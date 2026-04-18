@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Project
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+*.bak
+.claude/sessions/
+
+# Frontend artifacts (see also frontend/.gitignore)
+node_modules/
+frontend/build/
+frontend/.svelte-kit/
+
+# Generated static bundle — tracked placeholder only
+src/twrminal/web/dist/*
+!src/twrminal/web/dist/.gitkeep
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
