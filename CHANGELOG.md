@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-04-18
+
+### Added
+
+- Frontend three-panel shell: `SessionList`, `Conversation`, `Inspector`
+  Svelte components wired through `+page.svelte`.
+- `frontend/src/lib/api.ts` — typed `AgentEvent` discriminated union, session
+  CRUD helpers (`listSessions`, `createSession`, `deleteSession`,
+  `getSession`, `listMessages`).
+- Svelte 5 runes-based stores: `sessions.svelte.ts` (list, selected id,
+  CRUD) and `conversation.svelte.ts` (historical messages, in-flight
+  streaming buffer, live tool calls).
+- `agent.svelte.ts` — WebSocket connection manager dispatching events
+  into the conversation store, with typed `ConnectionState`.
+- `render.ts` — `marked`-backed Markdown → HTML with GFM + line breaks.
+- `@tailwindcss/typography` plugin for markdown styling (`prose
+  prose-invert`).
+
+### Changed
+
+- `frontend/package.json` version bumped to `0.1.3` (tracks Python pkg).
+
 ## [0.1.2] - 2026-04-18
 
 ### Added

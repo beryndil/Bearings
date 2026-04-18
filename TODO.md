@@ -21,19 +21,27 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `ToolCallEnd` event via `ToolResultBlock` translation.
 - [x] Tool-call persistence (store CRUD + WS handler writes).
 
-## v0.1.3 — next slice (frontend)
+## v0.1.3 — shipped
 
-- [ ] Frontend three-panel shell (`frontend/src/routes/+page.svelte`) —
-  wire sessions list / conversation / inspector to the real backend.
-- [ ] `frontend/src/lib/api.ts` — event type definitions, session CRUD
-  helpers (`listSessions`, `createSession`, `deleteSession`,
-  `listMessages`), WS event parsing with discriminated union.
-- [ ] Token streaming renderer (markdown + shiki for code blocks).
-- [ ] Tool-call inspector panel showing live tool_call_start/_end state.
-- [ ] Exercise the full UI in a browser (per project CLAUDE.md) before
-  shipping — dev server + golden-path + edge cases.
+- [x] Frontend three-panel shell wired end-to-end.
+- [x] `api.ts` with `AgentEvent` union + CRUD helpers.
+- [x] Svelte 5 stores for sessions + conversation + WS agent.
+- [x] Markdown rendering (marked + typography plugin).
+- [x] Browser-exercised: create session → WS connects → UI shows connected.
 
-## v0.1.4+
+## v0.1.4 — next slice
+
+- [ ] Syntax-highlight code blocks in conversation (integrate `shiki`;
+  already in deps but unused).
+- [ ] Dialog-free delete confirm: replace `confirm()` with an inline
+  "are you sure" affordance so UI is scriptable.
+- [ ] Show tool-call timing once finished (`startedAt` → elapsed even
+  after end). Currently only "running" elapsed is meaningful.
+- [ ] Persist selected session across reloads (localStorage).
+- [ ] Auto-reconnect WS on disconnect; surface retry state in UI.
+- [ ] Frontend unit tests (vitest + @testing-library/svelte).
+
+## v0.1.5+
 
 - [ ] Prometheus collectors for `/metrics` route (currently empty registry).
 - [ ] `routes_history.py` — implement `/api/history/export` and

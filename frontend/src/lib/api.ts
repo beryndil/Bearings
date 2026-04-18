@@ -3,12 +3,114 @@ export type HealthResponse = {
   version: string;
 };
 
-export async function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<HealthResponse> {
-  const res = await fetchImpl('/api/health');
+export type Session = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  working_dir: string;
+  model: string;
+  title: string | null;
+};
+
+export type SessionCreate = {
+  working_dir: string;
+  model: string;
+  title?: string | null;
+};
+
+export type Message = {
+  id: string;
+  session_id: string;
+  role: string;
+  content: string;
+  created_at: string;
+};
+
+export type TokenEvent = { type: 'token'; session_id: string; text: string };
+export type UserMessageEvent = { type: 'user_message'; session_id: string; content: string };
+export type ToolCallStartEvent = {
+  type: 'tool_call_start';
+  session_id: string;
+  tool_call_id: string;
+  name: string;
+  input: Record<string, unknown>;
+};
+export type ToolCallEndEvent = {
+  type: 'tool_call_end';
+  session_id: string;
+  tool_call_id: string;
+  ok: boolean;
+  output: string | null;
+  error: string | null;
+};
+export type MessageCompleteEvent = {
+  type: 'message_complete';
+  session_id: string;
+  message_id: string;
+};
+export type ErrorEvent = { type: 'error'; session_id: string; message: string };
+
+export type AgentEvent =
+  | TokenEvent
+  | UserMessageEvent
+  | ToolCallStartEvent
+  | ToolCallEndEvent
+  | MessageCompleteEvent
+  | ErrorEvent;
+
+async function jsonFetch<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  init?: RequestInit
+): Promise<T> {
+  const res = await fetchImpl(url, init);
   if (!res.ok) {
-    throw new Error(`health check failed: ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw new Error(`${init?.method ?? 'GET'} ${url} → ${res.status}: ${body}`);
   }
-  return (await res.json()) as HealthResponse;
+  return (await res.json()) as T;
+}
+
+export function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<HealthResponse> {
+  return jsonFetch<HealthResponse>(fetchImpl, '/api/health');
+}
+
+export function listSessions(fetchImpl: typeof fetch = fetch): Promise<Session[]> {
+  return jsonFetch<Session[]>(fetchImpl, '/api/sessions');
+}
+
+export function getSession(
+  id: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}`);
+}
+
+export function createSession(
+  body: SessionCreate,
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(fetchImpl, '/api/sessions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+export async function deleteSession(
+  id: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  await jsonFetch<{ deleted: boolean }>(fetchImpl, `/api/sessions/${id}`, {
+    method: 'DELETE'
+  });
+}
+
+export function listMessages(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Message[]> {
+  return jsonFetch<Message[]>(fetchImpl, `/api/sessions/${sessionId}/messages`);
 }
 
 export function openAgentSocket(sessionId: string): WebSocket {
