@@ -5,6 +5,7 @@
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import { parseBudget } from '$lib/utils/budget';
+  import { highlightText } from '$lib/utils/highlight';
   import Settings from '$lib/components/Settings.svelte';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
@@ -267,8 +268,8 @@
                 </span>
                 <span class="text-[10px] uppercase text-slate-500">{hit.role}</span>
               </div>
-              <div class="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
-                {hit.snippet}
+              <div class="text-[11px] text-slate-300 mt-0.5 line-clamp-2 snippet">
+                {@html highlightText(hit.snippet, searchQuery.trim())}
               </div>
             </button>
           </li>
@@ -336,3 +337,12 @@
     </ul>
   {/if}
 </aside>
+
+<style>
+  .snippet :global(mark) {
+    background-color: rgb(234 179 8 / 0.35);
+    color: rgb(253 224 71);
+    border-radius: 0.125rem;
+    padding: 0 0.125rem;
+  }
+</style>

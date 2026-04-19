@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.21] - 2026-04-19
+
+### Added
+
+- `$lib/utils/highlight.ts::highlightText(text, query)` — returns HTML
+  with case-insensitive matches wrapped in `<mark>`. HTML-escapes the
+  source first (so injected markup renders as text), treats regex
+  metacharacters in the query as literals. 6 unit tests cover the
+  escaping, no-match, multi-match, and meta-char cases.
+- Sidebar search results render highlights via `{@html}` on the
+  snippet, with a scoped `<style>` giving `<mark>` an amber tint that
+  reads cleanly on the dark theme.
+
 ## [0.1.20] - 2026-04-19
 
 ### Added

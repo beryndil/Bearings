@@ -128,14 +128,21 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Vitest scaffold + `npm run test`, wired into CI.
 - [x] First unit tests: `parseBudget` (extracted to `utils/budget.ts`).
 
-## v0.1.21 — next slice
+## v0.1.21 — shipped
 
-- [ ] Component tests (add jsdom + @testing-library/svelte; start
-  with `AuthGate.svelte` visibility and form submission).
+- [x] `highlightText` util + tests.
+- [x] Sidebar search snippets render amber-highlighted matches.
+
+## v0.1.22 — next slice
+
+- [ ] Component tests (jsdom + @testing-library/svelte; start with
+  `AuthGate.svelte` visibility / form submission).
 - [ ] Messages-endpoint pagination (limit + cursor).
 - [ ] Interrupt during tool execution: the SDK has `client.interrupt()`;
   wire it when a stop lands mid-`tool_use` so the tool can abort too.
-- [ ] Highlight the matched substring inside the search snippet.
+- [ ] Also highlight matches in the Conversation message body when a
+  search result is jumped to — today the hit highlights only in the
+  sidebar snippet.
 
 ## v0.1.7+
 
