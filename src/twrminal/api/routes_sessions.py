@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from twrminal import metrics
-from twrminal.api.models import MessageOut, SessionCreate, SessionOut
+from twrminal.api.models import MessageOut, SessionCreate, SessionOut, ToolCallOut
 from twrminal.db import store
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -50,3 +50,12 @@ async def list_messages(session_id: str, request: Request) -> list[MessageOut]:
         raise HTTPException(status_code=404, detail="session not found")
     rows = await store.list_messages(conn, session_id)
     return [MessageOut(**r) for r in rows]
+
+
+@router.get("/{session_id}/tool_calls", response_model=list[ToolCallOut])
+async def list_tool_calls(session_id: str, request: Request) -> list[ToolCallOut]:
+    conn = request.app.state.db
+    if await store.get_session(conn, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    rows = await store.list_tool_calls(conn, session_id)
+    return [ToolCallOut(**r) for r in rows]

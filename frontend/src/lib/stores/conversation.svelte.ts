@@ -11,6 +11,28 @@ export type LiveToolCall = {
   finishedAt: number | null;
 };
 
+function hydrateToolCall(row: api.ToolCall): LiveToolCall {
+  let parsedInput: Record<string, unknown> = {};
+  try {
+    parsedInput = JSON.parse(row.input) as Record<string, unknown>;
+  } catch {
+    // Malformed JSON — show as empty rather than crash the panel.
+  }
+  const startedAt = new Date(row.started_at).getTime();
+  const finishedAt = row.finished_at ? new Date(row.finished_at).getTime() : null;
+  const ok = finishedAt === null ? null : row.error === null;
+  return {
+    id: row.id,
+    name: row.name,
+    input: parsedInput,
+    output: row.output,
+    error: row.error,
+    ok,
+    startedAt,
+    finishedAt
+  };
+}
+
 class ConversationStore {
   sessionId = $state<string | null>(null);
   messages = $state<api.Message[]>([]);
@@ -25,7 +47,12 @@ class ConversationStore {
     this.reset();
     this.error = null;
     try {
-      this.messages = await api.listMessages(sessionId);
+      const [messages, toolCalls] = await Promise.all([
+        api.listMessages(sessionId),
+        api.listToolCalls(sessionId)
+      ]);
+      this.messages = messages;
+      this.toolCalls = toolCalls.map(hydrateToolCall);
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }

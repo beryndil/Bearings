@@ -43,7 +43,13 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `/api/history/export` + `/api/history/daily/{date}` routes.
 - [x] CI frontend artifact check + `npm run check` gate.
 
-## v0.1.6 — next slice
+## v0.1.6 — shipped
+
+- [x] `/api/sessions/{id}/tool_calls` history route.
+- [x] Frontend `listToolCalls` + `ToolCall` type.
+- [x] Inspector renders persisted tool calls on session load.
+
+## v0.1.7 — next slice
 
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Wire `message_id` on tool_calls rows. Likely approach: emit a
@@ -51,8 +57,6 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   so the WS handler can pass it through to `insert_tool_call_start`.
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
-- [ ] Render tool-call history in Inspector for loaded sessions
-  (currently only live WS events populate it).
 - [ ] `/api/history/export` query params: `?from=YYYY-MM-DD&to=YYYY-MM-DD`
   for a range filter.
 

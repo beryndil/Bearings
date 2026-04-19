@@ -24,3 +24,15 @@ class MessageOut(BaseModel):
     role: str
     content: str
     created_at: str
+
+
+class ToolCallOut(BaseModel):
+    id: str
+    session_id: str
+    message_id: str | None = None
+    name: str
+    input: str
+    output: str | None = None
+    error: str | None = None
+    started_at: str
+    finished_at: str | None = None

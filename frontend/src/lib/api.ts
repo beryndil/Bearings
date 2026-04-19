@@ -26,6 +26,18 @@ export type Message = {
   created_at: string;
 };
 
+export type ToolCall = {
+  id: string;
+  session_id: string;
+  message_id: string | null;
+  name: string;
+  input: string; // JSON string as stored in DB
+  output: string | null;
+  error: string | null;
+  started_at: string;
+  finished_at: string | null;
+};
+
 export type TokenEvent = { type: 'token'; session_id: string; text: string };
 export type UserMessageEvent = { type: 'user_message'; session_id: string; content: string };
 export type ToolCallStartEvent = {
@@ -111,6 +123,13 @@ export function listMessages(
   fetchImpl: typeof fetch = fetch
 ): Promise<Message[]> {
   return jsonFetch<Message[]>(fetchImpl, `/api/sessions/${sessionId}/messages`);
+}
+
+export function listToolCalls(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<ToolCall[]> {
+  return jsonFetch<ToolCall[]>(fetchImpl, `/api/sessions/${sessionId}/tool_calls`);
 }
 
 export function openAgentSocket(sessionId: string): WebSocket {

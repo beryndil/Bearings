@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-04-18
+
+### Added
+
+- `GET /api/sessions/{session_id}/tool_calls` — list persisted tool-call
+  rows, oldest-first. 404 on unknown session.
+- `ToolCallOut` Pydantic model (matches DB columns 1:1, `input` stays as
+  the stored JSON string).
+- Frontend `api.ts` gains `ToolCall` type + `listToolCalls()` helper.
+- `conversation.svelte.ts` now hydrates the `toolCalls` array from
+  `/api/sessions/{id}/tool_calls` on session load (parallel with
+  `listMessages`), converting ISO timestamps → ms and the stored JSON
+  input string → `Record<string, unknown>`. Reloading a session now
+  shows its tool-call history in the Inspector instead of an empty
+  panel; live WS events continue to append/update on top.
+
 ## [0.1.5] - 2026-04-18
 
 ### Added
