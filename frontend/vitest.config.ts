@@ -1,4 +1,5 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 
 // Kept separate from vite.config.ts so svelte-check's type-checking of
@@ -7,12 +8,16 @@ import { defineConfig } from 'vitest/config';
 // don't notice the environment.
 export default defineConfig({
   plugins: [svelte({ hot: false })],
-  // `resolve.conditions` / `server.deps.inline` so Svelte 5 picks the
-  // client entry (index-client.js) under jsdom instead of its
-  // SSR-only `index-server.js` — otherwise mounting real components
-  // throws.
   resolve: {
-    conditions: ['browser']
+    // Svelte 5 ships both server and client entries. Without the
+    // `browser` condition, jsdom pulls index-server.js and mount
+    // throws.
+    conditions: ['browser'],
+    // SvelteKit injects the `$lib` alias at build time; for vitest
+    // we resolve it manually so component imports work.
+    alias: {
+      $lib: path.resolve(__dirname, 'src/lib')
+    }
   },
   test: {
     include: ['src/**/*.{test,spec}.ts'],

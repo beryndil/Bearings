@@ -187,14 +187,17 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Component-test scaffold (jsdom + @testing-library/svelte) +
   CheatSheet tests.
 
-## v0.1.33 — next slice
+## v0.1.33 — shipped
 
-- [ ] Expand component tests: SessionList search debounce; AuthGate
-  store wiring; Settings save-button round-trip.
+- [x] Settings component test + `$lib` alias fix in vitest config.
+
+## v0.1.34 — next slice
+
+- [ ] SessionList search debounce test (fake timers).
+- [ ] AuthGate component test (auth store wiring).
 - [ ] Verify interrupt() behavior against a real agent running a
   Bash(sleep 10) tool.
 - [ ] "Import session" consuming the v0.1.30 export JSON.
-- [ ] Sidebar per-row message count pill.
 
 ## v0.1.7+
 

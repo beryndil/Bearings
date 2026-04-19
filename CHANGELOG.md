@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.33] - 2026-04-19
+
+### Added
+
+- `Settings.test.ts` — exercises the real `prefs` store: fields
+  pre-fill on open, Save writes all three fields back to the store,
+  Cancel leaves the store untouched. Proves the component-test
+  scaffold can drive store-integrated components, not just static
+  markup.
+
+### Changed
+
+- `vitest.config` resolves `$lib` to `src/lib` explicitly — needed
+  because SvelteKit's build-time alias isn't available in the
+  isolated vitest plugin chain. Added `@types/node` dev dep so the
+  config's `path.resolve(__dirname, …)` typechecks.
+
 ## [0.1.32] - 2026-04-19
 
 ### Added

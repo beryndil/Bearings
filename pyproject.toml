@@ -1,6 +1,6 @@
 [project]
 name = "twrminal"
-version = "0.1.32"
+version = "0.1.33"
 description = "Localhost web UI for Claude Code agent sessions."
 readme = "README.md"
 license = { text = "MIT" }
