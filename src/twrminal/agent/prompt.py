@@ -34,6 +34,20 @@ class AssembledPrompt:
     text: str
 
 
+def estimate_tokens(text: str) -> int:
+    """Rough token count for UI display. Uses ~4-chars-per-token as a
+    proxy — the real figure comes from the tokenizer on the Claude
+    side, but this is good enough for the Context-tab badge and
+    avoids pulling a heavyweight tokenizer dep.
+
+    Empty strings count as zero; anything else is at least 1 so the
+    UI never shows an all-zero row for non-empty content.
+    """
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
 def _finalize(layers: list[Layer]) -> AssembledPrompt:
     parts = [f"<!-- layer: {layer.kind}[{layer.name}] -->\n{layer.content}" for layer in layers]
     return AssembledPrompt(layers=layers, text="\n\n".join(parts))

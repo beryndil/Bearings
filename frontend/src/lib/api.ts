@@ -14,6 +14,8 @@ export type Session = {
   max_budget_usd: number | null;
   total_cost_usd: number;
   message_count: number;
+  project_id: number | null;
+  session_instructions: string | null;
 };
 
 export type SessionCreate = {
@@ -22,12 +24,15 @@ export type SessionCreate = {
   title?: string | null;
   description?: string | null;
   max_budget_usd?: number | null;
+  project_id?: number | null;
 };
 
 export type SessionUpdate = {
   title?: string | null;
   description?: string | null;
   max_budget_usd?: number | null;
+  project_id?: number | null;
+  session_instructions?: string | null;
 };
 
 export type Message = {
@@ -369,6 +374,25 @@ export function importSession(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload)
   });
+}
+
+export type SystemPromptLayer = {
+  name: string;
+  kind: 'base' | 'project' | 'tag_memory' | 'session';
+  content: string;
+  token_count: number;
+};
+
+export type SystemPrompt = {
+  layers: SystemPromptLayer[];
+  total_tokens: number;
+};
+
+export function getSystemPrompt(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<SystemPrompt> {
+  return jsonFetch<SystemPrompt>(fetchImpl, `/api/sessions/${sessionId}/system_prompt`);
 }
 
 export function openAgentSocket(sessionId: string): WebSocket {

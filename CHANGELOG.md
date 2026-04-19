@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-04-19
+
+Inspector Context tab — read-only view of the assembled system
+prompt. Ninth v0.2 slice, spec step 6.
+
+### Added
+
+- `GET /api/sessions/{id}/system_prompt` returning
+  `{layers, total_tokens}`. Layers carry `{name, kind, content,
+  token_count}` — calls the same `assemble_prompt` the agent uses
+  so the Inspector always shows current prompt state. 404 if the
+  session doesn't exist.
+- `SystemPromptLayerOut` / `SystemPromptOut` DTOs.
+- `agent.prompt.estimate_tokens` — coarse 4-chars-per-token
+  approximation. Avoids pulling `tiktoken` (heavy dep) for what's
+  a visual-only estimate; empty strings count as zero, anything
+  else is clamped to at least 1 so non-empty layers aren't
+  rendered as 0 tokens.
+- Frontend `getSystemPrompt(sessionId)` + `SystemPrompt` /
+  `SystemPromptLayer` types.
+- Inspector panel: new **Context** disclosure above the existing
+  Agent one. On open, fetches the assembled prompt; header shows
+  `~N tok`. Each layer renders as a collapsible row with a
+  color-coded kind badge (base/project/tag_memory/session). When
+  the selected session's `updated_at` changes the next open
+  refetches so project/tag/memory edits surface immediately.
+- Frontend `Session` type grew `project_id` and
+  `session_instructions`. `SessionCreate` accepts `project_id`;
+  `SessionUpdate` accepts `project_id` + `session_instructions`.
+  Catches the frontend contracts up to the v0.2.6/v0.2.7 backend
+  additions — no UI for these edits yet (v0.2.9 / v0.2.11).
+- 3 new prompt-assembler tests for `estimate_tokens`.
+- 3 new API tests for `/system_prompt` (404, base-only layer
+  shape, full four-layer stack).
+
 ## [0.2.7] - 2026-04-19
 
 Tag memories backend + `session_instructions` PATCH + wires the

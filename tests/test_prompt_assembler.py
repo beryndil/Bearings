@@ -55,6 +55,26 @@ async def _set_tag_memory(conn: aiosqlite.Connection, tag_id: int, content: str)
     await conn.commit()
 
 
+def test_estimate_tokens_empty_is_zero() -> None:
+    from twrminal.agent.prompt import estimate_tokens
+
+    assert estimate_tokens("") == 0
+
+
+def test_estimate_tokens_short_string_is_at_least_one() -> None:
+    from twrminal.agent.prompt import estimate_tokens
+
+    # 1 char / 4 = 0 under plain division, but non-empty must return ≥1.
+    assert estimate_tokens("a") == 1
+
+
+def test_estimate_tokens_scales_with_length() -> None:
+    from twrminal.agent.prompt import estimate_tokens
+
+    # 80 chars → 20 tokens (4 chars per token approximation).
+    assert estimate_tokens("x" * 80) == 20
+
+
 @pytest.mark.asyncio
 async def test_only_base_when_no_project_tags_or_instructions(tmp_path: Path) -> None:
     conn = await init_db(tmp_path / "db.sqlite")

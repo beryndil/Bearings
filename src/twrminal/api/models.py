@@ -144,3 +144,15 @@ class TagMemoryOut(BaseModel):
     tag_id: int
     content: str
     updated_at: str
+
+
+class SystemPromptLayerOut(BaseModel):
+    name: str
+    kind: str
+    content: str
+    token_count: int
+
+
+class SystemPromptOut(BaseModel):
+    layers: list[SystemPromptLayerOut]
+    total_tokens: int

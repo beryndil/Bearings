@@ -5,12 +5,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from twrminal import metrics
+from twrminal.agent.prompt import assemble_prompt, estimate_tokens
 from twrminal.api.auth import require_auth
 from twrminal.api.models import (
     MessageOut,
     SessionCreate,
     SessionOut,
     SessionUpdate,
+    SystemPromptLayerOut,
+    SystemPromptOut,
     TagOut,
     ToolCallOut,
 )
@@ -165,6 +168,30 @@ async def list_session_tags(session_id: str, request: Request) -> list[TagOut]:
         raise HTTPException(status_code=404, detail="session not found")
     rows = await store.list_session_tags(conn, session_id)
     return [TagOut(**r) for r in rows]
+
+
+@router.get("/{session_id}/system_prompt", response_model=SystemPromptOut)
+async def get_session_system_prompt(session_id: str, request: Request) -> SystemPromptOut:
+    """Inspect the layered system prompt that would be sent to the SDK on
+    the next turn. Read-only — calls the same `assemble_prompt` the
+    agent uses so what you see here is what the model sees."""
+    conn = request.app.state.db
+    if await store.get_session(conn, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    assembled = await assemble_prompt(conn, session_id)
+    layers = [
+        SystemPromptLayerOut(
+            name=layer.name,
+            kind=layer.kind,
+            content=layer.content,
+            token_count=estimate_tokens(layer.content),
+        )
+        for layer in assembled.layers
+    ]
+    return SystemPromptOut(
+        layers=layers,
+        total_tokens=sum(layer.token_count for layer in layers),
+    )
 
 
 @router.post("/{session_id}/tags/{tag_id}", response_model=list[TagOut])

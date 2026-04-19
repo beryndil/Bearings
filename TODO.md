@@ -348,13 +348,26 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   API + session_instructions round-trip) plus 2 agent-session
   cases pinning the system_prompt wire-through.
 
+## v0.2.8 — shipped
+
+- [x] `GET /api/sessions/{id}/system_prompt` — `{layers,
+  total_tokens}`. Same `assemble_prompt` path as the agent.
+- [x] `agent.prompt.estimate_tokens` — 4-chars-per-token
+  approximation (avoids tiktoken dep).
+- [x] `SystemPromptLayerOut` / `SystemPromptOut` DTOs.
+- [x] Frontend `getSystemPrompt` helper + `SystemPrompt` types.
+- [x] Inspector **Context** disclosure above Agent, with color-
+  coded kind badges and per-layer collapsibles. Refetches when
+  selected session's `updated_at` changes.
+- [x] Frontend `Session` / `SessionCreate` / `SessionUpdate`
+  caught up to the v0.2.6 + v0.2.7 backend fields.
+- [x] 3 estimate_tokens unit tests + 3 system_prompt API tests.
+
 ## v0.2.x — remaining slice plan
 
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
-- [ ] **v0.2.8** — Inspector Context tab (read-only) +
-  `GET /api/sessions/{id}/system_prompt`.
 - [ ] **v0.2.9** — Projects sidebar + management view.
 - [ ] **v0.2.10** — Tag memory editor (markdown + live preview).
 - [ ] **v0.2.11** — Session instructions inline editor.

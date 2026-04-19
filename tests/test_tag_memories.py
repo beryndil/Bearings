@@ -163,3 +163,56 @@ def test_patch_session_accepts_session_instructions(client: TestClient) -> None:
     )
     assert resp.status_code == 200
     assert resp.json()["session_instructions"] is None
+
+
+# --- System prompt route (v0.2.8) ------------------------------------
+
+
+def test_system_prompt_missing_session_is_404(client: TestClient) -> None:
+    resp = client.get(f"/api/sessions/{'0' * 32}/system_prompt")
+    assert resp.status_code == 404
+
+
+def test_system_prompt_base_only(client: TestClient) -> None:
+    sess = client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m"},
+    ).json()
+    resp = client.get(f"/api/sessions/{sess['id']}/system_prompt")
+    assert resp.status_code == 200
+    body = resp.json()
+    kinds = [layer["kind"] for layer in body["layers"]]
+    assert kinds == ["base"]
+    assert body["total_tokens"] == sum(layer["token_count"] for layer in body["layers"])
+    assert body["layers"][0]["token_count"] >= 1
+
+
+def test_system_prompt_full_stack(client: TestClient) -> None:
+    proj = client.post(
+        "/api/projects",
+        json={"name": "Twrminal", "system_prompt": "Prefer SQL over ORMs."},
+    ).json()
+    sess = client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m", "project_id": proj["id"]},
+    ).json()
+    tag = client.post("/api/tags", json={"name": "infra"}).json()
+    client.post(f"/api/sessions/{sess['id']}/tags/{tag['id']}")
+    client.put(f"/api/tags/{tag['id']}/memory", json={"content": "Prefer nftables."})
+    client.patch(
+        f"/api/sessions/{sess['id']}",
+        json={"session_instructions": "Be concise."},
+    )
+    body = client.get(f"/api/sessions/{sess['id']}/system_prompt").json()
+    kinds = [layer["kind"] for layer in body["layers"]]
+    assert kinds == ["base", "project", "tag_memory", "session"]
+    contents = [layer["content"] for layer in body["layers"]]
+    assert "Prefer SQL over ORMs." in contents
+    assert "Prefer nftables." in contents
+    assert "Be concise." in contents
+    # total_tokens is exactly the sum of per-layer counts.
+    assert body["total_tokens"] == sum(layer["token_count"] for layer in body["layers"])
+    # Every layer contributes at least one token when it has content.
+    for layer in body["layers"]:
+        if layer["content"]:
+            assert layer["token_count"] >= 1
