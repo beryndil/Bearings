@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from twrminal import metrics
 from twrminal.api.auth import require_auth
-from twrminal.api.models import MessageOut, SessionCreate, SessionOut, ToolCallOut
+from twrminal.api.models import (
+    MessageOut,
+    SessionCreate,
+    SessionOut,
+    SessionUpdate,
+    ToolCallOut,
+)
 from twrminal.db import store
 
 router = APIRouter(
@@ -36,6 +42,21 @@ async def list_sessions(request: Request) -> list[SessionOut]:
 @router.get("/{session_id}", response_model=SessionOut)
 async def get_session(session_id: str, request: Request) -> SessionOut:
     row = await store.get_session(request.app.state.db, session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return SessionOut(**row)
+
+
+@router.patch("/{session_id}", response_model=SessionOut)
+async def update_session(
+    session_id: str, body: SessionUpdate, request: Request
+) -> SessionOut:
+    # Only fields the client explicitly set are applied — unset fields
+    # leave the column untouched, explicit null clears it.
+    fields = {k: getattr(body, k) for k in body.model_fields_set}
+    row = await store.update_session(
+        request.app.state.db, session_id, fields=fields
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     return SessionOut(**row)

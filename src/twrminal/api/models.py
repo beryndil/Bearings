@@ -10,6 +10,17 @@ class SessionCreate(BaseModel):
     max_budget_usd: float | None = None
 
 
+class SessionUpdate(BaseModel):
+    """Partial update for an existing session. Any unset field is left
+    unchanged; explicit `None` for `title`/`max_budget_usd` clears them."""
+
+    title: str | None = None
+    max_budget_usd: float | None = None
+    # Distinguishes "not provided" from "set to null" for the two
+    # nullable columns. Pydantic writes `model_fields_set` so routes
+    # can dispatch off what was actually passed.
+
+
 class SessionOut(BaseModel):
     id: str
     created_at: str

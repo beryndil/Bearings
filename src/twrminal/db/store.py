@@ -88,6 +88,31 @@ async def get_session(conn: aiosqlite.Connection, session_id: str) -> dict[str, 
     return dict(row) if row is not None else None
 
 
+async def update_session(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    *,
+    fields: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Apply a partial update. `fields` maps column name → new value;
+    only `title` and `max_budget_usd` are accepted. Bumps updated_at.
+    Returns the refreshed row, or None if the session doesn't exist."""
+    allowed = {"title", "max_budget_usd"}
+    filtered = {k: v for k, v in fields.items() if k in allowed}
+    if not filtered:
+        return await get_session(conn, session_id)
+    assignments = ", ".join(f"{col} = ?" for col in filtered)
+    params = (*filtered.values(), _now(), session_id)
+    cursor = await conn.execute(
+        f"UPDATE sessions SET {assignments}, updated_at = ? WHERE id = ?",
+        params,
+    )
+    await conn.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_session(conn, session_id)
+
+
 async def delete_session(conn: aiosqlite.Connection, session_id: str) -> bool:
     cursor = await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
     await conn.commit()

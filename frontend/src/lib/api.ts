@@ -21,6 +21,11 @@ export type SessionCreate = {
   max_budget_usd?: number | null;
 };
 
+export type SessionUpdate = {
+  title?: string | null;
+  max_budget_usd?: number | null;
+};
+
 export type Message = {
   id: string;
   session_id: string;
@@ -161,6 +166,18 @@ export async function deleteSession(
 ): Promise<void> {
   await jsonFetch<{ deleted: boolean }>(fetchImpl, `/api/sessions/${id}`, {
     method: 'DELETE'
+  });
+}
+
+export function updateSession(
+  id: string,
+  patch: SessionUpdate,
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch)
   });
 }
 

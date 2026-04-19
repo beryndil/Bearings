@@ -69,6 +69,18 @@ class SessionStore {
     }
   }
 
+  async update(id: string, patch: api.SessionUpdate): Promise<api.Session | null> {
+    this.error = null;
+    try {
+      const updated = await api.updateSession(id, patch);
+      this.list = this.list.map((s) => (s.id === id ? updated : s));
+      return updated;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  }
+
   select(id: string | null): void {
     this.selectedId = id;
     writeStoredId(id);

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-04-19
+
+### Added
+
+- `PATCH /api/sessions/{id}` with `SessionUpdate` body — partial
+  updates for `title` and `max_budget_usd`; unset fields leave the
+  column untouched, explicit null clears. `updated_at` bumps on any
+  real change. Returns 404 if the session is gone.
+- `store.update_session(conn, session_id, fields)` — whitelists
+  `title` / `max_budget_usd`, builds the SET clause dynamically.
+- Frontend `api.updateSession(id, patch)` + `sessions.update(id, patch)`
+  store method.
+- Inline rename in the sidebar: double-click a session title →
+  input; Enter / blur saves via PATCH, Esc cancels. Conversation
+  header reflects the new title through normal reactivity.
+
 ## [0.1.15] - 2026-04-19
 
 ### Added

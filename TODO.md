@@ -100,14 +100,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   model + default working_dir without devtools.
 - [x] SessionList new-session form pre-fills from prefs defaults.
 
-## v0.1.16 — next slice
+## v0.1.16 — shipped
+
+- [x] `PATCH /api/sessions/{id}` + `store.update_session`.
+- [x] Frontend `updateSession` + inline double-click rename in the
+  sidebar.
+
+## v0.1.17 — next slice
 
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor).
-- [ ] `twrminal send` pretty-print mode (`--format=pretty`) — currently
-  only emits raw JSON lines.
-- [ ] Inline "Rename session" action — currently only the title set at
-  creation time is used.
+- [ ] `twrminal send` pretty-print mode (`--format=pretty`).
+- [ ] Sidebar rename UI for `max_budget_usd` — field exists in the API
+  but has no UI editor post-creation.
 
 ## v0.1.7+
 

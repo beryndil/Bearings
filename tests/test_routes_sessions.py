@@ -62,6 +62,59 @@ def test_delete_missing_returns_404(client: TestClient) -> None:
     assert resp.status_code == 404
 
 
+def test_patch_updates_title(client: TestClient) -> None:
+    created = _create(client, title="before")
+    before_updated = created["updated_at"]
+    resp = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={"title": "after"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["title"] == "after"
+    # Other fields untouched.
+    assert body["working_dir"] == created["working_dir"]
+    assert body["model"] == created["model"]
+    assert body["max_budget_usd"] == created["max_budget_usd"]
+    # updated_at bumped.
+    assert body["updated_at"] != before_updated
+
+
+def test_patch_can_clear_title(client: TestClient) -> None:
+    created = _create(client, title="named")
+    body = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={"title": None},
+    ).json()
+    assert body["title"] is None
+
+
+def test_patch_updates_budget(client: TestClient) -> None:
+    created = _create(client, max_budget_usd=1.0)
+    body = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={"max_budget_usd": 5.5},
+    ).json()
+    assert body["max_budget_usd"] == 5.5
+
+
+def test_patch_empty_body_is_noop(client: TestClient) -> None:
+    created = _create(client, title="stays")
+    body = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={},
+    ).json()
+    assert body["title"] == "stays"
+
+
+def test_patch_missing_session_returns_404(client: TestClient) -> None:
+    resp = client.patch(
+        "/api/sessions/" + "0" * 32,
+        json={"title": "whatever"},
+    )
+    assert resp.status_code == 404
+
+
 def test_get_messages_empty_for_new_session(client: TestClient) -> None:
     created = _create(client)
     resp = client.get(f"/api/sessions/{created['id']}/messages")

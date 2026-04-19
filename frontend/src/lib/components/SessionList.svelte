@@ -37,6 +37,38 @@
     confirm.id = null;
   }
 
+  const rename = $state<{ id: string | null; draft: string }>({ id: null, draft: '' });
+
+  function startRename(e: MouseEvent, session: { id: string; title: string | null; model: string }) {
+    e.stopPropagation();
+    rename.id = session.id;
+    rename.draft = session.title ?? '';
+  }
+
+  async function commitRename() {
+    if (rename.id === null) return;
+    const id = rename.id;
+    const draft = rename.draft.trim();
+    rename.id = null;
+    rename.draft = '';
+    await sessions.update(id, { title: draft === '' ? null : draft });
+  }
+
+  function cancelRename() {
+    rename.id = null;
+    rename.draft = '';
+  }
+
+  function onRenameKey(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitRename();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelRename();
+    }
+  }
+
   // Boot (auth + session refresh) is owned by +page.svelte so the auth
   // gate can block API calls until a token is supplied.
 
@@ -195,10 +227,26 @@
             type="button"
             class="flex-1 min-w-0 text-left px-2 py-2 rounded-l"
             onclick={() => onSelect(session.id)}
+            ondblclick={(e) => startRename(e, session)}
           >
-            <div class="text-sm truncate">
-              {session.title ?? session.model}
-            </div>
+            {#if rename.id === session.id}
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                type="text"
+                class="w-full bg-slate-950 rounded px-1 py-0.5 text-sm
+                  border border-slate-700 focus:outline-none focus:border-emerald-600"
+                bind:value={rename.draft}
+                onkeydown={onRenameKey}
+                onblur={commitRename}
+                onclick={(e) => e.stopPropagation()}
+                autofocus
+                placeholder="Session title"
+              />
+            {:else}
+              <div class="text-sm truncate" title="Double-click to rename">
+                {session.title ?? session.model}
+              </div>
+            {/if}
             <div class="text-[10px] text-slate-500 font-mono truncate">
               {session.working_dir}
             </div>
