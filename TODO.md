@@ -182,13 +182,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Session.message_count (backend + live-bumped frontend).
 - [x] Header shows `· N msg`.
 
-## v0.1.32 — next slice
+## v0.1.32 — shipped
 
-- [ ] Component tests (jsdom + @testing-library/svelte).
+- [x] Component-test scaffold (jsdom + @testing-library/svelte) +
+  CheatSheet tests.
+
+## v0.1.33 — next slice
+
+- [ ] Expand component tests: SessionList search debounce; AuthGate
+  store wiring; Settings save-button round-trip.
 - [ ] Verify interrupt() behavior against a real agent running a
   Bash(sleep 10) tool.
 - [ ] "Import session" consuming the v0.1.30 export JSON.
-- [ ] Sidebar also shows per-row message count (tiny "N ✉" pill).
+- [ ] Sidebar per-row message count pill.
 
 ## v0.1.7+
 
