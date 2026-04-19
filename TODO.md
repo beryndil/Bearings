@@ -348,6 +348,20 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   API + session_instructions round-trip) plus 2 agent-session
   cases pinning the system_prompt wire-through.
 
+## v0.2.11 — shipped
+
+- [x] `TagEdit.svelte` modal: name / pinned / sort_order,
+  default_working_dir, default_model, markdown memory with
+  live preview, delete button with two-click confirm.
+- [x] Loads memory via `GET /api/tags/{id}/memory`; 404 = no
+  memory yet. Save-path diffs: empty clears via DELETE,
+  non-empty upserts via PUT.
+- [x] Precedence hint rendered under the memory editor.
+- [x] Sidebar tag rows grew a hover-reveal ✎ button.
+- [x] `api.getTagMemory` / `putTagMemory` / `deleteTagMemory`
+  helpers + `TagMemory` type.
+- [x] 5 vitest cases in `TagEdit.test.ts`.
+
 ## v0.2.10 — shipped
 
 - [x] Migration `0009_tag_defaults.sql` adds
@@ -395,9 +409,6 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
-- [ ] **v0.2.11** — Tag editor modal: name / pinned / sort_order,
-  markdown memory with live preview, default_working_dir,
-  default_model. Reachable from each sidebar tag row.
 - [ ] **v0.2.12** — Session instructions inline editor.
 - [ ] **v0.2.13** — New-session gate (≥1 tag) + header badges +
   README update.

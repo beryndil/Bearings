@@ -9,12 +9,15 @@
   import { parseBudget } from '$lib/utils/budget';
   import { highlightText } from '$lib/utils/highlight';
   import Settings from '$lib/components/Settings.svelte';
+  import TagEdit from '$lib/components/TagEdit.svelte';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
   const SEARCH_DEBOUNCE_MS = 200;
 
   let showNewForm = $state(false);
   let showSettings = $state(false);
+  let showTagEdit = $state(false);
+  let tagEditId = $state<number | null>(null);
   let newWorkingDir = $state('');
   let newModel = $state('claude-sonnet-4-6');
   let newTitle = $state('');
@@ -303,16 +306,15 @@
 </script>
 
 <Settings bind:open={showSettings} />
+<TagEdit bind:open={showTagEdit} tagId={tagEditId} />
 
 {#snippet tagRow(tag: api.Tag, pinned: boolean)}
   {@const selected = tags.selected.includes(tag.id)}
-  <li>
+  <li class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}">
     <button
       type="button"
-      class="w-full flex items-center justify-between gap-2 rounded px-2 py-1 text-sm
-        text-left transition {selected
-        ? 'bg-emerald-900/60 text-emerald-200'
-        : 'text-slate-300 hover:bg-slate-800'}"
+      class="flex-1 min-w-0 flex items-center justify-between gap-2 px-2 py-1 text-sm
+        text-left transition {selected ? 'text-emerald-200' : 'text-slate-300'}"
       aria-pressed={selected}
       onclick={() => tags.toggleSelected(tag.id)}
     >
@@ -325,6 +327,20 @@
       <span class="text-[10px] font-mono text-slate-500">
         {tag.session_count}
       </span>
+    </button>
+    <button
+      type="button"
+      class="px-1.5 text-xs text-slate-500 hover:text-slate-200
+        opacity-0 group-hover:opacity-100"
+      aria-label={`Edit tag ${tag.name}`}
+      title="Edit tag (memory, defaults)"
+      onclick={(e) => {
+        e.stopPropagation();
+        tagEditId = tag.id;
+        showTagEdit = true;
+      }}
+    >
+      ✎
     </button>
   </li>
 {/snippet}

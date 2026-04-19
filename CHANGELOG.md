@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.11] - 2026-04-19
+
+Tag editor modal — the first surface for editing a tag's full
+contents from the UI. Covers name, pinned, sort_order, memory
+(markdown + live preview), default working dir, default model.
+
+### Added
+
+- `frontend/src/lib/components/TagEdit.svelte` — modal editor
+  reachable from a hover-reveal ✎ button on each sidebar tag row.
+  Loads the current tag's memory on open (GET /memory, 404 → no
+  memory yet). Save path diffs memory state: empty after a non-
+  empty load → DELETE; non-empty → PUT. Tag metadata (name,
+  pinned, sort_order, defaults) go through tags.update (PATCH).
+- Preview toggle flips the memory textarea to a `renderMarkdown`
+  pane using the same Shiki-backed renderer as the conversation
+  pane.
+- "If multiple tags have conflicting rules, later tags (lower in
+  the sidebar sort order) override earlier ones." hint sits
+  beneath the memory editor, matching the spec.
+- Delete button with two-click confirm, consistent with the
+  sidebar session-delete pattern.
+- `api.getTagMemory` / `putTagMemory` / `deleteTagMemory` TS
+  helpers + `TagMemory` type.
+- SessionList tag rows grew a hover-reveal ✎ affordance — hover
+  the row, click to edit.
+- `TagEdit.test.ts` — 5 cases: existing memory loads, 404 is
+  silent, save-with-content PUTs memory, save-after-clear
+  DELETEs memory, preview toggle renders markdown.
+
 ## [0.2.10] - 2026-04-19
 
 Tag defaults — `default_working_dir` and `default_model` per tag.

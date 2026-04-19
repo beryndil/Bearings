@@ -326,6 +326,43 @@ export async function deleteTag(
   }
 }
 
+export type TagMemory = {
+  tag_id: number;
+  content: string;
+  updated_at: string;
+};
+
+export function getTagMemory(
+  tagId: number,
+  fetchImpl: typeof fetch = fetch
+): Promise<TagMemory> {
+  return jsonFetch<TagMemory>(fetchImpl, `/api/tags/${tagId}/memory`);
+}
+
+export function putTagMemory(
+  tagId: number,
+  content: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<TagMemory> {
+  return jsonFetch<TagMemory>(fetchImpl, `/api/tags/${tagId}/memory`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+}
+
+export async function deleteTagMemory(
+  tagId: number,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  const res = await fetchImpl(`/api/tags/${tagId}/memory`, withAuth({ method: 'DELETE' }));
+  if (res.status === 401 && authFailureHandler) authFailureHandler();
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`DELETE /api/tags/${tagId}/memory → ${res.status}: ${body}`);
+  }
+}
+
 export function attachSessionTag(
   sessionId: string,
   tagId: number,
