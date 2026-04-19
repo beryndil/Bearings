@@ -3,9 +3,11 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import { renderMarkdown } from '$lib/render';
+  import SessionEdit from '$lib/components/SessionEdit.svelte';
 
   let promptText = $state('');
   let scrollContainer: HTMLDivElement | undefined = $state();
+  let editingSession = $state(false);
 
   $effect(() => {
     void conversation.messages;
@@ -58,11 +60,27 @@
   }
 </script>
 
+<SessionEdit
+  bind:open={editingSession}
+  sessionId={sessions.selectedId}
+/>
+
 <section class="bg-slate-900 overflow-hidden flex flex-col min-w-0">
   <header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">
     <div class="min-w-0">
-      <h1 class="text-lg font-medium">
+      <h1 class="text-lg font-medium flex items-center gap-2">
         {sessions.selected?.title ?? 'Twrminal'}
+        {#if sessions.selected}
+          <button
+            type="button"
+            class="text-xs text-slate-500 hover:text-slate-300"
+            aria-label="Edit session"
+            title="Edit title / budget"
+            onclick={() => (editingSession = true)}
+          >
+            ✎
+          </button>
+        {/if}
       </h1>
       <p class="text-xs font-mono truncate text-slate-500">
         {#if sessions.selected}

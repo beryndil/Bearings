@@ -76,3 +76,71 @@ async def test_send_returns_nonzero_on_error_event(
     out = io.StringIO()
     rc = await _run_send("ws://localhost:8787/ws/sessions/s", "x", out)
     assert rc == 1
+
+
+@pytest.mark.asyncio
+async def test_send_pretty_streams_tokens_inline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_connect(
+        monkeypatch,
+        [
+            {"type": "message_start", "session_id": "s", "message_id": "m"},
+            {"type": "token", "session_id": "s", "text": "hello "},
+            {"type": "token", "session_id": "s", "text": "there"},
+            {
+                "type": "message_complete",
+                "session_id": "s",
+                "message_id": "m",
+                "cost_usd": 0.0042,
+            },
+        ],
+    )
+    out = io.StringIO()
+    rc = await _run_send("ws://localhost:8787/ws/sessions/s", "hi", out, pretty=True)
+    assert rc == 0
+    text = out.getvalue()
+    # Tokens streamed inline (no JSON braces).
+    assert "hello there" in text
+    assert "{" not in text
+    # Cost rendered in the completion separator.
+    assert "$0.0042" in text
+
+
+@pytest.mark.asyncio
+async def test_send_pretty_renders_tool_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_connect(
+        monkeypatch,
+        [
+            {"type": "message_start", "session_id": "s", "message_id": "m"},
+            {
+                "type": "tool_call_start",
+                "session_id": "s",
+                "tool_call_id": "t",
+                "name": "Read",
+                "input": {"path": "/etc/hosts"},
+            },
+            {
+                "type": "tool_call_end",
+                "session_id": "s",
+                "tool_call_id": "t",
+                "ok": True,
+                "output": "127.0.0.1 localhost",
+                "error": None,
+            },
+            {
+                "type": "message_complete",
+                "session_id": "s",
+                "message_id": "m",
+                "cost_usd": None,
+            },
+        ],
+    )
+    out = io.StringIO()
+    rc = await _run_send("ws://localhost:8787/ws/sessions/s", "read it", out, pretty=True)
+    assert rc == 0
+    text = out.getvalue()
+    assert "↳ tool Read" in text
+    assert "← ok: 127.0.0.1 localhost" in text

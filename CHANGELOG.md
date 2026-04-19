@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] - 2026-04-19
+
+### Added
+
+- `SessionEdit.svelte` modal wired behind a ✎ button in the Conversation
+  header. Edits `title` + `max_budget_usd` on an existing session via
+  the v0.1.16 PATCH route. Cap is no longer create-time-only.
+- `twrminal send --format=pretty` — human-readable output:
+  - tokens stream inline with a flush,
+  - `thinking` / `message_start` frames suppressed,
+  - tool calls render as `↳ tool Name (input)` / `← ok: output` or
+    `← error: message`,
+  - each turn ends with a separator line + cost badge.
+  Default `--format=json` stays one-event-per-line for scripting.
+
 ## [0.1.16] - 2026-04-19
 
 ### Added

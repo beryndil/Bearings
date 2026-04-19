@@ -30,17 +30,64 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Auth token (default: from config auth.token when auth.enabled)",
     )
+    send.add_argument(
+        "--format",
+        dest="format",
+        choices=("json", "pretty"),
+        default="json",
+        help="Output format: json (one event per line, default) or pretty (human-readable).",
+    )
     send.add_argument("message", help="Prompt text")
 
     return parser
 
 
-async def _run_send(url: str, prompt: str, out: IO[str]) -> int:
+def _format_pretty(event: dict[str, Any]) -> str | None:
+    """Human-readable render of a single AgentEvent. Returns None when
+    the event shouldn't emit a line (e.g. tokens are streamed inline)."""
+    etype = event.get("type")
+    if etype == "token":
+        # Tokens stream inline without newlines — the caller writes them
+        # via a separate path to avoid a trailing newline after each.
+        return None
+    if etype == "thinking":
+        return None
+    if etype == "message_start":
+        return None
+    if etype == "tool_call_start":
+        return (
+            f"\n  ↳ tool {event.get('name')} "
+            f"({json.dumps(event.get('input', {}), separators=(',', ':'))})"
+        )
+    if etype == "tool_call_end":
+        status = "ok" if event.get("ok") else "error"
+        body = event.get("output") if event.get("ok") else event.get("error")
+        return f"  ← {status}: {body}"
+    if etype == "message_complete":
+        cost = event.get("cost_usd")
+        cost_str = f"  [${cost:.4f}]" if isinstance(cost, int | float) else ""
+        return f"\n{'─' * 40}{cost_str}"
+    if etype == "error":
+        return f"\nERROR: {event.get('message')}"
+    return f"[{etype}] {json.dumps(event)}"
+
+
+async def _run_send(url: str, prompt: str, out: IO[str], *, pretty: bool = False) -> int:
     async with ws_connect(url) as ws:
         await ws.send(json.dumps({"type": "prompt", "content": prompt}))
         async for raw in ws:
             event: dict[str, Any] = json.loads(raw)
-            print(json.dumps(event), file=out)
+            if pretty:
+                if event.get("type") == "token":
+                    # Stream tokens inline, no newline per frame.
+                    out.write(str(event.get("text", "")))
+                    out.flush()
+                else:
+                    line = _format_pretty(event)
+                    if line is not None:
+                        print(line, file=out)
+            else:
+                print(json.dumps(event), file=out)
             if event.get("type") == "message_complete":
                 return 0
             if event.get("type") == "error":
@@ -78,6 +125,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
         query = f"?token={token}" if token else ""
         url = f"ws://{host}:{port}/ws/sessions/{args.session}{query}"
-        return asyncio.run(_run_send(url, args.message, sys.stdout))
+        return asyncio.run(_run_send(url, args.message, sys.stdout, pretty=args.format == "pretty"))
 
     return 1

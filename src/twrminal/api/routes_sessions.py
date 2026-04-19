@@ -48,15 +48,11 @@ async def get_session(session_id: str, request: Request) -> SessionOut:
 
 
 @router.patch("/{session_id}", response_model=SessionOut)
-async def update_session(
-    session_id: str, body: SessionUpdate, request: Request
-) -> SessionOut:
+async def update_session(session_id: str, body: SessionUpdate, request: Request) -> SessionOut:
     # Only fields the client explicitly set are applied — unset fields
     # leave the column untouched, explicit null clears it.
     fields = {k: getattr(body, k) for k in body.model_fields_set}
-    row = await store.update_session(
-        request.app.state.db, session_id, fields=fields
-    )
+    row = await store.update_session(request.app.state.db, session_id, fields=fields)
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
     return SessionOut(**row)
