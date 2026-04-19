@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-04-19
+
+### Added
+
+- `stores/prefs.svelte.ts` — reactive preferences persisted in
+  `localStorage` (`defaultModel`, `defaultWorkingDir`, `authToken`).
+- `components/Settings.svelte` — modal accessed via a ⚙ button in the
+  Sessions panel header. Edits all three prefs + also lifts the auth
+  gate when a token is entered here while the gate is up.
+- SessionList new-session form pre-fills `working_dir` and `model`
+  from saved prefs each time it opens; user edits within the open
+  form still override. Create also falls back to the pref default if
+  the user clears the field.
+
 ## [0.1.14] - 2026-04-19
 
 ### Added

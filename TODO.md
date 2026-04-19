@@ -94,15 +94,20 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `messages.thinking` column (migration 0004) + WS persistence.
 - [x] Conversation renders persisted thinking blocks on reload.
 
-## v0.1.15 — next slice
+## v0.1.15 — shipped
+
+- [x] Settings modal (gear button) — edit auth token + default
+  model + default working_dir without devtools.
+- [x] SessionList new-session form pre-fills from prefs defaults.
+
+## v0.1.16 — next slice
 
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor).
-- [ ] "Settings" panel surface for token + default model/working_dir so
-  users don't have to remember the `twrminal:token` localStorage key.
-- [ ] `twrminal send` streams thinking to stdout too (currently only
-  echoes the raw JSON; pretty-printing with `--format=pretty` would
-  help).
+- [ ] `twrminal send` pretty-print mode (`--format=pretty`) — currently
+  only emits raw JSON lines.
+- [ ] Inline "Rename session" action — currently only the title set at
+  creation time is used.
 
 ## v0.1.7+
 

@@ -1,16 +1,31 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
+  import { prefs } from '$lib/stores/prefs.svelte';
   import { agent } from '$lib/agent.svelte';
+  import Settings from '$lib/components/Settings.svelte';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
 
   let showNewForm = $state(false);
+  let showSettings = $state(false);
   let newWorkingDir = $state('');
   let newModel = $state('claude-sonnet-4-6');
   let newTitle = $state('');
   let newBudget = $state('');
   let submitting = $state(false);
+
+  function toggleNewForm() {
+    if (showNewForm) {
+      showNewForm = false;
+      return;
+    }
+    // Seed from prefs every time the form re-opens; user edits during
+    // the open session stay put.
+    newWorkingDir = prefs.defaultWorkingDir || newWorkingDir;
+    newModel = prefs.defaultModel || newModel;
+    showNewForm = true;
+  }
   const confirm = $state<{ id: string | null }>({ id: null });
   let confirmTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -35,8 +50,8 @@
   async function onCreate() {
     submitting = true;
     const created = await sessions.create({
-      working_dir: newWorkingDir.trim() || '/tmp',
-      model: newModel.trim() || 'claude-sonnet-4-6',
+      working_dir: newWorkingDir.trim() || prefs.defaultWorkingDir || '/tmp',
+      model: newModel.trim() || prefs.defaultModel || 'claude-sonnet-4-6',
       title: newTitle.trim() || null,
       max_budget_usd: parseBudget(newBudget)
     });
@@ -77,17 +92,29 @@
   }
 </script>
 
+<Settings bind:open={showSettings} />
+
 <aside class="bg-slate-900 p-4 overflow-y-auto border-r border-slate-800 flex flex-col gap-3">
-  <div class="flex items-center justify-between">
+  <div class="flex items-center justify-between gap-2">
     <h2 class="text-sm uppercase tracking-wider text-slate-400">Sessions</h2>
-    <button
-      type="button"
-      class="text-xs rounded bg-slate-800 hover:bg-slate-700 px-2 py-1"
-      onclick={() => (showNewForm = !showNewForm)}
-      aria-label="Toggle new session form"
-    >
-      {showNewForm ? 'Cancel' : '+ New'}
-    </button>
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="text-xs rounded bg-slate-800 hover:bg-slate-700 px-2 py-1"
+        aria-label="Open settings"
+        onclick={() => (showSettings = true)}
+      >
+        ⚙
+      </button>
+      <button
+        type="button"
+        class="text-xs rounded bg-slate-800 hover:bg-slate-700 px-2 py-1"
+        onclick={toggleNewForm}
+        aria-label="Toggle new session form"
+      >
+        {showNewForm ? 'Cancel' : '+ New'}
+      </button>
+    </div>
   </div>
 
   {#if showNewForm}
