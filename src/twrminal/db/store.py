@@ -170,3 +170,46 @@ async def list_tool_calls(conn: aiosqlite.Connection, session_id: str) -> list[d
         (session_id,),
     ) as cursor:
         return [dict(row) async for row in cursor]
+
+
+def _date_filter(column: str, date_prefix: str | None) -> tuple[str, tuple[str, ...]]:
+    if date_prefix is None:
+        return "", ()
+    return f" WHERE substr({column}, 1, 10) = ?", (date_prefix,)
+
+
+async def list_all_sessions(
+    conn: aiosqlite.Connection, *, date_prefix: str | None = None
+) -> list[dict[str, Any]]:
+    where, params = _date_filter("created_at", date_prefix)
+    sql = (
+        "SELECT id, created_at, updated_at, working_dir, model, title "
+        "FROM sessions" + where + " ORDER BY created_at ASC, id ASC"
+    )
+    async with conn.execute(sql, params) as cursor:
+        return [dict(row) async for row in cursor]
+
+
+async def list_all_messages(
+    conn: aiosqlite.Connection, *, date_prefix: str | None = None
+) -> list[dict[str, Any]]:
+    where, params = _date_filter("created_at", date_prefix)
+    sql = (
+        "SELECT id, session_id, role, content, created_at "
+        "FROM messages" + where + " ORDER BY created_at ASC, id ASC"
+    )
+    async with conn.execute(sql, params) as cursor:
+        return [dict(row) async for row in cursor]
+
+
+async def list_all_tool_calls(
+    conn: aiosqlite.Connection, *, date_prefix: str | None = None
+) -> list[dict[str, Any]]:
+    where, params = _date_filter("started_at", date_prefix)
+    sql = (
+        "SELECT id, session_id, message_id, name, input, output, error, "
+        "started_at, finished_at "
+        "FROM tool_calls" + where + " ORDER BY started_at ASC, id ASC"
+    )
+    async with conn.execute(sql, params) as cursor:
+        return [dict(row) async for row in cursor]

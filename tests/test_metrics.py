@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import json
+
+from fastapi.testclient import TestClient
+
+from twrminal import metrics
+from twrminal.config import Settings
+
+
+def test_metrics_endpoint_emits_registry(client: TestClient) -> None:
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    assert "twrminal_sessions_created_total" in resp.text
+
+
+def test_sessions_created_counter_increments(client: TestClient) -> None:
+    before = metrics.sessions_created._value.get()
+    client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m", "title": None},
+    )
+    after = metrics.sessions_created._value.get()
+    assert after == before + 1
+
+
+def test_ws_counters_update(client: TestClient, mock_agent_stream: None) -> None:
+    resp = client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m", "title": None},
+    )
+    sid = resp.json()["id"]
+
+    active_before = metrics.ws_active_connections._value.get()
+    user_before = metrics.messages_persisted.labels(role="user")._value.get()
+    assistant_before = metrics.messages_persisted.labels(role="assistant")._value.get()
+
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "hi"})
+        frames = [json.loads(ws.receive_text()) for _ in range(3)]
+        # Server has clearly advanced past the inc() once we've read frames.
+        active_during = metrics.ws_active_connections._value.get()
+        assert active_during == active_before + 1
+    assert [f["type"] for f in frames] == ["token", "token", "message_complete"]
+
+    assert metrics.messages_persisted.labels(role="user")._value.get() == user_before + 1
+    assert metrics.messages_persisted.labels(role="assistant")._value.get() == assistant_before + 1
+    token_sent = metrics.ws_events_sent.labels(type="token")._value.get()
+    assert token_sent >= 2
+    # Connection closed cleanly — gauge returned to baseline.
+    assert metrics.ws_active_connections._value.get() == active_before
+
+
+def test_tool_call_counters_label_success(
+    client: TestClient, mock_agent_tool_stream: None, tmp_settings: Settings
+) -> None:
+    resp = client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m", "title": None},
+    )
+    sid = resp.json()["id"]
+
+    started_before = metrics.tool_calls_started._value.get()
+    ok_before = metrics.tool_calls_finished.labels(ok="true")._value.get()
+
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "read hosts"})
+        for _ in range(3):
+            ws.receive_text()
+
+    assert metrics.tool_calls_started._value.get() == started_before + 1
+    assert metrics.tool_calls_finished.labels(ok="true")._value.get() == ok_before + 1

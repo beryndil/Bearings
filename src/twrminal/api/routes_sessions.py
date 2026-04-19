@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
+from twrminal import metrics
 from twrminal.api.models import MessageOut, SessionCreate, SessionOut
 from twrminal.db import store
 
@@ -16,6 +17,7 @@ async def create_session(body: SessionCreate, request: Request) -> SessionOut:
         model=body.model,
         title=body.title,
     )
+    metrics.sessions_created.inc()
     return SessionOut(**row)
 
 

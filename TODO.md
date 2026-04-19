@@ -27,40 +27,45 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `api.ts` with `AgentEvent` union + CRUD helpers.
 - [x] Svelte 5 stores for sessions + conversation + WS agent.
 - [x] Markdown rendering (marked + typography plugin).
-- [x] Browser-exercised: create session → WS connects → UI shows connected.
 
 ## v0.1.4 — shipped
 
 - [x] Shiki syntax highlighting in conversation code blocks.
 - [x] Tool-call final duration after `tool_call_end`.
-- [x] `localStorage` persistence for selected session + auto-connect on boot.
+- [x] `localStorage` persistence for selected session.
 - [x] WebSocket auto-reconnect with exponential backoff.
-- [x] Inline two-click delete confirmation (no `window.confirm`).
+- [x] Inline two-click delete confirmation.
 
-## v0.1.5 — next slice
+## v0.1.5 — shipped
 
-- [ ] Prometheus collectors for `/metrics` route (currently empty registry).
-  Counters: sessions_created, messages_persisted, tool_calls_started; gauges
-  for active WS connections.
-- [ ] `routes_history.py` — implement `/api/history/export` (JSON dump of
-  all sessions + messages) and `/api/history/daily/{date}`.
-- [ ] CI frontend build artifact test — add a step that verifies
-  `src/twrminal/web/dist/index.html` exists after `npm run build`.
-- [ ] Wire `message_id` on tool_calls rows (currently always NULL on
-  insert; backfill at `MessageComplete` time).
+- [x] Prometheus collectors + instrumentation for sessions, messages,
+  tool calls, WS events and active connections.
+- [x] `/api/history/export` + `/api/history/daily/{date}` routes.
+- [x] CI frontend artifact check + `npm run check` gate.
 
-## v0.1.6+
+## v0.1.6 — next slice
 
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
-- [ ] Auth gate: enable `auth.enabled` path (currently no-op).
+- [ ] Wire `message_id` on tool_calls rows. Likely approach: emit a
+  `MessageStart(message_id)` event at the start of each assistant turn
+  so the WS handler can pass it through to `insert_tool_call_start`.
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
-- [ ] Render tool-call history in Inspector for loaded sessions (currently
-  only live WS events populate it).
+- [ ] Render tool-call history in Inspector for loaded sessions
+  (currently only live WS events populate it).
+- [ ] `/api/history/export` query params: `?from=YYYY-MM-DD&to=YYYY-MM-DD`
+  for a range filter.
+
+## v0.1.7+
+
+- [ ] Auth gate: enable `auth.enabled` path (currently no-op).
+- [ ] Kill switch / graceful shutdown signal in the WS handler so
+  `twrminal serve` under systemd stops cleanly with in-flight streams.
+- [ ] Rate-limit or soft-cap `max_budget_usd` per session via
+  `ClaudeAgentOptions` so an agent loop doesn't burn unbounded tokens.
 
 ## Decisions pending
 
-- [x] GitHub org for remote push: `Beryndil/Twrminal` (configured as
-  `origin`).
+- [x] GitHub org for remote push: `Beryndil/Twrminal`.
 - [ ] Partial-message semantics: confirm `include_partial_messages=True`
   emits token deltas as expected on first live agent run.

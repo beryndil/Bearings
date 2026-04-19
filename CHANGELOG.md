@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-04-18
+
+### Added
+
+- Prometheus collectors in a dedicated `twrminal/metrics.py` using a
+  private `CollectorRegistry`. Metrics exposed on `/metrics`:
+  - `twrminal_sessions_created_total`
+  - `twrminal_messages_persisted_total{role}`
+  - `twrminal_tool_calls_started_total`
+  - `twrminal_tool_calls_finished_total{ok}`
+  - `twrminal_ws_active_connections` (gauge)
+  - `twrminal_ws_events_sent_total{type}`
+  Instrumentation lives at the route / WS-handler boundary; store.py
+  stays side-effect-free.
+- `GET /api/history/export` — full `{sessions, messages, tool_calls}`
+  dump.
+- `GET /api/history/daily/{YYYY-MM-DD}` — same shape filtered to one
+  calendar day; 400 on bad date.
+- `store.list_all_sessions`, `list_all_messages`, `list_all_tool_calls`
+  with optional `date_prefix` filter.
+- CI job verifies `src/twrminal/web/dist/index.html` + `_app/` exist
+  after `npm run build` so a broken sync-dist step fails the build.
+- CI frontend job now also runs `npm run check` (svelte-check) gating
+  type errors in components.
+
 ## [0.1.4] - 2026-04-18
 
 ### Added
