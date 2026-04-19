@@ -255,13 +255,22 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `db/schema.sql` back-filled with the v0.1.40
   `sessions.description` column that was missed in that slice.
 
+## v0.2.1 — shipped
+
+- [x] `Tag` type + `listTags` / `listSessionTags` helpers in
+  `frontend/src/lib/api.ts`.
+- [x] `tags.svelte.ts` store with `refresh()` mirroring sessions.
+- [x] Tags section in `SessionList.svelte` (pinned-first, divider,
+  session-count chip). Hidden during sidebar search. No filter
+  behavior yet.
+- [x] `+page.svelte` boot runs `sessions.refresh()` and
+  `tags.refresh()` in parallel.
+- [x] `tags.svelte.test.ts` store test (happy path + error path).
+
 ## v0.2.x — remaining slice plan
 
 See `V0.2.0_SPEC.md` §"Build order" and plan file
 `~/.claude/plans/vectorized-leaping-pretzel.md`.
-
-- [ ] **v0.2.1** — Sidebar Tags panel (read-only): list global tags,
-  pinned-first, session counts. `listTags` client + `tags` store.
 - [ ] **v0.2.2** — Attach/detach tags on a session: chips in header
   or SessionEdit modal, clickable tag-filter on the session list.
 - [ ] **v0.2.3** — Migration `0007_projects_and_memories.sql`

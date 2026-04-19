@@ -234,6 +234,27 @@ export type SearchHit = {
   created_at: string;
 };
 
+export type Tag = {
+  id: number;
+  name: string;
+  color: string | null;
+  pinned: boolean;
+  sort_order: number;
+  created_at: string;
+  session_count: number;
+};
+
+export function listTags(fetchImpl: typeof fetch = fetch): Promise<Tag[]> {
+  return jsonFetch<Tag[]>(fetchImpl, '/api/tags');
+}
+
+export function listSessionTags(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Tag[]> {
+  return jsonFetch<Tag[]>(fetchImpl, `/api/sessions/${sessionId}/tags`);
+}
+
 export function searchHistory(
   query: string,
   limit = 50,

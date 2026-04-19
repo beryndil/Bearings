@@ -9,6 +9,7 @@
   import { agent } from '$lib/agent.svelte';
   import { auth } from '$lib/stores/auth.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
+  import { tags } from '$lib/stores/tags.svelte';
 
   let booted = $state(false);
   let showCheatSheet = $state(false);
@@ -16,7 +17,7 @@
   async function boot() {
     if (booted) return;
     booted = true;
-    await sessions.refresh();
+    await Promise.all([sessions.refresh(), tags.refresh()]);
     if (sessions.selectedId) await agent.connect(sessions.selectedId);
   }
 

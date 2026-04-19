@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-04-19
+
+Sidebar **Tags panel** — read-only. Second v0.2 slice.
+
+### Added
+
+- `Tag` type + `listTags` / `listSessionTags` helpers in
+  `frontend/src/lib/api.ts`.
+- New `frontend/src/lib/stores/tags.svelte.ts` with a `TagStore`
+  singleton (mirrors the shape of `sessions.svelte.ts`).
+- Tags section in `SessionList.svelte`: "Tags" header above the
+  session list, pinned tags first (with a ★ glyph), then a divider,
+  then unpinned. Each row shows a right-aligned session-count chip.
+  Section is hidden while sidebar search is active and when no tags
+  exist. No click/filter behavior yet — that lands in v0.2.2.
+- `+page.svelte` boot now refreshes sessions and tags in parallel
+  (`Promise.all`).
+- Store test `tags.svelte.test.ts` (success + error path).
+
 ## [0.2.0] - 2026-04-19
 
 First v0.2 slice — **tag primitives**. Backend-only: establishes the

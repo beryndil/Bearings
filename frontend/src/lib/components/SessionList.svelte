@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
+  import { tags } from '$lib/stores/tags.svelte';
   import { prefs } from '$lib/stores/prefs.svelte';
   import { conversation } from '$lib/stores/conversation.svelte';
   import { agent } from '$lib/agent.svelte';
@@ -403,6 +404,44 @@
   {/if}
   {#if importError}
     <p class="text-xs text-rose-400">import: {importError}</p>
+  {/if}
+
+  {#if !searchQuery.trim() && tags.list.length > 0}
+    {@const pinned = tags.list.filter((t) => t.pinned)}
+    {@const unpinned = tags.list.filter((t) => !t.pinned)}
+    <section class="flex flex-col gap-1">
+      <h2 class="text-sm uppercase tracking-wider text-slate-400">Tags</h2>
+      <ul class="flex flex-col gap-0.5">
+        {#each pinned as tag (tag.id)}
+          <li
+            class="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm
+              text-slate-300"
+          >
+            <span class="flex items-center gap-1.5 min-w-0">
+              <span class="text-amber-400" aria-label="pinned">★</span>
+              <span class="truncate">{tag.name}</span>
+            </span>
+            <span class="text-[10px] font-mono text-slate-500">
+              {tag.session_count}
+            </span>
+          </li>
+        {/each}
+        {#if pinned.length > 0 && unpinned.length > 0}
+          <li class="h-px bg-slate-800 my-1" aria-hidden="true"></li>
+        {/if}
+        {#each unpinned as tag (tag.id)}
+          <li
+            class="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm
+              text-slate-300"
+          >
+            <span class="truncate">{tag.name}</span>
+            <span class="text-[10px] font-mono text-slate-500">
+              {tag.session_count}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
   {#if searchQuery.trim()}
