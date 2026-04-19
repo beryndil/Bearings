@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-04-19
+
+Projects backend — store CRUD + REST + session filter. Seventh v0.2
+slice, spec step 4. Frontend for projects lands in v0.2.9.
+
+### Added
+
+- `store.create_project` / `list_projects` / `get_project` /
+  `update_project` / `delete_project` with `session_count` rollup and
+  canonical pinned-first / sort_order / id ordering (mirrors tags).
+- `/api/projects` CRUD: `GET` (list), `POST` (201; 409 on duplicate
+  name), `GET /{id}`, `PATCH /{id}` (409 on duplicate rename, 404 on
+  missing), `DELETE /{id}` (204; sessions' `project_id` becomes NULL
+  via `ON DELETE SET NULL`).
+- `ProjectCreate` / `ProjectUpdate` / `ProjectOut` DTOs.
+- `SessionOut.project_id` — exposed on every session response.
+- `POST /api/sessions` accepts `project_id` at creation time.
+- `PATCH /api/sessions/{id}` accepts `project_id` (explicit null
+  clears the assignment).
+- `GET /api/sessions?project_id=<id>` filter. `project_id=none`
+  restricts to sessions with no project. Non-integer non-`none` → 400.
+- `store.list_sessions(project_id=...)` composes with tag filters
+  (both AND'd together; refactored from three branches to one
+  dynamic WHERE builder).
+- `store.NO_PROJECT` sentinel + `store.ProjectFilter` alias so
+  routes don't reinvent the parsing rule.
+- 23 new pytest cases covering store CRUD, session_count rollup,
+  ordering tiebreakers, cascade-to-SET-NULL, project + tag filter
+  composition, and the full REST surface.
+
 ## [0.2.5] - 2026-04-19
 
 Layered system-prompt assembler — pure function, no consumers yet.

@@ -12,6 +12,7 @@ from twrminal.api import (
     routes_health,
     routes_history,
     routes_metrics,
+    routes_projects,
     routes_sessions,
     routes_tags,
     ws_agent,
@@ -55,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_health.router, prefix="/api")
     app.include_router(routes_sessions.router, prefix="/api")
     app.include_router(routes_tags.router, prefix="/api")
+    app.include_router(routes_projects.router, prefix="/api")
     app.include_router(routes_history.router, prefix="/api")
     app.include_router(routes_metrics.router)
     app.include_router(ws_agent.router)

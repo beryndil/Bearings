@@ -316,14 +316,28 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   pinned/sort_order/id tiebreakers, session_instructions-last, and
   per-layer header verbatim.
 
+## v0.2.6 — shipped
+
+- [x] `store.create_project` / `list_projects` / `get_project` /
+  `update_project` / `delete_project` with `session_count` rollup
+  and canonical pinned-first / sort_order / id ordering.
+- [x] `/api/projects` CRUD (201 on create, 409 on duplicate name,
+  204 on delete, 404 on missing).
+- [x] `ProjectCreate` / `ProjectUpdate` / `ProjectOut` DTOs.
+- [x] `SessionCreate` + `SessionUpdate` + `SessionOut` all carry
+  `project_id`. PATCH can set or clear the assignment.
+- [x] `GET /api/sessions?project_id=<id>` filter;
+  `project_id=none` matches `project_id IS NULL`. `store.NO_PROJECT`
+  sentinel + `store.ProjectFilter` alias.
+- [x] `list_sessions` refactored to one dynamic WHERE builder so
+  project + tag filters compose without SQL-path explosion.
+- [x] 23 pytest cases in `tests/test_projects.py`.
+
 ## v0.2.x — remaining slice plan
 
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
-
-- [ ] **v0.2.6** — Projects backend: store CRUD + `/api/projects`
-  routes + session filter by `project_id`.
 - [ ] **v0.2.7** — Tag memories backend + `session_instructions`
   via `PATCH /api/sessions/{id}`. Wire `AgentSession` through
   `assemble_prompt`.
