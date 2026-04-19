@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.34] - 2026-04-19
+
+### Added
+
+- `AuthGate.test.ts` — 5 cases: hidden when `auth.status == 'open'`;
+  visible on `required`; shows "rejected" copy on `invalid`; saving a
+  token flips status to `ok` + writes localStorage; empty-string
+  submission is a no-op.
+
+### Fixed
+
+- `vitest.setup.ts` installs a Map-backed `localStorage` shim on
+  both `globalThis` and `window`. Node 22+ ships a native
+  `localStorage` global that is non-functional unless
+  `--localstorage-file` is given a valid path, and that global
+  shadows jsdom's Storage under vitest — `setItem` / `getItem` threw
+  `TypeError`. The shim sidesteps the whole mess and clears between
+  tests via `afterEach`.
+
 ## [0.1.33] - 2026-04-19
 
 ### Added

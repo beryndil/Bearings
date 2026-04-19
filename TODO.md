@@ -191,10 +191,14 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 
 - [x] Settings component test + `$lib` alias fix in vitest config.
 
-## v0.1.34 — next slice
+## v0.1.34 — shipped
+
+- [x] AuthGate component test (5 cases).
+- [x] Node-native `localStorage` shim in vitest setup.
+
+## v0.1.35 — next slice
 
 - [ ] SessionList search debounce test (fake timers).
-- [ ] AuthGate component test (auth store wiring).
 - [ ] Verify interrupt() behavior against a real agent running a
   Bash(sleep 10) tool.
 - [ ] "Import session" consuming the v0.1.30 export JSON.
