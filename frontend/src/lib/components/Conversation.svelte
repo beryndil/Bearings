@@ -34,6 +34,23 @@
     }
   }
 
+  // Document-level Esc clears an active search highlight. Scoped to
+  // this component so it only binds while a session is open; the
+  // textarea keeps its own Esc handling via browser defaults.
+  $effect(() => {
+    function onDocKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      if (!conversation.highlightQuery) return;
+      // Don't hijack Esc while the user is typing a prompt.
+      const active = document.activeElement;
+      const inTextarea = active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT';
+      if (inTextarea) return;
+      conversation.highlightQuery = '';
+    }
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  });
+
   function pressureClass(spent: number, cap: number | null | undefined): string {
     if (cap == null || cap <= 0) return 'text-slate-500';
     const ratio = spent / cap;
@@ -120,6 +137,25 @@
       </span>
     </div>
   </header>
+
+  {#if conversation.highlightQuery}
+    <div
+      class="px-4 py-1.5 bg-amber-950/40 border-b border-amber-900/40
+        flex items-center justify-between text-xs"
+    >
+      <span class="text-amber-200">
+        Matching <span class="font-mono">«{conversation.highlightQuery}»</span> · Esc to clear
+      </span>
+      <button
+        type="button"
+        class="text-amber-400 hover:text-amber-200"
+        aria-label="Clear highlight"
+        onclick={() => (conversation.highlightQuery = '')}
+      >
+        ✕
+      </button>
+    </div>
+  {/if}
 
   <div bind:this={scrollContainer} class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
     {#if !sessions.selectedId}
