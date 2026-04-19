@@ -179,6 +179,15 @@
       return ts;
     }
   }
+
+  function costClass(session: api.Session): string {
+    const cap = session.max_budget_usd;
+    if (cap == null || cap <= 0) return 'text-slate-600';
+    const ratio = session.total_cost_usd / cap;
+    if (ratio >= 1) return 'text-rose-400';
+    if (ratio >= 0.8) return 'text-amber-400';
+    return 'text-slate-600';
+  }
 </script>
 
 <Settings bind:open={showSettings} />
@@ -345,8 +354,15 @@
             <div class="text-[10px] text-slate-500 font-mono truncate">
               {session.working_dir}
             </div>
-            <div class="text-[10px] text-slate-600">
-              {formatTimestamp(session.created_at)}
+            <div class="text-[10px] flex justify-between items-baseline gap-2">
+              <span class="text-slate-600">
+                {formatTimestamp(session.updated_at)}
+              </span>
+              {#if session.total_cost_usd > 0}
+                <span class="font-mono {costClass(session)}">
+                  ${session.total_cost_usd.toFixed(4)}
+                </span>
+              {/if}
             </div>
           </button>
           <button

@@ -81,6 +81,17 @@ class SessionStore {
     }
   }
 
+  /** Called by the conversation store when a MessageComplete event
+   * carries a cost delta, so the sidebar row reflects the new total
+   * without waiting for a full `refresh()`. No-op if the session
+   * isn't in the list (e.g. it was deleted mid-stream). */
+  bumpCost(id: string, deltaUsd: number): void {
+    if (deltaUsd <= 0) return;
+    this.list = this.list.map((s) =>
+      s.id === id ? { ...s, total_cost_usd: s.total_cost_usd + deltaUsd } : s
+    );
+  }
+
   select(id: string | null): void {
     this.selectedId = id;
     writeStoredId(id);

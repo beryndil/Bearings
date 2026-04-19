@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.27] - 2026-04-19
+
+### Added
+
+- Cost badge on each sidebar session row (`$0.1234` in a mono font,
+  hidden when total cost is zero). Uses the same amber/rose pressure
+  coloring as the Conversation header when a `max_budget_usd` is set.
+- `sessions.bumpCost(id, deltaUsd)` — called by the conversation
+  store on every MessageComplete that carries a cost, so the sidebar
+  badge updates live during streaming instead of waiting for a full
+  refresh.
+- Sidebar timestamp uses `updated_at` instead of `created_at` so a
+  rename or a just-streamed turn shows a meaningful "last touched".
+
 ## [0.1.26] - 2026-04-19
 
 ### Added

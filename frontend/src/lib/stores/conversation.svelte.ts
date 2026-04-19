@@ -1,4 +1,5 @@
 import * as api from '$lib/api';
+import { sessions } from '$lib/stores/sessions.svelte';
 
 export type LiveToolCall = {
   id: string;
@@ -141,6 +142,7 @@ class ConversationStore {
         }
         if (event.cost_usd !== null) {
           this.totalCost += event.cost_usd;
+          sessions.bumpCost(event.session_id, event.cost_usd);
         }
         this.streamingText = '';
         this.streamingThinking = '';
