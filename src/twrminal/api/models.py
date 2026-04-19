@@ -7,16 +7,18 @@ class SessionCreate(BaseModel):
     working_dir: str
     model: str
     title: str | None = None
+    description: str | None = None
     max_budget_usd: float | None = None
 
 
 class SessionUpdate(BaseModel):
     """Partial update for an existing session. Any unset field is left
-    unchanged; explicit `None` for `title`/`max_budget_usd` clears them."""
+    unchanged; explicit `None` for any nullable field clears it."""
 
     title: str | None = None
+    description: str | None = None
     max_budget_usd: float | None = None
-    # Distinguishes "not provided" from "set to null" for the two
+    # Distinguishes "not provided" from "set to null" for the three
     # nullable columns. Pydantic writes `model_fields_set` so routes
     # can dispatch off what was actually passed.
 
@@ -28,6 +30,7 @@ class SessionOut(BaseModel):
     working_dir: str
     model: str
     title: str | None = None
+    description: str | None = None
     max_budget_usd: float | None = None
     total_cost_usd: float = 0.0
     message_count: int = 0

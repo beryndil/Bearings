@@ -174,6 +174,11 @@
           select or create a session to start
         {/if}
       </p>
+      {#if sessions.selected?.description}
+        <p class="text-xs text-slate-400 mt-1 whitespace-pre-wrap break-words">
+          {sessions.selected.description}
+        </p>
+      {/if}
     </div>
     <div class="flex items-center gap-2">
       {#if conversation.streamingActive}

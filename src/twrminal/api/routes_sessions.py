@@ -29,6 +29,7 @@ async def create_session(body: SessionCreate, request: Request) -> SessionOut:
         working_dir=body.working_dir,
         model=body.model,
         title=body.title,
+        description=body.description,
         max_budget_usd=body.max_budget_usd,
     )
     metrics.sessions_created.inc()

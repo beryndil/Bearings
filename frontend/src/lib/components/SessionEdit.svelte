@@ -7,6 +7,7 @@
   }: { open?: boolean; sessionId: string | null } = $props();
 
   let title = $state('');
+  let description = $state('');
   let budget = $state('');
   let saving = $state(false);
 
@@ -17,6 +18,7 @@
   $effect(() => {
     if (open && current) {
       title = current.title ?? '';
+      description = current.description ?? '';
       budget = current.max_budget_usd != null ? String(current.max_budget_usd) : '';
     }
   });
@@ -33,6 +35,7 @@
     saving = true;
     await sessions.update(sessionId, {
       title: title.trim() === '' ? null : title.trim(),
+      description: description.trim() === '' ? null : description.trim(),
       max_budget_usd: parseBudget(budget)
     });
     saving = false;
@@ -80,6 +83,17 @@
           placeholder="(leave empty to clear)"
           bind:value={title}
         />
+      </label>
+
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="text-slate-400">Description</span>
+        <textarea
+          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
+            focus:outline-none focus:border-slate-600 resize-y min-h-[4.5rem]"
+          placeholder="context notes for this session (optional)"
+          rows="3"
+          bind:value={description}
+        ></textarea>
       </label>
 
       <label class="flex flex-col gap-1 text-xs">

@@ -10,6 +10,7 @@ export type Session = {
   working_dir: string;
   model: string;
   title: string | null;
+  description: string | null;
   max_budget_usd: number | null;
   total_cost_usd: number;
   message_count: number;
@@ -19,11 +20,13 @@ export type SessionCreate = {
   working_dir: string;
   model: string;
   title?: string | null;
+  description?: string | null;
   max_budget_usd?: number | null;
 };
 
 export type SessionUpdate = {
   title?: string | null;
+  description?: string | null;
   max_budget_usd?: number | null;
 };
 

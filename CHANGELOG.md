@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.40] - 2026-04-19
+
+### Added
+
+- **Editable session descriptions.** New `description TEXT` column on
+  `sessions` (migration `0005_session_description.sql`) surfaces a
+  free-form context note for each session — longer than the title,
+  shorter than the conversation. Wired through `SessionCreate` /
+  `SessionUpdate` / `SessionOut`, a new textarea in the SessionEdit
+  modal, and a subtle render under the Conversation header subtitle
+  when set. Preserved through the v0.1.30 export/import shape.
+- Three new route tests: description round-trip, patch-update,
+  patch-null clears.
+
 ## [0.1.39] - 2026-04-19
 
 Docs/housekeeping only — no code change. Brings the two pieces of

@@ -46,7 +46,8 @@ def _new_id() -> str:
 
 
 _SESSION_BASE_COLS = (
-    "id, created_at, updated_at, working_dir, model, title, max_budget_usd, total_cost_usd"
+    "id, created_at, updated_at, working_dir, model, title, description, "
+    "max_budget_usd, total_cost_usd"
 )
 _SESSION_COUNT = "(SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count"
 _SESSION_COLS_WITH_COUNT = f"s.{_SESSION_BASE_COLS.replace(', ', ', s.')}, {_SESSION_COUNT}"
@@ -58,15 +59,17 @@ async def create_session(
     working_dir: str,
     model: str,
     title: str | None = None,
+    description: str | None = None,
     max_budget_usd: float | None = None,
 ) -> dict[str, Any]:
     session_id = _new_id()
     now = _now()
     await conn.execute(
         "INSERT INTO sessions "
-        "(id, created_at, updated_at, working_dir, model, title, max_budget_usd) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (session_id, now, now, working_dir, model, title, max_budget_usd),
+        "(id, created_at, updated_at, working_dir, model, title, description, "
+        "max_budget_usd) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (session_id, now, now, working_dir, model, title, description, max_budget_usd),
     )
     await conn.commit()
     row = await get_session(conn, session_id)
@@ -97,9 +100,10 @@ async def update_session(
     fields: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Apply a partial update. `fields` maps column name → new value;
-    only `title` and `max_budget_usd` are accepted. Bumps updated_at.
-    Returns the refreshed row, or None if the session doesn't exist."""
-    allowed = {"title", "max_budget_usd"}
+    only `title`, `description`, and `max_budget_usd` are accepted. Bumps
+    updated_at. Returns the refreshed row, or None if the session doesn't
+    exist."""
+    allowed = {"title", "description", "max_budget_usd"}
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if not filtered:
         return await get_session(conn, session_id)
@@ -141,8 +145,9 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
     created_at = str(src_session.get("created_at") or now)
     await conn.execute(
         "INSERT INTO sessions "
-        "(id, created_at, updated_at, working_dir, model, title, max_budget_usd) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "(id, created_at, updated_at, working_dir, model, title, description, "
+        "max_budget_usd) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             new_session_id,
             created_at,
@@ -150,6 +155,7 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
             str(src_session.get("working_dir") or "/tmp"),
             str(src_session.get("model") or "claude-sonnet-4-6"),
             src_session.get("title"),
+            src_session.get("description"),
             src_session.get("max_budget_usd"),
         ),
     )

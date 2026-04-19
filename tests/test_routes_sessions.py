@@ -98,6 +98,33 @@ def test_patch_updates_budget(client: TestClient) -> None:
     assert body["max_budget_usd"] == 5.5
 
 
+def test_post_create_persists_description(client: TestClient) -> None:
+    data = _create(client, title="noted", description="investigating the auth bug")
+    assert data["description"] == "investigating the auth bug"
+    roundtrip = client.get(f"/api/sessions/{data['id']}").json()
+    assert roundtrip["description"] == "investigating the auth bug"
+
+
+def test_patch_updates_description(client: TestClient) -> None:
+    created = _create(client, description="first pass")
+    body = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={"description": "revised notes"},
+    ).json()
+    assert body["description"] == "revised notes"
+    # Title untouched by description-only patch.
+    assert body["title"] == created["title"]
+
+
+def test_patch_can_clear_description(client: TestClient) -> None:
+    created = _create(client, description="temporary")
+    body = client.patch(
+        f"/api/sessions/{created['id']}",
+        json={"description": None},
+    ).json()
+    assert body["description"] is None
+
+
 def test_patch_empty_body_is_noop(client: TestClient) -> None:
     created = _create(client, title="stays")
     body = client.patch(

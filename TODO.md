@@ -227,6 +227,12 @@ Then projects + tag memories on top. Build order lives in the spec.
 - [x] README refreshed from v0.1.0 scaffold prose to current v0.1.x
   capability surface.
 
+## v0.1.40 — shipped
+
+- [x] Editable session descriptions: `description` column (migration
+  0005), wired through SessionCreate/Update/Out, SessionEdit textarea,
+  Conversation-header render, and the v0.1.30 export/import shape.
+
 ## Stale items resolved in earlier slices (ticked in v0.1.39)
 
 - [x] Auth gate: enable `auth.enabled` path — opt-in bearer token
