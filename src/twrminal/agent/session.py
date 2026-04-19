@@ -11,6 +11,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     ResultMessage,
     TextBlock,
+    ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -21,6 +22,7 @@ from twrminal.agent.events import (
     ErrorEvent,
     MessageComplete,
     MessageStart,
+    Thinking,
     Token,
     ToolCallEnd,
     ToolCallStart,
@@ -91,6 +93,8 @@ class AgentSession:
     def _translate_block(self, block: object) -> AgentEvent | None:
         if isinstance(block, TextBlock):
             return Token(session_id=self.session_id, text=block.text)
+        if isinstance(block, ThinkingBlock):
+            return Thinking(session_id=self.session_id, text=block.thinking)
         if isinstance(block, ToolUseBlock):
             return ToolCallStart(
                 session_id=self.session_id,

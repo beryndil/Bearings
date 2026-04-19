@@ -116,6 +116,15 @@
           <header class="text-[10px] uppercase tracking-wider text-amber-400 mb-1">
             assistant · streaming
           </header>
+          {#if conversation.streamingThinking}
+            <details class="mb-2 rounded bg-slate-950/40 px-2 py-1" open>
+              <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500">
+                thinking
+              </summary>
+              <pre
+                class="mt-1 whitespace-pre-wrap text-xs text-slate-400 font-sans">{conversation.streamingThinking}</pre>
+            </details>
+          {/if}
           <div class="prose prose-invert prose-sm max-w-none">
             {@html renderMarkdown(conversation.streamingText)}
             <span class="inline-block animate-pulse">▍</span>

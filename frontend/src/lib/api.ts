@@ -42,6 +42,7 @@ export type ToolCall = {
 };
 
 export type TokenEvent = { type: 'token'; session_id: string; text: string };
+export type ThinkingEvent = { type: 'thinking'; session_id: string; text: string };
 export type UserMessageEvent = { type: 'user_message'; session_id: string; content: string };
 export type ToolCallStartEvent = {
   type: 'tool_call_start';
@@ -73,6 +74,7 @@ export type ErrorEvent = { type: 'error'; session_id: string; message: string };
 
 export type AgentEvent =
   | TokenEvent
+  | ThinkingEvent
   | UserMessageEvent
   | ToolCallStartEvent
   | ToolCallEndEvent

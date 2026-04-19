@@ -17,6 +17,12 @@ class Token(BaseModel):
     text: str
 
 
+class Thinking(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    session_id: str
+    text: str
+
+
 class ToolCallStart(BaseModel):
     type: Literal["tool_call_start"] = "tool_call_start"
     session_id: str
@@ -54,5 +60,12 @@ class ErrorEvent(BaseModel):
 
 
 AgentEvent = (
-    UserMessage | Token | ToolCallStart | ToolCallEnd | MessageStart | MessageComplete | ErrorEvent
+    UserMessage
+    | Token
+    | Thinking
+    | ToolCallStart
+    | ToolCallEnd
+    | MessageStart
+    | MessageComplete
+    | ErrorEvent
 )

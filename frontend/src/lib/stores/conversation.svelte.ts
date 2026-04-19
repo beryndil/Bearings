@@ -37,6 +37,7 @@ class ConversationStore {
   sessionId = $state<string | null>(null);
   messages = $state<api.Message[]>([]);
   streamingText = $state('');
+  streamingThinking = $state('');
   streamingActive = $state(false);
   toolCalls = $state<LiveToolCall[]>([]);
   totalCost = $state(0);
@@ -63,6 +64,7 @@ class ConversationStore {
 
   reset(): void {
     this.streamingText = '';
+    this.streamingThinking = '';
     this.streamingActive = false;
     this.toolCalls = [];
   }
@@ -79,6 +81,7 @@ class ConversationStore {
       }
     ];
     this.streamingText = '';
+    this.streamingThinking = '';
     this.streamingActive = true;
   }
 
@@ -86,6 +89,9 @@ class ConversationStore {
     switch (event.type) {
       case 'token':
         this.streamingText += event.text;
+        return;
+      case 'thinking':
+        this.streamingThinking += event.text;
         return;
       case 'tool_call_start':
         this.toolCalls = [
@@ -132,6 +138,7 @@ class ConversationStore {
           this.totalCost += event.cost_usd;
         }
         this.streamingText = '';
+        this.streamingThinking = '';
         this.streamingActive = false;
         return;
       case 'error':

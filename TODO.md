@@ -84,8 +84,15 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Budget pressure coloring (amber ≥80%, rose ≥100%).
 - [x] SessionList budget form handles number-input value shape.
 
-## v0.1.13 — next slice
+## v0.1.13 — shipped
 
+- [x] `Thinking` event + `ThinkingBlock` translation in AgentSession.
+- [x] Frontend renders streaming thinking in a collapsible block.
+
+## v0.1.14 — next slice
+
+- [ ] Persist thinking alongside assistant messages (currently only
+  streamed; not on reload). Needs a column or JSON payload.
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.

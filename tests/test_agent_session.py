@@ -8,6 +8,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
     TextBlock,
+    ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -17,6 +18,7 @@ from twrminal.agent.events import (
     ErrorEvent,
     MessageComplete,
     MessageStart,
+    Thinking,
     Token,
     ToolCallEnd,
     ToolCallStart,
@@ -138,6 +140,27 @@ async def test_stream_translates_text_blocks(monkeypatch: pytest.MonkeyPatch) ->
     assert start.message_id == complete.message_id
     tokens = [e for e in events if isinstance(e, Token)]
     assert [t.text for t in tokens] == ["hello ", "world"]
+
+
+@pytest.mark.asyncio
+async def test_stream_translates_thinking_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(
+        monkeypatch,
+        [
+            _assistant(
+                ThinkingBlock(thinking="reasoning about the prompt", signature="sig"),
+                TextBlock("answer"),
+            ),
+            _result(),
+        ],
+    )
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("hi")]
+    types = [type(e).__name__ for e in events]
+    assert types == ["MessageStart", "Thinking", "Token", "MessageComplete"]
+    thinking = events[1]
+    assert isinstance(thinking, Thinking)
+    assert thinking.text == "reasoning about the prompt"
 
 
 @pytest.mark.asyncio
