@@ -214,12 +214,6 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Inspector "Agent" disclosure with auto-follow scroll.
 - [x] TESTING_NOTES.md for the v0.1.37–38 testing pass.
 
-## v0.2.0 — next milestone
-
-See `V0.2.0_SPEC.md`. First numbered step: tag primitives (tags
-table, session_tags join, pinned/sort_order columns, basic CRUD).
-Then projects + tag memories on top. Build order lives in the spec.
-
 ## v0.1.39 — shipped
 
 - [x] Housekeeping: tick stale TODO items that actually shipped in
@@ -242,6 +236,15 @@ Then projects + tag memories on top. Build order lives in the spec.
 - [x] Rate-limit / soft-cap `max_budget_usd` per session via
   `ClaudeAgentOptions` — wired in `AgentSession.stream()`
   (`session.py:67-68`). Per-session column lands in v0.1.8.
+
+## v0.2.0 — next milestone
+
+See `V0.2.0_SPEC.md`. Migration slot 0005 is now claimed by the
+v0.1.40 description column, so the v0.2 migrations shift one up:
+`0006_tag_primitives.sql` then `0007_projects_and_memories.sql`.
+First numbered build-order step: tag primitives (tags table,
+session_tags join, pinned/sort_order columns, basic CRUD). Then
+projects + tag memories on top. Full order lives in the spec.
 
 ## Decisions pending
 
