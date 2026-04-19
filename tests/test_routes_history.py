@@ -82,3 +82,32 @@ def test_export_rejects_bad_range(client: TestClient) -> None:
     assert resp.status_code == 400
     resp = client.get("/api/history/export?to=2026-99-99")
     assert resp.status_code == 400
+
+
+def test_search_requires_q_param(client: TestClient) -> None:
+    resp = client.get("/api/history/search")
+    assert resp.status_code == 422  # q missing
+    resp = client.get("/api/history/search?q=")
+    assert resp.status_code == 422  # empty string
+
+
+def test_search_returns_matches(client: TestClient, mock_agent_stream: None) -> None:
+    sid = _create(client, "searchable")
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "pagination is tricky"})
+        for _ in range(4):
+            ws.receive_text()
+
+    hits = client.get("/api/history/search?q=pagination").json()
+    assert len(hits) >= 1
+    user_hit = next(h for h in hits if h["role"] == "user")
+    assert user_hit["session_id"] == sid
+    assert user_hit["session_title"] == "searchable"
+    assert "pagination" in user_hit["snippet"]
+    assert user_hit["model"]  # joined from sessions
+
+
+def test_search_empty_when_no_match(client: TestClient) -> None:
+    _create(client)
+    hits = client.get("/api/history/search?q=absolutely-not-there").json()
+    assert hits == []

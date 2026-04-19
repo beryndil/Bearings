@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2026-04-19
+
+### Added
+
+- `GET /api/history/search?q=...&limit=N` — case-insensitive LIKE
+  match across `messages.content` + `thinking`, joined with
+  `sessions` for title + model. Returns `SearchHit[]` with a trimmed
+  snippet window (±40/±120 chars around the first match).
+- `store.search_messages(conn, query, limit)` + `SearchHit` Pydantic
+  model.
+- Frontend `api.searchHistory(q, limit)` helper.
+- Sidebar search input above the sessions list. Typing (debounced
+  200ms) swaps the list for match previews — session title, role
+  badge, snippet with ellipses. Clicking a hit selects the session
+  and connects.
+
 ## [0.1.18] - 2026-04-19
 
 ### Added

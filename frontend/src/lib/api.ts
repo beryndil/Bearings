@@ -195,6 +195,25 @@ export function listToolCalls(
   return jsonFetch<ToolCall[]>(fetchImpl, `/api/sessions/${sessionId}/tool_calls`);
 }
 
+export type SearchHit = {
+  message_id: string;
+  session_id: string;
+  session_title: string | null;
+  model: string;
+  role: string;
+  snippet: string;
+  created_at: string;
+};
+
+export function searchHistory(
+  query: string,
+  limit = 50,
+  fetchImpl: typeof fetch = fetch
+): Promise<SearchHit[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  return jsonFetch<SearchHit[]>(fetchImpl, `/api/history/search?${params}`);
+}
+
 export function openAgentSocket(sessionId: string): WebSocket {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const token = readAuthToken();

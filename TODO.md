@@ -118,14 +118,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Frontend Stop button in Conversation header.
 - [x] WS handler: single-reader / queue-dispatched refactor.
 
-## v0.1.19 — next slice
+## v0.1.19 — shipped
+
+- [x] `/api/history/search` endpoint + `SearchHit` model.
+- [x] Sidebar search input (debounced) with inline match previews.
+
+## v0.1.20 — next slice
 
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor).
-- [ ] Persisted conversation search: `/api/history/search?q=...` across
-  messages, with sidebar filter input.
 - [ ] Interrupt during tool execution: the SDK has `client.interrupt()`;
   wire it when a stop lands mid-`tool_use` so the tool can abort too.
+- [ ] Highlight the matched substring inside the snippet rather than
+  relying on surrounding context.
 
 ## v0.1.7+
 

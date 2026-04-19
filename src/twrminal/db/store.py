@@ -284,6 +284,23 @@ async def list_all_messages(
         return [dict(row) async for row in cursor]
 
 
+async def search_messages(
+    conn: aiosqlite.Connection, query: str, *, limit: int = 50
+) -> list[dict[str, Any]]:
+    """Case-insensitive LIKE match across message content and thinking,
+    joined with sessions for the title. Newest matches first."""
+    pattern = f"%{query}%"
+    sql = (
+        "SELECT m.id AS message_id, m.session_id, m.role, m.content, "
+        "m.thinking, m.created_at, s.title AS session_title, s.model "
+        "FROM messages m JOIN sessions s ON s.id = m.session_id "
+        "WHERE m.content LIKE ? OR m.thinking LIKE ? "
+        "ORDER BY m.created_at DESC, m.id DESC LIMIT ?"
+    )
+    async with conn.execute(sql, (pattern, pattern, limit)) as cursor:
+        return [dict(row) async for row in cursor]
+
+
 async def list_all_tool_calls(
     conn: aiosqlite.Connection,
     *,

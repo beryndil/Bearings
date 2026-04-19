@@ -3,9 +3,11 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { prefs } from '$lib/stores/prefs.svelte';
   import { agent } from '$lib/agent.svelte';
+  import * as api from '$lib/api';
   import Settings from '$lib/components/Settings.svelte';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
+  const SEARCH_DEBOUNCE_MS = 200;
 
   let showNewForm = $state(false);
   let showSettings = $state(false);
@@ -14,6 +16,39 @@
   let newTitle = $state('');
   let newBudget = $state('');
   let submitting = $state(false);
+
+  let searchQuery = $state('');
+  let searchResults = $state<api.SearchHit[]>([]);
+  let searchError = $state<string | null>(null);
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function runSearch(q: string) {
+    if (searchTimer !== null) clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      if (!q.trim()) {
+        searchResults = [];
+        searchError = null;
+        return;
+      }
+      try {
+        searchResults = await api.searchHistory(q.trim());
+        searchError = null;
+      } catch (e) {
+        searchError = e instanceof Error ? e.message : String(e);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  $effect(() => {
+    runSearch(searchQuery);
+  });
+
+  async function onPickResult(sid: string) {
+    searchQuery = '';
+    searchResults = [];
+    sessions.select(sid);
+    await agent.connect(sid);
+  }
 
   function toggleNewForm() {
     if (showNewForm) {
@@ -149,6 +184,14 @@
     </div>
   </div>
 
+  <input
+    type="search"
+    placeholder="Search messages…"
+    class="rounded bg-slate-950 border border-slate-800 px-2 py-1.5 text-sm
+      focus:outline-none focus:border-slate-600"
+    bind:value={searchQuery}
+  />
+
   {#if showNewForm}
     <form
       class="flex flex-col gap-2 rounded bg-slate-800/60 p-3"
@@ -210,7 +253,35 @@
     <p class="text-xs text-rose-400">{sessions.error}</p>
   {/if}
 
-  {#if sessions.loading && sessions.list.length === 0}
+  {#if searchQuery.trim()}
+    {#if searchError}
+      <p class="text-xs text-rose-400">{searchError}</p>
+    {:else if searchResults.length === 0}
+      <p class="text-slate-500 text-sm">No matches.</p>
+    {:else}
+      <ul class="flex flex-col gap-1">
+        {#each searchResults as hit (hit.message_id)}
+          <li>
+            <button
+              type="button"
+              class="w-full text-left rounded bg-slate-800/40 hover:bg-slate-800 px-2 py-2"
+              onclick={() => onPickResult(hit.session_id)}
+            >
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-sm truncate">
+                  {hit.session_title ?? hit.model}
+                </span>
+                <span class="text-[10px] uppercase text-slate-500">{hit.role}</span>
+              </div>
+              <div class="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
+                {hit.snippet}
+              </div>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {:else if sessions.loading && sessions.list.length === 0}
     <p class="text-slate-500 text-sm">Loading…</p>
   {:else if sessions.list.length === 0}
     <p class="text-slate-500 text-sm">No sessions yet.</p>

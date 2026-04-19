@@ -51,3 +51,13 @@ class ToolCallOut(BaseModel):
     error: str | None = None
     started_at: str
     finished_at: str | None = None
+
+
+class SearchHit(BaseModel):
+    message_id: str
+    session_id: str
+    session_title: str | None = None
+    model: str
+    role: str
+    snippet: str
+    created_at: str

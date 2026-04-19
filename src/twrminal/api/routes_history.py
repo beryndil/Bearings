@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from twrminal.api.auth import require_auth
+from twrminal.api.models import SearchHit
 from twrminal.db import store
 
 router = APIRouter(
@@ -13,6 +14,26 @@ router = APIRouter(
     tags=["history"],
     dependencies=[Depends(require_auth)],
 )
+
+SNIPPET_MAX = 160
+
+
+def _snippet(text: str, query: str) -> str:
+    """Trim to a ~160-char window around the first case-insensitive
+    match. Matches `LIKE %q%` behavior; if the source is `thinking`
+    or the match is in it, the caller still wins because we feed
+    whichever field yielded the hit."""
+    if not text:
+        return ""
+    lower = text.lower()
+    idx = lower.find(query.lower())
+    if idx < 0:
+        return text[:SNIPPET_MAX] + ("…" if len(text) > SNIPPET_MAX else "")
+    start = max(0, idx - 40)
+    end = min(len(text), idx + len(query) + 120)
+    prefix = "…" if start > 0 else ""
+    suffix = "…" if end < len(text) else ""
+    return f"{prefix}{text[start:end]}{suffix}"
 
 
 def _validate_date(value: str | None) -> str | None:
@@ -51,3 +72,31 @@ async def export_history(
 async def daily_log(date: str, request: Request) -> dict[str, Any]:
     validated = _validate_date(date)
     return await _dump(request, date_from=validated, date_to=validated)
+
+
+@router.get("/search", response_model=list[SearchHit])
+async def search_history(
+    request: Request,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(50, ge=1, le=500),
+) -> list[SearchHit]:
+    rows = await store.search_messages(request.app.state.db, q, limit=limit)
+    hits: list[SearchHit] = []
+    for row in rows:
+        # Prefer content for the snippet — fall back to thinking when
+        # the match is only there.
+        content = row.get("content") or ""
+        thinking = row.get("thinking") or ""
+        source = content if q.lower() in content.lower() else thinking
+        hits.append(
+            SearchHit(
+                message_id=row["message_id"],
+                session_id=row["session_id"],
+                session_title=row.get("session_title"),
+                model=row["model"],
+                role=row["role"],
+                snippet=_snippet(source, q),
+                created_at=row["created_at"],
+            )
+        )
+    return hits
