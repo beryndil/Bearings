@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-04-19
+
+### Added
+
+- Vitest for the frontend — pure-logic tests run via `npm run test`.
+  First coverage: `$lib/utils/budget.ts::parseBudget` (extracted from
+  `SessionList.svelte` so it's testable).
+- `vitest.config.ts` kept separate from `vite.config.ts` so
+  svelte-check's type-checking of the Vite config stays clean.
+- CI `frontend` job now runs `npm run test` between `npm run check`
+  and `npm run build`.
+
+### Changed
+
+- `SessionList` imports `parseBudget` from `$lib/utils/budget` instead
+  of defining it inline.
+
 ## [0.1.19] - 2026-04-19
 
 ### Added

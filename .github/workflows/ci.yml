@@ -37,6 +37,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm run test
       - run: npm run build
       - name: Verify build artifact synced to backend
         working-directory: ${{ github.workspace }}

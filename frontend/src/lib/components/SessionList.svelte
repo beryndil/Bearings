@@ -4,6 +4,7 @@
   import { prefs } from '$lib/stores/prefs.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import { parseBudget } from '$lib/utils/budget';
   import Settings from '$lib/components/Settings.svelte';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
@@ -106,13 +107,6 @@
 
   // Boot (auth + session refresh) is owned by +page.svelte so the auth
   // gate can block API calls until a token is supplied.
-
-  function parseBudget(raw: unknown): number | null {
-    // type="number" binding can hand us a number, empty string, or null.
-    if (raw === null || raw === undefined || raw === '') return null;
-    const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }
 
   async function onCreate() {
     submitting = true;

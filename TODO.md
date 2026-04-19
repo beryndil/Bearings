@@ -123,14 +123,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `/api/history/search` endpoint + `SearchHit` model.
 - [x] Sidebar search input (debounced) with inline match previews.
 
-## v0.1.20 — next slice
+## v0.1.20 — shipped
 
-- [ ] Frontend unit tests (vitest + @testing-library/svelte).
+- [x] Vitest scaffold + `npm run test`, wired into CI.
+- [x] First unit tests: `parseBudget` (extracted to `utils/budget.ts`).
+
+## v0.1.21 — next slice
+
+- [ ] Component tests (add jsdom + @testing-library/svelte; start
+  with `AuthGate.svelte` visibility and form submission).
 - [ ] Messages-endpoint pagination (limit + cursor).
 - [ ] Interrupt during tool execution: the SDK has `client.interrupt()`;
   wire it when a stop lands mid-`tool_use` so the tool can abort too.
-- [ ] Highlight the matched substring inside the snippet rather than
-  relying on surrounding context.
+- [ ] Highlight the matched substring inside the search snippet.
 
 ## v0.1.7+
 
