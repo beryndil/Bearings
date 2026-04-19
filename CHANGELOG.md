@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-04-19
+
+Layered system-prompt assembler — pure function, no consumers yet.
+Sixth v0.2 slice, spec step 3. `AgentSession` wires through in
+v0.2.7 once tag-memory + session-instructions CRUD land.
+
+### Added
+
+- `src/twrminal/agent/prompt.py::assemble_prompt(conn, session_id)`
+  — async, pure SQL reads, returns `AssembledPrompt(layers, text)`.
+  Layer order: `base` → `project` (if the session's project has a
+  non-null `system_prompt`) → `tag_memory` layers (one per attached
+  tag with a `tag_memories` row, in the canonical `pinned DESC,
+  sort_order ASC, id ASC` order; tag-without-memory is silently
+  skipped) → `session` (`sessions.session_instructions`, when set).
+  `text` joins the layers with `<!-- layer: kind[name] -->` headers
+  so downstream renderers can split them back out.
+- `src/twrminal/agent/base_prompt.py::BASE_PROMPT` — short,
+  deterministic base layer. Real content lives in project / tag /
+  session layers.
+- 8 new pytest cases in `tests/test_prompt_assembler.py`: base-only,
+  missing session, project-with-prompt, project-without-prompt,
+  tag-without-memory skip, pinned/sort_order/id tiebreakers,
+  session_instructions-last, per-layer header verbatim.
+
 ## [0.2.4] - 2026-04-19
 
 Schema migration **0007** — projects, tag memories, session

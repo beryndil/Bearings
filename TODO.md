@@ -302,14 +302,26 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   (tags, session_tags, projects, tag_memories).
 - [x] 4 new pytest cases (migration + cascade behavior).
 
+## v0.2.5 — shipped
+
+- [x] `src/twrminal/agent/prompt.py::assemble_prompt(conn,
+  session_id)` — async, pure SQL, returns
+  `AssembledPrompt(layers, text)`. Layer order: base → project →
+  tag memories (canonical pinned/sort_order/id order; tag-without-
+  memory skipped) → session_instructions.
+- [x] `src/twrminal/agent/base_prompt.py::BASE_PROMPT` — short,
+  deterministic base layer.
+- [x] 8 pytest cases in `tests/test_prompt_assembler.py` covering
+  layer order, empty-project skip, tag-without-memory skip,
+  pinned/sort_order/id tiebreakers, session_instructions-last, and
+  per-layer header verbatim.
+
 ## v0.2.x — remaining slice plan
 
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
 
-- [ ] **v0.2.5** — `agent/prompt.py` assembler (pure function;
-  unit tests for layer ordering). No callers yet.
 - [ ] **v0.2.6** — Projects backend: store CRUD + `/api/projects`
   routes + session filter by `project_id`.
 - [ ] **v0.2.7** — Tag memories backend + `session_instructions`
