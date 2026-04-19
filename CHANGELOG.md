@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] - 2026-04-19
+
+Session instructions inline editor inside the Inspector Context
+tab. The session layer is the last one in the assembled prompt —
+always wins — so this is the knob users reach for when they want
+a one-off override without touching tags.
+
+### Added
+
+- Inline textarea under the Context layer list. Pre-hydrates from
+  `sessions.selected.session_instructions` on session change; user
+  edits don't propagate to the server until Save is clicked.
+- Reset button appears when the draft is dirty.
+- Save calls `sessions.update(sid, { session_instructions: ... })`
+  (PATCH-backed). Empty content saves as null (clears the
+  instructions). After save, the Context pane re-fetches the
+  system prompt so the `session` layer reflects the new value
+  immediately.
+- Hydration effect keyed on `instructionsLoadedFor === sel.id` so
+  `sessions.refresh()` / `bumpCost` mid-edit don't wipe the
+  draft. Switching sessions discards the prior draft.
+- Inspector's updated_at-watch effect now also actively re-fetches
+  the system prompt when the pane is open (not just invalidating
+  on next open). Picks up tag-memory edits from the TagEdit modal
+  without requiring the user to close and reopen Context.
+- Removed the dead `project` case in `layerBadgeClasses` (tidy
+  followup to v0.2.9 teardown).
+
+### Why
+
+Tags carry shared rules; session_instructions are the escape
+hatch for a single session. Having it in the Context tab, next to
+the assembled layer view, makes the precedence visible: everything
+above is inherited from tags / the base, this box is you.
+
 ## [0.2.11] - 2026-04-19
 
 Tag editor modal — the first surface for editing a tag's full

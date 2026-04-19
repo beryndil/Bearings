@@ -23,8 +23,6 @@
     switch (kind) {
       case 'base':
         return 'bg-slate-800 text-slate-400';
-      case 'project':
-        return 'bg-indigo-900 text-indigo-300';
       case 'tag_memory':
         return 'bg-teal-900 text-teal-300';
       case 'session':
@@ -72,12 +70,67 @@
   });
 
   // Invalidate when the session list refresh cycle may have changed
-  // project/tag/instructions underneath. Cheapest to just force a reload
-  // on the next open.
+  // tag/instructions underneath. Cheapest to just force a reload on
+  // the next open. Also re-fetches immediately if the pane is open.
   $effect(() => {
     void sessions.selected?.updated_at;
     loadedForSession = null;
+    const sid = sessions.selected?.id ?? null;
+    if (contextOpen && sid) void loadSystemPrompt(sid);
   });
+
+  // --- Session instructions inline editor (v0.2.12) ------------------
+
+  let instructionsDraft = $state('');
+  let instructionsSaving = $state(false);
+  let instructionsError = $state<string | null>(null);
+  /** Session id the draft was last hydrated for. Prevents the effect
+   * from clobbering in-flight edits on every `sessions.refresh()`. */
+  let instructionsLoadedFor = $state<string | null>(null);
+
+  $effect(() => {
+    const sel = sessions.selected;
+    if (!sel) {
+      instructionsLoadedFor = null;
+      instructionsDraft = '';
+      return;
+    }
+    if (instructionsLoadedFor === sel.id) return;
+    instructionsLoadedFor = sel.id;
+    instructionsDraft = sel.session_instructions ?? '';
+    instructionsError = null;
+  });
+
+  const instructionsDirty = $derived(
+    instructionsDraft !== (sessions.selected?.session_instructions ?? '')
+  );
+
+  async function saveInstructions() {
+    const sel = sessions.selected;
+    if (!sel) return;
+    instructionsSaving = true;
+    instructionsError = null;
+    const trimmed = instructionsDraft.trim();
+    const updated = await sessions.update(sel.id, {
+      session_instructions: trimmed === '' ? null : trimmed,
+    });
+    instructionsSaving = false;
+    if (updated === null) {
+      instructionsError = sessions.error;
+      return;
+    }
+    // Sync draft to what the server returned (trimmed form).
+    instructionsDraft = updated.session_instructions ?? '';
+    instructionsLoadedFor = sel.id;
+    // Re-fetch system_prompt if pane is open so the `session` layer
+    // reflects the new value immediately.
+    if (contextOpen) void loadSystemPrompt(sel.id);
+  }
+
+  function resetInstructions() {
+    instructionsDraft = sessions.selected?.session_instructions ?? '';
+    instructionsError = null;
+  }
 
   // Auto-follow scroll to the latest tool call while the agent is
   // actively streaming and the agent disclosure is open. `tick`
@@ -136,6 +189,48 @@
       </ul>
     {:else}
       <p class="text-slate-500 text-sm mt-3">Open to load.</p>
+    {/if}
+
+    {#if sessions.selected}
+      <section class="mt-4 flex flex-col gap-1.5">
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="text-[11px] uppercase tracking-wider text-slate-400">
+            Session instructions
+          </span>
+          <span class="text-[10px] text-slate-600">last layer — always wins</span>
+        </div>
+        <textarea
+          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-xs
+            focus:outline-none focus:border-slate-600 resize-y min-h-[4rem]"
+          rows="4"
+          placeholder="One-off instructions for this session…"
+          bind:value={instructionsDraft}
+        ></textarea>
+        {#if instructionsError}
+          <p class="text-rose-400 text-[11px]">{instructionsError}</p>
+        {/if}
+        <div class="flex items-center justify-end gap-1.5">
+          {#if instructionsDirty}
+            <button
+              type="button"
+              class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-2 py-1"
+              onclick={resetInstructions}
+              disabled={instructionsSaving}
+            >
+              Reset
+            </button>
+          {/if}
+          <button
+            type="button"
+            class="text-[11px] rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1
+              disabled:opacity-50"
+            onclick={saveInstructions}
+            disabled={!instructionsDirty || instructionsSaving}
+          >
+            {instructionsSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </section>
     {/if}
   </details>
 

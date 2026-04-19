@@ -348,6 +348,21 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   API + session_instructions round-trip) plus 2 agent-session
   cases pinning the system_prompt wire-through.
 
+## v0.2.12 — shipped
+
+- [x] Inline session_instructions editor in the Inspector Context
+  tab. Pre-hydrates from `sessions.selected.session_instructions`;
+  draft lives in local state until Save.
+- [x] Save calls `sessions.update` (PATCH). Empty content clears
+  to null.
+- [x] Dirty state surfaces a Reset button; Save disabled when
+  clean.
+- [x] Inspector auto-refetches system_prompt while pane is open
+  and session's `updated_at` bumps — tag-memory edits now surface
+  without close/reopen.
+- [x] Dropped the dead `project` badge case from
+  `layerBadgeClasses` (v0.2.9 teardown followup).
+
 ## v0.2.11 — shipped
 
 - [x] `TagEdit.svelte` modal: name / pinned / sort_order,
@@ -409,7 +424,6 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
-- [ ] **v0.2.12** — Session instructions inline editor.
 - [ ] **v0.2.13** — New-session gate (≥1 tag) + header badges +
   README update.
 
