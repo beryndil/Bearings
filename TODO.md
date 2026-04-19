@@ -163,7 +163,12 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `sessions.bumpCost` for cross-store cost propagation.
 - [x] Sidebar timestamp uses `updated_at`.
 
-## v0.1.28 — next slice
+## v0.1.28 — shipped
+
+- [x] Sidebar sort by updated_at; insert_message touches the session
+  row so active sessions float to the top.
+
+## v0.1.29 — next slice
 
 - [ ] Component tests (jsdom + @testing-library/svelte; start with
   `AuthGate.svelte`).
@@ -171,8 +176,6 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [ ] Verify interrupt() behavior against a real agent running a
   Bash(sleep 10) tool — only a live SDK run confirms the CLI actually
   aborts the subprocess.
-- [ ] Re-sort the sidebar by `updated_at DESC` so a session that just
-  streamed rises to the top; right now it holds its created_at slot.
 
 ## v0.1.7+
 

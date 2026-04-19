@@ -74,7 +74,7 @@ async def create_session(
 
 async def list_sessions(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
     async with conn.execute(
-        f"SELECT {_SESSION_COLS} FROM sessions ORDER BY created_at DESC, id DESC"
+        f"SELECT {_SESSION_COLS} FROM sessions ORDER BY updated_at DESC, id DESC"
     ) as cursor:
         return [dict(row) async for row in cursor]
 
@@ -145,6 +145,13 @@ async def insert_message(
         "INSERT INTO messages (id, session_id, role, content, thinking, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         (message_id, session_id, role, content, thinking, now),
+    )
+    # Bump the owning session's updated_at so active sessions sort to
+    # the top of list_sessions. Uses a shared timestamp with the
+    # message row for coherence.
+    await conn.execute(
+        "UPDATE sessions SET updated_at = ? WHERE id = ?",
+        (now, session_id),
     )
     await conn.commit()
     return {

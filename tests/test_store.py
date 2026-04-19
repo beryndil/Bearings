@@ -107,6 +107,27 @@ async def test_list_sessions_orders_newest_first(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_sessions_promotes_active_session(tmp_path: Path) -> None:
+    """Inserting a message bumps the owning session's updated_at, so
+    an older session that just streamed rises above a newer idle one."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        older = await create_session(conn, working_dir="/a", model="m", title="older")
+        await asyncio.sleep(0.002)
+        newer = await create_session(conn, working_dir="/b", model="m", title="newer")
+        # Sanity: newer is on top right after creation.
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [newer["id"], older["id"]]
+        # Activity on the older session promotes it.
+        await asyncio.sleep(0.002)
+        await insert_message(conn, session_id=older["id"], role="user", content="hi")
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [older["id"], newer["id"]]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_delete_session_removes_row(tmp_path: Path) -> None:
     conn = await init_db(tmp_path / "db.sqlite")
     try:

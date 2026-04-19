@@ -83,13 +83,22 @@ class SessionStore {
 
   /** Called by the conversation store when a MessageComplete event
    * carries a cost delta, so the sidebar row reflects the new total
-   * without waiting for a full `refresh()`. No-op if the session
-   * isn't in the list (e.g. it was deleted mid-stream). */
+   * without waiting for a full `refresh()`. Also mirrors the server's
+   * updated_at touch + re-sort so the active session floats to the
+   * top of the list. No-op if the session isn't in the list (e.g.
+   * it was deleted mid-stream). */
   bumpCost(id: string, deltaUsd: number): void {
-    if (deltaUsd <= 0) return;
-    this.list = this.list.map((s) =>
-      s.id === id ? { ...s, total_cost_usd: s.total_cost_usd + deltaUsd } : s
-    );
+    const now = new Date().toISOString();
+    const hit = this.list.find((s) => s.id === id);
+    if (!hit) return;
+    const updated: api.Session = {
+      ...hit,
+      updated_at: now,
+      total_cost_usd:
+        deltaUsd > 0 ? hit.total_cost_usd + deltaUsd : hit.total_cost_usd
+    };
+    const rest = this.list.filter((s) => s.id !== id);
+    this.list = [updated, ...rest];
   }
 
   select(id: string | null): void {

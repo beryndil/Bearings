@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.28] - 2026-04-19
+
+### Changed
+
+- `store.list_sessions` orders by `updated_at DESC` instead of
+  `created_at DESC`. `insert_message` now also bumps the owning
+  session's `updated_at`, so a session that just streamed a turn
+  rises above an idle newer session.
+- Frontend `sessions.bumpCost` mirrors the same move-to-top: the row
+  gets a fresh `updated_at` and is spliced to the head of the list,
+  matching what the next `refresh()` would produce.
+
 ## [0.1.27] - 2026-04-19
 
 ### Added
