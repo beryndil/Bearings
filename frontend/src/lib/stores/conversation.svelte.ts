@@ -108,6 +108,7 @@ class ConversationStore {
         created_at: new Date().toISOString()
       }
     ];
+    sessions.bumpMessageCount(sessionId, 1);
     this.streamingText = '';
     this.streamingThinking = '';
     this.streamingActive = true;
@@ -169,6 +170,7 @@ class ConversationStore {
           this.totalCost += event.cost_usd;
           sessions.bumpCost(event.session_id, event.cost_usd);
         }
+        sessions.bumpMessageCount(event.session_id, 1);
         this.streamingText = '';
         this.streamingThinking = '';
         this.streamingActive = false;

@@ -177,16 +177,18 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 
 - [x] Per-session JSON export (`/api/sessions/{id}/export` + ⇣ button).
 
-## v0.1.31 — next slice
+## v0.1.31 — shipped
 
-- [ ] Component tests (jsdom + @testing-library/svelte; start with
-  `AuthGate.svelte`).
+- [x] Session.message_count (backend + live-bumped frontend).
+- [x] Header shows `· N msg`.
+
+## v0.1.32 — next slice
+
+- [ ] Component tests (jsdom + @testing-library/svelte).
 - [ ] Verify interrupt() behavior against a real agent running a
   Bash(sleep 10) tool.
-- [ ] Running total message count on the Conversation header.
-- [ ] "Import session" on a fresh server — consume the v0.1.30 export
-  JSON + restore as a new session (or with existing ids if we allow
-  overwrite).
+- [ ] "Import session" consuming the v0.1.30 export JSON.
+- [ ] Sidebar also shows per-row message count (tiny "N ✉" pill).
 
 ## v0.1.7+
 

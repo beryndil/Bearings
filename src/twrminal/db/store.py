@@ -45,9 +45,11 @@ def _new_id() -> str:
     return uuid4().hex
 
 
-_SESSION_COLS = (
+_SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, max_budget_usd, total_cost_usd"
 )
+_SESSION_COUNT = "(SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count"
+_SESSION_COLS_WITH_COUNT = f"s.{_SESSION_BASE_COLS.replace(', ', ', s.')}, {_SESSION_COUNT}"
 
 
 async def create_session(
@@ -74,14 +76,14 @@ async def create_session(
 
 async def list_sessions(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
     async with conn.execute(
-        f"SELECT {_SESSION_COLS} FROM sessions ORDER BY updated_at DESC, id DESC"
+        f"SELECT {_SESSION_COLS_WITH_COUNT} FROM sessions s ORDER BY s.updated_at DESC, s.id DESC"
     ) as cursor:
         return [dict(row) async for row in cursor]
 
 
 async def get_session(conn: aiosqlite.Connection, session_id: str) -> dict[str, Any] | None:
     async with conn.execute(
-        f"SELECT {_SESSION_COLS} FROM sessions WHERE id = ?",
+        f"SELECT {_SESSION_COLS_WITH_COUNT} FROM sessions s WHERE s.id = ?",
         (session_id,),
     ) as cursor:
         row = await cursor.fetchone()
@@ -299,8 +301,11 @@ async def list_all_sessions(
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> list[dict[str, Any]]:
-    where, params = _date_filter("created_at", date_from, date_to)
-    sql = f"SELECT {_SESSION_COLS} FROM sessions{where} ORDER BY created_at ASC, id ASC"
+    where, params = _date_filter("s.created_at", date_from, date_to)
+    sql = (
+        f"SELECT {_SESSION_COLS_WITH_COUNT} FROM sessions s{where} "
+        "ORDER BY s.created_at ASC, s.id ASC"
+    )
     async with conn.execute(sql, params) as cursor:
         return [dict(row) async for row in cursor]
 

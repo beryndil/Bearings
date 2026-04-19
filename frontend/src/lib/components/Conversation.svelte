@@ -163,6 +163,11 @@
               ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
               : ''}
           </span>
+          {#if sessions.selected.message_count > 0}
+            · {sessions.selected.message_count} msg{sessions.selected.message_count === 1
+              ? ''
+              : 's'}
+          {/if}
         {:else}
           select or create a session to start
         {/if}

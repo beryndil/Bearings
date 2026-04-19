@@ -30,6 +30,7 @@ class SessionOut(BaseModel):
     title: str | None = None
     max_budget_usd: float | None = None
     total_cost_usd: float = 0.0
+    message_count: int = 0
 
 
 class MessageOut(BaseModel):

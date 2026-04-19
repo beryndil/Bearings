@@ -107,6 +107,23 @@ async def test_list_sessions_orders_newest_first(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_rows_expose_message_count(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        assert (await get_session(conn, sess["id"]))["message_count"] == 0
+        for i in range(3):
+            await insert_message(conn, session_id=sess["id"], role="user", content=f"m{i}")
+        assert (await get_session(conn, sess["id"]))["message_count"] == 3
+        # list_sessions also includes it.
+        rows = await list_sessions(conn)
+        row = next(r for r in rows if r["id"] == sess["id"])
+        assert row["message_count"] == 3
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_list_sessions_promotes_active_session(tmp_path: Path) -> None:
     """Inserting a message bumps the owning session's updated_at, so
     an older session that just streamed rises above a newer idle one."""

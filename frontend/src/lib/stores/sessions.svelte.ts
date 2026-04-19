@@ -101,6 +101,17 @@ class SessionStore {
     this.list = [updated, ...rest];
   }
 
+  /** Bumps the sidebar's cached message_count. Called on user-push
+   * (+1) and on MessageComplete (+1 for the assistant row). */
+  bumpMessageCount(id: string, delta: number): void {
+    if (delta === 0) return;
+    this.list = this.list.map((s) =>
+      s.id === id
+        ? { ...s, message_count: Math.max(0, s.message_count + delta) }
+        : s
+    );
+  }
+
   select(id: string | null): void {
     this.selectedId = id;
     writeStoredId(id);

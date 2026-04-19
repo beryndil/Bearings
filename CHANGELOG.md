@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.31] - 2026-04-19
+
+### Added
+
+- `Session.message_count` — computed via subquery in `get_session`,
+  `list_sessions`, `list_all_sessions`. SessionOut API response
+  exposes it.
+- Conversation header shows `· N msg` (pluralized) next to the cost
+  segment when a session is selected. Useful now that pagination
+  only loads 50 messages at a time — you can tell at a glance
+  whether older ones are hidden.
+- `sessions.bumpMessageCount(id, delta)` — conversation store calls
+  it on user prompt (+1) and on MessageComplete (+1), so the header
+  count ticks up live during streaming.
+
 ## [0.1.30] - 2026-04-19
 
 ### Added
