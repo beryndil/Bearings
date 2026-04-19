@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-19
+
+First v0.2 slice — **tag primitives**. Backend-only: establishes the
+global `tags` registry + `session_tags` join table that the sidebar
+Tags panel (v0.2.1) and eventual tag memories (v0.2.6+) build on.
+
+### Added
+
+- **Tag primitives.** New migration `0006_tag_primitives.sql` creating
+  `tags` (id, name UNIQUE, color, pinned, sort_order, created_at) and
+  `session_tags` (session_id, tag_id, created_at). Both FKs cascade
+  on delete. `idx_session_tags_tag` keeps per-tag lookups fast.
+- **Tag store helpers** in `db/store.py`: `create_tag`, `list_tags`,
+  `get_tag`, `update_tag` (partial), `delete_tag`, `attach_tag`
+  (idempotent `INSERT OR IGNORE`), `detach_tag`, `list_session_tags`.
+  `list_tags` returns a `session_count` rollup per tag; all tag reads
+  order pinned-first, then ascending `sort_order`, then `id`.
+- **Tag REST surface** (`/api/tags/*`): `GET`, `POST` (201, 409 on
+  duplicate name), `GET /{id}`, `PATCH /{id}`, `DELETE /{id}` (204).
+- **Session-tag endpoints** on the sessions router: `GET
+  /api/sessions/{id}/tags`, `POST /api/sessions/{id}/tags/{tag_id}`,
+  `DELETE /api/sessions/{id}/tags/{tag_id}`. Attach/detach bumps
+  `sessions.updated_at` so a tagged session floats to the top.
+- New DTOs `TagCreate`, `TagUpdate`, `TagOut` in `api/models.py`.
+- 25 new tests in `tests/test_tags.py` covering migration shape,
+  CRUD round-trips, idempotent attach, cascade on tag delete and
+  session delete, unique-name 409, ordering, and every new endpoint
+  including missing-session and missing-tag paths.
+
+### Fixed
+
+- `db/schema.sql` now includes the `sessions.description` column
+  from v0.1.40 (previously missed during that slice's canonical-file
+  update). Schema file is back in sync with applied migrations.
+
 ## [0.1.40] - 2026-04-19
 
 ### Added

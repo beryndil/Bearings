@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     working_dir TEXT NOT NULL,
     model TEXT NOT NULL,
     title TEXT,
+    description TEXT,
     max_budget_usd REAL,
     total_cost_usd REAL NOT NULL DEFAULT 0
 );

@@ -237,14 +237,50 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   `ClaudeAgentOptions` — wired in `AgentSession.stream()`
   (`session.py:67-68`). Per-session column lands in v0.1.8.
 
-## v0.2.0 — next milestone
+## v0.2.0 — shipped
 
-See `V0.2.0_SPEC.md`. Migration slot 0005 is now claimed by the
-v0.1.40 description column, so the v0.2 migrations shift one up:
-`0006_tag_primitives.sql` then `0007_projects_and_memories.sql`.
-First numbered build-order step: tag primitives (tags table,
-session_tags join, pinned/sort_order columns, basic CRUD). Then
-projects + tag memories on top. Full order lives in the spec.
+- [x] Migration `0006_tag_primitives.sql` — `tags` (id, name UNIQUE,
+  color, pinned, sort_order, created_at) + `session_tags`
+  (session_id, tag_id, created_at) + `idx_session_tags_tag`.
+- [x] Tag store helpers (`create_tag` / `list_tags` / `get_tag` /
+  `update_tag` / `delete_tag` / `attach_tag` / `detach_tag` /
+  `list_session_tags`) with `session_count` rollup and canonical
+  pinned-first / sort_order / id ordering.
+- [x] Tag REST surface (`/api/tags/*` CRUD — 201/409 on create,
+  204 on delete) + session-tag endpoints (`GET/POST/DELETE
+  /api/sessions/{id}/tags[/{tag_id}]`). Attach/detach bumps
+  `sessions.updated_at`.
+- [x] `TagCreate` / `TagUpdate` / `TagOut` DTOs.
+- [x] 25 pytest cases in `tests/test_tags.py` (store + API).
+- [x] `db/schema.sql` back-filled with the v0.1.40
+  `sessions.description` column that was missed in that slice.
+
+## v0.2.x — remaining slice plan
+
+See `V0.2.0_SPEC.md` §"Build order" and plan file
+`~/.claude/plans/vectorized-leaping-pretzel.md`.
+
+- [ ] **v0.2.1** — Sidebar Tags panel (read-only): list global tags,
+  pinned-first, session counts. `listTags` client + `tags` store.
+- [ ] **v0.2.2** — Attach/detach tags on a session: chips in header
+  or SessionEdit modal, clickable tag-filter on the session list.
+- [ ] **v0.2.3** — Migration `0007_projects_and_memories.sql`
+  (projects table, `sessions.project_id`, `tag_memories`,
+  `sessions.session_instructions`). Store helpers stubbed.
+- [ ] **v0.2.4** — `agent/prompt.py` assembler: base + project +
+  tag memories + session override, with unit tests.
+- [ ] **v0.2.5** — Projects backend: CRUD + session filter by
+  `project_id` on `GET /api/sessions`.
+- [ ] **v0.2.6** — Tag memories backend (`GET/PUT/DELETE
+  /api/tags/{id}/memory`) + `session_instructions` via
+  `PATCH /api/sessions/{id}`. Wire `AgentSession` to
+  `assemble_prompt`.
+- [ ] **v0.2.7** — Inspector Context tab (read-only assembled prompt
+  with per-layer breakdown).
+- [ ] **v0.2.8** — Projects sidebar + management view.
+- [ ] **v0.2.9** — Tag memory editor (markdown + live preview).
+- [ ] **v0.2.10** — Session instructions inline editor.
+- [ ] **v0.2.11** — Conversation header badges + README update.
 
 ## Decisions pending
 

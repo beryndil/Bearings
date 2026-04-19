@@ -441,3 +441,133 @@ async def list_all_tool_calls(
     )
     async with conn.execute(sql, params) as cursor:
         return [dict(row) async for row in cursor]
+
+
+# --- Tags (v0.2.0) ----------------------------------------------------
+
+_TAG_COLS_WITH_COUNT = (
+    "t.id, t.name, t.color, t.pinned, t.sort_order, t.created_at, "
+    "(SELECT COUNT(*) FROM session_tags st WHERE st.tag_id = t.id) "
+    "AS session_count"
+)
+# Pinned tags first, then ascending sort_order, then id — the
+# canonical order used for sidebar rendering and tag-memory precedence.
+_TAG_ORDER = "t.pinned DESC, t.sort_order ASC, t.id ASC"
+
+
+async def create_tag(
+    conn: aiosqlite.Connection,
+    *,
+    name: str,
+    color: str | None = None,
+    pinned: bool = False,
+    sort_order: int = 0,
+) -> dict[str, Any]:
+    cursor = await conn.execute(
+        "INSERT INTO tags (name, color, pinned, sort_order, created_at) VALUES (?, ?, ?, ?, ?)",
+        (name, color, 1 if pinned else 0, sort_order, _now()),
+    )
+    await conn.commit()
+    tag_id = cursor.lastrowid
+    assert tag_id is not None  # just inserted
+    row = await get_tag(conn, tag_id)
+    assert row is not None
+    return row
+
+
+async def list_tags(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
+    async with conn.execute(
+        f"SELECT {_TAG_COLS_WITH_COUNT} FROM tags t ORDER BY {_TAG_ORDER}"
+    ) as cursor:
+        return [dict(row) async for row in cursor]
+
+
+async def get_tag(conn: aiosqlite.Connection, tag_id: int) -> dict[str, Any] | None:
+    async with conn.execute(
+        f"SELECT {_TAG_COLS_WITH_COUNT} FROM tags t WHERE t.id = ?",
+        (tag_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    return dict(row) if row is not None else None
+
+
+async def update_tag(
+    conn: aiosqlite.Connection,
+    tag_id: int,
+    *,
+    fields: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Apply a partial update. `fields` maps column name → new value.
+    Only `name`, `color`, `pinned`, `sort_order` are accepted. Returns
+    the refreshed row, or None if the tag doesn't exist."""
+    allowed = {"name", "color", "pinned", "sort_order"}
+    filtered = {k: v for k, v in fields.items() if k in allowed}
+    if "pinned" in filtered:
+        filtered["pinned"] = 1 if filtered["pinned"] else 0
+    if not filtered:
+        return await get_tag(conn, tag_id)
+    assignments = ", ".join(f"{col} = ?" for col in filtered)
+    params = (*filtered.values(), tag_id)
+    cursor = await conn.execute(
+        f"UPDATE tags SET {assignments} WHERE id = ?",
+        params,
+    )
+    await conn.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_tag(conn, tag_id)
+
+
+async def delete_tag(conn: aiosqlite.Connection, tag_id: int) -> bool:
+    cursor = await conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+    await conn.commit()
+    return cursor.rowcount > 0
+
+
+async def attach_tag(conn: aiosqlite.Connection, session_id: str, tag_id: int) -> bool:
+    """Attach a tag to a session. Idempotent — re-attaching is a no-op.
+    Returns True if the session and tag both exist (so the attach is
+    semantically valid), False if either is missing."""
+    session_row = await conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,))
+    if await session_row.fetchone() is None:
+        return False
+    tag_row = await conn.execute("SELECT 1 FROM tags WHERE id = ?", (tag_id,))
+    if await tag_row.fetchone() is None:
+        return False
+    now = _now()
+    await conn.execute(
+        "INSERT OR IGNORE INTO session_tags (session_id, tag_id, created_at) VALUES (?, ?, ?)",
+        (session_id, tag_id, now),
+    )
+    # Touch the session so it floats to the top of the sidebar when
+    # tags change — mirrors insert_message's behavior.
+    await conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+    await conn.commit()
+    return True
+
+
+async def detach_tag(conn: aiosqlite.Connection, session_id: str, tag_id: int) -> bool:
+    """Detach a tag from a session. Returns True if the session exists
+    (so the call was well-formed), regardless of whether the pair was
+    actually present — DELETE is idempotent at this layer."""
+    session_row = await conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,))
+    if await session_row.fetchone() is None:
+        return False
+    now = _now()
+    await conn.execute(
+        "DELETE FROM session_tags WHERE session_id = ? AND tag_id = ?",
+        (session_id, tag_id),
+    )
+    await conn.execute("UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id))
+    await conn.commit()
+    return True
+
+
+async def list_session_tags(conn: aiosqlite.Connection, session_id: str) -> list[dict[str, Any]]:
+    async with conn.execute(
+        f"SELECT {_TAG_COLS_WITH_COUNT} FROM tags t "
+        "JOIN session_tags st ON st.tag_id = t.id "
+        f"WHERE st.session_id = ? ORDER BY {_TAG_ORDER}",
+        (session_id,),
+    ) as cursor:
+        return [dict(row) async for row in cursor]

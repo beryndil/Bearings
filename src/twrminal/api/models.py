@@ -65,3 +65,30 @@ class SearchHit(BaseModel):
     role: str
     snippet: str
     created_at: str
+
+
+class TagCreate(BaseModel):
+    name: str
+    color: str | None = None
+    pinned: bool = False
+    sort_order: int = 0
+
+
+class TagUpdate(BaseModel):
+    """Partial update for an existing tag. Any unset field is left
+    unchanged; explicit `None` for `color` clears it."""
+
+    name: str | None = None
+    color: str | None = None
+    pinned: bool | None = None
+    sort_order: int | None = None
+
+
+class TagOut(BaseModel):
+    id: int
+    name: str
+    color: str | None = None
+    pinned: bool
+    sort_order: int
+    created_at: str
+    session_count: int = 0

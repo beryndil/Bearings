@@ -11,6 +11,7 @@ from twrminal.api.models import (
     SessionCreate,
     SessionOut,
     SessionUpdate,
+    TagOut,
     ToolCallOut,
 )
 from twrminal.db import store
@@ -121,3 +122,36 @@ async def export_session(session_id: str, request: Request) -> dict[str, Any]:
         "messages": messages,
         "tool_calls": tool_calls,
     }
+
+
+@router.get("/{session_id}/tags", response_model=list[TagOut])
+async def list_session_tags(session_id: str, request: Request) -> list[TagOut]:
+    conn = request.app.state.db
+    if await store.get_session(conn, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    rows = await store.list_session_tags(conn, session_id)
+    return [TagOut(**r) for r in rows]
+
+
+@router.post("/{session_id}/tags/{tag_id}", response_model=list[TagOut])
+async def attach_session_tag(session_id: str, tag_id: int, request: Request) -> list[TagOut]:
+    conn = request.app.state.db
+    ok = await store.attach_tag(conn, session_id, tag_id)
+    if not ok:
+        # attach_tag returns False when either the session or the tag
+        # doesn't exist — both map to 404 from the client's view.
+        if await store.get_session(conn, session_id) is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        raise HTTPException(status_code=404, detail="tag not found")
+    rows = await store.list_session_tags(conn, session_id)
+    return [TagOut(**r) for r in rows]
+
+
+@router.delete("/{session_id}/tags/{tag_id}", response_model=list[TagOut])
+async def detach_session_tag(session_id: str, tag_id: int, request: Request) -> list[TagOut]:
+    conn = request.app.state.db
+    ok = await store.detach_tag(conn, session_id, tag_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="session not found")
+    rows = await store.list_session_tags(conn, session_id)
+    return [TagOut(**r) for r in rows]
