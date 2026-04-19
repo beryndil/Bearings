@@ -118,6 +118,26 @@ def test_ws_persists_tool_calls(
     assert call["started_at"] and call["finished_at"]
 
 
+def test_ws_registers_and_deregisters_active_connection(
+    client: TestClient, mock_agent_stream: None
+) -> None:
+    sid = _create_session(client)
+    assert len(client.app.state.active_ws) == 0  # type: ignore[attr-defined]
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "hi"})
+        # Read at least one frame so the server has executed its setup.
+        ws.receive_text()
+        assert len(client.app.state.active_ws) == 1  # type: ignore[attr-defined]
+    # Server-side cleanup is async; poll briefly for the deregister.
+    import time
+
+    for _ in range(50):
+        if len(client.app.state.active_ws) == 0:  # type: ignore[attr-defined]
+            break
+        time.sleep(0.02)
+    assert len(client.app.state.active_ws) == 0  # type: ignore[attr-defined]
+
+
 def test_ws_ignores_unknown_payload_types(client: TestClient, mock_agent_stream: None) -> None:
     sid = _create_session(client)
     with client.websocket_connect(f"/ws/sessions/{sid}") as ws:

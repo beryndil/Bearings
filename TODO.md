@@ -61,15 +61,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   wiring, frontend form field).
 - [x] `/api/history/export?from=&to=` range filter.
 
-## v0.1.9 — next slice
+## v0.1.9 — shipped
 
+- [x] Graceful WS shutdown on lifespan exit (1001 Going Away).
+- [x] Budget display in Conversation header.
+
+## v0.1.10 — next slice
+
+- [ ] Running cost display: surface SDK `ResultMessage.total_cost_usd`
+  as part of `MessageComplete` (or a new `UsageEvent`); accumulate
+  per-session and render under the budget in the header.
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
-- [ ] Show `max_budget_usd` in the Conversation header (+ a running
-  cost once the SDK `ResultMessage.total_cost_usd` is surfaced).
-- [ ] Graceful WS shutdown signal so `twrminal serve` under systemd
-  stops cleanly with in-flight streams.
 - [ ] Auth gate: enable `auth.enabled` path (currently no-op).
 
 ## v0.1.7+

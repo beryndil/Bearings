@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
 from twrminal import __version__
@@ -14,14 +14,29 @@ from twrminal.db.store import init_db
 
 STATIC_DIR = Path(__file__).parent / "web" / "dist"
 
+# WebSocket close code for "server shutdown" — clients interpret this as
+# a clean disconnect and reconnect on their own backoff schedule.
+CODE_GOING_AWAY = 1001
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     app.state.db = await init_db(settings.storage.db_path)
+    active: set[WebSocket] = set()
+    app.state.active_ws = active
     try:
         yield
     finally:
+        for ws in list(app.state.active_ws):
+            try:
+                await ws.close(code=CODE_GOING_AWAY, reason="server shutdown")
+            except Exception:
+                # Socket already closed by peer or underlying transport — not
+                # actionable during shutdown, and we still need to close the
+                # remaining connections + the DB.
+                pass
+        app.state.active_ws.clear()
         await app.state.db.close()
 
 

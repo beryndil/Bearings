@@ -31,6 +31,7 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
         return
 
     metrics.ws_active_connections.inc()
+    websocket.app.state.active_ws.add(websocket)
     agent = AgentSession(
         session_id,
         row["working_dir"],
@@ -91,4 +92,5 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     except WebSocketDisconnect:
         return
     finally:
+        websocket.app.state.active_ws.discard(websocket)
         metrics.ws_active_connections.dec()

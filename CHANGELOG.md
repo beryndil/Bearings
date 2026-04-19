@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-04-19
+
+### Added
+
+- Graceful WebSocket shutdown: FastAPI lifespan tracks active agent
+  sockets in `app.state.active_ws`; on shutdown, each is closed with
+  code `1001 Going Away` before the DB connection is torn down.
+  Clients see a clean disconnect (and hit the v0.1.4 reconnect path)
+  instead of `ConnectionReset` on `systemctl restart`.
+- Conversation header shows `budget $X.XX` next to model + working_dir
+  when the session has a `max_budget_usd` cap set; otherwise omitted.
+
 ## [0.1.8] - 2026-04-19
 
 ### Added
