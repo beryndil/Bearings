@@ -25,6 +25,7 @@ class ServerCfg(BaseModel):
 
 class AuthCfg(BaseModel):
     enabled: bool = False
+    token: str | None = None
 
 
 class AgentCfg(BaseModel):

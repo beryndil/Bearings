@@ -71,14 +71,21 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] `MessageComplete.cost_usd` + `sessions.total_cost_usd` column.
 - [x] Conversation header shows running cost + optional cap.
 
-## v0.1.11 — next slice
+## v0.1.11 — shipped
 
+- [x] Opt-in bearer-token auth (REST + WS + CLI + frontend).
+- [x] `/api/health` reports real auth state.
+
+## v0.1.12 — next slice
+
+- [ ] Frontend settings UI for the auth token (instead of devtools
+  localStorage). Prompt when `/api/health` reports `required` and the
+  stored token fails.
+- [ ] Visual pressure when `total_cost_usd` approaches `max_budget_usd`
+  (amber header text at 80%, red at 100%).
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
-- [ ] Auth gate: enable `auth.enabled` path (currently no-op).
-- [ ] Visual pressure when `total_cost_usd` approaches `max_budget_usd`
-  (amber header text at 80%, red at 100%).
 
 ## v0.1.7+
 

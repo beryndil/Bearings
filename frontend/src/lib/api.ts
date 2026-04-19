@@ -80,12 +80,34 @@ export type AgentEvent =
   | MessageCompleteEvent
   | ErrorEvent;
 
+const TOKEN_STORAGE_KEY = 'twrminal:token';
+
+/** Reads the auth token from localStorage. Set via devtools:
+ * `localStorage.setItem('twrminal:token', 'your-token')`. A full
+ * in-app settings UI lands in a later slice. */
+function readAuthToken(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem(TOKEN_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function withAuth(init?: RequestInit): RequestInit | undefined {
+  const token = readAuthToken();
+  if (!token) return init;
+  const headers = new Headers(init?.headers);
+  headers.set('Authorization', `Bearer ${token}`);
+  return { ...init, headers };
+}
+
 async function jsonFetch<T>(
   fetchImpl: typeof fetch,
   url: string,
   init?: RequestInit
 ): Promise<T> {
-  const res = await fetchImpl(url, init);
+  const res = await fetchImpl(url, withAuth(init));
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`${init?.method ?? 'GET'} ${url} → ${res.status}: ${body}`);
@@ -144,5 +166,9 @@ export function listToolCalls(
 
 export function openAgentSocket(sessionId: string): WebSocket {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return new WebSocket(`${proto}://${window.location.host}/ws/sessions/${sessionId}`);
+  const token = readAuthToken();
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  return new WebSocket(
+    `${proto}://${window.location.host}/ws/sessions/${sessionId}${query}`
+  );
 }

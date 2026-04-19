@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from twrminal import metrics
+from twrminal.api.auth import require_auth
 from twrminal.api.models import MessageOut, SessionCreate, SessionOut, ToolCallOut
 from twrminal.db import store
 
-router = APIRouter(prefix="/sessions", tags=["sessions"])
+router = APIRouter(
+    prefix="/sessions",
+    tags=["sessions"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 @router.post("", response_model=SessionOut)

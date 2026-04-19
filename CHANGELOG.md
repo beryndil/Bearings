@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-04-19
+
+### Added
+
+- Opt-in bearer-token auth. Set `auth.enabled = true` +
+  `auth.token = "..."` in `config.toml`:
+  - `/api/sessions*` and `/api/history*` require
+    `Authorization: Bearer <token>` (new `api/auth.py` dependency).
+  - `/ws/sessions/{id}` requires `?token=<token>` (browsers can't set
+    WS headers); closes with app code `4401 Unauthorized` on mismatch.
+  - `/api/health` and `/metrics` stay open so monitoring can probe
+    without creds.
+  - Enabling auth with an empty token fails the first request with
+    500 — fail closed rather than silently ship with no protection.
+- `GET /api/health` now returns `{auth: "required"|"disabled", version}`
+  so clients can tell whether they need to supply a token.
+- `twrminal send --token <t>` flag; CLI also auto-pulls from
+  `cfg.auth.token` when `auth.enabled`.
+- Frontend `api.ts` reads `localStorage["twrminal:token"]` and injects
+  `Authorization: Bearer` on fetches + `?token=...` on the WS URL. UI
+  to enter the token lands in a later slice; for now set it via devtools
+  (`localStorage.setItem('twrminal:token', '...')`).
+
 ## [0.1.10] - 2026-04-19
 
 ### Added

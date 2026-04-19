@@ -25,6 +25,11 @@ def build_parser() -> argparse.ArgumentParser:
     send.add_argument("--session", required=True, help="Session id")
     send.add_argument("--host", default=None, help="Server host (default: from config)")
     send.add_argument("--port", type=int, default=None, help="Server port (default: from config)")
+    send.add_argument(
+        "--token",
+        default=None,
+        help="Auth token (default: from config auth.token when auth.enabled)",
+    )
     send.add_argument("message", help="Prompt text")
 
     return parser
@@ -70,7 +75,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg = load_settings()
         host = args.host or cfg.server.host
         port = args.port or cfg.server.port
-        url = f"ws://{host}:{port}/ws/sessions/{args.session}"
+        token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
+        query = f"?token={token}" if token else ""
+        url = f"ws://{host}:{port}/ws/sessions/{args.session}{query}"
         return asyncio.run(_run_send(url, args.message, sys.stdout))
 
     return 1

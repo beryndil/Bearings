@@ -3,11 +3,16 @@ from __future__ import annotations
 from datetime import date as date_cls
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+from twrminal.api.auth import require_auth
 from twrminal.db import store
 
-router = APIRouter(prefix="/history", tags=["history"])
+router = APIRouter(
+    prefix="/history",
+    tags=["history"],
+    dependencies=[Depends(require_auth)],
+)
 
 
 def _validate_date(value: str | None) -> str | None:

@@ -14,16 +14,21 @@ from twrminal.agent.events import (
     ToolCallStart,
 )
 from twrminal.agent.session import AgentSession
+from twrminal.api.auth import check_ws_auth
 from twrminal.db import store
 
 router = APIRouter(tags=["agent-ws"])
 
+CODE_UNAUTHORIZED = 4401
 CODE_SESSION_NOT_FOUND = 4404
 
 
 @router.websocket("/ws/sessions/{session_id}")
 async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
+    if not check_ws_auth(websocket):
+        await websocket.close(code=CODE_UNAUTHORIZED)
+        return
     conn = websocket.app.state.db
     row = await store.get_session(conn, session_id)
     if row is None:
