@@ -1,4 +1,5 @@
 import * as api from '$lib/api';
+import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
@@ -6,6 +7,7 @@ export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error
 const MAX_RETRY_DELAY_MS = 30_000;
 const BASE_RETRY_DELAY_MS = 1_000;
 const CODE_NORMAL_CLOSE = 1000;
+const CODE_UNAUTHORIZED = 4401;
 const CODE_SESSION_NOT_FOUND = 4404;
 
 class AgentConnection {
@@ -74,6 +76,11 @@ class AgentConnection {
       this.state = 'closed';
       this.lastCloseCode = ev.code;
       this.socket = null;
+      if (ev.code === CODE_UNAUTHORIZED) {
+        auth.markInvalid();
+        this.wantConnected = false;
+        return;
+      }
       if (this.shouldReconnect(ev.code)) {
         this.scheduleReconnect();
       }
@@ -88,6 +95,7 @@ class AgentConnection {
     return (
       this.wantConnected &&
       code !== CODE_SESSION_NOT_FOUND &&
+      code !== CODE_UNAUTHORIZED &&
       code !== CODE_NORMAL_CLOSE
     );
   }

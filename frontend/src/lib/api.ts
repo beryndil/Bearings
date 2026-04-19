@@ -102,12 +102,23 @@ function withAuth(init?: RequestInit): RequestInit | undefined {
   return { ...init, headers };
 }
 
+let authFailureHandler: (() => void) | null = null;
+
+/** Register a callback fired whenever an API call sees a 401 — the auth
+ * store uses this to flip itself to `invalid` without a circular import. */
+export function onAuthFailure(cb: () => void): void {
+  authFailureHandler = cb;
+}
+
 async function jsonFetch<T>(
   fetchImpl: typeof fetch,
   url: string,
   init?: RequestInit
 ): Promise<T> {
   const res = await fetchImpl(url, withAuth(init));
+  if (res.status === 401 && authFailureHandler) {
+    authFailureHandler();
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`${init?.method ?? 'GET'} ${url} → ${res.status}: ${body}`);

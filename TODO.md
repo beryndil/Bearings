@@ -76,16 +76,21 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Opt-in bearer-token auth (REST + WS + CLI + frontend).
 - [x] `/api/health` reports real auth state.
 
-## v0.1.12 — next slice
+## v0.1.12 — shipped
 
-- [ ] Frontend settings UI for the auth token (instead of devtools
-  localStorage). Prompt when `/api/health` reports `required` and the
-  stored token fails.
-- [ ] Visual pressure when `total_cost_usd` approaches `max_budget_usd`
-  (amber header text at 80%, red at 100%).
+- [x] Auth token modal (AuthGate) — no more devtools hack.
+- [x] 401 + WS 4401 flip the store back to `invalid` and re-open the
+  gate; reconnect loop stays out.
+- [x] Budget pressure coloring (amber ≥80%, rose ≥100%).
+- [x] SessionList budget form handles number-input value shape.
+
+## v0.1.13 — next slice
+
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
+- [ ] "Settings" panel surface for token + default model/working_dir so
+  users don't have to remember the `twrminal:token` localStorage key.
 
 ## v0.1.7+
 

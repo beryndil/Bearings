@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-04-19
+
+### Added
+
+- `AuthGate.svelte` modal. When `/api/health` reports
+  `auth: "required"` and no token is stored (or the stored token is
+  rejected on any API 401 / WS 4401), the modal blocks the UI with a
+  password-masked input. Save → token persists in
+  `localStorage["twrminal:token"]` → boot proceeds.
+- `stores/auth.svelte.ts` tracks `status`
+  (`checking`/`open`/`ok`/`required`/`invalid`/`error`). `api.ts`
+  exports `onAuthFailure(cb)` so the store flips itself to `invalid`
+  on 401 without a circular import. `agent.svelte.ts` flips the same
+  way on WS close 4401 and aborts reconnect (no infinite loop).
+- Boot flow moved from `SessionList.onMount` to `+page.svelte`: auth
+  check first, then `sessions.refresh` + auto-connect only after the
+  gate clears.
+- Budget pressure coloring in the Conversation header: amber at ≥80%
+  of `max_budget_usd`, rose at ≥100%. Sessions with no cap render
+  unchanged.
+
+### Fixed
+
+- `SessionList` budget parsing now handles `<input type="number">`
+  binding variants (number / empty string / null) instead of assuming
+  a string; previously the new-session form submitted
+  `max_budget_usd: null` when the field had a value.
+
 ## [0.1.11] - 2026-04-19
 
 ### Added

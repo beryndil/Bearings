@@ -22,22 +22,23 @@
     confirm.id = null;
   }
 
-  onMount(async () => {
-    await sessions.refresh();
-    if (sessions.selectedId) {
-      await agent.connect(sessions.selectedId);
-    }
-  });
+  // Boot (auth + session refresh) is owned by +page.svelte so the auth
+  // gate can block API calls until a token is supplied.
+
+  function parseBudget(raw: unknown): number | null {
+    // type="number" binding can hand us a number, empty string, or null.
+    if (raw === null || raw === undefined || raw === '') return null;
+    const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
 
   async function onCreate() {
     submitting = true;
-    const budgetTrimmed = newBudget.trim();
-    const budget = budgetTrimmed ? Number(budgetTrimmed) : null;
     const created = await sessions.create({
       working_dir: newWorkingDir.trim() || '/tmp',
       model: newModel.trim() || 'claude-sonnet-4-6',
       title: newTitle.trim() || null,
-      max_budget_usd: budget !== null && Number.isFinite(budget) ? budget : null
+      max_budget_usd: parseBudget(newBudget)
     });
     submitting = false;
     if (created) {

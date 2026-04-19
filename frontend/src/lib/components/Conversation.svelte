@@ -31,6 +31,14 @@
     }
   }
 
+  function pressureClass(spent: number, cap: number | null | undefined): string {
+    if (cap == null || cap <= 0) return 'text-slate-500';
+    const ratio = spent / cap;
+    if (ratio >= 1) return 'text-rose-400';
+    if (ratio >= 0.8) return 'text-amber-400';
+    return 'text-slate-500';
+  }
+
   function connectionLabel(state: typeof agent.state): string {
     if (agent.reconnectDelayMs !== null) {
       return `retrying in ${Math.ceil(agent.reconnectDelayMs / 1000)}s`;
@@ -56,13 +64,14 @@
       <h1 class="text-lg font-medium">
         {sessions.selected?.title ?? 'Twrminal'}
       </h1>
-      <p class="text-xs text-slate-500 font-mono truncate">
+      <p class="text-xs font-mono truncate text-slate-500">
         {#if sessions.selected}
-          {sessions.selected.model} · {sessions.selected.working_dir} · spent ${conversation.totalCost.toFixed(
-            4
-          )}{sessions.selected.max_budget_usd != null
-            ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
-            : ''}
+          {sessions.selected.model} · {sessions.selected.working_dir} ·
+          <span class={pressureClass(conversation.totalCost, sessions.selected.max_budget_usd)}>
+            spent ${conversation.totalCost.toFixed(4)}{sessions.selected.max_budget_usd != null
+              ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
+              : ''}
+          </span>
         {:else}
           select or create a session to start
         {/if}
