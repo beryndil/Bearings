@@ -431,3 +431,89 @@ def test_list_session_tags_returns_attached(client: TestClient) -> None:
 def test_list_session_tags_missing_session_is_404(client: TestClient) -> None:
     resp = client.get(f"/api/sessions/{'0' * 32}/tags")
     assert resp.status_code == 404
+
+
+# --- Tag defaults (v0.2.10) ------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_tag_accepts_defaults(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        row = await create_tag(
+            conn,
+            name="twrminal",
+            default_working_dir="/home/beryndil/Projects/Twrminal",
+            default_model="claude-opus-4-7",
+        )
+        assert row["default_working_dir"] == "/home/beryndil/Projects/Twrminal"
+        assert row["default_model"] == "claude-opus-4-7"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_create_tag_defaults_default_to_null(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        row = await create_tag(conn, name="plain")
+        assert row["default_working_dir"] is None
+        assert row["default_model"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_update_tag_sets_and_clears_defaults(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        row = await create_tag(conn, name="twrminal")
+        updated = await update_tag(
+            conn,
+            row["id"],
+            fields={
+                "default_working_dir": "/x",
+                "default_model": "claude-opus-4-7",
+            },
+        )
+        assert updated is not None
+        assert updated["default_working_dir"] == "/x"
+        assert updated["default_model"] == "claude-opus-4-7"
+        # Explicit null clears.
+        cleared = await update_tag(
+            conn,
+            row["id"],
+            fields={"default_working_dir": None, "default_model": None},
+        )
+        assert cleared is not None
+        assert cleared["default_working_dir"] is None
+        assert cleared["default_model"] is None
+    finally:
+        await conn.close()
+
+
+def test_post_tag_accepts_defaults(client: TestClient) -> None:
+    resp = client.post(
+        "/api/tags",
+        json={
+            "name": "twrminal",
+            "default_working_dir": "/home/beryndil/Projects/Twrminal",
+            "default_model": "claude-opus-4-7",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["default_working_dir"] == "/home/beryndil/Projects/Twrminal"
+    assert body["default_model"] == "claude-opus-4-7"
+
+
+def test_patch_tag_sets_defaults(client: TestClient) -> None:
+    created = client.post("/api/tags", json={"name": "twrminal"}).json()
+    resp = client.patch(
+        f"/api/tags/{created['id']}",
+        json={"default_working_dir": "/x", "default_model": "m"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["default_working_dir"] == "/x"
+    assert body["default_model"] == "m"

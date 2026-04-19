@@ -348,6 +348,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   API + session_instructions round-trip) plus 2 agent-session
   cases pinning the system_prompt wire-through.
 
+## v0.2.10 — shipped
+
+- [x] Migration `0009_tag_defaults.sql` adds
+  `tags.default_working_dir` + `tags.default_model` (both
+  nullable).
+- [x] `store.create_tag` / `update_tag` accept the new fields.
+- [x] `TagCreate` / `TagUpdate` / `TagOut` expose them.
+- [x] Frontend `Tag` / `TagCreate` / `TagUpdate` TS types match.
+- [x] New-session form pre-fills working_dir / model from the
+  highest-precedence filter-selected tag. Precedence matches
+  tag-memory rules (last wins); falls back to user prefs.
+- [x] 5 new pytest cases in `tests/test_tags.py`.
+
 ## v0.2.9 — shipped (teardown)
 
 - [x] Migration `0008_drop_projects.sql` — wipes sessions, drops
@@ -382,10 +395,9 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
 numbering shifted from the original 12-slice plan because spec
 step 1 ended up needing four slices, not three.
-- [ ] **v0.2.10** — Tag defaults: migration adds
-  `tags.default_working_dir` + `tags.default_model` + CRUD +
-  new-session pre-fill from attached tags.
-- [ ] **v0.2.11** — Tag memory editor (markdown + live preview).
+- [ ] **v0.2.11** — Tag editor modal: name / pinned / sort_order,
+  markdown memory with live preview, default_working_dir,
+  default_model. Reachable from each sidebar tag row.
 - [ ] **v0.2.12** — Session instructions inline editor.
 - [ ] **v0.2.13** — New-session gate (≥1 tag) + header badges +
   README update.

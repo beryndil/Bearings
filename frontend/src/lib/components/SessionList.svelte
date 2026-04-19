@@ -158,15 +158,36 @@
     conversation.highlightQuery = q;
   }
 
+  /** Tag-driven defaults for the new-session form. When the sidebar
+   * has one or more tags filter-selected, the highest-precedence tag
+   * wins its working_dir / model defaults. Precedence matches
+   * tag-memory precedence — canonical list order (pinned-first,
+   * sort_order ASC, id ASC), last wins. Handles missing fields by
+   * falling back to earlier tags in the precedence order. */
+  function tagFilterDefaults(): { workingDir: string | null; model: string | null } {
+    if (tags.selected.length === 0) return { workingDir: null, model: null };
+    // `tags.list` is already in canonical order from the server.
+    const selected = tags.list.filter((t) => tags.selected.includes(t.id));
+    let workingDir: string | null = null;
+    let model: string | null = null;
+    for (const t of selected) {
+      if (t.default_working_dir) workingDir = t.default_working_dir;
+      if (t.default_model) model = t.default_model;
+    }
+    return { workingDir, model };
+  }
+
   function toggleNewForm() {
     if (showNewForm) {
       showNewForm = false;
       return;
     }
-    // Seed from prefs every time the form re-opens; user edits during
-    // the open session stay put.
-    newWorkingDir = prefs.defaultWorkingDir || newWorkingDir;
-    newModel = prefs.defaultModel || newModel;
+    // Precedence: active tag filter's defaults → user prefs → prior
+    // form value. Tag defaults win because they encode project-like
+    // context; prefs are a global fallback.
+    const td = tagFilterDefaults();
+    newWorkingDir = td.workingDir || prefs.defaultWorkingDir || newWorkingDir;
+    newModel = td.model || prefs.defaultModel || newModel;
     showNewForm = true;
   }
   const confirm = $state<{ id: string | null }>({ id: null });

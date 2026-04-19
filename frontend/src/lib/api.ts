@@ -258,6 +258,8 @@ export type Tag = {
   sort_order: number;
   created_at: string;
   session_count: number;
+  default_working_dir: string | null;
+  default_model: string | null;
 };
 
 export type TagCreate = {
@@ -265,6 +267,8 @@ export type TagCreate = {
   color?: string | null;
   pinned?: boolean;
   sort_order?: number;
+  default_working_dir?: string | null;
+  default_model?: string | null;
 };
 
 export type TagUpdate = {
@@ -272,6 +276,8 @@ export type TagUpdate = {
   color?: string | null;
   pinned?: boolean;
   sort_order?: number;
+  default_working_dir?: string | null;
+  default_model?: string | null;
 };
 
 export function listTags(fetchImpl: typeof fetch = fetch): Promise<Tag[]> {

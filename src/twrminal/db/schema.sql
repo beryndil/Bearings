@@ -44,7 +44,9 @@ CREATE TABLE IF NOT EXISTS tags (
     color TEXT,
     pinned INTEGER NOT NULL DEFAULT 0,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    default_working_dir TEXT,
+    default_model TEXT
 );
 
 CREATE TABLE IF NOT EXISTS session_tags (

@@ -74,16 +74,20 @@ class TagCreate(BaseModel):
     color: str | None = None
     pinned: bool = False
     sort_order: int = 0
+    default_working_dir: str | None = None
+    default_model: str | None = None
 
 
 class TagUpdate(BaseModel):
     """Partial update for an existing tag. Any unset field is left
-    unchanged; explicit `None` for `color` clears it."""
+    unchanged; explicit `None` for nullable fields clears them."""
 
     name: str | None = None
     color: str | None = None
     pinned: bool | None = None
     sort_order: int | None = None
+    default_working_dir: str | None = None
+    default_model: str | None = None
 
 
 class TagOut(BaseModel):
@@ -94,6 +98,8 @@ class TagOut(BaseModel):
     sort_order: int
     created_at: str
     session_count: int = 0
+    default_working_dir: str | None = None
+    default_model: str | None = None
 
 
 class TagMemoryPut(BaseModel):

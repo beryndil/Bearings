@@ -28,6 +28,8 @@ async def create_tag(body: TagCreate, request: Request) -> TagOut:
             color=body.color,
             pinned=body.pinned,
             sort_order=body.sort_order,
+            default_working_dir=body.default_working_dir,
+            default_model=body.default_model,
         )
     except Exception as exc:  # aiosqlite raises IntegrityError on UNIQUE
         if "UNIQUE" in str(exc):

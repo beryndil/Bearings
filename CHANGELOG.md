@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] - 2026-04-19
+
+Tag defaults — `default_working_dir` and `default_model` per tag.
+Replaces what projects were going to do for new-session pre-fill.
+First slice after the v0.2.9 teardown.
+
+### Added
+
+- Migration `0009_tag_defaults.sql`: adds `default_working_dir`
+  and `default_model` TEXT columns to `tags` (both nullable).
+- `store.create_tag` / `update_tag` accept the new fields. The
+  update allowed-set grew by both columns; unset preserves, null
+  clears.
+- `TagCreate` / `TagUpdate` / `TagOut` expose the new fields.
+- Frontend `Tag` / `TagCreate` / `TagUpdate` TS types match.
+- New-session form pre-fills from the sidebar's active tag filter:
+  when one or more tags are filter-selected, the form pulls
+  `default_working_dir` and `default_model` from the highest-
+  precedence tag (canonical list order, last wins — same rule as
+  tag-memory precedence). Falls back to user prefs, then to the
+  prior form value. No tag defaults, no behavior change.
+- 5 new pytest cases in `tests/test_tags.py` (store create with
+  defaults, null defaults, update set+clear, POST accepts, PATCH
+  sets).
+
+### Why
+
+Projects were going to carry per-project defaults. With projects
+torn down, tags now carry them. A pinned `twrminal` tag with
+`default_working_dir = ~/Projects/Twrminal` and
+`default_model = claude-opus-4-7` gives the same new-session pre-
+fill behavior a project would have given — one click to filter
+the sidebar to that tag, then `+ New` has the fields ready.
+
+### Gaps
+
+- No in-app UI to set tag defaults yet. Lands in v0.2.11 (tag
+  editor modal), alongside the memory editor.
+- Tag attach at session-create time is still v0.2.13. For now the
+  pre-fill is driven only by the sidebar tag filter. A user who
+  wants to create a session under a tag must filter to it first.
+
 ## [0.2.9] - 2026-04-19
 
 Teardown of projects. Course correction — projects were the wrong

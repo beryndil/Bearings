@@ -492,6 +492,7 @@ async def list_all_tool_calls(
 
 _TAG_COLS_WITH_COUNT = (
     "t.id, t.name, t.color, t.pinned, t.sort_order, t.created_at, "
+    "t.default_working_dir, t.default_model, "
     "(SELECT COUNT(*) FROM session_tags st WHERE st.tag_id = t.id) "
     "AS session_count"
 )
@@ -507,10 +508,23 @@ async def create_tag(
     color: str | None = None,
     pinned: bool = False,
     sort_order: int = 0,
+    default_working_dir: str | None = None,
+    default_model: str | None = None,
 ) -> dict[str, Any]:
     cursor = await conn.execute(
-        "INSERT INTO tags (name, color, pinned, sort_order, created_at) VALUES (?, ?, ?, ?, ?)",
-        (name, color, 1 if pinned else 0, sort_order, _now()),
+        "INSERT INTO tags "
+        "(name, color, pinned, sort_order, created_at, "
+        "default_working_dir, default_model) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            name,
+            color,
+            1 if pinned else 0,
+            sort_order,
+            _now(),
+            default_working_dir,
+            default_model,
+        ),
     )
     await conn.commit()
     tag_id = cursor.lastrowid
@@ -543,9 +557,17 @@ async def update_tag(
     fields: dict[str, Any],
 ) -> dict[str, Any] | None:
     """Apply a partial update. `fields` maps column name → new value.
-    Only `name`, `color`, `pinned`, `sort_order` are accepted. Returns
-    the refreshed row, or None if the tag doesn't exist."""
-    allowed = {"name", "color", "pinned", "sort_order"}
+    Only `name`, `color`, `pinned`, `sort_order`, `default_working_dir`,
+    and `default_model` are accepted. Returns the refreshed row, or
+    None if the tag doesn't exist."""
+    allowed = {
+        "name",
+        "color",
+        "pinned",
+        "sort_order",
+        "default_working_dir",
+        "default_model",
+    }
     filtered = {k: v for k, v in fields.items() if k in allowed}
     if "pinned" in filtered:
         filtered["pinned"] = 1 if filtered["pinned"] else 0
