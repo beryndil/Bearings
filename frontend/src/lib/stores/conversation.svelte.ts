@@ -39,6 +39,7 @@ class ConversationStore {
   streamingText = $state('');
   streamingActive = $state(false);
   toolCalls = $state<LiveToolCall[]>([]);
+  totalCost = $state(0);
   error = $state<string | null>(null);
 
   async load(sessionId: string): Promise<void> {
@@ -47,12 +48,14 @@ class ConversationStore {
     this.reset();
     this.error = null;
     try {
-      const [messages, toolCalls] = await Promise.all([
+      const [session, messages, toolCalls] = await Promise.all([
+        api.getSession(sessionId),
         api.listMessages(sessionId),
         api.listToolCalls(sessionId)
       ]);
       this.messages = messages;
       this.toolCalls = toolCalls.map(hydrateToolCall);
+      this.totalCost = session.total_cost_usd;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     }
@@ -124,6 +127,9 @@ class ConversationStore {
               created_at: new Date().toISOString()
             }
           ];
+        }
+        if (event.cost_usd !== null) {
+          this.totalCost += event.cost_usd;
         }
         this.streamingText = '';
         this.streamingActive = false;

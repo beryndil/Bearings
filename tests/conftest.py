@@ -74,3 +74,22 @@ def mock_agent_tool_stream(monkeypatch: pytest.MonkeyPatch) -> None:
         yield MessageComplete(session_id=self.session_id, message_id=MOCK_TOOL_MSG_ID)
 
     monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+
+
+@pytest.fixture
+def mock_agent_cost_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    from uuid import uuid4
+
+    async def fake(self: AgentSession, prompt: str) -> AsyncIterator[AgentEvent]:
+        # Fresh id per turn so a session can run multiple turns without
+        # colliding on messages.id (UNIQUE).
+        msg_id = uuid4().hex
+        yield MessageStart(session_id=self.session_id, message_id=msg_id)
+        yield Token(session_id=self.session_id, text="billed")
+        yield MessageComplete(
+            session_id=self.session_id,
+            message_id=msg_id,
+            cost_usd=0.01,
+        )
+
+    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)

@@ -44,6 +44,7 @@ class MessageComplete(BaseModel):
     type: Literal["message_complete"] = "message_complete"
     session_id: str
     message_id: str
+    cost_usd: float | None = None
 
 
 class ErrorEvent(BaseModel):

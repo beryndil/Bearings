@@ -45,7 +45,9 @@ def _new_id() -> str:
     return uuid4().hex
 
 
-_SESSION_COLS = "id, created_at, updated_at, working_dir, model, title, max_budget_usd"
+_SESSION_COLS = (
+    "id, created_at, updated_at, working_dir, model, title, max_budget_usd, total_cost_usd"
+)
 
 
 async def create_session(
@@ -88,6 +90,17 @@ async def get_session(conn: aiosqlite.Connection, session_id: str) -> dict[str, 
 
 async def delete_session(conn: aiosqlite.Connection, session_id: str) -> bool:
     cursor = await conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    await conn.commit()
+    return cursor.rowcount > 0
+
+
+async def add_session_cost(conn: aiosqlite.Connection, session_id: str, delta_usd: float) -> bool:
+    """Accumulate SDK-reported cost onto the session row. Returns False if
+    the session row is gone (e.g. deleted mid-stream)."""
+    cursor = await conn.execute(
+        "UPDATE sessions SET total_cost_usd = total_cost_usd + ? WHERE id = ?",
+        (delta_usd, session_id),
+    )
     await conn.commit()
     return cursor.rowcount > 0
 

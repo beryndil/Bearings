@@ -62,6 +62,7 @@ class AgentSession:
             options_kwargs["max_budget_usd"] = self.max_budget_usd
         options = ClaudeAgentOptions(**options_kwargs)
         message_id = uuid4().hex
+        cost_usd: float | None = None
         try:
             async with ClaudeSDKClient(options=options) as client:
                 await client.query(prompt)
@@ -77,8 +78,13 @@ class AgentSession:
                             if isinstance(block, ToolResultBlock):
                                 yield self._tool_call_end(block)
                     elif isinstance(msg, ResultMessage):
+                        cost_usd = msg.total_cost_usd
                         break
-            yield MessageComplete(session_id=self.session_id, message_id=message_id)
+            yield MessageComplete(
+                session_id=self.session_id,
+                message_id=message_id,
+                cost_usd=cost_usd,
+            )
         except Exception as exc:  # noqa: BLE001 — surface as a wire event
             yield ErrorEvent(session_id=self.session_id, message=str(exc))
 

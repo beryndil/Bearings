@@ -11,6 +11,7 @@ export type Session = {
   model: string;
   title: string | null;
   max_budget_usd: number | null;
+  total_cost_usd: number;
 };
 
 export type SessionCreate = {
@@ -66,6 +67,7 @@ export type MessageCompleteEvent = {
   type: 'message_complete';
   session_id: string;
   message_id: string;
+  cost_usd: number | null;
 };
 export type ErrorEvent = { type: 'error'; session_id: string; message: string };
 

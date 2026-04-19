@@ -118,6 +118,45 @@ def test_ws_persists_tool_calls(
     assert call["started_at"] and call["finished_at"]
 
 
+def test_ws_accumulates_session_cost(client: TestClient, mock_agent_cost_stream: None) -> None:
+    sid = _create_session(client)
+    before = client.get(f"/api/sessions/{sid}").json()
+    assert before["total_cost_usd"] == 0
+
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "go"})
+        frames = [json.loads(ws.receive_text()) for _ in range(3)]
+
+        import time
+
+        # Cost UPDATE runs after the MessageComplete frame is sent; poll.
+        for _ in range(50):
+            row = client.get(f"/api/sessions/{sid}").json()
+            if row["total_cost_usd"] > 0:
+                break
+            time.sleep(0.02)
+
+    assert [f["type"] for f in frames] == ["message_start", "token", "message_complete"]
+    assert frames[2]["cost_usd"] == pytest.approx(0.01)
+
+    after = client.get(f"/api/sessions/{sid}").json()
+    assert after["total_cost_usd"] == pytest.approx(0.01)
+
+    # Second turn accumulates.
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        ws.send_json({"type": "prompt", "content": "again"})
+        for _ in range(3):
+            ws.receive_text()
+        for _ in range(50):
+            row = client.get(f"/api/sessions/{sid}").json()
+            if row["total_cost_usd"] >= 0.02:
+                break
+            time.sleep(0.02)
+
+    final = client.get(f"/api/sessions/{sid}").json()
+    assert final["total_cost_usd"] == pytest.approx(0.02)
+
+
 def test_ws_registers_and_deregisters_active_connection(
     client: TestClient, mock_agent_stream: None
 ) -> None:

@@ -66,15 +66,19 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 - [x] Graceful WS shutdown on lifespan exit (1001 Going Away).
 - [x] Budget display in Conversation header.
 
-## v0.1.10 — next slice
+## v0.1.10 — shipped
 
-- [ ] Running cost display: surface SDK `ResultMessage.total_cost_usd`
-  as part of `MessageComplete` (or a new `UsageEvent`); accumulate
-  per-session and render under the budget in the header.
+- [x] `MessageComplete.cost_usd` + `sessions.total_cost_usd` column.
+- [x] Conversation header shows running cost + optional cap.
+
+## v0.1.11 — next slice
+
 - [ ] Frontend unit tests (vitest + @testing-library/svelte).
 - [ ] Messages-endpoint pagination (limit + cursor) once conversations
   grow long.
 - [ ] Auth gate: enable `auth.enabled` path (currently no-op).
+- [ ] Visual pressure when `total_cost_usd` approaches `max_budget_usd`
+  (amber header text at 80%, red at 100%).
 
 ## v0.1.7+
 

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-04-19
+
+### Added
+
+- `MessageComplete.cost_usd` — SDK-reported turn cost
+  (`ResultMessage.total_cost_usd`) surfaced on the wire. `AgentSession`
+  captures it before the `break` on ResultMessage.
+- `sessions.total_cost_usd` column (migration 0003, `REAL NOT NULL
+  DEFAULT 0`). `store.add_session_cost` accumulates it per turn; WS
+  handler calls it on MessageComplete when cost is non-null.
+- `SessionOut.total_cost_usd` on the API.
+- Frontend `Session.total_cost_usd` + `MessageCompleteEvent.cost_usd`.
+- Conversation store tracks `totalCost`: seeded from the DB row on load,
+  incremented locally per MessageComplete. Conversation header shows
+  `spent $Y.YYYY` and, when a cap is set, `/ $X.XX`.
+
 ## [0.1.9] - 2026-04-19
 
 ### Added

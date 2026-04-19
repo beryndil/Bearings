@@ -57,13 +57,15 @@
         {sessions.selected?.title ?? 'Twrminal'}
       </h1>
       <p class="text-xs text-slate-500 font-mono truncate">
-        {sessions.selected
-          ? `${sessions.selected.model} · ${sessions.selected.working_dir}${
-              sessions.selected.max_budget_usd != null
-                ? ` · budget $${sessions.selected.max_budget_usd.toFixed(2)}`
-                : ''
-            }`
-          : 'select or create a session to start'}
+        {#if sessions.selected}
+          {sessions.selected.model} · {sessions.selected.working_dir} · spent ${conversation.totalCost.toFixed(
+            4
+          )}{sessions.selected.max_budget_usd != null
+            ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
+            : ''}
+        {:else}
+          select or create a session to start
+        {/if}
       </p>
     </div>
     <span

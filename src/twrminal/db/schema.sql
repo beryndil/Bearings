@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     working_dir TEXT NOT NULL,
     model TEXT NOT NULL,
     title TEXT,
-    max_budget_usd REAL
+    max_budget_usd REAL,
+    total_cost_usd REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (

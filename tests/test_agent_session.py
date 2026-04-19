@@ -24,7 +24,7 @@ from twrminal.agent.events import (
 from twrminal.agent.session import AgentSession
 
 
-def _result(session_id: str = "sdk-sess") -> ResultMessage:
+def _result(session_id: str = "sdk-sess", total_cost_usd: float | None = None) -> ResultMessage:
     return ResultMessage(
         subtype="success",
         duration_ms=1,
@@ -32,6 +32,7 @@ def _result(session_id: str = "sdk-sess") -> ResultMessage:
         is_error=False,
         num_turns=1,
         session_id=session_id,
+        total_cost_usd=total_cost_usd,
     )
 
 
@@ -218,6 +219,33 @@ async def test_stream_stops_on_result_message(monkeypatch: pytest.MonkeyPatch) -
     events = [ev async for ev in session.stream("x")]
     tokens = [e for e in events if isinstance(e, Token)]
     assert [t.text for t in tokens] == ["pre"]
+
+
+@pytest.mark.asyncio
+async def test_stream_message_complete_carries_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client(
+        monkeypatch,
+        [_assistant(TextBlock("hi")), _result(total_cost_usd=0.0042)],
+    )
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("x")]
+    complete = events[-1]
+    assert isinstance(complete, MessageComplete)
+    assert complete.cost_usd == pytest.approx(0.0042)
+
+
+@pytest.mark.asyncio
+async def test_stream_message_complete_cost_none_when_sdk_omits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_client(monkeypatch, [_assistant(TextBlock("hi")), _result()])
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("x")]
+    complete = events[-1]
+    assert isinstance(complete, MessageComplete)
+    assert complete.cost_usd is None
 
 
 @pytest.mark.asyncio

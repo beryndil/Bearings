@@ -87,6 +87,8 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
                         message_id=event.message_id,
                         tool_call_ids=tool_call_ids,
                     )
+                    if event.cost_usd is not None:
+                        await store.add_session_cost(conn, session_id, event.cost_usd)
                     buf.clear()
                     tool_call_ids.clear()
     except WebSocketDisconnect:
