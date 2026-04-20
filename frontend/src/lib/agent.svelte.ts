@@ -3,6 +3,7 @@ import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
+export type PermissionMode = 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
 
 const MAX_RETRY_DELAY_MS = 30_000;
 const BASE_RETRY_DELAY_MS = 1_000;
@@ -15,6 +16,7 @@ class AgentConnection {
   sessionId = $state<string | null>(null);
   lastCloseCode = $state<number | null>(null);
   reconnectDelayMs = $state<number | null>(null);
+  permissionMode = $state<PermissionMode>('default');
 
   private socket: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -27,6 +29,7 @@ class AgentConnection {
     this.sessionId = sessionId;
     this.lastCloseCode = null;
     this.retryCount = 0;
+    this.permissionMode = 'default';
     await conversation.load(sessionId);
     this.openSocket(sessionId);
   }
@@ -41,6 +44,13 @@ class AgentConnection {
   stop(): boolean {
     if (!this.socket || this.state !== 'open') return false;
     this.socket.send(JSON.stringify({ type: 'stop' }));
+    return true;
+  }
+
+  setPermissionMode(mode: PermissionMode): boolean {
+    if (!this.socket || this.state !== 'open') return false;
+    this.permissionMode = mode;
+    this.socket.send(JSON.stringify({ type: 'set_permission_mode', mode }));
     return true;
   }
 

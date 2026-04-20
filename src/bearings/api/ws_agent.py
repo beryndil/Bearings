@@ -109,6 +109,7 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:  # noqa: C901
         row["model"],
         max_budget_usd=row.get("max_budget_usd"),
         db=conn,
+        sdk_session_id=row.get("sdk_session_id"),
     )
     incoming: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
     reader = asyncio.create_task(_ws_reader(websocket, incoming))
@@ -117,7 +118,13 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:  # noqa: C901
             payload = await incoming.get()
             if payload is None:
                 break  # disconnect
-            if payload.get("type") != "prompt":
+            msg_type = payload.get("type")
+            if msg_type == "set_permission_mode":
+                mode = payload.get("mode")
+                # `None` or an empty string clears back to default.
+                agent.set_permission_mode(mode or None)
+                continue
+            if msg_type != "prompt":
                 # Stop-without-an-active-stream is a no-op.
                 continue
             prompt = str(payload.get("content", ""))
@@ -167,6 +174,12 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:  # noqa: C901
                         tool_call_ids=tool_call_ids,
                         cost_usd=event.cost_usd,
                     )
+                    if agent.sdk_session_id is not None:
+                        await store.set_sdk_session_id(
+                            conn,
+                            session_id,
+                            agent.sdk_session_id,
+                        )
                     persisted = True
                     break  # turn finished naturally
                 # Check for client stop between events. Cancel any

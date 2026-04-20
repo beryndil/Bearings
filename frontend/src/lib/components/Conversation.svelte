@@ -3,46 +3,65 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
-  import { renderMarkdown } from '$lib/render';
-  import { highlight } from '$lib/actions/highlight';
+  import MessageTurn from '$lib/components/MessageTurn.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
+  import { buildTurns } from '$lib/turns';
+  import {
+    connectionLabel,
+    copyText,
+    messagesAsMarkdown,
+    nextPermissionMode,
+    pressureClass
+  } from '$lib/utils/conversation-ui';
+
+  const turns = $derived(
+    buildTurns({
+      messages: conversation.messages,
+      toolCalls: conversation.toolCalls,
+      streamingActive: conversation.streamingActive,
+      streamingMessageId: conversation.streamingMessageId,
+      streamingThinking: conversation.streamingThinking,
+      streamingText: conversation.streamingText
+    })
+  );
 
   let promptText = $state('');
   let scrollContainer: HTMLDivElement | undefined = $state();
   let editingSession = $state(false);
   let exporting = $state(false);
+  let copiedMsgId = $state<string | null>(null);
+  let copiedSession = $state(false);
 
-  // Tag chips rendered in the header next to the session title. Small
-  // local state — other components already have their own tag views
-  // (sidebar SessionEdit, TagEdit) and don't share this shape.
-  let sessionTags = $state<api.Tag[]>([]);
-  let sessionTagsLoadedFor = $state<string | null>(null);
-
-  async function loadSessionTags(sid: string): Promise<void> {
-    try {
-      sessionTags = await api.listSessionTags(sid);
-      sessionTagsLoadedFor = sid;
-    } catch {
-      // Non-fatal — the chip row is cosmetic. Leave whatever we had.
-    }
+  async function onCopyMessage(msg: api.Message) {
+    if (!(await copyText(msg.content))) return;
+    copiedMsgId = msg.id;
+    setTimeout(() => {
+      if (copiedMsgId === msg.id) copiedMsgId = null;
+    }, 1500);
   }
+
+  async function onCopySession() {
+    const sid = sessions.selectedId;
+    if (!sid || copiedSession) return;
+    // Pull the full list so the copy isn't limited to what's paged in.
+    const dump = await api.exportSession(sid);
+    if (!(await copyText(messagesAsMarkdown(dump.messages)))) return;
+    copiedSession = true;
+    setTimeout(() => (copiedSession = false), 1500);
+  }
+
+  // Tag chips in the header. Refetch on session change and on
+  // `updated_at` bumps (SessionEdit attach/detach bumps the server).
+  let sessionTags = $state<api.Tag[]>([]);
 
   $effect(() => {
     const sid = sessions.selected?.id ?? null;
+    void sessions.selected?.updated_at;
     if (!sid) {
       sessionTags = [];
-      sessionTagsLoadedFor = null;
       return;
     }
-    // Refetch on session change, and when updated_at bumps (attach/
-    // detach through SessionEdit bumps the server's updated_at).
-    void sessions.selected?.updated_at;
-    if (sid !== sessionTagsLoadedFor) {
-      void loadSessionTags(sid);
-    } else {
-      // Same session but updated — re-load to reflect attach/detach.
-      void loadSessionTags(sid);
-    }
+    api.listSessionTags(sid).then((r) => (sessionTags = r), () => {});
   });
 
   async function onExport() {
@@ -101,6 +120,12 @@
   function onSend() {
     const text = promptText.trim();
     if (!text) return;
+    const modeNext = nextPermissionMode(text, agent.permissionMode);
+    if (modeNext !== null) {
+      agent.setPermissionMode(modeNext);
+      promptText = '';
+      return;
+    }
     if (!agent.send(text)) return;
     promptText = '';
   }
@@ -131,31 +156,6 @@
     return () => document.removeEventListener('keydown', onDocKey);
   });
 
-  function pressureClass(spent: number, cap: number | null | undefined): string {
-    if (cap == null || cap <= 0) return 'text-slate-500';
-    const ratio = spent / cap;
-    if (ratio >= 1) return 'text-rose-400';
-    if (ratio >= 0.8) return 'text-amber-400';
-    return 'text-slate-500';
-  }
-
-  function connectionLabel(state: typeof agent.state): string {
-    if (agent.reconnectDelayMs !== null) {
-      return `retrying in ${Math.ceil(agent.reconnectDelayMs / 1000)}s`;
-    }
-    switch (state) {
-      case 'idle':
-        return 'idle';
-      case 'connecting':
-        return 'connecting…';
-      case 'open':
-        return 'connected';
-      case 'closed':
-        return agent.lastCloseCode === 4404 ? 'session not found' : 'disconnected';
-      case 'error':
-        return 'error';
-    }
-  }
 </script>
 
 <SessionEdit
@@ -187,6 +187,16 @@
             disabled={exporting}
           >
             ⇣
+          </button>
+          <button
+            type="button"
+            class="text-xs text-slate-500 hover:text-slate-300 disabled:opacity-50"
+            aria-label="Copy session to clipboard"
+            title={copiedSession ? 'Copied' : 'Copy session as markdown'}
+            onclick={onCopySession}
+            disabled={copiedSession}
+          >
+            {copiedSession ? '✓' : '⎘'}
           </button>
         {/if}
       </h1>
@@ -232,6 +242,17 @@
       {/if}
     </div>
     <div class="flex items-center gap-2">
+      {#if agent.permissionMode !== 'default'}
+        <button
+          type="button"
+          class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
+            bg-sky-900 text-sky-200 hover:bg-sky-800"
+          onclick={() => agent.setPermissionMode('default')}
+          title="Click to exit {agent.permissionMode} mode (or type /plan off)"
+        >
+          {agent.permissionMode}
+        </button>
+      {/if}
       {#if conversation.streamingActive}
         <button
           type="button"
@@ -251,7 +272,7 @@
               ? 'bg-amber-900 text-amber-300'
               : 'bg-slate-800 text-slate-400'}"
       >
-        {connectionLabel(agent.state)}
+        {connectionLabel(agent.state, agent.reconnectDelayMs, agent.lastCloseCode)}
       </span>
     </div>
   </header>
@@ -288,52 +309,20 @@
         No messages yet. Send a prompt to start the conversation.
       </p>
     {:else}
-      {#each conversation.messages as msg (msg.id)}
-        <article
-          class="rounded border border-slate-800 px-3 py-2
-          {msg.role === 'user' ? 'bg-slate-800/60' : 'bg-slate-900'}"
-        >
-          <header class="text-[10px] uppercase tracking-wider text-slate-500 mb-1">
-            {msg.role}
-          </header>
-          {#if msg.thinking}
-            <details class="mb-2 rounded bg-slate-950/40 px-2 py-1">
-              <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500">
-                thinking
-              </summary>
-              <pre
-                class="mt-1 whitespace-pre-wrap text-xs text-slate-400 font-sans">{msg.thinking}</pre>
-            </details>
-          {/if}
-          <div
-            class="prose prose-invert prose-sm max-w-none"
-            use:highlight={conversation.highlightQuery}
-          >
-            {@html renderMarkdown(msg.content)}
-          </div>
-        </article>
+      {#each turns as turn (turn.key)}
+        <MessageTurn
+          user={turn.user}
+          assistant={turn.assistant}
+          thinking={turn.thinking}
+          toolCalls={turn.toolCalls}
+          streamingContent={turn.streamingContent}
+          streamingThinking={turn.streamingThinking}
+          isStreaming={turn.isStreaming}
+          highlightQuery={conversation.highlightQuery}
+          {copiedMsgId}
+          {onCopyMessage}
+        />
       {/each}
-
-      {#if conversation.streamingActive}
-        <article class="rounded border border-amber-900/50 px-3 py-2 bg-slate-900">
-          <header class="text-[10px] uppercase tracking-wider text-amber-400 mb-1">
-            assistant · streaming
-          </header>
-          {#if conversation.streamingThinking}
-            <details class="mb-2 rounded bg-slate-950/40 px-2 py-1" open>
-              <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500">
-                thinking
-              </summary>
-              <pre
-                class="mt-1 whitespace-pre-wrap text-xs text-slate-400 font-sans">{conversation.streamingThinking}</pre>
-            </details>
-          {/if}
-          <div class="prose prose-invert prose-sm max-w-none">
-            {@html renderMarkdown(conversation.streamingText)}
-            <span class="inline-block animate-pulse">▍</span>
-          </div>
-        </article>
-      {/if}
 
       {#if conversation.error}
         <article class="rounded border border-rose-900/50 px-3 py-2 bg-rose-950/30">

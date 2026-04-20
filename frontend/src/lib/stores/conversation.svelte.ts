@@ -3,6 +3,7 @@ import { sessions } from '$lib/stores/sessions.svelte';
 
 export type LiveToolCall = {
   id: string;
+  messageId: string | null;
   name: string;
   input: Record<string, unknown>;
   output: string | null;
@@ -24,6 +25,7 @@ function hydrateToolCall(row: api.ToolCall): LiveToolCall {
   const ok = finishedAt === null ? null : row.error === null;
   return {
     id: row.id,
+    messageId: row.message_id,
     name: row.name,
     input: parsedInput,
     output: row.output,
@@ -42,6 +44,7 @@ class ConversationStore {
   streamingText = $state('');
   streamingThinking = $state('');
   streamingActive = $state(false);
+  streamingMessageId = $state<string | null>(null);
   toolCalls = $state<LiveToolCall[]>([]);
   totalCost = $state(0);
   highlightQuery = $state('');
@@ -93,6 +96,7 @@ class ConversationStore {
     this.streamingText = '';
     this.streamingThinking = '';
     this.streamingActive = false;
+    this.streamingMessageId = null;
     this.toolCalls = [];
   }
 
@@ -118,6 +122,9 @@ class ConversationStore {
 
   handleEvent(event: api.AgentEvent): void {
     switch (event.type) {
+      case 'message_start':
+        this.streamingMessageId = event.message_id;
+        return;
       case 'token':
         this.streamingText += event.text;
         return;
@@ -129,6 +136,7 @@ class ConversationStore {
           ...this.toolCalls,
           {
             id: event.tool_call_id,
+            messageId: this.streamingMessageId,
             name: event.name,
             input: event.input,
             output: null,
@@ -174,12 +182,12 @@ class ConversationStore {
         this.streamingText = '';
         this.streamingThinking = '';
         this.streamingActive = false;
+        this.streamingMessageId = null;
         return;
       case 'error':
         this.error = event.message;
         this.streamingActive = false;
         return;
-      case 'message_start':
       case 'user_message':
         return;
     }

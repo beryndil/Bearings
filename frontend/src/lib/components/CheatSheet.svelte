@@ -17,7 +17,8 @@
       items: [
         { keys: ['Enter'], description: 'Send the prompt' },
         { keys: ['Shift', 'Enter'], description: 'Newline inside the prompt' },
-        { keys: ['Esc'], description: 'Clear an active search highlight' }
+        { keys: ['Esc'], description: 'Clear an active search highlight' },
+        { keys: ['/plan'], description: 'Toggle plan mode (append "off" to exit)' }
       ]
     },
     {

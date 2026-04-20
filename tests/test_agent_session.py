@@ -119,6 +119,67 @@ async def test_stream_passes_budget_to_options(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_stream_passes_permission_mode_to_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    session.set_permission_mode("plan")
+    _ = [ev async for ev in session.stream("hi")]
+    assert captured["options"].permission_mode == "plan"
+
+
+@pytest.mark.asyncio
+async def test_stream_passes_sdk_session_id_as_resume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession(
+        "s",
+        working_dir="/tmp",
+        model="m",
+        sdk_session_id="prior-sdk-xyz",
+    )
+    _ = [ev async for ev in session.stream("hi")]
+    assert captured["options"].resume == "prior-sdk-xyz"
+
+
+@pytest.mark.asyncio
+async def test_stream_captures_sdk_session_id_from_assistant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assistant = AssistantMessage(
+        content=[TextBlock("hi")],
+        model="claude-sonnet-4-6",
+        session_id="new-sdk-abc",
+    )
+    _patch_client(monkeypatch, [assistant, _result()])
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    _ = [ev async for ev in session.stream("hi")]
+    assert session.sdk_session_id == "new-sdk-abc"
+
+
+@pytest.mark.asyncio
 async def test_stream_translates_text_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(
         monkeypatch,

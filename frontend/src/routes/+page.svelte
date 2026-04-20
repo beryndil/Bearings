@@ -70,9 +70,11 @@
   };
 
   function loadPanes(): PaneState {
+    // Inspector starts collapsed — `lastRight` seeds the toggle so the
+    // first click opens to the default width instead of the minimum.
     const fallback: PaneState = {
       left: DEFAULT_LEFT_PX,
-      right: DEFAULT_RIGHT_PX,
+      right: 0,
       lastLeft: DEFAULT_LEFT_PX,
       lastRight: DEFAULT_RIGHT_PX
     };

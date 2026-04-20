@@ -10,6 +10,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    PermissionMode,
     ResultMessage,
     StreamEvent,
     TextBlock,
@@ -52,6 +53,8 @@ class AgentSession:
         model: str,
         max_budget_usd: float | None = None,
         db: aiosqlite.Connection | None = None,
+        sdk_session_id: str | None = None,
+        permission_mode: PermissionMode | None = None,
     ) -> None:
         self.session_id = session_id
         self.working_dir = working_dir
@@ -63,10 +66,23 @@ class AgentSession:
         # that don't exercise persistence can leave it None; the WS
         # handler wires it in production.
         self.db = db
+        # Claude-agent-sdk session id captured from the first
+        # AssistantMessage and passed back as `resume=` on the next
+        # turn so the fresh SDK client inherits prior history instead
+        # of starting blind. WS handler persists this to `sessions.
+        # sdk_session_id` so reconnects keep context too.
+        self.sdk_session_id = sdk_session_id
+        # Current permission mode — applied to every subsequent
+        # stream() call's options. Flipping this (via
+        # set_permission_mode) is how `/plan` engages plan mode.
+        self.permission_mode = permission_mode
         # Tracks the currently-active SDK client so `interrupt()` can
         # reach into an in-flight stream. Set inside `stream()` under
         # the `async with`; cleared on exit.
         self._client: ClaudeSDKClient | None = None
+
+    def set_permission_mode(self, mode: PermissionMode | None) -> None:
+        self.permission_mode = mode
 
     async def stream(self, prompt: str) -> AsyncIterator[AgentEvent]:
         options_kwargs: dict[str, Any] = {
@@ -76,6 +92,12 @@ class AgentSession:
         }
         if self.max_budget_usd is not None:
             options_kwargs["max_budget_usd"] = self.max_budget_usd
+        if self.permission_mode is not None:
+            options_kwargs["permission_mode"] = self.permission_mode
+        if self.sdk_session_id is not None:
+            # Resume the prior SDK session so conversation history is
+            # on the CLI side even though this is a fresh client.
+            options_kwargs["resume"] = self.sdk_session_id
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called
@@ -104,6 +126,8 @@ class AgentSession:
                                 streamed_this_msg = True
                                 yield event
                         elif isinstance(msg, AssistantMessage):
+                            if msg.session_id:
+                                self.sdk_session_id = msg.session_id
                             for block in msg.content:
                                 if streamed_this_msg and isinstance(
                                     block, TextBlock | ThinkingBlock

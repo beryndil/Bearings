@@ -16,6 +16,7 @@ from bearings.db.store import (
     list_messages,
     list_sessions,
     list_tool_calls,
+    set_sdk_session_id,
 )
 
 
@@ -89,6 +90,20 @@ async def test_get_session_returns_none_for_missing(tmp_path: Path) -> None:
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         assert await get_session(conn, "deadbeef" * 4) is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_set_sdk_session_id_persists(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        created = await create_session(conn, working_dir="/tmp", model="m")
+        assert created["sdk_session_id"] is None
+        await set_sdk_session_id(conn, created["id"], "sdk-abc-123")
+        refreshed = await get_session(conn, created["id"])
+        assert refreshed is not None
+        assert refreshed["sdk_session_id"] == "sdk-abc-123"
     finally:
         await conn.close()
 

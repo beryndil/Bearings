@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     description TEXT,
     max_budget_usd REAL,
     total_cost_usd REAL NOT NULL DEFAULT 0,
-    session_instructions TEXT
+    session_instructions TEXT,
+    sdk_session_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (

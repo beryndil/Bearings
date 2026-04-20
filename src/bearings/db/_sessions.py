@@ -12,7 +12,7 @@ from bearings.db._common import _date_filter, _new_id, _now
 
 SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
-    "max_budget_usd, total_cost_usd, session_instructions"
+    "max_budget_usd, total_cost_usd, session_instructions, sdk_session_id"
 )
 SESSION_COUNT = "(SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count"
 SESSION_COLS_WITH_COUNT = f"s.{SESSION_BASE_COLS.replace(', ', ', s.')}, {SESSION_COUNT}"
@@ -214,6 +214,21 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
     row = await get_session(conn, new_session_id)
     assert row is not None
     return row
+
+
+async def set_sdk_session_id(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    sdk_session_id: str,
+) -> None:
+    """Cache the claude-agent-sdk session id on the Bearings session so
+    later turns can `resume=` it and inherit the SDK's conversation
+    history. No-op if the row is gone."""
+    await conn.execute(
+        "UPDATE sessions SET sdk_session_id = ? WHERE id = ?",
+        (sdk_session_id, session_id),
+    )
+    await conn.commit()
 
 
 async def add_session_cost(conn: aiosqlite.Connection, session_id: str, delta_usd: float) -> bool:
