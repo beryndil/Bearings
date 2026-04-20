@@ -454,10 +454,13 @@ is feature-complete.
   `NewSessionForm.svelte` (251), `SidebarSearch.svelte` (122),
   `TagFilterPanel.svelte` (94). `SessionList.svelte` is now 336
   lines.
-- [ ] `frontend/src/lib/api.ts` is 447 lines — over the cap but
-  it's all type declarations + thin fetch helpers. Splitting it
-  before there's a second domain to peel off would be premature.
-  Revisit if/when agent/session API expands significantly.
+- [x] `frontend/src/lib/api.ts` split into
+  `frontend/src/lib/api/core.ts` (119) /
+  `sessions.ts` (149) / `tags.ts` (124) / `history.ts` (64) with
+  `index.ts` re-export barrel. Second domain (tags) had grown
+  large enough to justify the split; all imports use `$lib/api`
+  unchanged. `voidFetch` helper added to core for DELETE-without-
+  body endpoints. All 168 backend + 39 frontend tests pass.
 
 ### Browser verification pending
 
