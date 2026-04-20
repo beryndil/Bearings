@@ -79,7 +79,22 @@ observations here and flag regressions with a version bump.
   `message_start` → `thinking` → `token` (coalesced) →
   `message_complete` with cost_usd=0.176.
 
-### Out-of-scope note
+## v0.3.1 (2026-04-20)
 
-Resizable / collapsible panes were raised during v0.2.13 review.
-Not specced, not shipped. Candidate for v0.3.0.
+### Pending Dave's browser walkthrough
+
+- [ ] **Resizable panes**: drag the handle between sidebar and
+  conversation — width updates live, clamps at 200px min, snaps to
+  collapsed below that, maxes out at ~50% viewport. Release persists
+  the width (reload the page to confirm). Same for
+  conversation/inspector handle.
+- [ ] **Collapse toggles**: click the chevron button centered on
+  each handle; the near pane collapses to 0px. Click again —
+  pre-collapse width restored. State survives reload.
+- [ ] **Keyboard resize**: Tab to a handle (sky-500 focus ring
+  shows), ArrowLeft/Right nudges 16px, Shift+Arrow nudges 48px.
+  Enter or Space toggles collapse. For left handle, ArrowRight
+  widens sidebar; for right handle, ArrowLeft widens inspector.
+- [ ] **Collapse persistence across sessions**: collapse both
+  sides, reload — they stay collapsed. Expand, reload — widths
+  return to the last-dragged values.

@@ -480,11 +480,16 @@ cover shape, not feel.
   without duplication. 4 new cases in `test_agent_session.py`
   (172 backend tests total).
 
-## v0.3.1 — in progress
+## v0.3.1 — shipped
 
-- [ ] Resizable / collapsible side panes (sidebar + inspector), with
-  drag handles, min-width / snap-to-collapse, and localStorage
-  persistence of widths + collapse state.
+- [x] Resizable / collapsible side panes in `+page.svelte`: drag
+  handles between sidebar/conversation and conversation/inspector,
+  200px minimum with snap-to-collapse below that, max 50% of
+  viewport, 16px / 48px (+Shift) keyboard-arrow nudges, Enter / Space
+  toggles collapse. Widths + `lastLeft` / `lastRight` (pre-collapse
+  restore values) persisted to `localStorage` key `twrminal:panes`.
+  +page.svelte is 244 lines (under the 400-line cap). Browser
+  walkthrough entry added to `TESTING_NOTES.md`.
 
 ## Decisions pending
 
