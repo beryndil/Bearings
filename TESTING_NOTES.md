@@ -98,3 +98,36 @@ observations here and flag regressions with a version bump.
 - [ ] **Collapse persistence across sessions**: collapse both
   sides, reload — they stay collapsed. Expand, reload — widths
   return to the last-dragged values.
+
+## v0.3.3 (2026-04-20)
+
+### Pending Dave's browser walkthrough
+
+- [ ] **TagEdit "Order" relabel**: open `infra` ✎ — the field
+  previously labeled "Sort" now reads "Order". Hover the input
+  for the tooltip "Lower number = higher in sidebar. Breaks ties
+  in prompt assembly (later wins)."
+- [ ] **TagEdit ModelSelect**: the Default model field is a
+  dropdown showing `claude-opus-4-7` / `claude-sonnet-4-6` /
+  `claude-haiku-4-5-20251001` / `Custom…`. Picking a known model
+  stores it. Picking Custom clears the value and reveals a
+  free-text input with focus. For a tag whose default_model is
+  already an unknown id (e.g. a dated snapshot), the modal opens
+  in Custom mode with the input pre-populated.
+- [ ] **TagEdit FolderPicker**: the Default working dir field has
+  a text input + "Browse" button. Browse opens an inline tree:
+  breadcrumb at top (each segment is clickable to jump),
+  ⬆ parent, hidden-dir toggle, grid of subdirectory buttons.
+  Click a subdir to descend; breadcrumb updates. "Use this
+  folder" writes the current path back to the input and closes
+  the picker. A bad path (`/nope`) surfaces "not found" inline
+  without clobbering the input.
+- [ ] **NewSessionForm pickers**: same ModelSelect + FolderPicker
+  in the + session form. Attaching a tag with defaults still
+  prefills both fields (working_dir only when empty, model
+  unconditionally per last-wins).
+- [ ] **`/api/fs/list` live smoke**: run `curl -s
+  "http://127.0.0.1:8787/api/fs/list?path=$HOME" | jq` — returns
+  `{path, parent, entries[]}` with hidden dirs omitted. Add
+  `&hidden=true` to include them. `path=./relative` → 400,
+  `path=/nonexistent` → 404.
