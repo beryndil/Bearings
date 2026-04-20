@@ -504,6 +504,20 @@ cover shape, not feel.
   `BROWSER --app=URL` detached. `--browser PATH` override. 6 new
   tests in `test_cli_window.py` (178 backend tests total).
 
+## v0.3.3 — shipped
+
+- [x] **TagEdit + NewSessionForm polish**. "Sort" relabeled to
+  "Order" with a hint tooltip. Default-model free-text input
+  replaced with a `<ModelSelect>` dropdown (claude-opus-4-7 /
+  sonnet-4-6 / haiku-4-5-20251001 + "Custom…" escape-hatch for
+  dated or future IDs). Default-working-dir replaced with a
+  `<FolderPicker>`: text field + Browse toggle that opens an
+  inline tree browser (breadcrumb, ⬆ parent, toggle hidden, "Use
+  this folder"). New `GET /api/fs/list?path=&hidden=` endpoint
+  backs it — absolute-path only, resolves symlinks, 404 on
+  missing/file targets. 8 new backend tests + 9 new frontend
+  tests (186 backend / 48 frontend total).
+
 ## Decisions pending
 
 - [x] GitHub org for remote push: `Beryndil/Twrminal`.

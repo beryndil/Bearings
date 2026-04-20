@@ -4,6 +4,8 @@
   import { prefs } from '$lib/stores/prefs.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import FolderPicker from './FolderPicker.svelte';
+  import ModelSelect from './ModelSelect.svelte';
   import { parseBudget } from '$lib/utils/budget';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
@@ -141,23 +143,14 @@
       onSubmit();
     }}
   >
-    <label class="flex flex-col text-xs gap-1">
+    <div class="flex flex-col text-xs gap-1">
       <span class="text-slate-400">Working dir</span>
-      <input
-        type="text"
-        class="rounded bg-slate-950 px-2 py-1 text-sm"
-        placeholder="/home/..."
-        bind:value={workingDir}
-      />
-    </label>
-    <label class="flex flex-col text-xs gap-1">
+      <FolderPicker bind:value={workingDir} />
+    </div>
+    <div class="flex flex-col text-xs gap-1">
       <span class="text-slate-400">Model</span>
-      <input
-        type="text"
-        class="rounded bg-slate-950 px-2 py-1 text-sm font-mono"
-        bind:value={model}
-      />
-    </label>
+      <ModelSelect bind:value={model} />
+    </div>
     <label class="flex flex-col text-xs gap-1">
       <span class="text-slate-400">Title <span class="text-slate-600">(optional)</span></span>
       <input

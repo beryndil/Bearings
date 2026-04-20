@@ -127,3 +127,14 @@ class SystemPromptLayerOut(BaseModel):
 class SystemPromptOut(BaseModel):
     layers: list[SystemPromptLayerOut]
     total_tokens: int
+
+
+class FsEntryOut(BaseModel):
+    name: str
+    path: str
+
+
+class FsListOut(BaseModel):
+    path: str
+    parent: str | None
+    entries: list[FsEntryOut]

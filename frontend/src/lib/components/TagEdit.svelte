@@ -2,6 +2,8 @@
   import * as api from '$lib/api';
   import { tags } from '$lib/stores/tags.svelte';
   import { renderMarkdown } from '$lib/render';
+  import FolderPicker from './FolderPicker.svelte';
+  import ModelSelect from './ModelSelect.svelte';
 
   let {
     open = $bindable(false),
@@ -170,11 +172,12 @@
           />
         </label>
         <label class="flex flex-col gap-1 text-xs">
-          <span class="text-slate-400">Sort</span>
+          <span class="text-slate-400">Order</span>
           <input
             type="number"
             class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono w-16
               focus:outline-none focus:border-slate-600"
+            title="Lower number = higher in sidebar. Breaks ties in prompt assembly (later wins)."
             bind:value={sortOrder}
           />
         </label>
@@ -185,26 +188,14 @@
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <label class="flex flex-col gap-1 text-xs">
+        <div class="flex flex-col gap-1 text-xs">
           <span class="text-slate-400">Default working dir</span>
-          <input
-            type="text"
-            class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-              focus:outline-none focus:border-slate-600"
-            placeholder="/home/..."
-            bind:value={defaultWorkingDir}
-          />
-        </label>
-        <label class="flex flex-col gap-1 text-xs">
+          <FolderPicker bind:value={defaultWorkingDir} />
+        </div>
+        <div class="flex flex-col gap-1 text-xs">
           <span class="text-slate-400">Default model</span>
-          <input
-            type="text"
-            class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-              focus:outline-none focus:border-slate-600"
-            placeholder="claude-opus-4-7"
-            bind:value={defaultModel}
-          />
-        </label>
+          <ModelSelect bind:value={defaultModel} />
+        </div>
       </div>
 
       <section class="flex flex-col gap-1">
