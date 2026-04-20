@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from twrminal import cli
+from bearings import cli
 
 
 def test_find_browser_picks_first_match_on_path(monkeypatch: pytest.MonkeyPatch) -> None:

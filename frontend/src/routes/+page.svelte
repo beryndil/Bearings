@@ -60,7 +60,7 @@
   const MIN_PANE_PX = 200;
   const DEFAULT_LEFT_PX = 280;
   const DEFAULT_RIGHT_PX = 320;
-  const PANE_STORAGE_KEY = 'twrminal:panes';
+  const PANE_STORAGE_KEY = 'bearings:panes';
 
   type PaneState = {
     left: number;

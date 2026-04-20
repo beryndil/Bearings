@@ -4,7 +4,7 @@ Lists directories under an absolute path so the FolderPicker can walk
 the tree without relying on a browser-side file dialog (which can't
 access server-side paths). Read-only; no write or execute semantics.
 
-Security posture: Twrminal binds 127.0.0.1 by default and is a
+Security posture: Bearings binds 127.0.0.1 by default and is a
 single-user tool. Exposing directory names to the local browser is
 equivalent to the user running `ls` in a terminal — not a meaningful
 disclosure.
@@ -16,8 +16,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from twrminal.api.auth import require_auth
-from twrminal.api.models import FsEntryOut, FsListOut
+from bearings.api.auth import require_auth
+from bearings.api.models import FsEntryOut, FsListOut
 
 router = APIRouter(
     prefix="/fs",

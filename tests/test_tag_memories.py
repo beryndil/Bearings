@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from twrminal.db.store import (
+from bearings.db.store import (
     create_tag,
     delete_tag,
     delete_tag_memory,

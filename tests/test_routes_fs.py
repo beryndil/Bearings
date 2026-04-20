@@ -65,7 +65,7 @@ def test_list_defaults_to_home(
     fake home so tests don't depend on the developer's real home
     contents."""
     (tmp_path / "ProjectA").mkdir()
-    monkeypatch.setattr("twrminal.api.routes_fs.Path.home", lambda: tmp_path)
+    monkeypatch.setattr("bearings.api.routes_fs.Path.home", lambda: tmp_path)
     resp = client.get("/api/fs/list")
     assert resp.status_code == 200
     body = resp.json()

@@ -1,4 +1,4 @@
--- Canonical schema for Twrminal. Migrations in migrations/ apply in order.
+-- Canonical schema for Bearings. Migrations in migrations/ apply in order.
 
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,

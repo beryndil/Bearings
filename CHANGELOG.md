@@ -147,8 +147,8 @@ First slice after the v0.2.9 teardown.
 ### Why
 
 Projects were going to carry per-project defaults. With projects
-torn down, tags now carry them. A pinned `twrminal` tag with
-`default_working_dir = ~/Projects/Twrminal` and
+torn down, tags now carry them. A pinned `bearings` tag with
+`default_working_dir = ~/Projects/Bearings` and
 `default_model = claude-opus-4-7` gives the same new-session pre-
 fill behavior a project would have given — one click to filter
 the sidebar to that tag, then `+ New` has the fields ready.
@@ -175,8 +175,8 @@ land in v0.2.10 to close the gap. Pinned tag = "project". See
   (none in production at teardown time, per Dave's call), drops
   `idx_sessions_project`, drops `sessions.project_id` column
   (SQLite 3.35+ DROP COLUMN), drops the `projects` table.
-- `src/twrminal/api/routes_projects.py` — entire file.
-- `src/twrminal/db/store.py` — `create_project` / `list_projects`
+- `src/bearings/api/routes_projects.py` — entire file.
+- `src/bearings/db/store.py` — `create_project` / `list_projects`
   / `get_project` / `update_project` / `delete_project` and their
   helper constants. `NO_PROJECT` sentinel + `ProjectFilter` alias.
 - `ProjectCreate` / `ProjectUpdate` / `ProjectOut` DTOs.
@@ -205,7 +205,7 @@ land in v0.2.10 to close the gap. Pinned tag = "project". See
 
 Tags carry shared system-prompt content (as memories), shared
 working-dir defaults, shared model defaults, and sidebar-pin
-behavior. A pinned `twrminal` tag IS the Twrminal project.
+behavior. A pinned `bearings` tag IS the Bearings project.
 Maintaining a second "projects" primitive alongside that was
 duplicating surface for no additional capability. Cheaper-than-
 expected memory stacking (short pointers, not mirrored document
@@ -332,7 +332,7 @@ v0.2.7 once tag-memory + session-instructions CRUD land.
 
 ### Added
 
-- `src/twrminal/agent/prompt.py::assemble_prompt(conn, session_id)`
+- `src/bearings/agent/prompt.py::assemble_prompt(conn, session_id)`
   — async, pure SQL reads, returns `AssembledPrompt(layers, text)`.
   Layer order: `base` → `project` (if the session's project has a
   non-null `system_prompt`) → `tag_memory` layers (one per attached
@@ -341,7 +341,7 @@ v0.2.7 once tag-memory + session-instructions CRUD land.
   skipped) → `session` (`sessions.session_instructions`, when set).
   `text` joins the layers with `<!-- layer: kind[name] -->` headers
   so downstream renderers can split them back out.
-- `src/twrminal/agent/base_prompt.py::BASE_PROMPT` — short,
+- `src/bearings/agent/base_prompt.py::BASE_PROMPT` — short,
   deterministic base layer. Real content lives in project / tag /
   session layers.
 - 8 new pytest cases in `tests/test_prompt_assembler.py`: base-only,
@@ -848,7 +848,7 @@ in-flight tool.
 - `SessionEdit.svelte` modal wired behind a ✎ button in the Conversation
   header. Edits `title` + `max_budget_usd` on an existing session via
   the v0.1.16 PATCH route. Cap is no longer create-time-only.
-- `twrminal send --format=pretty` — human-readable output:
+- `bearings send --format=pretty` — human-readable output:
   - tokens stream inline with a flush,
   - `thinking` / `message_start` frames suppressed,
   - tool calls render as `↳ tool Name (input)` / `← ok: output` or
@@ -927,7 +927,7 @@ in-flight tool.
   `auth: "required"` and no token is stored (or the stored token is
   rejected on any API 401 / WS 4401), the modal blocks the UI with a
   password-masked input. Save → token persists in
-  `localStorage["twrminal:token"]` → boot proceeds.
+  `localStorage["bearings:token"]` → boot proceeds.
 - `stores/auth.svelte.ts` tracks `status`
   (`checking`/`open`/`ok`/`required`/`invalid`/`error`). `api.ts`
   exports `onAuthFailure(cb)` so the store flips itself to `invalid`
@@ -963,12 +963,12 @@ in-flight tool.
     500 — fail closed rather than silently ship with no protection.
 - `GET /api/health` now returns `{auth: "required"|"disabled", version}`
   so clients can tell whether they need to supply a token.
-- `twrminal send --token <t>` flag; CLI also auto-pulls from
+- `bearings send --token <t>` flag; CLI also auto-pulls from
   `cfg.auth.token` when `auth.enabled`.
-- Frontend `api.ts` reads `localStorage["twrminal:token"]` and injects
+- Frontend `api.ts` reads `localStorage["bearings:token"]` and injects
   `Authorization: Bearer` on fetches + `?token=...` on the WS URL. UI
   to enter the token lands in a later slice; for now set it via devtools
-  (`localStorage.setItem('twrminal:token', '...')`).
+  (`localStorage.setItem('bearings:token', '...')`).
 
 ## [0.1.10] - 2026-04-19
 
@@ -1061,14 +1061,14 @@ enforced while still linking tool calls back to their assistant turn.
 
 ### Added
 
-- Prometheus collectors in a dedicated `twrminal/metrics.py` using a
+- Prometheus collectors in a dedicated `bearings/metrics.py` using a
   private `CollectorRegistry`. Metrics exposed on `/metrics`:
-  - `twrminal_sessions_created_total`
-  - `twrminal_messages_persisted_total{role}`
-  - `twrminal_tool_calls_started_total`
-  - `twrminal_tool_calls_finished_total{ok}`
-  - `twrminal_ws_active_connections` (gauge)
-  - `twrminal_ws_events_sent_total{type}`
+  - `bearings_sessions_created_total`
+  - `bearings_messages_persisted_total{role}`
+  - `bearings_tool_calls_started_total`
+  - `bearings_tool_calls_finished_total{ok}`
+  - `bearings_ws_active_connections` (gauge)
+  - `bearings_ws_events_sent_total{type}`
   Instrumentation lives at the route / WS-handler boundary; store.py
   stays side-effect-free.
 - `GET /api/history/export` — full `{sessions, messages, tool_calls}`
@@ -1077,7 +1077,7 @@ enforced while still linking tool calls back to their assistant turn.
   calendar day; 400 on bad date.
 - `store.list_all_sessions`, `list_all_messages`, `list_all_tool_calls`
   with optional `date_prefix` filter.
-- CI job verifies `src/twrminal/web/dist/index.html` + `_app/` exist
+- CI job verifies `src/bearings/web/dist/index.html` + `_app/` exist
   after `npm run build` so a broken sync-dist step fails the build.
 - CI frontend job now also runs `npm run check` (svelte-check) gating
   type errors in components.
@@ -1094,7 +1094,7 @@ enforced while still linking tool calls back to their assistant turn.
   `tool_call_end`; Inspector now shows final duration ("123ms" / "2.4s")
   after completion instead of ticking "running".
 - Session selection persists in `localStorage`
-  (`twrminal:selectedSessionId`); auto-connects on boot if the stored id
+  (`bearings:selectedSessionId`); auto-connects on boot if the stored id
   still exists in the session list.
 - WebSocket auto-reconnect with exponential backoff (1s/2s/4s/8s/…,
   capped at 30s); Conversation header shows `retrying in Ns`. Triggers
@@ -1141,7 +1141,7 @@ enforced while still linking tool calls back to their assistant turn.
 
 - `GET /api/sessions/{session_id}/messages` — history playback endpoint
   returning `MessageOut[]`.
-- `twrminal send --session <id> <prompt>` — CLI subcommand opens a WebSocket
+- `bearings send --session <id> <prompt>` — CLI subcommand opens a WebSocket
   to a running server, streams events to stdout as JSON lines, exits 0 on
   `message_complete`, 1 on `error`.
 - `ToolCallEnd` event: `AgentSession.stream` now translates

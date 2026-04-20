@@ -5,9 +5,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from twrminal.api.auth import require_auth
-from twrminal.api.models import SearchHit
-from twrminal.db import store
+from bearings.api.auth import require_auth
+from bearings.api.models import SearchHit
+from bearings.db import store
 
 router = APIRouter(
     prefix="/history",

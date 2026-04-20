@@ -21,7 +21,7 @@ const PROJECTS_LIST = {
   path: '/home/dave/Projects',
   parent: '/home/dave',
   entries: [
-    { name: 'Twrminal', path: '/home/dave/Projects/Twrminal' }
+    { name: 'Bearings', path: '/home/dave/Projects/Bearings' }
   ]
 };
 
@@ -84,7 +84,7 @@ describe('FolderPicker', () => {
     await fireEvent.click(getByLabelText('Folder path'));
     await findByText('Projects');
     await fireEvent.click(getByText('Projects'));
-    await findByText('Twrminal');
+    await findByText('Bearings');
     expect(getByText('Projects')).toBeDefined();
   });
 
@@ -98,7 +98,7 @@ describe('FolderPicker', () => {
       { value: '/home/dave/Projects' }
     );
     await fireEvent.click(getByLabelText('Folder path'));
-    await findByText('Twrminal');
+    await findByText('Bearings');
     await fireEvent.click(getByText('Use this folder'));
     await waitFor(() => expect(queryByText('Use this folder')).toBeNull());
     const trigger = getByLabelText('Folder path') as HTMLButtonElement;
@@ -115,7 +115,7 @@ describe('FolderPicker', () => {
       { value: '/home/dave/Projects' }
     );
     await fireEvent.click(getByLabelText('Folder path'));
-    await findByText('Twrminal');
+    await findByText('Bearings');
     await fireEvent.click(getByText('Cancel'));
     await waitFor(() => expect(queryByText('Use this folder')).toBeNull());
     const trigger = getByLabelText('Folder path') as HTMLButtonElement;

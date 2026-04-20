@@ -13,7 +13,7 @@ afterEach(() => {
 function tag(overrides: Partial<Tag> = {}): Tag {
   return {
     id: 1,
-    name: 'twrminal',
+    name: 'bearings',
     color: null,
     pinned: true,
     sort_order: 0,
@@ -87,8 +87,8 @@ describe('TagEdit memory editor', () => {
         ok: true,
         body: { tag_id: 1, content: 'seeded', updated_at: 'x' }
       }, // initial GET /memory — pretend memory already exists
-      { ok: true, body: tag({ name: 'twrminal' }) }, // PATCH tag
-      { ok: true, body: [tag({ name: 'twrminal' })] }, // tags.refresh after update
+      { ok: true, body: tag({ name: 'bearings' }) }, // PATCH tag
+      { ok: true, body: [tag({ name: 'bearings' })] }, // tags.refresh after update
       {
         ok: true,
         body: { tag_id: 1, content: 'seeded', updated_at: 'x' }
@@ -119,8 +119,8 @@ describe('TagEdit memory editor', () => {
         ok: true,
         body: { tag_id: 1, content: 'old memory', updated_at: 'x' }
       }, // GET /memory — exists
-      { ok: true, body: tag({ name: 'twrminal' }) }, // PATCH tag
-      { ok: true, body: [tag({ name: 'twrminal' })] }, // tags.refresh
+      { ok: true, body: tag({ name: 'bearings' }) }, // PATCH tag
+      { ok: true, body: [tag({ name: 'bearings' })] }, // tags.refresh
       { ok: true, body: '' } // DELETE /memory
     ]);
     const { container, getByRole } = render(TagEdit, {

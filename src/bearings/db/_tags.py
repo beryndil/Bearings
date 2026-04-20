@@ -14,7 +14,7 @@ from typing import Any
 
 import aiosqlite
 
-from twrminal.db._common import _now
+from bearings.db._common import _now
 
 TAG_COLS_WITH_COUNT = (
     "t.id, t.name, t.color, t.pinned, t.sort_order, t.created_at, "

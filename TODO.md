@@ -1,4 +1,4 @@
-# Twrminal — Open Tasks
+# Bearings — Open Tasks
 
 ## Scaffold reference
 
@@ -8,8 +8,8 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 ## v0.1.1 — shipped
 
 - [x] `AgentSession` wired to `claude-agent-sdk`.
-- [x] WebSocket streaming in `src/twrminal/api/ws_agent.py`.
-- [x] DB CRUD in `src/twrminal/db/store.py` (sessions + messages).
+- [x] WebSocket streaming in `src/bearings/api/ws_agent.py`.
+- [x] DB CRUD in `src/bearings/db/store.py` (sessions + messages).
 - [x] Real `/api/sessions` routes.
 - [x] `api/models.py` Pydantic DTOs.
 - [x] Lifespan wiring `init_db` → `app.state.db`.
@@ -17,7 +17,7 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 ## v0.1.2 — shipped
 
 - [x] `GET /api/sessions/{id}/messages` history route.
-- [x] `twrminal send` CLI subcommand.
+- [x] `bearings send` CLI subcommand.
 - [x] `ToolCallEnd` event via `ToolResultBlock` translation.
 - [x] Tool-call persistence (store CRUD + WS handler writes).
 
@@ -109,7 +109,7 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 ## v0.1.17 — shipped
 
 - [x] `SessionEdit` modal — title + budget editable post-creation.
-- [x] `twrminal send --format=pretty` — human-readable output mode.
+- [x] `bearings send --format=pretty` — human-readable output mode.
 
 ## v0.1.18 — shipped
 
@@ -304,12 +304,12 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
 
 ## v0.2.5 — shipped
 
-- [x] `src/twrminal/agent/prompt.py::assemble_prompt(conn,
+- [x] `src/bearings/agent/prompt.py::assemble_prompt(conn,
   session_id)` — async, pure SQL, returns
   `AssembledPrompt(layers, text)`. Layer order: base → project →
   tag memories (canonical pinned/sort_order/id order; tag-without-
   memory skipped) → session_instructions.
-- [x] `src/twrminal/agent/base_prompt.py::BASE_PROMPT` — short,
+- [x] `src/bearings/agent/base_prompt.py::BASE_PROMPT` — short,
   deterministic base layer.
 - [x] 8 pytest cases in `tests/test_prompt_assembler.py` covering
   layer order, empty-project skip, tag-without-memory skip,
@@ -445,7 +445,7 @@ is feature-complete.
 
 ### File-size audit (CLAUDE.md: max 400 lines)
 
-- [x] `src/twrminal/db/store.py` split into
+- [x] `src/bearings/db/store.py` split into
   `_common.py` / `_sessions.py` / `_messages.py` / `_tags.py`.
   `store.py` is now a 81-line re-export facade; largest new file
   is `_sessions.py` at 242 lines. All 168 backend tests pass
@@ -487,7 +487,7 @@ cover shape, not feel.
   200px minimum with snap-to-collapse below that, max 50% of
   viewport, 16px / 48px (+Shift) keyboard-arrow nudges, Enter / Space
   toggles collapse. Widths + `lastLeft` / `lastRight` (pre-collapse
-  restore values) persisted to `localStorage` key `twrminal:panes`.
+  restore values) persisted to `localStorage` key `bearings:panes`.
   +page.svelte is 244 lines (under the 400-line cap). Browser
   walkthrough entry added to `TESTING_NOTES.md`.
 
@@ -498,7 +498,7 @@ cover shape, not feel.
   `icon.svg` + `icon-192.png` + `icon-512.png` (rsvg-convert from
   the SVG), `favicon.png`. `app.html` links the manifest, icons,
   and `theme-color`. Chromium install button creates a standalone
-  dock-docked window. **CLI**: new `twrminal window` subcommand
+  dock-docked window. **CLI**: new `bearings window` subcommand
   autodetects Chromium-flavored browsers on PATH
   (google-chrome-stable, chromium, brave, edge) and spawns
   `BROWSER --app=URL` detached. `--browser PATH` override. 6 new
@@ -542,4 +542,4 @@ cover shape, not feel.
 
 ## Decisions pending
 
-- [x] GitHub org for remote push: `Beryndil/Twrminal`.
+- [x] GitHub org for remote push: `Beryndil/Bearings`.

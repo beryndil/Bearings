@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from twrminal.config import Settings, load_settings
+from bearings.config import Settings, load_settings
 
 
 def test_defaults_are_localhost() -> None:

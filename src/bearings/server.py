@@ -7,8 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
-from twrminal import __version__
-from twrminal.api import (
+from bearings import __version__
+from bearings.api import (
     routes_fs,
     routes_health,
     routes_history,
@@ -17,8 +17,8 @@ from twrminal.api import (
     routes_tags,
     ws_agent,
 )
-from twrminal.config import Settings, load_settings
-from twrminal.db.store import init_db
+from bearings.config import Settings, load_settings
+from bearings.db.store import init_db
 
 STATIC_DIR = Path(__file__).parent / "web" / "dist"
 
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings or load_settings()
-    app = FastAPI(title="Twrminal", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="Bearings", version=__version__, lifespan=lifespan)
     app.state.settings = cfg
 
     app.include_router(routes_health.router, prefix="/api")

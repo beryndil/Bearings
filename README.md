@@ -1,4 +1,4 @@
-# Twrminal
+# Bearings
 
 Localhost web UI for Claude Code agent sessions. FastAPI backend streams
 session events over WebSocket to a SvelteKit frontend; SQLite persists
@@ -32,8 +32,8 @@ cost. Run via `claude-agent-sdk`; pipe over WebSocket to the frontend.
   keyed to the tag.
 - **Tag defaults** — optional `default_working_dir` and
   `default_model` per tag. The new-session form pre-fills from the
-  highest-precedence attached tag. Pin a `twrminal` tag with
-  `default_working_dir = ~/Projects/Twrminal` and it behaves like a
+  highest-precedence attached tag. Pin a `bearings` tag with
+  `default_working_dir = ~/Projects/Bearings` and it behaves like a
   "project" in any tool that has them.
 - **Every session has ≥1 tag.** The new-session form gates on this;
   the API rejects `tag_ids: []` with a 400.
@@ -60,7 +60,7 @@ last-wins layer.
   frontend AuthGate modal; 401/4401 flips the store back to `invalid`.
 - Prometheus `/metrics` (sessions, messages, tool calls, WS events,
   active connections) + JSON history export/daily/search routes.
-- CLI subcommands: `twrminal serve | init | send`. `send` supports
+- CLI subcommands: `bearings serve | init | send`. `send` supports
   `--format=pretty` for human-readable output and `--token` for
   authenticated servers.
 
@@ -92,13 +92,13 @@ uv sync
 cd frontend && npm install && npm run build
 ```
 
-The frontend build writes static assets into `src/twrminal/web/dist/`, which
+The frontend build writes static assets into `src/bearings/web/dist/`, which
 FastAPI mounts at `/`.
 
 ## Run
 
 ```bash
-uv run twrminal serve
+uv run bearings serve
 # then open http://127.0.0.1:8787
 ```
 
@@ -111,14 +111,14 @@ curl -s http://127.0.0.1:8787/api/health
 ## Service install
 
 ```bash
-install -Dm644 config/twrminal.service ~/.config/systemd/user/twrminal.service
+install -Dm644 config/bearings.service ~/.config/systemd/user/bearings.service
 systemctl --user daemon-reload
-systemctl --user enable --now twrminal.service
+systemctl --user enable --now bearings.service
 ```
 
 ## Config
 
-`~/.config/twrminal/config.toml`. Defaults are baked in; override only the
+`~/.config/bearings/config.toml`. Defaults are baked in; override only the
 keys you need.
 
 | Section    | Key                  | Default                          | Purpose                          |
@@ -129,7 +129,7 @@ keys you need.
 | `auth`     | `token`              | *(unset)*                        | Shared secret when `enabled`     |
 | `agent`    | `working_dir`        | `~/`                             | CWD for agent sessions           |
 | `agent`    | `model`              | `claude-opus-4-7`                | Default model                    |
-| `storage`  | `db_path`            | `~/.local/share/twrminal/db.sqlite` | Persistence                 |
+| `storage`  | `db_path`            | `~/.local/share/bearings/db.sqlite` | Persistence                 |
 | `metrics`  | `enabled`            | `false`                          | Prometheus `/metrics` endpoint   |
 
 ## License

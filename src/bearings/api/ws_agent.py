@@ -8,8 +8,8 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from twrminal import metrics
-from twrminal.agent.events import (
+from bearings import metrics
+from bearings.agent.events import (
     MessageComplete,
     MessageStart,
     Thinking,
@@ -17,9 +17,9 @@ from twrminal.agent.events import (
     ToolCallEnd,
     ToolCallStart,
 )
-from twrminal.agent.session import AgentSession
-from twrminal.api.auth import check_ws_auth
-from twrminal.db import store
+from bearings.agent.session import AgentSession
+from bearings.api.auth import check_ws_auth
+from bearings.db import store
 
 router = APIRouter(tags=["agent-ws"])
 

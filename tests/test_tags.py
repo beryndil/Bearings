@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from twrminal.db.store import (
+from bearings.db.store import (
     attach_tag,
     create_session,
     create_tag,
@@ -449,11 +449,11 @@ async def test_create_tag_accepts_defaults(tmp_path: Path) -> None:
     try:
         row = await create_tag(
             conn,
-            name="twrminal",
-            default_working_dir="/home/beryndil/Projects/Twrminal",
+            name="bearings",
+            default_working_dir="/home/beryndil/Projects/Bearings",
             default_model="claude-opus-4-7",
         )
-        assert row["default_working_dir"] == "/home/beryndil/Projects/Twrminal"
+        assert row["default_working_dir"] == "/home/beryndil/Projects/Bearings"
         assert row["default_model"] == "claude-opus-4-7"
     finally:
         await conn.close()
@@ -474,7 +474,7 @@ async def test_create_tag_defaults_default_to_null(tmp_path: Path) -> None:
 async def test_update_tag_sets_and_clears_defaults(tmp_path: Path) -> None:
     conn = await init_db(tmp_path / "db.sqlite")
     try:
-        row = await create_tag(conn, name="twrminal")
+        row = await create_tag(conn, name="bearings")
         updated = await update_tag(
             conn,
             row["id"],
@@ -503,19 +503,19 @@ def test_post_tag_accepts_defaults(client: TestClient) -> None:
     resp = client.post(
         "/api/tags",
         json={
-            "name": "twrminal",
-            "default_working_dir": "/home/beryndil/Projects/Twrminal",
+            "name": "bearings",
+            "default_working_dir": "/home/beryndil/Projects/Bearings",
             "default_model": "claude-opus-4-7",
         },
     )
     assert resp.status_code == 201, resp.text
     body = resp.json()
-    assert body["default_working_dir"] == "/home/beryndil/Projects/Twrminal"
+    assert body["default_working_dir"] == "/home/beryndil/Projects/Bearings"
     assert body["default_model"] == "claude-opus-4-7"
 
 
 def test_patch_tag_sets_defaults(client: TestClient) -> None:
-    created = client.post("/api/tags", json={"name": "twrminal"}).json()
+    created = client.post("/api/tags", json={"name": "bearings"}).json()
     resp = client.patch(
         f"/api/tags/{created['id']}",
         json={"default_working_dir": "/x", "default_model": "m"},

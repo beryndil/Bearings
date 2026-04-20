@@ -1,6 +1,6 @@
 {
-  "name": "Twrminal",
-  "short_name": "Twrminal",
+  "name": "Bearings",
+  "short_name": "Bearings",
   "description": "Localhost web UI for Claude Code agent sessions",
   "start_url": "/",
   "scope": "/",

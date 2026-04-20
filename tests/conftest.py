@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from twrminal.agent.events import (
+from bearings.agent.events import (
     AgentEvent,
     MessageComplete,
     MessageStart,
@@ -16,9 +16,9 @@ from twrminal.agent.events import (
     ToolCallEnd,
     ToolCallStart,
 )
-from twrminal.agent.session import AgentSession
-from twrminal.config import Settings, StorageCfg
-from twrminal.server import create_app
+from bearings.agent.session import AgentSession
+from bearings.config import Settings, StorageCfg
+from bearings.server import create_app
 
 MOCK_MSG_ID = "mock-msg"
 MOCK_TOOL_MSG_ID = "mock-tool-msg"
@@ -52,7 +52,7 @@ def mock_agent_stream(monkeypatch: pytest.MonkeyPatch) -> None:
         yield Token(session_id=self.session_id, text="world")
         yield MessageComplete(session_id=self.session_id, message_id=MOCK_MSG_ID)
 
-    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+    monkeypatch.setattr("bearings.agent.session.AgentSession.stream", fake)
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ def mock_agent_tool_stream(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         yield MessageComplete(session_id=self.session_id, message_id=MOCK_TOOL_MSG_ID)
 
-    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+    monkeypatch.setattr("bearings.agent.session.AgentSession.stream", fake)
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ def mock_agent_thinking_stream(monkeypatch: pytest.MonkeyPatch) -> None:
         yield Token(session_id=self.session_id, text="answer")
         yield MessageComplete(session_id=self.session_id, message_id=MOCK_MSG_ID)
 
-    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+    monkeypatch.setattr("bearings.agent.session.AgentSession.stream", fake)
 
 
 @pytest.fixture
@@ -108,7 +108,7 @@ def mock_agent_long_stream(monkeypatch: pytest.MonkeyPatch) -> None:
             await asyncio.sleep(0.005)
         yield MessageComplete(session_id=self.session_id, message_id=MOCK_MSG_ID)
 
-    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+    monkeypatch.setattr("bearings.agent.session.AgentSession.stream", fake)
 
 
 @pytest.fixture
@@ -127,4 +127,4 @@ def mock_agent_cost_stream(monkeypatch: pytest.MonkeyPatch) -> None:
             cost_usd=0.01,
         )
 
-    monkeypatch.setattr("twrminal.agent.session.AgentSession.stream", fake)
+    monkeypatch.setattr("bearings.agent.session.AgentSession.stream", fake)

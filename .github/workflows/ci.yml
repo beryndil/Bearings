@@ -42,11 +42,11 @@ jobs:
       - name: Verify build artifact synced to backend
         working-directory: ${{ github.workspace }}
         run: |
-          test -f src/twrminal/web/dist/index.html || {
-            echo "::error::frontend build did not produce src/twrminal/web/dist/index.html"
+          test -f src/bearings/web/dist/index.html || {
+            echo "::error::frontend build did not produce src/bearings/web/dist/index.html"
             exit 1
           }
-          test -d src/twrminal/web/dist/_app || {
-            echo "::error::frontend build did not produce src/twrminal/web/dist/_app"
+          test -d src/bearings/web/dist/_app || {
+            echo "::error::frontend build did not produce src/bearings/web/dist/_app"
             exit 1
           }

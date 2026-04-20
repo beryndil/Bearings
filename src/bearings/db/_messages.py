@@ -10,7 +10,7 @@ from typing import Any
 
 import aiosqlite
 
-from twrminal.db._common import _date_filter, _new_id, _now
+from bearings.db._common import _date_filter, _new_id, _now
 
 
 async def insert_message(

@@ -8,8 +8,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from twrminal.config import AuthCfg, Settings, StorageCfg
-from twrminal.server import create_app
+from bearings.config import AuthCfg, Settings, StorageCfg
+from bearings.server import create_app
 
 
 @pytest.fixture

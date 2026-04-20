@@ -1,6 +1,6 @@
 import * as api from '$lib/api';
 
-const STORAGE_KEY = 'twrminal:selectedSessionId';
+const STORAGE_KEY = 'bearings:selectedSessionId';
 
 function readStoredId(): string | null {
   if (typeof localStorage === 'undefined') return null;

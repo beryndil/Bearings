@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from twrminal.cli import _run_send
+from bearings.cli import _run_send
 
 
 class FakeWS:
@@ -38,7 +38,7 @@ def _patch_connect(monkeypatch: pytest.MonkeyPatch, frames: list[dict[str, Any]]
     def factory(url: str) -> FakeWS:
         return ws
 
-    monkeypatch.setattr("twrminal.cli.ws_connect", factory)
+    monkeypatch.setattr("bearings.cli.ws_connect", factory)
     return ws
 
 

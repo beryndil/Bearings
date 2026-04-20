@@ -44,10 +44,10 @@ export type AgentEvent =
   | MessageCompleteEvent
   | ErrorEvent;
 
-const TOKEN_STORAGE_KEY = 'twrminal:token';
+const TOKEN_STORAGE_KEY = 'bearings:token';
 
 /** Reads the auth token from localStorage. Set via devtools:
- * `localStorage.setItem('twrminal:token', 'your-token')`. A full
+ * `localStorage.setItem('bearings:token', 'your-token')`. A full
  * in-app settings UI lands in a later slice. */
 function readAuthToken(): string | null {
   if (typeof localStorage === 'undefined') return null;

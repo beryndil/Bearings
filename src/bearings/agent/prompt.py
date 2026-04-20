@@ -15,7 +15,7 @@ from typing import Literal
 
 import aiosqlite
 
-from twrminal.agent.base_prompt import BASE_PROMPT
+from bearings.agent.base_prompt import BASE_PROMPT
 
 LayerKind = Literal["base", "tag_memory", "session"]
 

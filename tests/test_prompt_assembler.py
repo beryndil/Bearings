@@ -5,9 +5,9 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from twrminal.agent.base_prompt import BASE_PROMPT
-from twrminal.agent.prompt import assemble_prompt
-from twrminal.db.store import attach_tag, create_session, create_tag, init_db
+from bearings.agent.base_prompt import BASE_PROMPT
+from bearings.agent.prompt import assemble_prompt
+from bearings.db.store import attach_tag, create_session, create_tag, init_db
 
 
 async def _set_session_instructions(
@@ -29,20 +29,20 @@ async def _set_tag_memory(conn: aiosqlite.Connection, tag_id: int, content: str)
 
 
 def test_estimate_tokens_empty_is_zero() -> None:
-    from twrminal.agent.prompt import estimate_tokens
+    from bearings.agent.prompt import estimate_tokens
 
     assert estimate_tokens("") == 0
 
 
 def test_estimate_tokens_short_string_is_at_least_one() -> None:
-    from twrminal.agent.prompt import estimate_tokens
+    from bearings.agent.prompt import estimate_tokens
 
     # 1 char / 4 = 0 under plain division, but non-empty must return ≥1.
     assert estimate_tokens("a") == 1
 
 
 def test_estimate_tokens_scales_with_length() -> None:
-    from twrminal.agent.prompt import estimate_tokens
+    from bearings.agent.prompt import estimate_tokens
 
     # 80 chars → 20 tokens (4 chars per token approximation).
     assert estimate_tokens("x" * 80) == 20

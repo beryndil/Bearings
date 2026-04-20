@@ -1,4 +1,4 @@
-# Twrminal — Localhost Web UI for Claude Code Sessions
+# Bearings — Localhost Web UI for Claude Code Sessions
 
 ## Project
 - **Platform**: Python 3.11+ (FastAPI) backend, SvelteKit (static) frontend,
@@ -9,7 +9,7 @@
 - **License**: MIT (deliberate deviation from the Unlicense used elsewhere —
   per spec)
 - **Status**: Pre-release (0.x.x development). v0.1.0 is scaffold-only.
-- **Repository**: TBD — decide between `Beryndil/Twrminal` and `Dev-VulX/Twrminal`
+- **Repository**: TBD — decide between `Beryndil/Bearings` and `Dev-VulX/Bearings`
 
 ## Tech Stack
 - Python 3.11+ (floor), 3.12 pinned via `.python-version`
@@ -27,9 +27,9 @@
 ## Layout
 
 ```
-Twrminal/
-├── src/twrminal/       # Python package (CLI, server, agent, api, db)
-├── frontend/           # SvelteKit app; build output → src/twrminal/web/dist/
+Bearings/
+├── src/bearings/       # Python package (CLI, server, agent, api, db)
+├── frontend/           # SvelteKit app; build output → src/bearings/web/dist/
 ├── config/             # systemd user unit
 ├── tests/              # pytest suite
 ├── .github/workflows/  # CI
@@ -40,7 +40,7 @@ Twrminal/
 
 ```bash
 uv sync                                # resolve + install deps
-uv run twrminal serve                  # start FastAPI on 127.0.0.1:8787
+uv run bearings serve                  # start FastAPI on 127.0.0.1:8787
 cd frontend && npm install && npm run dev   # frontend dev mode
 npm run build                          # produce static bundle (FastAPI serves it)
 ```
@@ -57,21 +57,21 @@ uv run pytest
 ## Database conventions
 
 - Raw SQL via `aiosqlite`. No ORM.
-- Schema in `src/twrminal/db/schema.sql` describes the canonical shape.
-- Migrations in `src/twrminal/db/migrations/NNNN_*.sql`, applied in order.
+- Schema in `src/bearings/db/schema.sql` describes the canonical shape.
+- Migrations in `src/bearings/db/migrations/NNNN_*.sql`, applied in order.
 - `db/store.py` owns connection bootstrap and query helpers.
 
 ## Configuration
 
-- XDG paths. Config at `~/.config/twrminal/config.toml`.
+- XDG paths. Config at `~/.config/bearings/config.toml`.
 - `pydantic-settings` loads + validates. Defaults are declared in
-  `src/twrminal/config.py` — override only the keys you need in the TOML file.
+  `src/bearings/config.py` — override only the keys you need in the TOML file.
 - Never read env vars for secrets; wire them through config or keyring.
 
 ## Service install
 
-Systemd `--user` unit at `config/twrminal.service`. Install with
-`systemctl --user enable --now twrminal`.
+Systemd `--user` unit at `config/bearings.service`. Install with
+`systemctl --user enable --now bearings`.
 
 ## Task completion workflow
 

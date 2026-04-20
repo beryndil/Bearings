@@ -11,8 +11,8 @@ from typing import IO, Any
 
 from websockets.asyncio.client import connect as ws_connect
 
-from twrminal import __version__
-from twrminal.config import load_settings
+from bearings import __version__
+from bearings.config import load_settings
 
 # Ordered by popularity on Linux so the first hit on PATH is likely
 # the one the user actually uses. All of these accept --app=URL to
@@ -30,8 +30,8 @@ CHROMIUM_FLAVORED_BROWSERS: tuple[str, ...] = (
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="twrminal")
-    parser.add_argument("--version", action="version", version=f"twrminal {__version__}")
+    parser = argparse.ArgumentParser(prog="bearings")
+    parser.add_argument("--version", action="version", version=f"bearings {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("serve", help="Run the FastAPI server")
@@ -136,7 +136,7 @@ def find_chromium_browser(
 
 def launch_app_window(browser: str, url: str) -> subprocess.Popen[bytes]:
     """Spawn a chromeless standalone window pointed at `url`. Detaches
-    so `twrminal window` returns immediately — the window lives as long
+    so `bearings window` returns immediately — the window lives as long
     as the user keeps it open, decoupled from this CLI invocation."""
     return subprocess.Popen(
         [browser, f"--app={url}"],
@@ -154,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         cfg = load_settings()
         uvicorn.run(
-            "twrminal.server:create_app",
+            "bearings.server:create_app",
             factory=True,
             host=cfg.server.host,
             port=cfg.server.port,
@@ -177,7 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         browser = args.browser or find_chromium_browser()
         if browser is None:
             print(
-                "twrminal window: no Chromium-flavored browser found on PATH.\n"
+                "bearings window: no Chromium-flavored browser found on PATH.\n"
                 "  Install one of: "
                 + ", ".join(CHROMIUM_FLAVORED_BROWSERS)
                 + "\n  …or pass --browser /path/to/binary.\n"
@@ -186,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 1
         launch_app_window(browser, url)
-        print(f"twrminal window: opened {url} via {browser}", file=sys.stderr)
+        print(f"bearings window: opened {url} via {browser}", file=sys.stderr)
         return 0
 
     if args.command == "send":

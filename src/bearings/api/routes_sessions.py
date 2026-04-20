@@ -4,10 +4,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from twrminal import metrics
-from twrminal.agent.prompt import assemble_prompt, estimate_tokens
-from twrminal.api.auth import require_auth
-from twrminal.api.models import (
+from bearings import metrics
+from bearings.agent.prompt import assemble_prompt, estimate_tokens
+from bearings.api.auth import require_auth
+from bearings.api.models import (
     MessageOut,
     SessionCreate,
     SessionOut,
@@ -17,7 +17,7 @@ from twrminal.api.models import (
     TagOut,
     ToolCallOut,
 )
-from twrminal.db import store
+from bearings.db import store
 
 router = APIRouter(
     prefix="/sessions",

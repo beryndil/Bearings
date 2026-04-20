@@ -1,4 +1,4 @@
-from twrminal.cli import main
+from bearings.cli import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

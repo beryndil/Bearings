@@ -15,7 +15,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from twrminal.agent.events import (
+from bearings.agent.events import (
     ErrorEvent,
     MessageComplete,
     MessageStart,
@@ -24,7 +24,7 @@ from twrminal.agent.events import (
     ToolCallEnd,
     ToolCallStart,
 )
-from twrminal.agent.session import AgentSession
+from bearings.agent.session import AgentSession
 
 
 def _result(session_id: str = "sdk-sess", total_cost_usd: float | None = None) -> ResultMessage:
@@ -69,7 +69,7 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, messages: list[Any]) -> None:
     def factory(options: Any = None) -> FakeClient:
         return FakeClient(messages, options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
 
 
 def test_agent_session_constructs() -> None:
@@ -92,7 +92,7 @@ async def test_stream_omits_budget_when_none(monkeypatch: pytest.MonkeyPatch) ->
     def factory(options: Any = None) -> CapturingClient:
         return CapturingClient([_result()], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s", working_dir="/tmp", model="m")
     _ = [ev async for ev in session.stream("hi")]
     opts = captured["options"]
@@ -111,7 +111,7 @@ async def test_stream_passes_budget_to_options(monkeypatch: pytest.MonkeyPatch) 
     def factory(options: Any = None) -> CapturingClient:
         return CapturingClient([_result()], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s", working_dir="/tmp", model="m", max_budget_usd=0.25)
     _ = [ev async for ev in session.stream("hi")]
     opts = captured["options"]
@@ -292,7 +292,7 @@ async def test_stream_tracks_client_reference(
     def factory(options: Any = None) -> FakeClient:
         return FakeClient([_assistant(TextBlock("hi")), _result()], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s", working_dir="/tmp", model="m")
     async for ev in session.stream("go"):
         # Capture on the first non-MessageStart event so we know we're
@@ -328,7 +328,7 @@ async def test_interrupt_during_stream_calls_sdk_interrupt(
         ref["client"] = client
         return client
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s", working_dir="/tmp", model="m")
     async for ev in session.stream("go"):
         if isinstance(ev, Token):
@@ -347,7 +347,7 @@ async def test_stream_emits_error_event_on_exception(
     def factory(options: Any = None) -> BoomClient:
         return BoomClient([], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s4", working_dir="/tmp", model="m")
     events = [ev async for ev in session.stream("x")]
     assert len(events) == 1
@@ -516,8 +516,8 @@ async def test_stream_passes_assembled_system_prompt_when_db_wired(
     """With db= set, stream() calls assemble_prompt and passes the
     result through as ClaudeAgentOptions.system_prompt. Without db=
     (the prior behavior), system_prompt stays None."""
-    from twrminal.agent.base_prompt import BASE_PROMPT
-    from twrminal.db.store import (
+    from bearings.agent.base_prompt import BASE_PROMPT
+    from bearings.db.store import (
         attach_tag,
         create_session,
         create_tag,
@@ -536,7 +536,7 @@ async def test_stream_passes_assembled_system_prompt_when_db_wired(
     def factory(options: Any = None) -> CapturingClient:
         return CapturingClient([_result()], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         sess = await create_session(conn, working_dir="/x", model="m")
@@ -569,7 +569,7 @@ async def test_stream_omits_system_prompt_when_db_is_none(
     def factory(options: Any = None) -> CapturingClient:
         return CapturingClient([_result()], options)
 
-    monkeypatch.setattr("twrminal.agent.session.ClaudeSDKClient", factory)
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
     session = AgentSession("s", working_dir="/tmp", model="m")
     _ = [ev async for ev in session.stream("hi")]
     assert captured["options"].system_prompt is None

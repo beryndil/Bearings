@@ -44,7 +44,7 @@ describe('AuthGate', () => {
     // jsdom exposes localStorage on `window`; Node 22+ also ships a
     // native bare `localStorage` global that conflicts, so go through
     // `window` to reach the one the app actually wrote to.
-    expect(window.localStorage.getItem('twrminal:token')).toBe('secret-sauce');
+    expect(window.localStorage.getItem('bearings:token')).toBe('secret-sauce');
   });
 
   it('ignores empty / whitespace-only token submissions', async () => {

@@ -56,7 +56,7 @@
         Save & continue
       </button>
       <p class="text-[10px] text-slate-600">
-        Stored in <code>localStorage</code> under <code>twrminal:token</code>.
+        Stored in <code>localStorage</code> under <code>bearings:token</code>.
       </p>
     </form>
   </div>

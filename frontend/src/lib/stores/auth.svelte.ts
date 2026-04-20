@@ -1,6 +1,6 @@
 import * as api from '$lib/api';
 
-const TOKEN_KEY = 'twrminal:token';
+const TOKEN_KEY = 'bearings:token';
 
 export type AuthStatus =
   | 'checking' // fetching /api/health

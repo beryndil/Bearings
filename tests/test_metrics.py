@@ -4,8 +4,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from twrminal import metrics
-from twrminal.config import Settings
+from bearings import metrics
+from bearings.config import Settings
 
 
 def _default_tag_id(client: TestClient) -> int:
@@ -18,7 +18,7 @@ def _default_tag_id(client: TestClient) -> int:
 def test_metrics_endpoint_emits_registry(client: TestClient) -> None:
     resp = client.get("/metrics")
     assert resp.status_code == 200
-    assert "twrminal_sessions_created_total" in resp.text
+    assert "bearings_sessions_created_total" in resp.text
 
 
 def test_sessions_created_counter_increments(client: TestClient) -> None:

@@ -29,8 +29,11 @@ frontend/build/
 frontend/.svelte-kit/
 
 # Generated static bundle — tracked placeholder only
-src/twrminal/web/dist/*
-!src/twrminal/web/dist/.gitkeep
+src/bearings/web/dist/*
+!src/bearings/web/dist/.gitkeep
+
+# Playwright MCP snapshots (transient)
+.playwright-mcp/
 
 # Editors / OS
 .idea/

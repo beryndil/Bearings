@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from twrminal.config import Settings
+from bearings.config import Settings
 
 
 def _create_session(client: TestClient) -> str:

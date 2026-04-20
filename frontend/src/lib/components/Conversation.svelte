@@ -167,7 +167,7 @@
   <header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">
     <div class="min-w-0">
       <h1 class="text-lg font-medium flex items-center gap-2">
-        {sessions.selected?.title ?? 'Twrminal'}
+        {sessions.selected?.title ?? 'Bearings'}
         {#if sessions.selected}
           <button
             type="button"

@@ -14,8 +14,8 @@ def _xdg(var: str, default: Path) -> Path:
     return Path(raw) if raw else default
 
 
-CONFIG_HOME = _xdg("XDG_CONFIG_HOME", Path.home() / ".config") / "twrminal"
-DATA_HOME = _xdg("XDG_DATA_HOME", Path.home() / ".local" / "share") / "twrminal"
+CONFIG_HOME = _xdg("XDG_CONFIG_HOME", Path.home() / ".config") / "bearings"
+DATA_HOME = _xdg("XDG_DATA_HOME", Path.home() / ".local" / "share") / "bearings"
 
 
 class ServerCfg(BaseModel):
@@ -42,7 +42,7 @@ class MetricsCfg(BaseModel):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="TWRMINAL_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="BEARINGS_", extra="ignore")
 
     server: ServerCfg = Field(default_factory=ServerCfg)
     auth: AuthCfg = Field(default_factory=AuthCfg)

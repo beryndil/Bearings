@@ -19,7 +19,7 @@ from claude_agent_sdk import (
     UserMessage,
 )
 
-from twrminal.agent.events import (
+from bearings.agent.events import (
     AgentEvent,
     ErrorEvent,
     MessageComplete,
@@ -29,7 +29,7 @@ from twrminal.agent.events import (
     ToolCallEnd,
     ToolCallStart,
 )
-from twrminal.agent.prompt import assemble_prompt
+from bearings.agent.prompt import assemble_prompt
 
 
 def _stringify(content: str | list[dict[str, object]] | None) -> str | None:

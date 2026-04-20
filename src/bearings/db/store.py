@@ -1,6 +1,6 @@
 """Public DB surface — a thin facade over the split `_common` /
 `_sessions` / `_messages` / `_tags` modules. Callers keep using
-`from twrminal.db import store` + `store.create_session(...)` and
+`from bearings.db import store` + `store.create_session(...)` and
 `store.attach_tag(...)`; the implementation lives in the sibling
 modules one layer down.
 
@@ -11,8 +11,8 @@ concern, then re-export here.
 
 from __future__ import annotations
 
-from twrminal.db._common import MIGRATIONS_DIR, init_db
-from twrminal.db._messages import (
+from bearings.db._common import MIGRATIONS_DIR, init_db
+from bearings.db._messages import (
     attach_tool_calls_to_message,
     finish_tool_call,
     insert_message,
@@ -23,7 +23,7 @@ from twrminal.db._messages import (
     list_tool_calls,
     search_messages,
 )
-from twrminal.db._sessions import (
+from bearings.db._sessions import (
     add_session_cost,
     create_session,
     delete_session,
@@ -33,7 +33,7 @@ from twrminal.db._sessions import (
     list_sessions,
     update_session,
 )
-from twrminal.db._tags import (
+from bearings.db._tags import (
     attach_tag,
     create_tag,
     delete_tag,

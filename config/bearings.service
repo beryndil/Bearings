@@ -1,10 +1,10 @@
 [Unit]
-Description=Twrminal — Claude Code agent web UI
+Description=Bearings — Claude Code agent web UI
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/twrminal serve
+ExecStart=%h/.local/bin/bearings serve
 Restart=on-failure
 RestartSec=5
 

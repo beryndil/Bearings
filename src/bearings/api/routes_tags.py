@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from twrminal.api.auth import require_auth
-from twrminal.api.models import TagCreate, TagMemoryOut, TagMemoryPut, TagOut, TagUpdate
-from twrminal.db import store
+from bearings.api.auth import require_auth
+from bearings.api.models import TagCreate, TagMemoryOut, TagMemoryPut, TagOut, TagUpdate
+from bearings.db import store
 
 router = APIRouter(
     prefix="/tags",

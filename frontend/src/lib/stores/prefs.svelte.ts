@@ -1,6 +1,6 @@
-const MODEL_KEY = 'twrminal:defaultModel';
-const WORKDIR_KEY = 'twrminal:defaultWorkingDir';
-const TOKEN_KEY = 'twrminal:token';
+const MODEL_KEY = 'bearings:defaultModel';
+const WORKDIR_KEY = 'bearings:defaultWorkingDir';
+const TOKEN_KEY = 'bearings:token';
 
 function readStorage(key: string): string | null {
   if (typeof localStorage === 'undefined') return null;

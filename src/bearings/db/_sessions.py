@@ -8,7 +8,7 @@ from typing import Any
 
 import aiosqlite
 
-from twrminal.db._common import _date_filter, _new_id, _now
+from bearings.db._common import _date_filter, _new_id, _now
 
 SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
