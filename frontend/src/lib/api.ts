@@ -420,7 +420,7 @@ export function importSession(
 
 export type SystemPromptLayer = {
   name: string;
-  kind: 'base' | 'project' | 'tag_memory' | 'session';
+  kind: 'base' | 'tag_memory' | 'session';
   content: string;
   token_count: number;
 };

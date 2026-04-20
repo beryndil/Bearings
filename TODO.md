@@ -436,14 +436,59 @@ v0.1.1 slice plan: `~/.claude/plans/hazy-hatching-honey.md`.
   caught up to the v0.2.6 + v0.2.7 backend fields.
 - [x] 3 estimate_tokens unit tests + 3 system_prompt API tests.
 
-## v0.2.x — remaining slice plan
+## v0.2 — closed
 
-Plan file: `~/.claude/plans/vectorized-leaping-pretzel.md`. Slice
-numbering shifted from the original 12-slice plan because spec
-step 1 ended up needing four slices, not three.
+All 14 planned slices (0.2.0 → 0.2.13) shipped on 2026-04-19. v0.2
+is feature-complete.
+
+## Open follow-ups (post-v0.2 refactor + verification)
+
+These are not blocking v0.3; they're the residue of shipping
+v0.2 fast.
+
+### File-size audit (CLAUDE.md: max 400 lines)
+
+- [ ] `src/twrminal/db/store.py` is **680 lines**. Natural split:
+  `store/sessions.py`, `store/messages.py`, `store/tags.py` (tags
+  + memories), `store/history.py` (aggregate queries + search),
+  `store/__init__.py` re-exporting for back-compat. Reasonable
+  scope for one refactor slice; mypy + pytest should cover
+  regressions.
+- [ ] `frontend/src/lib/components/SessionList.svelte` is **788
+  lines**. Extraction candidates:
+  - search pane (input + results + debounce) → `SidebarSearch.svelte`
+  - import UX (drag-drop + file picker + progress + errors) →
+    `SessionImport.svelte`
+  - tag filter section → `TagFilterPanel.svelte`
+  - new-session form → `NewSessionForm.svelte`
+- [ ] `frontend/src/lib/api.ts` is **447 lines**. Fine to leave as
+  one file for now — it's all type declarations + thin fetch
+  helpers. Split only if a second domain comes along.
+
+### Browser verification pending (CLAUDE.md: UI changes need dev-server testing)
+
+- [ ] Dave to walk through the v0.2 UI surfaces and confirm
+  behavior:
+  - Inspector → Context pane: layers render, per-layer content
+    collapsibles work, `~N tok` counts look sensible.
+  - Session instructions inline editor (under Context layer
+    list): Save / Reset / clear-to-null round trip.
+  - TagEdit modal (sidebar ✎): name / pinned / sort_order /
+    defaults persist; markdown preview toggle; save-clears-to-
+    DELETE-memory path.
+  - New-session form: tag chip attach (existing + create-and-
+    attach via Enter), submit gated on ≥1 tag, defaults pre-fill
+    from attached tags.
+  - Conversation header: tag chips render, pinned order, hover
+    title shows defaults.
+
+### Other
+
+- [ ] TESTING_NOTES.md last update was v0.1.37. Expand or archive
+  once a v0.2 walkthrough happens.
+- [ ] Partial-message semantics: confirm `include_partial_messages=True`
+  emits token deltas as expected on first live agent run.
 
 ## Decisions pending
 
 - [x] GitHub org for remote push: `Beryndil/Twrminal`.
-- [ ] Partial-message semantics: confirm `include_partial_messages=True`
-  emits token deltas as expected on first live agent run.

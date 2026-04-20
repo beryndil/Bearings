@@ -76,11 +76,10 @@ class AgentSession:
         if self.max_budget_usd is not None:
             options_kwargs["max_budget_usd"] = self.max_budget_usd
         if self.db is not None:
-            # Assemble the layered system prompt (base → project → tag
-            # memories → session instructions) from the current DB
-            # state. Called per turn so edits to project prompt / tag
-            # memories / session instructions take effect on the next
-            # prompt without restarting the WS.
+            # Assemble the layered system prompt (base → tag memories →
+            # session instructions) from the current DB state. Called
+            # per turn so edits to tag memories / session instructions
+            # take effect on the next prompt without restarting the WS.
             assembled = await assemble_prompt(self.db, self.session_id)
             options_kwargs["system_prompt"] = assembled.text
         options = ClaudeAgentOptions(**options_kwargs)
