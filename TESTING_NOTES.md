@@ -69,10 +69,15 @@ observations here and flag regressions with a version bump.
   working_dir/model, Enter on a novel tag name creates + attaches.
 - [ ] **SessionEdit modal**: tag attach / detach still works
   post-v0.2; ✕ on a chip detaches without side effects.
-- [ ] **WS + CLI `send`** against a live agent: a full prompt
-  round-trip with an assembled system prompt that includes a
-  tag memory ("prefer nftables over iptables" on an `infra` tag,
-  attached to the session — agent references it unprompted).
+- [x] **WS + CLI `send`** against a live agent (2026-04-20):
+  session `74374ddb` tagged `infra` with memory "Prefer nftables
+  over iptables…". Prompt "one-liner firewall rule that blocks
+  SSH except from 10.0.0.0/8" got back `sudo nft add rule inet
+  filter input tcp dport 22 ip saddr != 10.0.0.0/8 drop` —
+  nftables, unprompted. `/system_prompt` confirmed 2 layers
+  (base + infra tag_memory, 66 tokens). Event stream:
+  `message_start` → `thinking` → `token` (coalesced) →
+  `message_complete` with cost_usd=0.176.
 
 ### Out-of-scope note
 

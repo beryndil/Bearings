@@ -470,9 +470,15 @@ cover shape, not feel.
 
 ### Other
 
-- [ ] Partial-message semantics: confirm
-  `include_partial_messages=True` emits token deltas as expected
-  on first live agent run.
+- [ ] Partial-message semantics (confirmed 2026-04-20, live run
+  session `74374ddb`): `include_partial_messages=True` is set in
+  `agent/session.py:74`, but the `receive_response()` loop only
+  branches on `AssistantMessage` / `UserMessage` / `ResultMessage`
+  — the SDK's `StreamEvent` (with per-delta content) has no case,
+  so deltas are silently dropped and the UI sees one `token` event
+  per completed `TextBlock`. Flag is functionally inert today.
+  Either wire a `StreamEvent` branch that emits `token` deltas as
+  they land, or drop the flag. v0.3.x candidate.
 - [ ] Resizable / collapsible panes (raised during v0.2.13 review,
   out of scope). Candidate for v0.3.0.
 
