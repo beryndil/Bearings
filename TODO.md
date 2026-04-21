@@ -521,6 +521,38 @@ cover shape, not feel.
   component in `frontend/src/lib/components/` that currently renders
   the copy button on assistant turns.
 
+- [ ] **Upstream: plan mode pins a stale plan file across topic pivots
+  (2026-04-21).** Discovered in the Checklists session
+  (`f66b7166…`) while trying to plan the checklist feature. Entering
+  plan mode auto-selected `~/.claude/plans/enumerated-inventing-ullman.md`
+  (the unrelated token-cost-mitigation plan from hours earlier in the
+  same session) as "the only file you are allowed to edit." System-
+  reminder verbatim: *"A plan file already exists at
+  /home/beryndil/.claude/plans/enumerated-inventing-ullman.md. You can
+  read it and make incremental edits using the Edit tool. … this is the
+  only file you are allowed to edit — other than this you are only
+  allowed to take READ-ONLY actions."* Forces a choice between
+  clobbering a still-valuable unrelated plan or appending a mismatched
+  section to a file on a different topic; no in-mode affordance to
+  mint a fresh plan file. Selection isn't pure "most recently modified"
+  either — `sparkling-triaging-otter.md` was newer on disk (Apr 21
+  14:29) than `enumerated-inventing-ullman.md` (13:35), so the harness
+  appears to remember a per-session assignment. Confirmed **not a
+  Bearings bug**: `grep` across `src/` shows every `~/.claude/plans/`
+  reference is an in-code comment pointing at plan docs for trace-
+  ability — no file-selection logic, no system-reminder emission, no
+  plan-path wiring through `AgentSession` / `prompt.py`. The reminder
+  is emitted by Claude Code's plan-mode harness inside `claude-agent-
+  sdk` / the CLI, upstream of Bearings. **Action:** file upstream to
+  Anthropic / Claude Code asking for one of — (1) mint a fresh three-
+  word-slug plan file per topic by default, (2) prompt "resume X or
+  start a new plan file?" on plan-mode entry, or (3) allow the agent
+  to `touch` a new file in `~/.claude/plans/` from within plan mode.
+  Also a sibling bug Dave flagged in the same turn: plan-mode
+  dropdown behavior needs its own investigation (tracked separately
+  once reproduced). Workaround: drop out of plan mode, hand off to a
+  fresh session, replan there.
+
 - [ ] **Feature: Session Reorg — message triage across sessions.**
   Plan: `~/.claude/plans/sparkling-triaging-otter.md`. Session:
   `a0a4f828…` (tag: Bearings). Motivating failure was the "Checklists"

@@ -1,9 +1,8 @@
 <script lang="ts">
   import type { Message } from '$lib/api';
   import type { LiveToolCall } from '$lib/stores/conversation.svelte';
-  import { renderMarkdown } from '$lib/render';
-  import { highlight } from '$lib/actions/highlight';
   import { stickToBottom } from '$lib/actions/autoscroll';
+  import CollapsibleBody from './CollapsibleBody.svelte';
 
   type Props = {
     user: Message | null;
@@ -192,9 +191,11 @@
         </div>
       {/if}
     </header>
-    <div class="prose prose-invert prose-sm max-w-none" use:highlight={highlightQuery}>
-      {@html renderMarkdown(user.content)}
-    </div>
+    <CollapsibleBody
+      messageId={user.id}
+      content={user.content}
+      highlightQuery={highlightQuery}
+    />
   </article>
 {/if}
 
@@ -324,14 +325,22 @@
         </div>
       {/if}
     </header>
-    <div class="prose prose-invert prose-sm max-w-none" use:highlight={highlightQuery}>
-      {#if assistant}
-        {@html renderMarkdown(assistant.content)}
-      {:else}
-        {@html renderMarkdown(streamingContent)}
-        <span class="inline-block animate-pulse">▍</span>
-      {/if}
-    </div>
+    {#if assistant}
+      <CollapsibleBody
+        messageId={assistant.id}
+        content={assistant.content}
+        highlightQuery={highlightQuery}
+        disabled={isStreaming}
+      />
+    {:else}
+      <CollapsibleBody
+        messageId={null}
+        content={streamingContent}
+        highlightQuery={highlightQuery}
+        disabled={true}
+      />
+      <span class="inline-block animate-pulse">▍</span>
+    {/if}
     {#if assistant}
       <div class="mt-2 flex justify-end">
         <button
