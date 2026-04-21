@@ -1,5 +1,5 @@
 import type { Message } from '$lib/api';
-import type { ConnectionState, PermissionMode } from '$lib/agent.svelte';
+import type { ConnectionState } from '$lib/agent.svelte';
 
 export function pressureClass(spent: number, cap: number | null | undefined): string {
   if (cap == null || cap <= 0) return 'text-slate-500';
@@ -43,21 +43,3 @@ export async function copyText(text: string): Promise<boolean> {
 export function messagesAsMarkdown(msgs: Message[]): string {
   return msgs.map((m) => `## ${m.role}\n\n${m.content}`).join('\n\n');
 }
-
-/** Map a slash command + the current permission mode to the next mode,
- *  or `null` when the input isn't a recognized command. */
-export function nextPermissionMode(
-  text: string,
-  current: PermissionMode
-): PermissionMode | null {
-  const [cmd, rawArg] = text.split(/\s+/);
-  if (cmd !== '/plan') return null;
-  const arg = (rawArg ?? '').toLowerCase();
-  if (arg === 'off' || arg === 'default') return 'default';
-  if (arg === 'on') return 'plan';
-  return current === 'default' ? 'plan' : 'default';
-}
-
-// Keep the param unused-shape explicit for ConnectionState so removing
-// a case above triggers a TS exhaustiveness error.
-export type { ConnectionState, PermissionMode };

@@ -491,6 +491,50 @@ cover shape, not feel.
 
 ### Other
 
+## v0.3.11 — shipped
+
+Permission-mode UI correction. Retires the `/plan` slash-command
+hijack and the single-mode badge that were shipped in v0.3.5 /
+v0.3.10 — both were second-class paths that only ever exposed `plan`,
+leaving `acceptEdits` and `bypassPermissions` unreachable from the UI
+even though backend + WS + frontend types all supported them. A user
+who got stuck under a broken approval prompt had literally no in-app
+way to waive further prompts and keep working.
+
+- [x] `PermissionModeSelector.svelte` — header-mounted `<select>` with
+  all four modes (`Ask` / `Plan` / `Auto-edit` / `Bypass`). Tone
+  escalates slate → sky → amber → rose so Bypass is unmissable. Hint
+  copy per mode surfaced via `title` for hover-explainability.
+- [x] `Conversation.svelte` — replaces the conditional sky pill with
+  the selector; the `nextPermissionMode` intercept in `onSend()` is
+  gone so `/plan` no longer eats prompts.
+- [x] `conversation-ui.ts` — `nextPermissionMode` and its slash-
+  command regex deleted; `PermissionMode` re-export dropped (no
+  external importers).
+- [x] `agent.svelte.ts` — reconnect persistence. The server-side
+  runner resets to `default` on every fresh WS attach, so a drop →
+  reconnect used to silently downgrade a user from `bypassPermissions`
+  back to `default` and their next tool call would surface an approval
+  they thought they'd waived. The new socket's `open` handler re-
+  sends the remembered mode as its first frame. `connect()` still
+  resets to `default`, so session-switch stays a clean slate.
+- [x] 6 new vitest cases in `PermissionModeSelector.test.ts` (renders
+  four modes, reflects current mode as selected, tone class per mode,
+  dispatches `setPermissionMode` on change, disabled when socket not
+  open, hint surfaces in `title`). 2 new vitest cases in
+  `agent.svelte.test.ts` cover reconnect persistence (re-sends
+  `bypassPermissions`; no-op for `default`). Old
+  `nextPermissionMode` describe block deleted.
+- [x] 94 frontend tests + 232 backend tests pass; ruff + mypy +
+  svelte-check green.
+
+Deliberate scope cuts:
+- The badge-vs-modal race noted in v0.3.10 follow-ups still exists —
+  switching modes via the selector while an approval is pending does
+  not auto-resolve the modal. Same semantics as before; not
+  introduced here and not worth more wiring until the specific case
+  bites.
+
 ## v0.3.10 — shipped
 
 Tool-use approval UI for plan-mode (and any gated tool).

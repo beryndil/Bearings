@@ -130,6 +130,22 @@ export class AgentConnection {
       this.state = 'open';
       this.retryCount = 0;
       this.reconnectDelayMs = null;
+      // Reconnect persistence: the server-side SessionRunner resets to
+      // `default` whenever a new WS attaches, so a drop → reconnect
+      // silently downgrades a user who had picked `acceptEdits` or
+      // `bypassPermissions`. Re-send the remembered mode the instant
+      // the new socket is up so approval prompts don't resume behind
+      // the user's back. `connect()` resets `permissionMode` to
+      // `default`, so session-switch remains a clean slate — this
+      // branch only fires for in-place reconnects.
+      if (this.permissionMode !== 'default') {
+        ws.send(
+          JSON.stringify({
+            type: 'set_permission_mode',
+            mode: this.permissionMode
+          })
+        );
+      }
     });
 
     ws.addEventListener('message', (msg) => {

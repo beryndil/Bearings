@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   connectionLabel,
   messagesAsMarkdown,
-  nextPermissionMode,
   pressureClass
 } from './conversation-ui';
 
@@ -36,24 +35,6 @@ describe('connectionLabel', () => {
     ['error', 'error']
   ] as const)('renders %s as "%s"', (state, label) => {
     expect(connectionLabel(state, null, null)).toBe(label);
-  });
-});
-
-describe('nextPermissionMode', () => {
-  it('returns null for non-plan input', () => {
-    expect(nextPermissionMode('hello', 'default')).toBeNull();
-    expect(nextPermissionMode('/something', 'default')).toBeNull();
-  });
-
-  it('toggles between default and plan on a bare /plan', () => {
-    expect(nextPermissionMode('/plan', 'default')).toBe('plan');
-    expect(nextPermissionMode('/plan', 'plan')).toBe('default');
-  });
-
-  it('honors explicit on/off arguments', () => {
-    expect(nextPermissionMode('/plan off', 'plan')).toBe('default');
-    expect(nextPermissionMode('/plan default', 'plan')).toBe('default');
-    expect(nextPermissionMode('/plan on', 'default')).toBe('plan');
   });
 });
 

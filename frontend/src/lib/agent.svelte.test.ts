@@ -33,10 +33,14 @@ type Listener = (ev: unknown) => void;
 // helpers used to drive events from tests.
 class FakeSocket {
   readonly listeners: Record<string, Listener[]> = {};
+  readonly sent: string[] = [];
   closed = false;
   constructor(public readonly sessionId: string) {}
   addEventListener(type: string, listener: Listener): void {
     (this.listeners[type] ??= []).push(listener);
+  }
+  send(data: string): void {
+    this.sent.push(data);
   }
   close(): void {
     this.closed = true;
@@ -76,11 +80,18 @@ afterEach(() => {
   vi.resetModules();
 });
 
-async function freshAgent(): Promise<{ agent: { connect: (sid: string) => Promise<void> } }> {
+type TestAgent = {
+  connect: (sid: string) => Promise<void>;
+  setPermissionMode: (
+    mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions'
+  ) => boolean;
+};
+
+async function freshAgent(): Promise<{ agent: TestAgent }> {
   // Reimport per-test so each gets its own AgentConnection instance.
   vi.resetModules();
   const mod = await import('./agent.svelte');
-  return { agent: new mod.AgentConnection() as unknown as { connect: (sid: string) => Promise<void> } };
+  return { agent: new mod.AgentConnection() as unknown as TestAgent };
 }
 
 describe('AgentConnection reconnect race', () => {
@@ -155,5 +166,65 @@ describe('AgentConnection reconnect race', () => {
     s2.fireOpen();
     s2.fireMessage({ type: 'token', session_id: 'B', text: 'x' });
     expect(handleEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentConnection permission-mode persistence', () => {
+  it('re-sends the selected permission mode when a reconnect completes', async () => {
+    // The server-side runner resets permission mode whenever a new WS
+    // attaches, so a drop → reconnect would silently downgrade the user
+    // from (e.g.) bypassPermissions back to default and the next tool
+    // call would surface an approval prompt they thought they'd
+    // waived. This asserts the client pushes the remembered mode on
+    // the fresh socket's open event.
+    const { agent } = await freshAgent();
+
+    conversationLoad.mockResolvedValue();
+    await agent.connect('C');
+    const s1 = sockets[0];
+    s1.fireOpen();
+
+    agent.setPermissionMode('bypassPermissions');
+    expect(s1.sent).toContainEqual(
+      JSON.stringify({
+        type: 'set_permission_mode',
+        mode: 'bypassPermissions'
+      })
+    );
+
+    s1.fireClose(1006);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const s2 = sockets[1];
+    s2.fireOpen();
+
+    // The freshly opened socket must carry the remembered mode in its
+    // very first send, before the user can issue any prompt.
+    expect(s2.sent).toContainEqual(
+      JSON.stringify({
+        type: 'set_permission_mode',
+        mode: 'bypassPermissions'
+      })
+    );
+  });
+
+  it('does not push a set_permission_mode frame on reconnect when mode is default', async () => {
+    // No-op guard: avoid spamming the server with redundant frames when
+    // the user never left the default mode. Catches a naive
+    // implementation that always re-sends.
+    const { agent } = await freshAgent();
+
+    conversationLoad.mockResolvedValue();
+    await agent.connect('D');
+    const s1 = sockets[0];
+    s1.fireOpen();
+
+    s1.fireClose(1006);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const s2 = sockets[1];
+    s2.fireOpen();
+
+    expect(s2.sent).toEqual([]);
   });
 });

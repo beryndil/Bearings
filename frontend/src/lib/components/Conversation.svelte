@@ -5,13 +5,13 @@
   import * as api from '$lib/api';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
+  import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import { buildTurns } from '$lib/turns';
   import {
     connectionLabel,
     copyText,
     messagesAsMarkdown,
-    nextPermissionMode,
     pressureClass
   } from '$lib/utils/conversation-ui';
 
@@ -121,12 +121,6 @@
   function onSend() {
     const text = promptText.trim();
     if (!text) return;
-    const modeNext = nextPermissionMode(text, agent.permissionMode);
-    if (modeNext !== null) {
-      agent.setPermissionMode(modeNext);
-      promptText = '';
-      return;
-    }
     if (!agent.send(text)) return;
     promptText = '';
   }
@@ -251,17 +245,7 @@
       {/if}
     </div>
     <div class="flex items-center gap-2">
-      {#if agent.permissionMode !== 'default'}
-        <button
-          type="button"
-          class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
-            bg-sky-900 text-sky-200 hover:bg-sky-800"
-          onclick={() => agent.setPermissionMode('default')}
-          title="Click to exit {agent.permissionMode} mode (or type /plan off)"
-        >
-          {agent.permissionMode}
-        </button>
-      {/if}
+      <PermissionModeSelector />
       {#if conversation.streamingActive}
         <button
           type="button"
