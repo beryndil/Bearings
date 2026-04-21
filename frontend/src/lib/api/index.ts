@@ -3,3 +3,4 @@ export * from './sessions';
 export * from './tags';
 export * from './history';
 export * from './fs';
+export * from './commands';

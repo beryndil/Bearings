@@ -4,6 +4,7 @@
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
+  import CommandMenu from '$lib/components/CommandMenu.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
@@ -32,6 +33,54 @@
   let exporting = $state(false);
   let copiedMsgId = $state<string | null>(null);
   let copiedSession = $state(false);
+  let textareaEl: HTMLTextAreaElement | undefined = $state();
+
+  // Slash-command palette. Entries are fetched once per session
+  // (keyed by id) so opening the menu doesn't restart the filesystem
+  // walk every keystroke. The menu opens only when the first character
+  // is `/` and there's no whitespace yet — matches the CLI, and means
+  // adding args (`/fad:ship --dry`) dismisses it.
+  let commandEntries = $state<api.CommandEntry[]>([]);
+  let commandEntriesSessionId = $state<string | null>(null);
+  let commandMenu: { handleKey: (e: KeyboardEvent) => boolean } | undefined = $state();
+
+  const commandMenuOpen = $derived(
+    promptText.startsWith('/') && !/\s/.test(promptText)
+  );
+  const commandQuery = $derived(
+    commandMenuOpen ? promptText.slice(1) : ''
+  );
+
+  $effect(() => {
+    const sid = sessions.selected?.id ?? null;
+    if (sid === null || sid === commandEntriesSessionId) return;
+    commandEntriesSessionId = sid;
+    const cwd = sessions.selected?.working_dir ?? null;
+    api.listCommands(cwd).then(
+      (r) => {
+        // Guard against session switch during the round-trip.
+        if (commandEntriesSessionId === sid) commandEntries = r.entries;
+      },
+      () => {
+        // Palette is a convenience; a failed fetch just means no menu,
+        // not an error the user needs to see.
+      }
+    );
+  });
+
+  function onSelectCommand(slug: string) {
+    promptText = `/${slug} `;
+    // Return focus to the textarea so the user can keep typing args.
+    queueMicrotask(() => textareaEl?.focus());
+  }
+
+  function onCloseCommandMenu() {
+    // Insert a space after the slash so the menu closes without
+    // dropping what the user already typed.
+    if (promptText.startsWith('/') && !/\s/.test(promptText)) {
+      promptText = `${promptText} `;
+    }
+  }
 
   async function onCopyMessage(msg: api.Message) {
     if (!(await copyText(msg.content))) return;
@@ -126,6 +175,10 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // The command menu claims arrow/Enter/Tab/Escape while open so the
+    // user can navigate without leaving the textarea. It returns false
+    // for other keys so normal typing still flows through.
+    if (commandMenu?.handleKey(e)) return;
     // Enter sends; Shift+Enter falls through so the textarea inserts
     // a newline. Skip while the user is mid-IME composition.
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
@@ -329,20 +382,29 @@
   </div>
 
   <form
-    class="border-t border-slate-800 px-4 py-3 flex gap-2 items-end"
+    class="relative border-t border-slate-800 px-4 py-3 flex gap-2 items-end"
     onsubmit={(e) => {
       e.preventDefault();
       onSend();
     }}
   >
+    <CommandMenu
+      bind:this={commandMenu}
+      entries={commandEntries}
+      query={commandQuery}
+      open={commandMenuOpen}
+      onSelect={onSelectCommand}
+      onClose={onCloseCommandMenu}
+    />
     <textarea
       class="flex-1 rounded bg-slate-950 border border-slate-800 px-3 py-2 text-sm
         resize-none focus:outline-none focus:border-slate-600 disabled:opacity-50"
       rows="2"
       placeholder={sessions.selectedId
-        ? 'Send a prompt (Enter · Shift+Enter for newline)'
+        ? 'Send a prompt (Enter · Shift+Enter for newline · / for commands)'
         : 'Select a session first'}
       bind:value={promptText}
+      bind:this={textareaEl}
       onkeydown={onKeydown}
       disabled={!sessions.selectedId || agent.state !== 'open'}
     ></textarea>
