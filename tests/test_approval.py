@@ -136,6 +136,107 @@ async def test_request_stop_denies_pending_with_interrupt(
 
 
 @pytest.mark.asyncio
+async def test_set_permission_mode_bypass_resolves_all_pending(
+    db: aiosqlite.Connection,
+) -> None:
+    """Flipping the header selector to `bypassPermissions` while a
+    modal is on screen must clear it without the user also clicking
+    through. Every parked approval — edit or not — resolves `allow` and
+    fans `approval_resolved` so mirroring tabs drop their modals too."""
+    sid = await _session_id(db)
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[]), db)
+    queue, _ = await runner.subscribe(0)
+
+    t_edit = asyncio.create_task(runner.can_use_tool("Edit", {"path": "/a"}, _ctx("a")))
+    t_bash = asyncio.create_task(runner.can_use_tool("Bash", {"cmd": "ls"}, _ctx("b")))
+    # Wait for both `ApprovalRequest` events so the Futures are registered.
+    reqs: list[str] = []
+    for _ in range(2):
+        env = await asyncio.wait_for(queue.get(), timeout=1.0)
+        assert env.payload["type"] == "approval_request"
+        reqs.append(env.payload["request_id"])
+
+    await runner.set_permission_mode("bypassPermissions")
+
+    r_edit = await asyncio.wait_for(t_edit, timeout=1.0)
+    r_bash = await asyncio.wait_for(t_bash, timeout=1.0)
+    assert isinstance(r_edit, PermissionResultAllow)
+    assert isinstance(r_bash, PermissionResultAllow)
+
+    # Two `approval_resolved(allow)` events, one per request.
+    resolved_ids: set[str] = set()
+    for _ in range(2):
+        env = await asyncio.wait_for(queue.get(), timeout=1.0)
+        assert env.payload["type"] == "approval_resolved"
+        assert env.payload["decision"] == "allow"
+        resolved_ids.add(env.payload["request_id"])
+    assert resolved_ids == set(reqs)
+
+
+@pytest.mark.asyncio
+async def test_set_permission_mode_accept_edits_only_resolves_edit_tools(
+    db: aiosqlite.Connection,
+) -> None:
+    """`acceptEdits` is narrower than `bypassPermissions`: it clears
+    parked approvals for SDK edit tools (Edit/Write/MultiEdit/
+    NotebookEdit) but leaves anything else (Bash, WebFetch, etc.)
+    parked on the user decision. Mirrors the SDK's own classification
+    so flipping to accept-edits mid-turn behaves the same as having
+    started the turn in that mode."""
+    sid = await _session_id(db)
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[]), db)
+    queue, _ = await runner.subscribe(0)
+
+    t_edit = asyncio.create_task(runner.can_use_tool("Edit", {"path": "/a"}, _ctx("a")))
+    t_bash = asyncio.create_task(runner.can_use_tool("Bash", {"cmd": "ls"}, _ctx("b")))
+    for _ in range(2):
+        await asyncio.wait_for(queue.get(), timeout=1.0)
+
+    await runner.set_permission_mode("acceptEdits")
+
+    r_edit = await asyncio.wait_for(t_edit, timeout=1.0)
+    assert isinstance(r_edit, PermissionResultAllow)
+
+    # Bash is still parked — no result available.
+    assert not t_bash.done()
+    # Exactly one `approval_resolved(allow)` on the wire for the edit.
+    env = await asyncio.wait_for(queue.get(), timeout=1.0)
+    assert env.payload["type"] == "approval_resolved"
+    assert env.payload["decision"] == "allow"
+
+    # Clean up the still-parked Bash future so the test doesn't leak
+    # a pending task.
+    await runner.request_stop()
+    await asyncio.wait_for(t_bash, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_set_permission_mode_default_leaves_pending_parked(
+    db: aiosqlite.Connection,
+) -> None:
+    """Dropping back to `default` (or switching to `plan`) mustn't
+    auto-resolve parked approvals — the user should still get a modal
+    click. Regression guard: a naive implementation that always ran
+    `resolve_for_mode` would silently allow on every mode change."""
+    sid = await _session_id(db)
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[]), db)
+    queue, _ = await runner.subscribe(0)
+
+    task = asyncio.create_task(runner.can_use_tool("Edit", {"path": "/a"}, _ctx("a")))
+    await asyncio.wait_for(queue.get(), timeout=1.0)
+
+    await runner.set_permission_mode("default")
+    await runner.set_permission_mode("plan")
+    await asyncio.sleep(0)  # give any stray coroutine a chance to run
+
+    assert not task.done()
+
+    # Clean up.
+    await runner.request_stop()
+    await asyncio.wait_for(task, timeout=1.0)
+
+
+@pytest.mark.asyncio
 async def test_shutdown_denies_all_pending(
     db: aiosqlite.Connection,
 ) -> None:

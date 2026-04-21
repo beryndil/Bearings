@@ -31,6 +31,13 @@ from bearings.agent.events import AgentEvent, ApprovalRequest, ApprovalResolved
 
 EventEmitter = Callable[[AgentEvent], Awaitable[None]]
 
+# Tools the SDK classifies as edits. `acceptEdits` mode blankets
+# these without prompting; anything outside this set still gates on
+# per-call approval even in that mode. Kept in sync with the Claude
+# Code SDK's own edit classification — adding a new edit tool here
+# means it auto-resolves under `acceptEdits` the same as the rest.
+EDIT_TOOLS: frozenset[str] = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+
 
 class ApprovalBroker:
     """Owns the pending-approval Futures dict for one session.
@@ -41,12 +48,19 @@ class ApprovalBroker:
     - `resolve`: WS-driven resolution from an `approval_response` frame.
     - `deny_all`: stop / shutdown path that unblocks every pending
       Future with `interrupt=True` so the SDK unwinds.
+    - `resolve_for_mode`: permission-mode change path that retro-applies
+      the new mode to already-parked approvals so the user can clear a
+      live modal by escalating to `bypassPermissions` / `acceptEdits`
+      instead of having to click through it.
     """
 
     def __init__(self, session_id: str, emit: EventEmitter) -> None:
         self.session_id = session_id
         self._emit = emit
-        self._pending: dict[str, asyncio.Future[PermissionResult]] = {}
+        # Tool name is carried alongside the Future so `resolve_for_mode`
+        # can apply the `acceptEdits` filter without reconstructing it
+        # from the original `ApprovalRequest` event.
+        self._pending: dict[str, tuple[str, asyncio.Future[PermissionResult]]] = {}
 
     # ---- public API (also the SDK callback) -----------------------
 
@@ -64,7 +78,7 @@ class ApprovalBroker:
         request_id = uuid4().hex
         loop = asyncio.get_running_loop()
         future: asyncio.Future[PermissionResult] = loop.create_future()
-        self._pending[request_id] = future
+        self._pending[request_id] = (tool_name, future)
         await self._emit(
             ApprovalRequest(
                 session_id=self.session_id,
@@ -84,8 +98,11 @@ class ApprovalBroker:
         by the WS handler on an `approval_response` frame. No-op if the
         id is unknown or already resolved — duplicate resolutions from
         two tabs answering the same modal mustn't crash."""
-        future = self._pending.get(request_id)
-        if future is None or future.done():
+        entry = self._pending.get(request_id)
+        if entry is None:
+            return
+        _tool_name, future = entry
+        if future.done():
             return
         if decision == "allow":
             future.set_result(PermissionResultAllow())
@@ -102,6 +119,57 @@ class ApprovalBroker:
                 decision=resolved,
             )
         )
+
+    async def resolve_for_mode(self, new_mode: str) -> None:
+        """Retro-apply a permission-mode change to already-parked
+        approvals. The race this closes: the agent hits a gated tool,
+        the broker parks on a Future and emits `ApprovalRequest`; the
+        user responds by flipping the header selector to
+        `bypassPermissions` instead of clicking the modal. Without this
+        hook the SDK only consults the new mode on the *next* tool call
+        — the current Future sits forever, the modal stays up, and the
+        user has to click through the thing they just tried to dismiss
+        wholesale.
+
+        Matrix:
+        - `bypassPermissions`: allow every parked approval.
+        - `acceptEdits`: allow parked approvals for SDK edit tools
+          (`Edit`, `Write`, `MultiEdit`, `NotebookEdit`); leave others
+          parked.
+        - `plan` or `default`: leave pending. Plan mode doesn't execute
+          tools so the SDK will wind the current call down itself; the
+          modal clearing there happens via the ordinary stop/interrupt
+          path, not here.
+
+        Fans `ApprovalResolved(decision=allow)` per cleared request so
+        every mirroring tab drops the modal.
+        """
+        if new_mode not in ("bypassPermissions", "acceptEdits"):
+            return
+        # Snapshot before mutation: `resolve()` pops entries via the
+        # `can_use_tool` finally-clause as soon as we set the result,
+        # so iterating a live view would skip entries or raise.
+        targets: list[str] = []
+        for request_id, (tool_name, future) in self._pending.items():
+            if future.done():
+                continue
+            if new_mode == "bypassPermissions" or tool_name in EDIT_TOOLS:
+                targets.append(request_id)
+        for request_id in targets:
+            entry = self._pending.get(request_id)
+            if entry is None:
+                continue
+            _tool_name, future = entry
+            if future.done():
+                continue
+            future.set_result(PermissionResultAllow())
+            await self._emit(
+                ApprovalResolved(
+                    session_id=self.session_id,
+                    request_id=request_id,
+                    decision="allow",
+                )
+            )
 
     async def deny_all(self, reason: str, *, interrupt: bool) -> None:
         """Deny every pending approval (stop / shutdown path) and fan
@@ -129,7 +197,7 @@ class ApprovalBroker:
         first wake could let the SDK re-enter `can_use_tool` and park
         a fresh Future behind our back."""
         denied: list[str] = []
-        for request_id, future in self._pending.items():
+        for request_id, (_tool_name, future) in self._pending.items():
             if not future.done():
                 future.set_result(PermissionResultDeny(message=reason, interrupt=interrupt))
                 denied.append(request_id)

@@ -167,8 +167,20 @@ class SessionRunner:
         sequentially — if a turn is already in flight, this one waits."""
         await self._prompts.put(prompt)
 
-    def set_permission_mode(self, mode: Any) -> None:
+    async def set_permission_mode(self, mode: Any) -> None:
+        """Update the SDK's permission mode AND retro-apply it to any
+        approval already parked on a user decision.
+
+        Forwarding to the SDK is not enough on its own: the SDK only
+        consults the new mode the *next* time it calls `can_use_tool`,
+        so a user who flips the header selector to `bypassPermissions`
+        while a modal is on screen would still be stuck clicking the
+        modal. Handing the new mode to the broker lets it clear the
+        current Future per the accept-edits / bypass matrix and emits
+        `approval_resolved` so every mirroring tab drops its modal too."""
         self.agent.set_permission_mode(mode)
+        if isinstance(mode, str):
+            await self._approval.resolve_for_mode(mode)
 
     async def request_stop(self) -> None:
         """User-initiated stop of the current turn. Flags the worker

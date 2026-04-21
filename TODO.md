@@ -491,6 +491,48 @@ cover shape, not feel.
 
 ### Other
 
+## v0.3.12 — shipped
+
+Selector-vs-modal race fix. Closes the v0.3.11 scope cut: flipping
+the header permission selector to `bypassPermissions` /
+`acceptEdits` while a `can_use_tool` approval is already parked now
+retro-applies the new mode to the pending Future instead of leaving
+the modal on screen. The user's "dismiss this wholesale" intent is
+honored on the current tool call, not just the next one.
+
+- [x] `approval_broker.py` — `_pending` shape changed from
+  `dict[str, Future]` to `dict[str, tuple[str, Future]]` so the tool
+  name travels with the Future. New `resolve_for_mode(new_mode)`
+  applies the matrix: `bypassPermissions` → allow all parked,
+  `acceptEdits` → allow parked edits only (`Edit`, `Write`,
+  `MultiEdit`, `NotebookEdit` — `EDIT_TOOLS` frozenset matches the
+  SDK), `plan` / `default` → leave parked. Fans
+  `ApprovalResolved(decision=allow)` per cleared id so mirroring
+  tabs drop their modals. Snapshots the target id list before
+  mutating because `can_use_tool`'s finally-clause pops entries the
+  moment the Future resolves.
+- [x] `runner.py` — `set_permission_mode` is now async and also
+  calls `self._approval.resolve_for_mode(mode)`. Forwarding to the
+  SDK alone isn't enough: the SDK only consults the new mode on the
+  *next* `can_use_tool` call, so without this the user would still
+  be stuck clicking through the modal that just became moot.
+- [x] `ws_agent.py` — the `set_permission_mode` WS handler now
+  `await`s `runner.set_permission_mode` so any `approval_resolved`
+  fan-out lands on the wire before the handler returns to the read
+  loop.
+- [x] 3 new pytest cases in `tests/test_approval.py`:
+  `bypassPermissions` clears every parked approval (edit + non-edit);
+  `acceptEdits` clears only the edit-class ones and leaves Bash
+  parked; `default` / `plan` leave everything parked (regression
+  guard against a naive "always resolve" implementation).
+- [x] All three existing `_pending` consumers (`resolve`,
+  `deny_all` / `_deny_sync`) unpack the new tuple shape. Existing 5
+  approval tests still pass; total 8 approval tests, 235 backend +
+  94 frontend, mypy + ruff + svelte-check green.
+
+Dave's directive: "there are no preexisint edge cases... You wrote
+the entire app if there is a problem you made it. fix it." Done.
+
 ## v0.3.11 — shipped
 
 Permission-mode UI correction. Retires the `/plan` slash-command
@@ -529,11 +571,8 @@ way to waive further prompts and keep working.
   svelte-check green.
 
 Deliberate scope cuts:
-- The badge-vs-modal race noted in v0.3.10 follow-ups still exists —
-  switching modes via the selector while an approval is pending does
-  not auto-resolve the modal. Same semantics as before; not
-  introduced here and not worth more wiring until the specific case
-  bites.
+- The badge-vs-modal race noted in v0.3.10 follow-ups: addressed in
+  v0.3.12 (see above entry).
 
 ## v0.3.10 — shipped
 

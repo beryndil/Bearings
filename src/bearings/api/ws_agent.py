@@ -176,7 +176,12 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
                 await runner.request_stop()
             elif msg_type == "set_permission_mode":
                 mode = payload.get("mode")
-                runner.set_permission_mode(mode or None)
+                # Async now because the runner also retro-applies the
+                # new mode to any parked approval (see the broker's
+                # `resolve_for_mode` matrix). Await so an
+                # `approval_resolved` fan-out gets on the wire before we
+                # consider ourselves ready for the next frame.
+                await runner.set_permission_mode(mode or None)
             elif msg_type == "approval_response":
                 # Resolves a pending `can_use_tool` future. Unknown /
                 # already-resolved ids are no-ops inside the runner, so
