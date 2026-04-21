@@ -455,6 +455,89 @@ async def test_registry_running_ids_reflects_live_turns(
 
 
 @pytest.mark.asyncio
+async def test_two_runners_execute_concurrently_without_crosstalk(
+    db: aiosqlite.Connection,
+) -> None:
+    """Two sessions, two runners, two turns in flight at once. Events
+    must land in the right subscriber queue and persist to the right
+    session row. This is the multi-session concurrency guarantee the
+    whole walk-away feature rests on — a regression where runners
+    shared fan-out state (or where one's worker blocked another's)
+    would manifest here, not in single-runner tests.
+
+    Gate on A, release it AFTER B completes, to prove A's parked turn
+    does not prevent B from making progress."""
+    sid_a = await _session_id(db)
+    row_b = await store.create_session(db, working_dir="/tmp", model="m", title="B")
+    sid_b = row_b["id"]
+
+    gate_a = asyncio.Event()
+    agent_a = ScriptedAgent(
+        sid_a,
+        scripts=[_message_script(sid_a, "msg-A", "alpha")],
+        gate=gate_a,
+    )
+    agent_b = ScriptedAgent(
+        sid_b,
+        scripts=[_message_script(sid_b, "msg-B", "beta")],
+    )
+    runner_a = SessionRunner(sid_a, agent_a, db)
+    runner_b = SessionRunner(sid_b, agent_b, db)
+    qa, _ = await runner_a.subscribe(0)
+    qb, _ = await runner_b.subscribe(0)
+    runner_a.start()
+    runner_b.start()
+    try:
+        await runner_a.submit_prompt("P_A")
+        await _wait_until(lambda: runner_a.is_running)
+        # A is parked on its gate. Kick B; B must complete while A
+        # stays parked. If runners shared a worker or lock, B would
+        # hang here waiting for A.
+        await runner_b.submit_prompt("P_B")
+
+        seen_b: list[str] = []
+        while "message_complete" not in seen_b:
+            env = await asyncio.wait_for(qb.get(), timeout=2.0)
+            # Every envelope B sees must carry B's session id.
+            assert env.payload["session_id"] == sid_b
+            seen_b.append(env.payload["type"])
+
+        # A is still running (gated). Drain what's already in A's
+        # queue — it must include MessageStart but not MessageComplete,
+        # and every frame must be tagged for A only.
+        assert runner_a.is_running
+        drained_a: list[dict[str, Any]] = []
+        while True:
+            try:
+                env = await asyncio.wait_for(qa.get(), timeout=0.05)
+            except TimeoutError:
+                break
+            assert env.payload["session_id"] == sid_a
+            drained_a.append(env.payload)
+        types_a = {p["type"] for p in drained_a}
+        assert "message_start" in types_a
+        assert "message_complete" not in types_a
+
+        # Release A; it should now finish.
+        gate_a.set()
+        while "message_complete" not in types_a:
+            env = await asyncio.wait_for(qa.get(), timeout=2.0)
+            assert env.payload["session_id"] == sid_a
+            types_a.add(env.payload["type"])
+
+        # Persistence is partitioned by session id — no leakage.
+        msgs_a = {m["content"] for m in await store.list_messages(db, sid_a)}
+        msgs_b = {m["content"] for m in await store.list_messages(db, sid_b)}
+        assert {"P_A", "alpha"} <= msgs_a
+        assert {"P_B", "beta"} <= msgs_b
+        assert msgs_a.isdisjoint({"P_B", "beta"})
+        assert msgs_b.isdisjoint({"P_A", "alpha"})
+    finally:
+        await runner_a.shutdown()
+        await runner_b.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_registry_shutdown_all_drains_every_runner(
     db: aiosqlite.Connection,
 ) -> None:
