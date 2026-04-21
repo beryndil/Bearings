@@ -308,3 +308,51 @@ def test_get_tool_calls_returns_persisted_rows(
     assert call["error"] is None
     assert call["started_at"]
     assert call["finished_at"]
+
+
+def test_running_endpoint_empty_when_no_runners(client: TestClient) -> None:
+    """/api/sessions/running returns [] when no session has a runner
+    mid-turn. This is the idle-state the sidebar poll sees on fresh
+    boot — it must not claim any session is busy."""
+    # Create a session but never open a WS — no runner is spawned.
+    _create(client, title="idle")
+    resp = client.get("/api/sessions/running")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_running_endpoint_reports_session_with_live_turn(
+    client: TestClient, mock_agent_long_stream: None
+) -> None:
+    """While a turn is in flight, the session id appears in the
+    running list. This is what powers the sidebar's "still working"
+    badge — regression here means Daisy walks away from a prompt and
+    the UI gives no signal that it's still streaming."""
+    import json
+
+    existing = client.get("/api/tags").json()
+    tag_id = (
+        existing[0]["id"]
+        if existing
+        else client.post("/api/tags", json={"name": "default"}).json()["id"]
+    )
+    sid = client.post(
+        "/api/sessions",
+        json={"working_dir": "/tmp", "model": "m", "tag_ids": [tag_id]},
+    ).json()["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{sid}") as ws:
+        # Drain initial runner_status frame.
+        assert json.loads(ws.receive_text())["type"] == "runner_status"
+        ws.send_json({"type": "prompt", "content": "work"})
+        # Wait until at least one streamed event arrives so the runner
+        # is visibly mid-turn by the time we poll the endpoint.
+        assert json.loads(ws.receive_text())["type"] == "message_start"
+        assert json.loads(ws.receive_text())["type"] == "token"
+
+        running = client.get("/api/sessions/running").json()
+        assert sid in running
+
+        # Stop cleanly so the test shuts down the turn instead of
+        # leaving the long-stream mock hanging.
+        ws.send_json({"type": "stop"})

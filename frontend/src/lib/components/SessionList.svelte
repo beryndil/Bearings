@@ -306,8 +306,31 @@
                 placeholder="Session title"
               />
             {:else}
-              <div class="text-sm truncate" title="Double-click to rename">
-                {session.title ?? session.model}
+              <div class="flex items-center gap-1.5 text-sm" title="Double-click to rename">
+                {#if isRunning(session.id)}
+                  <!-- Live-run indicator: a solid emerald dot with an
+                       outer ping ring. Rendered for every session
+                       whose server-side runner has a turn in flight,
+                       not just the active one, so Daisy can walk away
+                       from a prompt and still see at a glance which
+                       sessions are still working. -->
+                  <span
+                    class="relative inline-flex h-2 w-2 shrink-0"
+                    aria-label="Agent is working"
+                    title="Agent is working — you can switch away and come back"
+                  >
+                    <span
+                      class="absolute inline-flex h-full w-full rounded-full
+                        bg-emerald-400 opacity-60 animate-ping"
+                    ></span>
+                    <span
+                      class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"
+                    ></span>
+                  </span>
+                {/if}
+                <span class="min-w-0 truncate">
+                  {session.title ?? session.model}
+                </span>
               </div>
             {/if}
             <div class="text-[10px] text-slate-500 font-mono truncate">
