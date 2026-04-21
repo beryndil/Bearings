@@ -519,32 +519,75 @@ async def test_stream_event_emits_text_deltas(monkeypatch: pytest.MonkeyPatch) -
 async def test_stream_event_emits_thinking_deltas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """When both thinking and text stream via deltas, the matching blocks
+    in the trailing AssistantMessage are skipped. Only same-kind skipping
+    is allowed: a thinking_delta must not suppress a TextBlock (and vice
+    versa)."""
     _patch_client(
         monkeypatch,
         [
             _thinking_delta("pondering "),
             _thinking_delta("the prompt"),
+            _text_delta("the "),
+            _text_delta("answer"),
             _assistant(
                 ThinkingBlock(thinking="pondering the prompt", signature="sig"),
-                TextBlock("answer"),
+                TextBlock("the answer"),
             ),
             _result(),
         ],
     )
     session = AgentSession("s", working_dir="/tmp", model="m")
     events = [ev async for ev in session.stream("hi")]
-    thinking = [e for e in events if isinstance(e, Thinking)]
-    assert [t.text for t in thinking] == ["pondering ", "the prompt"]
-    # TextBlock("answer") came via AssistantMessage; no delta preceded it
-    # but streamed_this_msg was set by the thinking deltas, so the text
-    # block is treated as already-streamed. This is the documented
-    # trade-off — partial-stream mode assumes text comes via deltas.
     assert [type(e).__name__ for e in events] == [
         "MessageStart",
         "Thinking",
         "Thinking",
+        "Token",
+        "Token",
         "MessageComplete",
     ]
+    thinking = [e for e in events if isinstance(e, Thinking)]
+    assert [t.text for t in thinking] == ["pondering ", "the prompt"]
+    tokens = [e for e in events if isinstance(e, Token)]
+    assert [t.text for t in tokens] == ["the ", "answer"]
+
+
+@pytest.mark.asyncio
+async def test_thinking_block_surfaces_when_only_text_streams(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: Opus 4.7 in adaptive-thinking mode emits text_delta
+    events during streaming but NOT thinking_delta events — the thinking
+    content only arrives as a ThinkingBlock in the final AssistantMessage.
+    The per-block-type guard in stream() must suppress the TextBlock
+    (already streamed) while still emitting the Thinking event for the
+    ThinkingBlock (never streamed)."""
+    _patch_client(
+        monkeypatch,
+        [
+            _text_delta("the "),
+            _text_delta("answer"),
+            _assistant(
+                ThinkingBlock(thinking="reasoning that never streamed", signature="sig"),
+                TextBlock("the answer"),
+            ),
+            _result(),
+        ],
+    )
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("hi")]
+    # Thinking comes from the final AssistantMessage; Tokens from deltas;
+    # the TextBlock in the AssistantMessage is suppressed as a duplicate.
+    assert [type(e).__name__ for e in events] == [
+        "MessageStart",
+        "Token",
+        "Token",
+        "Thinking",
+        "MessageComplete",
+    ]
+    thinking = [e for e in events if isinstance(e, Thinking)]
+    assert [t.text for t in thinking] == ["reasoning that never streamed"]
 
 
 @pytest.mark.asyncio

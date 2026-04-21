@@ -125,29 +125,38 @@ class AgentSession:
                 try:
                     await client.query(prompt)
                     yield MessageStart(session_id=self.session_id, message_id=message_id)
-                    # True once we've seen at least one StreamEvent delta
-                    # for the current assistant message. If so, the
-                    # matching TextBlock/ThinkingBlock in the eventual
-                    # AssistantMessage is a duplicate and we skip it.
-                    streamed_this_msg = False
+                    # Track per-block-type streaming. Opus 4.7 in adaptive
+                    # mode emits text_delta but NOT thinking_delta — the
+                    # thinking content only arrives in the final
+                    # AssistantMessage's ThinkingBlock. A single
+                    # streamed_this_msg flag would drop that thinking
+                    # block as a "duplicate" because text_delta fired.
+                    # Track each block type independently so we only
+                    # suppress the kind we actually saw streamed.
+                    streamed_text = False
+                    streamed_thinking = False
                     async for msg in client.receive_response():
                         if isinstance(msg, StreamEvent):
                             event = self._translate_stream_event(msg.event)
                             if event is not None:
-                                streamed_this_msg = True
+                                if isinstance(event, Token):
+                                    streamed_text = True
+                                elif isinstance(event, Thinking):
+                                    streamed_thinking = True
                                 yield event
                         elif isinstance(msg, AssistantMessage):
                             if msg.session_id:
                                 self.sdk_session_id = msg.session_id
                             for block in msg.content:
-                                if streamed_this_msg and isinstance(
-                                    block, TextBlock | ThinkingBlock
-                                ):
+                                if streamed_text and isinstance(block, TextBlock):
+                                    continue
+                                if streamed_thinking and isinstance(block, ThinkingBlock):
                                     continue
                                 event = self._translate_block(block)
                                 if event is not None:
                                     yield event
-                            streamed_this_msg = False
+                            streamed_text = False
+                            streamed_thinking = False
                         elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
                             for block in msg.content:
                                 if isinstance(block, ToolResultBlock):
