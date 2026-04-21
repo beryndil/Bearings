@@ -3,6 +3,7 @@
   import type { LiveToolCall } from '$lib/stores/conversation.svelte';
   import { renderMarkdown } from '$lib/render';
   import { highlight } from '$lib/actions/highlight';
+  import { stickToBottom } from '$lib/actions/autoscroll';
 
   type Props = {
     user: Message | null;
@@ -75,36 +76,39 @@
     <ul class="flex flex-col gap-1.5 mt-2">
       {#each toolCalls as call (call.id)}
         {@const badge = statusBadge(call.ok)}
-        <li class="rounded border border-slate-800 bg-slate-950/40 p-1.5 text-xs">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-mono font-medium truncate">{call.name}</span>
-            <span class="{badge.classes} px-1.5 py-0.5 rounded text-[10px] uppercase">
-              {badge.label}
-            </span>
-          </div>
-          <details class="mt-1">
-            <summary class="cursor-pointer text-slate-400 text-[10px]">input</summary>
-            <pre
-              class="mt-1 text-[10px] text-slate-300 whitespace-pre-wrap break-all">{JSON.stringify(
-                call.input,
-                null,
-                2
-              )}</pre>
-          </details>
-          {#if call.output !== null}
-            <details class="mt-0.5">
-              <summary class="cursor-pointer text-slate-400 text-[10px]">output</summary>
+        {@const streamLen =
+          (call.output?.length ?? 0) + (call.error?.length ?? 0)}
+        <li
+          class="tool-card rounded border border-slate-800 bg-slate-950/40
+            text-xs overflow-hidden"
+        >
+          <details>
+            <summary
+              class="cursor-pointer p-1.5 flex items-center justify-between
+                gap-2 hover:bg-slate-900/40"
+            >
+              <span class="font-mono font-medium truncate">{call.name}</span>
+              <span
+                class="{badge.classes} px-1.5 py-0.5 rounded text-[10px] uppercase"
+              >
+                {badge.label}
+              </span>
+            </summary>
+            <div
+              use:stickToBottom={streamLen}
+              class="max-h-64 overflow-y-auto bg-black/70 border-t border-slate-800
+                p-2 font-mono text-[10px] leading-relaxed"
+            >
               <pre
-                class="mt-1 text-[10px] text-slate-300 whitespace-pre-wrap break-all">{call.output}</pre>
-            </details>
-          {/if}
-          {#if call.error}
-            <div class="mt-0.5 rounded bg-rose-950/40 p-1">
-              <div class="text-[10px] uppercase text-rose-400">error</div>
-              <pre
-                class="text-[10px] text-rose-200 whitespace-pre-wrap break-all">{call.error}</pre>
+                class="whitespace-pre-wrap break-all text-slate-300"><span
+                  class="text-emerald-400">$ {call.name}</span>
+{JSON.stringify(call.input, null, 2)}{#if call.output !== null}
+
+{call.output}{/if}{#if call.error}
+
+<span class="text-rose-400">error: {call.error}</span>{/if}</pre>
             </div>
-          {/if}
+          </details>
         </li>
       {/each}
     </ul>
@@ -145,3 +149,15 @@
     {/if}
   </article>
 {/if}
+
+<style>
+  /* Keep the tool-call card header looking like the old always-visible
+   * row — no default disclosure triangle. The whole summary is the
+   * click target; hover tint makes expandability discoverable. */
+  .tool-card > details > summary {
+    list-style: none;
+  }
+  .tool-card > details > summary::-webkit-details-marker {
+    display: none;
+  }
+</style>
