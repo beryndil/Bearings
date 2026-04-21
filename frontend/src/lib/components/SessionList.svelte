@@ -196,7 +196,7 @@
 <Settings bind:open={showSettings} />
 
 <aside
-  class="relative bg-slate-900 p-4 overflow-y-auto border-r border-slate-800
+  class="relative h-full bg-slate-900 p-4 overflow-y-auto border-r border-slate-800
     flex flex-col gap-3 {dragging ? 'ring-2 ring-emerald-500/60 ring-inset' : ''}"
   ondragenter={onDragEnter}
   ondragover={onDragOver}
