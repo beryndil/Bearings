@@ -47,3 +47,25 @@ def test_agent_thinking_accepts_none() -> None:
     in `_thinking_config` needs a passing-case to keep working."""
     cfg = Settings(agent={"thinking": None})  # type: ignore[arg-type]
     assert cfg.agent.thinking is None
+
+
+def test_billing_defaults_to_payg() -> None:
+    """The default billing mode is `payg` so developer-API users who
+    were already running Bearings see the exact same dollar display
+    after the subscription-mode knob lands. A regression here means
+    their session cards suddenly hide cost figures."""
+    cfg = Settings()
+    assert cfg.billing.mode == "payg"
+    assert cfg.billing.plan is None
+
+
+def test_billing_accepts_subscription_mode(tmp_path: Path) -> None:
+    """Max/Pro subscribers flip `billing.mode = "subscription"` in
+    config.toml to swap the dollar meter for token totals. The
+    frontend keys off this exact string, so it must round-trip
+    through pydantic intact."""
+    path = tmp_path / "config.toml"
+    path.write_text('[billing]\nmode = "subscription"\nplan = "max_20x"\n')
+    cfg = load_settings(path)
+    assert cfg.billing.mode == "subscription"
+    assert cfg.billing.plan == "max_20x"

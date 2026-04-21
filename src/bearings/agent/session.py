@@ -41,6 +41,45 @@ def _stringify(content: str | list[dict[str, object]] | None) -> str | None:
     return json.dumps(content)
 
 
+def _extract_tokens(usage: dict[str, Any] | None) -> dict[str, int | None]:
+    """Pull the four token fields out of `ResultMessage.usage`.
+
+    The SDK forwards Anthropic's `usage` block verbatim, so the key
+    shape is `input_tokens`, `output_tokens`,
+    `cache_creation_input_tokens`, `cache_read_input_tokens` (note the
+    `_input_tokens` suffix on the cache fields). We normalize to the
+    shorter column names used in the `messages` table.
+
+    Missing keys stay None so the DB column stays NULL — useful for
+    future SDK versions that might reshape the payload without us
+    noticing. All four are `None` when `usage` itself is None
+    (synthetic completions from stop/cancel paths).
+    """
+    if not usage:
+        return {
+            "input_tokens": None,
+            "output_tokens": None,
+            "cache_read_tokens": None,
+            "cache_creation_tokens": None,
+        }
+
+    def _int_or_none(value: object) -> int | None:
+        if isinstance(value, bool):
+            # bool is a subclass of int; reject it explicitly so a
+            # stray True doesn't silently become 1.
+            return None
+        if isinstance(value, int):
+            return value
+        return None
+
+    return {
+        "input_tokens": _int_or_none(usage.get("input_tokens")),
+        "output_tokens": _int_or_none(usage.get("output_tokens")),
+        "cache_read_tokens": _int_or_none(usage.get("cache_read_input_tokens")),
+        "cache_creation_tokens": _int_or_none(usage.get("cache_creation_input_tokens")),
+    }
+
+
 class AgentSession:
     """Wraps a single Claude Code agent session via claude-agent-sdk.
 
@@ -129,6 +168,7 @@ class AgentSession:
         options = ClaudeAgentOptions(**options_kwargs)
         message_id = uuid4().hex
         cost_usd: float | None = None
+        usage: dict[str, Any] | None = None
         try:
             async with ClaudeSDKClient(options=options) as client:
                 self._client = client
@@ -173,13 +213,19 @@ class AgentSession:
                                     yield self._tool_call_end(block)
                         elif isinstance(msg, ResultMessage):
                             cost_usd = msg.total_cost_usd
+                            usage = msg.usage
                             break
                 finally:
                     self._client = None
+            tokens = _extract_tokens(usage)
             yield MessageComplete(
                 session_id=self.session_id,
                 message_id=message_id,
                 cost_usd=cost_usd,
+                input_tokens=tokens["input_tokens"],
+                output_tokens=tokens["output_tokens"],
+                cache_read_tokens=tokens["cache_read_tokens"],
+                cache_creation_tokens=tokens["cache_creation_tokens"],
             )
         except Exception as exc:  # noqa: BLE001 — surface as a wire event
             yield ErrorEvent(session_id=self.session_id, message=str(exc))

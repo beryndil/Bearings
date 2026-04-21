@@ -27,7 +27,11 @@ from bearings.agent.events import (
 from bearings.agent.session import AgentSession
 
 
-def _result(session_id: str = "sdk-sess", total_cost_usd: float | None = None) -> ResultMessage:
+def _result(
+    session_id: str = "sdk-sess",
+    total_cost_usd: float | None = None,
+    usage: dict[str, Any] | None = None,
+) -> ResultMessage:
     return ResultMessage(
         subtype="success",
         duration_ms=1,
@@ -36,6 +40,7 @@ def _result(session_id: str = "sdk-sess", total_cost_usd: float | None = None) -
         num_turns=1,
         session_id=session_id,
         total_cost_usd=total_cost_usd,
+        usage=usage,
     )
 
 
@@ -380,6 +385,100 @@ async def test_stream_message_complete_cost_none_when_sdk_omits(
     complete = events[-1]
     assert isinstance(complete, MessageComplete)
     assert complete.cost_usd is None
+
+
+@pytest.mark.asyncio
+async def test_stream_message_complete_carries_usage_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`ResultMessage.usage` maps into the four token fields on
+    `MessageComplete` under the shorter column names used in the DB.
+    Cache fields in particular lose the `_input` suffix — a regression
+    here means per-turn cache usage silently stops being persisted."""
+    usage = {
+        "input_tokens": 12,
+        "output_tokens": 34,
+        "cache_read_input_tokens": 56,
+        "cache_creation_input_tokens": 78,
+    }
+    _patch_client(
+        monkeypatch,
+        [_assistant(TextBlock("hi")), _result(total_cost_usd=0.01, usage=usage)],
+    )
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("x")]
+    complete = events[-1]
+    assert isinstance(complete, MessageComplete)
+    assert complete.input_tokens == 12
+    assert complete.output_tokens == 34
+    assert complete.cache_read_tokens == 56
+    assert complete.cache_creation_tokens == 78
+
+
+@pytest.mark.asyncio
+async def test_stream_message_complete_usage_none_leaves_tokens_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No usage on the ResultMessage → every token field stays None so
+    the DB row carries NULL rather than a silently-fabricated zero."""
+    _patch_client(monkeypatch, [_assistant(TextBlock("hi")), _result()])
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("x")]
+    complete = events[-1]
+    assert isinstance(complete, MessageComplete)
+    assert complete.input_tokens is None
+    assert complete.output_tokens is None
+    assert complete.cache_read_tokens is None
+    assert complete.cache_creation_tokens is None
+
+
+def test_extract_tokens_returns_none_for_missing_keys() -> None:
+    """Unknown/missing keys stay None so a future SDK reshape can't
+    silently land bad zeros in the DB."""
+    from bearings.agent.session import _extract_tokens
+
+    got = _extract_tokens({"input_tokens": 5})
+    assert got == {
+        "input_tokens": 5,
+        "output_tokens": None,
+        "cache_read_tokens": None,
+        "cache_creation_tokens": None,
+    }
+
+
+def test_extract_tokens_rejects_bool_values() -> None:
+    """`bool` is a subclass of `int`, so a stray True from an upstream
+    bug would round-trip as 1 without an explicit guard. Regression
+    here means corrupted token counts on certain SDK bugs."""
+    from bearings.agent.session import _extract_tokens
+
+    got = _extract_tokens(
+        {
+            "input_tokens": True,
+            "output_tokens": False,
+            "cache_read_input_tokens": 7,
+            "cache_creation_input_tokens": 8,
+        }
+    )
+    assert got["input_tokens"] is None
+    assert got["output_tokens"] is None
+    assert got["cache_read_tokens"] == 7
+    assert got["cache_creation_tokens"] == 8
+
+
+def test_extract_tokens_none_usage_returns_all_none() -> None:
+    """`None` usage (synthetic completions from stop/cancel) yields
+    all-None so the DB row keeps NULLs and the frontend can tell
+    "no data" from "zero use"."""
+    from bearings.agent.session import _extract_tokens
+
+    got = _extract_tokens(None)
+    assert got == {
+        "input_tokens": None,
+        "output_tokens": None,
+        "cache_read_tokens": None,
+        "cache_creation_tokens": None,
+    }
 
 
 @pytest.mark.asyncio

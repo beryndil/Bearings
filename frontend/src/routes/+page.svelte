@@ -8,6 +8,7 @@
   import SessionList from '$lib/components/SessionList.svelte';
   import { agent } from '$lib/agent.svelte';
   import { auth } from '$lib/stores/auth.svelte';
+  import { billing } from '$lib/stores/billing.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
 
@@ -17,7 +18,12 @@
   async function boot() {
     if (booted) return;
     booted = true;
-    await Promise.all([sessions.refresh(), tags.refresh()]);
+    // billing.init fetches /ui-config so the header and session cards
+    // know whether to render dollars (PAYG) or token totals
+    // (subscription). Run alongside the other boot fetches — a
+    // failure here leaves the PAYG default in place, it does not
+    // block boot.
+    await Promise.all([billing.init(), sessions.refresh(), tags.refresh()]);
     // Start the background runner poll so session rows flag which
     // sessions are still working even when you're on a different one.
     sessions.startRunningPoll();

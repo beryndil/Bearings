@@ -11,6 +11,7 @@ from bearings import __version__
 from bearings.agent.registry import RunnerRegistry
 from bearings.api import (
     routes_commands,
+    routes_config,
     routes_fs,
     routes_health,
     routes_history,
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = cfg
 
     app.include_router(routes_health.router, prefix="/api")
+    app.include_router(routes_config.router, prefix="/api")
     app.include_router(routes_sessions.router, prefix="/api")
     app.include_router(routes_tags.router, prefix="/api")
     app.include_router(routes_history.router, prefix="/api")

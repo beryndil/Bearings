@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS messages (
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     thinking TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- Populated on assistant turns from ResultMessage.usage. Nullable
+    -- because user rows never carry usage and historical assistant
+    -- rows predate 0011. See db/migrations/0011_message_token_usage.sql.
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    cache_read_tokens INTEGER,
+    cache_creation_tokens INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);

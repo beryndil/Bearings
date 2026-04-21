@@ -16,6 +16,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # it). We default to "adaptive" so sessions show reasoning in the UI.
 ThinkingMode = Literal["adaptive", "disabled"]
 
+# Billing mode toggles what the UI shows as the "spend" metric.
+#   - "payg": dollars from ResultMessage.total_cost_usd (the SDK's
+#     pay-as-you-go equivalent cost). Matches the developer-API bill
+#     exactly.
+#   - "subscription": token totals from ResultMessage.usage. Dollars
+#     are misleading on a Max/Pro subscription because billing is
+#     flat; tokens correlate with the quota that actually depletes.
+# Anthropic does not expose Max-plan quota percentages via any public
+# API, so "subscription" mode shows raw tokens rather than a fake
+# percentage meter.
+BillingMode = Literal["payg", "subscription"]
+
 
 def _xdg(var: str, default: Path) -> Path:
     raw = os.environ.get(var)
@@ -56,6 +68,18 @@ class MetricsCfg(BaseModel):
     enabled: bool = False
 
 
+class BillingCfg(BaseModel):
+    # Defaults to "payg" so nothing changes for developer-API users who
+    # were using Bearings before this knob existed. Max/Pro subscribers
+    # set this to "subscription" in config.toml to swap the session-card
+    # dollar figure for token totals.
+    mode: BillingMode = "payg"
+    # Informational only — e.g. "max_20x", "pro", "max_5x". Currently
+    # unused by the rendering code; reserved for a future plan-aware
+    # token meter should Anthropic ship quota endpoints.
+    plan: str | None = None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BEARINGS_", extra="ignore")
 
@@ -64,6 +88,7 @@ class Settings(BaseSettings):
     agent: AgentCfg = Field(default_factory=AgentCfg)
     storage: StorageCfg = Field(default_factory=StorageCfg)
     metrics: MetricsCfg = Field(default_factory=MetricsCfg)
+    billing: BillingCfg = Field(default_factory=BillingCfg)
 
     config_file: Path = Field(default_factory=lambda: CONFIG_HOME / "config.toml")
 

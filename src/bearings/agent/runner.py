@@ -311,6 +311,10 @@ class SessionRunner:
                     thinking="".join(thinking_buf) or None,
                     tool_call_ids=tool_call_ids,
                     cost_usd=event.cost_usd,
+                    input_tokens=event.input_tokens,
+                    output_tokens=event.output_tokens,
+                    cache_read_tokens=event.cache_read_tokens,
+                    cache_creation_tokens=event.cache_creation_tokens,
                 )
                 if self.agent.sdk_session_id is not None:
                     await store.set_sdk_session_id(
@@ -374,6 +378,10 @@ async def _persist_assistant_turn(
     thinking: str | None,
     tool_call_ids: list[str],
     cost_usd: float | None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    cache_read_tokens: int | None = None,
+    cache_creation_tokens: int | None = None,
 ) -> None:
     await store.insert_message(
         conn,
@@ -382,6 +390,10 @@ async def _persist_assistant_turn(
         role="assistant",
         content=content,
         thinking=thinking,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_creation_tokens=cache_creation_tokens,
     )
     metrics.messages_persisted.labels(role="assistant").inc()
     await store.attach_tool_calls_to_message(

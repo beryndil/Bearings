@@ -3,6 +3,19 @@ export type HealthResponse = {
   version: string;
 };
 
+export type BillingMode = 'payg' | 'subscription';
+
+/** Shape of `/api/ui-config`. Served once at boot so the frontend can
+ * pick a cost-vs-tokens display strategy without ever reading the raw
+ * config file. Pay-as-you-go users see dollar amounts (the SDK's
+ * `total_cost_usd` matches their developer-API bill); Max/Pro
+ * subscribers see token totals because flat-rate billing makes dollar
+ * figures meaningless for their plan. */
+export type UiConfig = {
+  billing_mode: BillingMode;
+  billing_plan: string | null;
+};
+
 export type TokenEvent = { type: 'token'; session_id: string; text: string };
 export type ThinkingEvent = { type: 'thinking'; session_id: string; text: string };
 export type UserMessageEvent = { type: 'user_message'; session_id: string; content: string };
@@ -43,6 +56,14 @@ export type MessageCompleteEvent = {
   session_id: string;
   message_id: string;
   cost_usd: number | null;
+  /** Per-turn token counts mirrored from `ResultMessage.usage`. Null
+   * on synthetic completions emitted by a stop/cancel before the SDK
+   * reported usage, so the frontend distinguishes "no data" (leave
+   * the meter as-is) from "zero use" (bump by 0). */
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_creation_tokens?: number | null;
 };
 export type ErrorEvent = { type: 'error'; session_id: string; message: string };
 
@@ -170,6 +191,10 @@ export async function voidFetch(
 
 export function fetchHealth(fetchImpl: typeof fetch = fetch): Promise<HealthResponse> {
   return jsonFetch<HealthResponse>(fetchImpl, '/api/health');
+}
+
+export function fetchUiConfig(fetchImpl: typeof fetch = fetch): Promise<UiConfig> {
+  return jsonFetch<UiConfig>(fetchImpl, '/api/ui-config');
 }
 
 export function openAgentSocket(sessionId: string, sinceSeq = 0): WebSocket {

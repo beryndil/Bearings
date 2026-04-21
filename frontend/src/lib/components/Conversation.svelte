@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { billing } from '$lib/stores/billing.svelte';
   import { conversation } from '$lib/stores/conversation.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
@@ -8,6 +9,7 @@
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
+  import TokenMeter from '$lib/components/TokenMeter.svelte';
   import { buildTurns } from '$lib/turns';
   import {
     connectionLabel,
@@ -112,6 +114,54 @@
       return;
     }
     api.listSessionTags(sid).then((r) => (sessionTags = r), () => {});
+  });
+
+  // Subscription-mode token totals for the header. Only fetched when
+  // billing mode is `subscription` — PAYG users never hit the endpoint
+  // and the meter is not rendered. Refreshed on session change and
+  // whenever a streaming turn completes (streamingActive true → false),
+  // which is the same cadence at which `total_cost_usd` would move.
+  let tokenTotals = $state<api.TokenTotals | null>(null);
+  let prevStreaming = false;
+
+  $effect(() => {
+    const sid = sessions.selected?.id ?? null;
+    if (!sid || !billing.showTokens) {
+      tokenTotals = null;
+      return;
+    }
+    // Fetch once on session change. The completion effect below
+    // handles subsequent refreshes.
+    api.getSessionTokens(sid).then(
+      (r) => {
+        if (sessions.selected?.id === sid) tokenTotals = r;
+      },
+      () => {
+        // Non-fatal — leave the prior totals (or null placeholder) in
+        // place. /tokens failing does not warrant a visible error.
+      }
+    );
+  });
+
+  $effect(() => {
+    const active = conversation.streamingActive;
+    const sid = sessions.selected?.id ?? null;
+    if (!sid || !billing.showTokens) {
+      prevStreaming = active;
+      return;
+    }
+    // Trailing edge: a turn just finished. Refresh the aggregate so
+    // the meter reflects the new per-turn usage. Using an edge trigger
+    // (rather than a timer) keeps this cheap — one fetch per turn.
+    if (prevStreaming && !active) {
+      api.getSessionTokens(sid).then(
+        (r) => {
+          if (sessions.selected?.id === sid) tokenTotals = r;
+        },
+        () => {}
+      );
+    }
+    prevStreaming = active;
   });
 
   async function onExport() {
@@ -259,11 +309,20 @@
       <p class="text-xs font-mono truncate text-slate-500">
         {#if sessions.selected}
           {sessions.selected.model} · {sessions.selected.working_dir} ·
-          <span class={pressureClass(conversation.totalCost, sessions.selected.max_budget_usd)}>
-            spent ${conversation.totalCost.toFixed(4)}{sessions.selected.max_budget_usd != null
-              ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
-              : ''}
-          </span>
+          {#if billing.showTokens}
+            <!-- Subscription mode: flat-rate billing makes the dollar
+                 figure meaningless, so swap in the token aggregate
+                 from /sessions/{id}/tokens. No budget cap rendered
+                 because `max_budget_usd` is dollar-denominated; a
+                 future slice can add a token-denominated cap. -->
+            <TokenMeter totals={tokenTotals} />
+          {:else}
+            <span class={pressureClass(conversation.totalCost, sessions.selected.max_budget_usd)}>
+              spent ${conversation.totalCost.toFixed(4)}{sessions.selected.max_budget_usd != null
+                ? ` / $${sessions.selected.max_budget_usd.toFixed(2)}`
+                : ''}
+            </span>
+          {/if}
           {#if sessions.selected.message_count > 0}
             · {sessions.selected.message_count} msg{sessions.selected.message_count === 1
               ? ''

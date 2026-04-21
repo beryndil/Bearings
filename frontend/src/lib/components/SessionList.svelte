@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { billing } from '$lib/stores/billing.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
   import { agent } from '$lib/agent.svelte';
@@ -340,7 +341,12 @@
               <span class="text-slate-600">
                 {formatTimestamp(session.updated_at)}
               </span>
-              {#if session.total_cost_usd > 0}
+              {#if !billing.showTokens && session.total_cost_usd > 0}
+                <!-- Subscription mode suppresses this dollar figure
+                     entirely. Fetching per-card token totals would
+                     mean one round-trip per listed session on every
+                     sidebar render; the conversation header carries
+                     the real token meter for the active session. -->
                 <span class="font-mono {costClass(session)}">
                   ${session.total_cost_usd.toFixed(4)}
                 </span>

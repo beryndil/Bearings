@@ -38,6 +38,28 @@ export type Message = {
   content: string;
   thinking: string | null;
   created_at: string;
+  /** Per-turn token counts captured from `ResultMessage.usage` when the
+   * row was first persisted. Null on user rows and on assistant rows
+   * created before migration 0011 landed. The Conversation view uses
+   * the aggregate /tokens endpoint rather than summing these, so these
+   * are informational — exposed here so future UI can show per-turn
+   * breakdowns without another round-trip. */
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_tokens?: number | null;
+  cache_creation_tokens?: number | null;
+};
+
+/** Aggregate per-session token counts served by
+ * `GET /sessions/{id}/tokens`. Every field is a non-negative int —
+ * the server COALESCE-SUMs NULL rows to 0, so "session with zero
+ * assistant turns" and "session full of null rows" both return all
+ * zeros rather than null. */
+export type TokenTotals = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_creation_tokens: number;
 };
 
 export type ToolCall = {
@@ -152,4 +174,11 @@ export function listToolCalls(
   fetchImpl: typeof fetch = fetch
 ): Promise<ToolCall[]> {
   return jsonFetch<ToolCall[]>(fetchImpl, `/api/sessions/${sessionId}/tool_calls`);
+}
+
+export function getSessionTokens(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<TokenTotals> {
+  return jsonFetch<TokenTotals>(fetchImpl, `/api/sessions/${sessionId}/tokens`);
 }

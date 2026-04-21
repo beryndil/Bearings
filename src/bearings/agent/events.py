@@ -67,6 +67,14 @@ class MessageComplete(BaseModel):
     session_id: str
     message_id: str
     cost_usd: float | None = None
+    # Per-turn token counts from ResultMessage.usage. Populated on real
+    # completions (set of four non-negative ints); `None` on synthetic
+    # completions emitted by a stop/cancel before the SDK reported
+    # usage, so the reducer can distinguish "no data" from "zero use".
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
 
 
 class ErrorEvent(BaseModel):

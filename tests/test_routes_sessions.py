@@ -310,6 +310,54 @@ def test_get_tool_calls_returns_persisted_rows(
     assert call["finished_at"]
 
 
+def test_tokens_endpoint_missing_session_returns_404(client: TestClient) -> None:
+    """The /tokens endpoint is gated on session existence — a bogus id
+    must 404 rather than leaking a zero-valued row a non-existent
+    session would never accumulate."""
+    resp = client.get("/api/sessions/" + "0" * 32 + "/tokens")
+    assert resp.status_code == 404
+
+
+def test_tokens_endpoint_empty_session_returns_zeros(client: TestClient) -> None:
+    """A freshly-created session has no messages yet. The endpoint
+    must return all-zeros (not null, not 500) so the frontend can
+    render its placeholder without null-guarding every field."""
+    created = _create(client, title="empty")
+    body = client.get(f"/api/sessions/{created['id']}/tokens").json()
+    assert body == {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 0,
+    }
+
+
+def test_tokens_endpoint_sums_assistant_turns(
+    client: TestClient, mock_agent_cost_stream: None
+) -> None:
+    """After a real turn completes through the WS the aggregate
+    reflects whatever usage the mocked ResultMessage carried. The
+    cost-stream fixture doesn't populate usage, so the totals stay
+    at zero — that's the PAYG-no-usage case and it should not 500."""
+    created = _create(client, title="summed")
+    with client.websocket_connect(f"/ws/sessions/{created['id']}") as ws:
+        ws.send_json({"type": "prompt", "content": "go"})
+        # Drain a few frames so the turn persists before we poll.
+        for _ in range(4):
+            ws.receive_text()
+    body = client.get(f"/api/sessions/{created['id']}/tokens").json()
+    # All four keys are present and non-negative ints.
+    assert set(body.keys()) == {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+    }
+    for v in body.values():
+        assert isinstance(v, int)
+        assert v >= 0
+
+
 def test_running_endpoint_empty_when_no_runners(client: TestClient) -> None:
     """/api/sessions/running returns [] when no session has a runner
     mid-turn. This is the idle-state the sidebar poll sees on fresh

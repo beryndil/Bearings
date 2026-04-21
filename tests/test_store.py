@@ -11,6 +11,7 @@ from bearings.db.store import (
     delete_session,
     finish_tool_call,
     get_session,
+    get_session_token_totals,
     init_db,
     insert_message,
     insert_tool_call_start,
@@ -413,5 +414,152 @@ async def test_list_messages_no_limit_still_returns_all(tmp_path: Path) -> None:
             await asyncio.sleep(0.002)
         rows = await list_messages(conn, sess["id"])
         assert [r["content"] for r in rows] == ["m0", "m1", "m2"]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_insert_message_round_trips_token_counts(tmp_path: Path) -> None:
+    """Token counts supplied to insert_message come back out on both
+    the return dict and a subsequent list_messages read — so the DB
+    write, the SELECT column list, and the dict shape are all aligned."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        inserted = await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="assistant",
+            content="hi",
+            input_tokens=11,
+            output_tokens=22,
+            cache_read_tokens=33,
+            cache_creation_tokens=44,
+        )
+        assert inserted["input_tokens"] == 11
+        assert inserted["output_tokens"] == 22
+        assert inserted["cache_read_tokens"] == 33
+        assert inserted["cache_creation_tokens"] == 44
+
+        rows = await list_messages(conn, sess["id"])
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["input_tokens"] == 11
+        assert row["output_tokens"] == 22
+        assert row["cache_read_tokens"] == 33
+        assert row["cache_creation_tokens"] == 44
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_insert_message_defaults_token_counts_to_null(tmp_path: Path) -> None:
+    """Calls that don't pass token counts (user rows, pre-0011 assistant
+    rows replayed from imports) land with NULL columns rather than zero
+    — that's how the aggregate query can distinguish "no data" from
+    "zero use"."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        row = await insert_message(conn, session_id=sess["id"], role="user", content="hi")
+        assert row["input_tokens"] is None
+        assert row["output_tokens"] is None
+        assert row["cache_read_tokens"] is None
+        assert row["cache_creation_tokens"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_session_token_totals_sums_all_messages(tmp_path: Path) -> None:
+    """The aggregate query sums every row for the session and COALESCEs
+    NULLs to 0 so user rows don't turn the totals into NULL."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        # User row — all-NULL, must not poison the totals.
+        await insert_message(conn, session_id=sess["id"], role="user", content="go")
+        # Two assistant turns with different counts.
+        await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="assistant",
+            content="first",
+            input_tokens=10,
+            output_tokens=20,
+            cache_read_tokens=30,
+            cache_creation_tokens=40,
+        )
+        await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="assistant",
+            content="second",
+            input_tokens=1,
+            output_tokens=2,
+            cache_read_tokens=3,
+            cache_creation_tokens=4,
+        )
+        totals = await get_session_token_totals(conn, sess["id"])
+        assert totals == {
+            "input_tokens": 11,
+            "output_tokens": 22,
+            "cache_read_tokens": 33,
+            "cache_creation_tokens": 44,
+        }
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_session_token_totals_empty_session_is_zero(tmp_path: Path) -> None:
+    """A session with no messages at all returns all-zeros (COALESCE
+    over an empty SUM yields 0, not NULL) so the frontend never has to
+    handle null for this endpoint."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        totals = await get_session_token_totals(conn, sess["id"])
+        assert totals == {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_session_token_totals_scoped_per_session(tmp_path: Path) -> None:
+    """Two sessions in the same DB must not bleed into each other's
+    totals. Guards against a missing WHERE clause in the aggregate
+    query."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        a = await create_session(conn, working_dir="/x", model="m", title=None)
+        b = await create_session(conn, working_dir="/y", model="m", title=None)
+        await insert_message(
+            conn,
+            session_id=a["id"],
+            role="assistant",
+            content="a",
+            input_tokens=5,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        await insert_message(
+            conn,
+            session_id=b["id"],
+            role="assistant",
+            content="b",
+            input_tokens=99,
+            output_tokens=0,
+            cache_read_tokens=0,
+            cache_creation_tokens=0,
+        )
+        assert (await get_session_token_totals(conn, a["id"]))["input_tokens"] == 5
+        assert (await get_session_token_totals(conn, b["id"]))["input_tokens"] == 99
     finally:
         await conn.close()

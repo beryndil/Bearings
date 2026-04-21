@@ -15,6 +15,7 @@ from bearings.api.models import (
     SystemPromptLayerOut,
     SystemPromptOut,
     TagOut,
+    TokenTotalsOut,
     ToolCallOut,
 )
 from bearings.db import store
@@ -141,6 +142,19 @@ async def list_messages(
         raise HTTPException(status_code=404, detail="session not found")
     rows = await store.list_messages(conn, session_id, before=before, limit=limit)
     return [MessageOut(**r) for r in rows]
+
+
+@router.get("/{session_id}/tokens", response_model=TokenTotalsOut)
+async def get_session_tokens(session_id: str, request: Request) -> TokenTotalsOut:
+    """Aggregate token totals for a session — feeds the subscription-
+    mode session card and conversation header. Cheap (one COALESCE(SUM)
+    over an indexed session_id scan), so the frontend polls it on
+    message_complete rather than maintaining a running tally."""
+    conn = request.app.state.db
+    if await store.get_session(conn, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    totals = await store.get_session_token_totals(conn, session_id)
+    return TokenTotalsOut(**totals)
 
 
 @router.get("/{session_id}/tool_calls", response_model=list[ToolCallOut])

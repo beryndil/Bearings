@@ -21,13 +21,29 @@ async def insert_message(
     content: str,
     id: str | None = None,
     thinking: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    cache_read_tokens: int | None = None,
+    cache_creation_tokens: int | None = None,
 ) -> dict[str, Any]:
     message_id = id or _new_id()
     now = _now()
     await conn.execute(
-        "INSERT INTO messages (id, session_id, role, content, thinking, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        (message_id, session_id, role, content, thinking, now),
+        "INSERT INTO messages (id, session_id, role, content, thinking, created_at, "
+        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            message_id,
+            session_id,
+            role,
+            content,
+            thinking,
+            now,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        ),
     )
     # Bump the owning session's updated_at so active sessions sort to
     # the top of list_sessions. Uses a shared timestamp with the
@@ -44,6 +60,46 @@ async def insert_message(
         "content": content,
         "thinking": thinking,
         "created_at": now,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cache_read_tokens": cache_read_tokens,
+        "cache_creation_tokens": cache_creation_tokens,
+    }
+
+
+async def get_session_token_totals(
+    conn: aiosqlite.Connection,
+    session_id: str,
+) -> dict[str, int]:
+    """Aggregate per-turn token counts into session-level totals.
+
+    Returns the four columns summed over all messages for the session;
+    rows whose columns are NULL (pre-0011 assistant turns, user rows)
+    contribute 0 via COALESCE. Callers get a dict with every key set to
+    a non-negative int so the frontend never has to handle None.
+    """
+    async with conn.execute(
+        "SELECT "
+        "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
+        "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
+        "COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens, "
+        "COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens "
+        "FROM messages WHERE session_id = ?",
+        (session_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
+    return {
+        "input_tokens": int(row["input_tokens"]),
+        "output_tokens": int(row["output_tokens"]),
+        "cache_read_tokens": int(row["cache_read_tokens"]),
+        "cache_creation_tokens": int(row["cache_creation_tokens"]),
     }
 
 
@@ -61,7 +117,10 @@ async def list_messages(
     order (so routes / callers that want oldest-first rendering
     reverse the page). Pass `before` (ISO timestamp) to fetch the
     page immediately older than a known cursor."""
-    cols = "id, session_id, role, content, thinking, created_at"
+    cols = (
+        "id, session_id, role, content, thinking, created_at, "
+        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens"
+    )
     if limit is None:
         async with conn.execute(
             f"SELECT {cols} FROM messages WHERE session_id = ? ORDER BY created_at ASC, id ASC",
@@ -195,7 +254,8 @@ async def list_all_messages(
 ) -> list[dict[str, Any]]:
     where, params = _date_filter("created_at", date_from, date_to)
     sql = (
-        "SELECT id, session_id, role, content, thinking, created_at "
+        "SELECT id, session_id, role, content, thinking, created_at, "
+        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens "
         "FROM messages" + where + " ORDER BY created_at ASC, id ASC"
     )
     async with conn.execute(sql, params) as cursor:
@@ -226,7 +286,10 @@ async def search_messages(
     pattern = f"%{query}%"
     sql = (
         "SELECT m.id AS message_id, m.session_id, m.role, m.content, "
-        "m.thinking, m.created_at, s.title AS session_title, s.model "
+        "m.thinking, m.created_at, "
+        "m.input_tokens, m.output_tokens, "
+        "m.cache_read_tokens, m.cache_creation_tokens, "
+        "s.title AS session_title, s.model "
         "FROM messages m JOIN sessions s ON s.id = m.session_id "
         "WHERE m.content LIKE ? OR m.thinking LIKE ? "
         "ORDER BY m.created_at DESC, m.id DESC LIMIT ?"
