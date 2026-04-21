@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.13] - 2026-04-21
+
+### Added
+
+- Desktop/tray notifications when an agent turn finishes. Opt-in
+  under Settings → "Notify when Claude finishes replying". Enabling
+  triggers the browser's permission prompt in-place; once granted,
+  every subsequent `message_complete` event raises a native
+  notification while the Bearings tab is hidden or unfocused.
+  Clicking the notification focuses the window. Notifications carry
+  the session title in the body and a per-session dedup tag so a
+  fast sequence of turns replaces rather than stacks in the tray.
+  Works everywhere browser notifications work on Linux (KDE Plasma,
+  mako under Hyprland, GNOME Shell) — the DE handles the render.
+
 ## [0.3.7] - 2026-04-20
 
 ### Reverted

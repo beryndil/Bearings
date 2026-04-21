@@ -6,6 +6,10 @@ const openAgentSocket = vi.fn<(sessionId: string, sinceSeq?: number) => FakeSock
 const handleEvent = vi.fn();
 const conversationLoad = vi.fn<(sessionId: string) => Promise<void>>();
 const pushUserMessage = vi.fn();
+const notifyMock = vi.fn();
+const prefsState = { notifyOnComplete: false };
+const sessionsList: Array<{ id: string; title: string | null }> = [];
+const completedIds = new Map<string, Set<string>>();
 
 vi.mock('$lib/api', () => ({
   openAgentSocket: (sessionId: string, sinceSeq?: number) => openAgentSocket(sessionId, sinceSeq),
@@ -22,8 +26,26 @@ vi.mock('$lib/stores/conversation.svelte', () => ({
     load: (sessionId: string) => conversationLoad(sessionId),
     handleEvent: (...args: unknown[]) => handleEvent(...args),
     pushUserMessage: (...args: unknown[]) => pushUserMessage(...args),
+    completedIdsFor: (sessionId: string) =>
+      completedIds.get(sessionId) ?? new Set<string>(),
     error: null
   }
+}));
+
+vi.mock('$lib/stores/prefs.svelte', () => ({
+  prefs: prefsState
+}));
+
+vi.mock('$lib/stores/sessions.svelte', () => ({
+  sessions: {
+    get list() {
+      return sessionsList;
+    }
+  }
+}));
+
+vi.mock('$lib/utils/notify', () => ({
+  notify: (...args: unknown[]) => notifyMock(...args)
 }));
 
 type Listener = (ev: unknown) => void;
@@ -68,6 +90,10 @@ beforeEach(() => {
   handleEvent.mockReset();
   conversationLoad.mockReset();
   pushUserMessage.mockReset();
+  notifyMock.mockReset();
+  prefsState.notifyOnComplete = false;
+  sessionsList.length = 0;
+  completedIds.clear();
   openAgentSocket.mockImplementation((sessionId: string) => {
     const s = new FakeSocket(sessionId);
     sockets.push(s);
@@ -166,6 +192,84 @@ describe('AgentConnection reconnect race', () => {
     s2.fireOpen();
     s2.fireMessage({ type: 'token', session_id: 'B', text: 'x' });
     expect(handleEvent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentConnection turn-complete notifications', () => {
+  it('fires notify() on a fresh message_complete when opted in and tab is hidden', async () => {
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue();
+    await agent.connect('N');
+    const s = sockets[0];
+    s.fireOpen();
+
+    prefsState.notifyOnComplete = true;
+    sessionsList.push({ id: 'N', title: 'Bearings dev' });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden'
+    });
+
+    s.fireMessage({
+      type: 'message_complete',
+      session_id: 'N',
+      message_id: 'msg-1',
+      cost_usd: 0
+    });
+
+    expect(notifyMock).toHaveBeenCalledWith(
+      'Claude finished replying',
+      expect.objectContaining({ body: 'Bearings dev', tag: 'bearings:complete:N' })
+    );
+  });
+
+  it('does not fire when the opt-in pref is off', async () => {
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue();
+    await agent.connect('N');
+    const s = sockets[0];
+    s.fireOpen();
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden'
+    });
+
+    s.fireMessage({
+      type: 'message_complete',
+      session_id: 'N',
+      message_id: 'msg-1',
+      cost_usd: 0
+    });
+
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it('skips replayed message_complete frames (already in completedIds)', async () => {
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue();
+    await agent.connect('N');
+    const s = sockets[0];
+    s.fireOpen();
+
+    prefsState.notifyOnComplete = true;
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden'
+    });
+    // Pretend the reducer already recorded this message_id — a
+    // reconnect replay delivers the same frame and must NOT retrigger
+    // the notification.
+    completedIds.set('N', new Set(['msg-1']));
+
+    s.fireMessage({
+      type: 'message_complete',
+      session_id: 'N',
+      message_id: 'msg-1',
+      cost_usd: 0
+    });
+
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 });
 

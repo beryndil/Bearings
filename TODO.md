@@ -491,6 +491,62 @@ cover shape, not feel.
 
 ### Other
 
+## v0.3.13 — shipped
+
+Desktop/tray notification when an agent turn completes. Opt-in via
+Settings; fires only while the Bearings tab is hidden or unfocused so
+it stays quiet for the common "watching the reply stream" case. Uses
+the browser `Notification` API (localhost counts as a secure context
+in Chromium and Firefox), which the DE forwards to KDE Plasma /
+mako / GNOME Shell notifications — same path any other app's tray
+notifications take.
+
+- [x] `frontend/src/lib/utils/notify.ts` — thin wrapper around
+  `Notification` with `notifySupported`, `notifyPermission`,
+  `requestNotifyPermission`, and `notify(title, options)`. Handles
+  unsupported browsers, un-granted permission, and constructor
+  failures silently so callers never have to re-check. Click handler
+  focuses the Bearings window and closes the notification.
+- [x] `prefs.svelte.ts` — added `notifyOnComplete: boolean` persisted
+  to `localStorage` key `bearings:notifyOnComplete` (`'1'` / absent).
+  All `prefs.save()` callers updated to pass the new field.
+- [x] `Settings.svelte` — new checkbox "Notify when Claude finishes
+  replying". Toggling on kicks `requestNotifyPermission()` in the
+  same click (not deferred to Save) so the browser's OS-level prompt
+  appears while the modal is still open — one less round-trip for
+  "I turned it on, why nothing?". Hint copy reflects the live
+  permission state (unsupported / blocked / on / off); a browser
+  `denied` state disables the checkbox with a "re-allow in browser
+  settings" hint.
+- [x] `agent.svelte.ts` — WS `message` listener snapshots a
+  `fresh` flag BEFORE handing the event to the reducer. For
+  `message_complete`, freshness is derived from
+  `conversation.completedIdsFor(session_id).has(message_id)` — the
+  reducer mutates that set synchronously, so checking after the
+  call can't distinguish a real completion from a replayed frame.
+  Fresh + opted-in + hidden/unfocused tab → `notify(...)` with the
+  session title in the body and a `bearings:complete:<session_id>`
+  tag so rapid-fire completions on the same session replace rather
+  than stack.
+- [x] `conversation.svelte.ts` — exposed `completedIdsFor(id)`
+  returning `ReadonlySet<string>` (empty for unknown sessions).
+  Read-only API; the reducer remains the sole writer.
+- [x] `utils/notify.test.ts` — 7 vitest cases covering: unsupported
+  branch for `notifySupported` / `notifyPermission` / `notify` /
+  `requestNotifyPermission`, permission short-circuit on granted,
+  prompt path on default, no-op on denied, constructor options
+  (title/body/tag/icon) on granted, and the click → `window.focus()`
+  + `n.close()` handler.
+- [x] `Settings.test.ts` — updated `prefs.save` callers to pass
+  `notifyOnComplete`.
+- [x] `agent.svelte.test.ts` — added mocks for `prefs`, `sessions`,
+  and `notify`, a `completedIdsFor` stub on the conversation mock,
+  and 3 new cases: fires on fresh + opted-in + hidden; stays silent
+  when opt-in off; stays silent on replayed frame (id already in
+  `completedIds`).
+- [x] 109 frontend tests + 251 backend tests pass; ruff + mypy +
+  svelte-check green.
+
 ## v0.3.12 — shipped
 
 Selector-vs-modal race fix. Closes the v0.3.11 scope cut: flipping

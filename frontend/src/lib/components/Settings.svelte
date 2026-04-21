@@ -1,26 +1,54 @@
 <script lang="ts">
   import { prefs } from '$lib/stores/prefs.svelte';
   import { auth } from '$lib/stores/auth.svelte';
+  import {
+    notifyPermission,
+    notifySupported,
+    requestNotifyPermission
+  } from '$lib/utils/notify';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
   let model = $state(prefs.defaultModel);
   let workdir = $state(prefs.defaultWorkingDir);
   let token = $state(prefs.authToken);
+  let notifyOnComplete = $state(prefs.notifyOnComplete);
+  /** Tracked so the UI can show the live browser permission state
+   * ("blocked in browser" when denied). Refreshed each time the
+   * modal opens and after a permission request resolves. */
+  let permission = $state(notifyPermission());
 
   $effect(() => {
     if (open) {
       model = prefs.defaultModel;
       workdir = prefs.defaultWorkingDir;
       token = prefs.authToken;
+      notifyOnComplete = prefs.notifyOnComplete;
+      permission = notifyPermission();
     }
   });
+
+  async function onNotifyToggle(e: Event) {
+    const checked = (e.currentTarget as HTMLInputElement).checked;
+    notifyOnComplete = checked;
+    if (checked) {
+      // Ask the browser the moment the user opts in, not on Save.
+      // Gives them a chance to flip the prompt while the modal is
+      // still open — and makes "I enabled it but nothing fires" a
+      // single UX step to debug.
+      permission = await requestNotifyPermission();
+      if (permission !== 'granted') {
+        notifyOnComplete = false;
+      }
+    }
+  }
 
   function onSave() {
     prefs.save({
       defaultModel: model,
       defaultWorkingDir: workdir,
-      authToken: token
+      authToken: token,
+      notifyOnComplete
     });
     // If the gate is still up (required/invalid) and the user supplied
     // a token, flip the store to `ok` so the app boots.
@@ -95,6 +123,32 @@
           bind:value={workdir}
         />
       </label>
+
+      <div class="flex flex-col gap-1 text-xs">
+        <label class="flex items-center gap-2">
+          <input
+            type="checkbox"
+            class="rounded border-slate-700 bg-slate-950"
+            checked={notifyOnComplete}
+            disabled={!notifySupported() || permission === 'denied'}
+            onchange={onNotifyToggle}
+          />
+          <span class="text-slate-300">Notify when Claude finishes replying</span>
+        </label>
+        <p class="text-slate-500 pl-6">
+          {#if !notifySupported()}
+            Your browser does not support desktop notifications.
+          {:else if permission === 'denied'}
+            Blocked in browser settings — re-allow notifications for this
+            site, then re-toggle.
+          {:else if notifyOnComplete}
+            Fires a tray notification for each completed agent turn. Only
+            raised while this tab is hidden or unfocused.
+          {:else}
+            Off — enable to see a tray notification when a turn completes.
+          {/if}
+        </p>
+      </div>
 
       <div class="flex items-center justify-end gap-2 pt-2">
         <button

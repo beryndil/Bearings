@@ -9,7 +9,12 @@ afterEach(cleanup);
 beforeEach(() => {
   // Fresh prefs per test — prefs is a module singleton backed by
   // localStorage, which jsdom resets per test file but not per case.
-  prefs.save({ defaultModel: '', defaultWorkingDir: '', authToken: '' });
+  prefs.save({
+    defaultModel: '',
+    defaultWorkingDir: '',
+    authToken: '',
+    notifyOnComplete: false
+  });
 });
 
 describe('Settings', () => {
@@ -17,7 +22,8 @@ describe('Settings', () => {
     prefs.save({
       defaultModel: 'claude-opus-4-7',
       defaultWorkingDir: '/home/dave',
-      authToken: 'existing-token'
+      authToken: 'existing-token',
+      notifyOnComplete: false
     });
     const { getByLabelText } = render(Settings, { props: { open: true } });
     expect(getByLabelText('Default model')).toHaveValue('claude-opus-4-7');
@@ -43,13 +49,15 @@ describe('Settings', () => {
     expect(prefs.defaultModel).toBe('claude-sonnet-4-6');
     expect(prefs.defaultWorkingDir).toBe('/tmp/work');
     expect(prefs.authToken).toBe('fresh-token');
+    expect(prefs.notifyOnComplete).toBe(false);
   });
 
   it('Cancel leaves the prefs store untouched', async () => {
     prefs.save({
       defaultModel: 'existing-model',
       defaultWorkingDir: '/existing',
-      authToken: 'keep'
+      authToken: 'keep',
+      notifyOnComplete: false
     });
     const { getByLabelText, getByRole } = render(Settings, {
       props: { open: true }

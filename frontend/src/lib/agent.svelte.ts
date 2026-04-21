@@ -1,6 +1,9 @@
 import * as api from '$lib/api';
 import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
+import { prefs } from '$lib/stores/prefs.svelte';
+import { sessions } from '$lib/stores/sessions.svelte';
+import { notify } from '$lib/utils/notify';
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
 export type PermissionMode = 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
@@ -152,7 +155,19 @@ export class AgentConnection {
       if (!isCurrent()) return;
       try {
         const event = JSON.parse(msg.data) as api.AgentEvent;
+        // Snapshot the "is this a fresh completion" signal BEFORE the
+        // reducer runs — once handleEvent returns the id is already
+        // recorded in `completedMessageIds` either way, so a
+        // post-hoc check can't tell a replay from a novel turn.
+        const fresh =
+          event.type === 'message_complete' &&
+          !conversation
+            .completedIdsFor(event.session_id)
+            .has(event.message_id);
         conversation.handleEvent(event);
+        if (fresh && event.type === 'message_complete') {
+          maybeNotifyTurnComplete(event);
+        }
       } catch (e) {
         conversation.error = e instanceof Error ? e.message : String(e);
       }
@@ -211,3 +226,28 @@ export class AgentConnection {
 }
 
 export const agent = new AgentConnection();
+
+/** Raise a tray notification for a completed agent turn when the
+ * user has opted in via Settings and the tab is currently in the
+ * background (hidden or unfocused). Staying silent for a focused
+ * tab keeps the nicety from becoming noise for the common case
+ * where the user is watching the reply stream in.
+ *
+ * Caller is responsible for filtering replayed `message_complete`
+ * frames — the `fresh` snapshot at the WS listener handles that by
+ * checking `completedIdsFor` BEFORE the reducer records the id. */
+function maybeNotifyTurnComplete(event: api.MessageCompleteEvent): void {
+  if (!prefs.notifyOnComplete) return;
+  if (typeof document !== 'undefined') {
+    const hidden = document.visibilityState === 'hidden';
+    const unfocused =
+      typeof document.hasFocus === 'function' && !document.hasFocus();
+    if (!hidden && !unfocused) return;
+  }
+  const session = sessions.list.find((s) => s.id === event.session_id);
+  const title = session?.title?.trim() || 'Untitled session';
+  notify('Claude finished replying', {
+    body: title,
+    tag: `bearings:complete:${event.session_id}`
+  });
+}

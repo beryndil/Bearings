@@ -62,6 +62,15 @@ class ConversationStore {
     return this.states[sessionId]?.lastSeq ?? 0;
   }
 
+  /** Set of message ids the reducer has already finalised for a
+   * session. Used by the notification hook to skip replayed
+   * `message_complete` frames (the reducer dedups via the same set
+   * — we just read it). Returns an empty set for unknown sessions
+   * so callers don't need a null check. */
+  completedIdsFor(sessionId: string): ReadonlySet<string> {
+    return this.states[sessionId]?.completedMessageIds ?? new Set();
+  }
+
   async load(sessionId: string): Promise<void> {
     this.sessionId = sessionId;
     const state = this.ensureState(sessionId);
