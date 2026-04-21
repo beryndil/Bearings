@@ -20,6 +20,16 @@ async def _set_session_instructions(
     await conn.commit()
 
 
+async def _set_session_description(
+    conn: aiosqlite.Connection, session_id: str, description: str
+) -> None:
+    await conn.execute(
+        "UPDATE sessions SET description = ? WHERE id = ?",
+        (description, session_id),
+    )
+    await conn.commit()
+
+
 async def _set_tag_memory(conn: aiosqlite.Connection, tag_id: int, content: str) -> None:
     await conn.execute(
         "INSERT INTO tag_memories (tag_id, content, updated_at) VALUES (?, ?, datetime('now'))",
@@ -126,6 +136,55 @@ async def test_session_instructions_always_last(tmp_path: Path) -> None:
         await conn.close()
     assert [layer.kind for layer in result.layers] == ["base", "tag_memory", "session"]
     assert result.layers[-1].content == "Override everything above."
+
+
+@pytest.mark.asyncio
+async def test_description_injected_between_base_and_tag_memory(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        tag = await create_tag(conn, name="t")
+        await _set_tag_memory(conn, tag["id"], "Tag memory.")
+        await attach_tag(conn, sess["id"], tag["id"])
+        await _set_session_description(conn, sess["id"], "Why this window exists.")
+        await _set_session_instructions(conn, sess["id"], "Override everything above.")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    assert [layer.kind for layer in result.layers] == [
+        "base",
+        "session_description",
+        "tag_memory",
+        "session",
+    ]
+    description_layer = result.layers[1]
+    assert description_layer.name == "description"
+    assert description_layer.content == "Why this window exists."
+    assert "<!-- layer: session_description[description] -->" in result.text
+
+
+@pytest.mark.asyncio
+async def test_missing_description_omits_layer(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    assert "session_description" not in [layer.kind for layer in result.layers]
+
+
+@pytest.mark.asyncio
+async def test_empty_description_omits_layer(tmp_path: Path) -> None:
+    # Empty-string description is treated the same as NULL — no layer.
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        await _set_session_description(conn, sess["id"], "")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    assert "session_description" not in [layer.kind for layer in result.layers]
 
 
 @pytest.mark.asyncio

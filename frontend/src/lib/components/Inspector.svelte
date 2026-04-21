@@ -24,6 +24,8 @@
     switch (kind) {
       case 'base':
         return 'bg-slate-800 text-slate-400';
+      case 'session_description':
+        return 'bg-indigo-900 text-indigo-300';
       case 'tag_memory':
         return 'bg-teal-900 text-teal-300';
       case 'session':

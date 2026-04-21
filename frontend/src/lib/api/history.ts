@@ -46,7 +46,7 @@ export function importSession(
 
 export type SystemPromptLayer = {
   name: string;
-  kind: 'base' | 'tag_memory' | 'session';
+  kind: 'base' | 'session_description' | 'tag_memory' | 'session';
   content: string;
   token_count: number;
 };

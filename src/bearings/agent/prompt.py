@@ -1,8 +1,15 @@
 """Layered system-prompt assembler.
 
-Order: base → tag memories (one per attached tag with a
-`tag_memories` row, in the canonical pinned-first / sort_order / id
-order) → session instructions (if non-null).
+Order: base → session description (if non-null) → tag memories (one
+per attached tag with a `tag_memories` row, in the canonical
+pinned-first / sort_order / id order) → session instructions (if
+non-null).
+
+The session description is the human-authored "why this window
+exists" blurb rendered under the title/tags in the Conversation
+header. Injecting it into the system prompt gives empty-context
+agents a first-person orientation hint without having to query the
+DB or UI out-of-band.
 
 Pure SQL reads — no writes, safe to call per-turn. `AgentSession`
 calls this before every SDK turn.
@@ -17,7 +24,7 @@ import aiosqlite
 
 from bearings.agent.base_prompt import BASE_PROMPT
 
-LayerKind = Literal["base", "tag_memory", "session"]
+LayerKind = Literal["base", "session_description", "tag_memory", "session"]
 
 
 @dataclass(frozen=True)
@@ -56,14 +63,18 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
     layers: list[Layer] = [Layer(name="base", kind="base", content=BASE_PROMPT)]
 
     async with conn.execute(
-        "SELECT session_instructions FROM sessions WHERE id = ?",
+        "SELECT description, session_instructions FROM sessions WHERE id = ?",
         (session_id,),
     ) as cursor:
         session_row = await cursor.fetchone()
     if session_row is None:
         return _finalize(layers)
 
+    description = session_row["description"]
     session_instructions = session_row["session_instructions"]
+
+    if description:
+        layers.append(Layer(name="description", kind="session_description", content=description))
 
     async with conn.execute(
         "SELECT t.name AS name, tm.content AS content "
