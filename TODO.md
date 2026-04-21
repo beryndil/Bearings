@@ -734,3 +734,75 @@ Each tracked directory gets a `.bearings/` folder:
 ## Decisions pending
 
 - [x] GitHub org for remote push: `Beryndil/Bearings`.
+
+## Intra-call tool output streaming (flagged, scoped)
+
+Goal: in the terminal-style tool-work pane, have each call's stdout land
+line-by-line as it's produced — not dumped whole at `tool_call_end`.
+Matters for long-running `Bash` (e.g. `npm run build`, large searches)
+where today the user stares at amber `●` for 30s, then a wall of output
+appears. Frontend (MessageTurn.svelte, Inspector.svelte) already reacts
+to `tc.output` reactively and auto-scrolls; no component change needed
+downstream.
+
+### Blocking investigation (do first)
+
+- [ ] **Verify SDK custom-tool registration in `claude-agent-sdk` 0.1.63.**
+  Grep `.venv/lib/python3.12/site-packages/claude_agent_sdk/` for a way
+  to register an in-process Python callable as a tool the model can
+  invoke. If present, this unlocks Path B (below) without a fork.
+- [ ] **Protocol trace of `subprocess_cli.py`.** Dump the raw JSON the
+  Claude CLI sends over stdout during a long Bash call to confirm
+  whether partial tool output is ever emitted on the wire. If the CLI
+  only sends complete `ToolResultBlock`s, Path A gets you nothing —
+  the limitation is in the closed-source CLI.
+
+### Paths
+
+- **Path C — Synthetic-delta spike (2–3h).** Add `ToolOutputDelta`
+  event + reducer + fake backend emission (split final output into
+  chunks with setTimeout). Proves frontend + event schema end-to-end.
+  De-risk step before committing to A or B.
+- **Path B — Bearings-owned Bash tool via SDK custom tool (6–10h).**
+  Register an in-process Bash implementation; run the subprocess
+  locally; stream chunks to the WS event bus; return final combined
+  output to the SDK synchronously. No fork. Cleanest path *if SDK
+  exposes custom-tool registration*.
+- **Path A — SDK fork + subprocess stream parsing (8–16h + merge tax).**
+  Fork `claude-agent-sdk`, modify `_internal/transport/subprocess_cli.py`
+  to emit partial chunks as the CLI streams bytes. Only viable if the
+  protocol trace confirms the CLI actually sends partial output.
+
+### Files that change (shared across paths)
+
+- `src/bearings/agent/events.py` — add `ToolOutputDelta` Pydantic model
+  + extend event union.
+- `src/bearings/agent/session.py` or `runner.py` — emit deltas (source
+  differs by path).
+- `frontend/src/lib/api/core.ts` — add `ToolOutputDeltaEvent` + union.
+- `frontend/src/lib/stores/conversation.svelte.ts` — new case appending
+  `event.delta` to the matching `tc.output`; ignore deltas when
+  `tc.finishedAt !== null` (guard against out-of-order).
+- No change to `MessageTurn.svelte` / `Inspector.svelte` / `schema.sql`.
+
+### Gotchas (must be handled, not just listed)
+
+- **Reconnect mid-tool**: WS drop loses unseen chunks. Persist the
+  cumulative `output` to DB on each delta (idempotent update) so
+  history endpoint stays authoritative.
+- **Chunk boundaries**: split-mid-UTF-8 corrupts multibyte characters;
+  split-mid-ANSI-escape breaks color. Backend buffers until a newline
+  (or complete codepoint minimum) before flushing.
+- **Memory cap**: pathological 1GB tool output shouldn't balloon the
+  browser store. Cap `tc.output` to e.g. 5MB in the reducer, mark
+  `truncated: true`.
+- **Event ordering**: rely on the ring buffer's `_seq`. Reducer drops
+  deltas whose target call is already finished.
+
+### Decision
+
+Path C first (proves the pipe). Then Path B if SDK supports it. Path A
+only if B is unavailable and the protocol trace justifies it. If
+protocol trace shows the CLI itself buffers, kill the feature with a
+dated note in this TODO explaining why — genuine upstream limit, not a
+Bearings shortcoming.
