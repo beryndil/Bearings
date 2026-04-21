@@ -65,7 +65,14 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
         sdk_session_id=row.get("sdk_session_id"),
         thinking=_thinking_config(app.state.settings.agent.thinking),
     )
-    return SessionRunner(session_id, agent, conn)
+    runner = SessionRunner(session_id, agent, conn)
+    # Late-bind the approval callback: the SDK's `can_use_tool` hook
+    # parks futures on the runner, but the runner only exists after
+    # the agent is constructed. Binding here keeps the agent ignorant
+    # of the runner (circular import otherwise) while giving the SDK
+    # a real coroutine to call when a gated tool wants permission.
+    agent.can_use_tool = runner.can_use_tool
+    return runner
 
 
 def _parse_since_seq(websocket: WebSocket) -> int:
@@ -169,6 +176,19 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
             elif msg_type == "set_permission_mode":
                 mode = payload.get("mode")
                 runner.set_permission_mode(mode or None)
+            elif msg_type == "approval_response":
+                # Resolves a pending `can_use_tool` future. Unknown /
+                # already-resolved ids are no-ops inside the runner, so
+                # two tabs racing to answer the same modal is safe.
+                request_id = payload.get("request_id")
+                decision = payload.get("decision")
+                reason = payload.get("reason")
+                if isinstance(request_id, str) and decision in ("allow", "deny"):
+                    await runner.resolve_approval(
+                        request_id,
+                        decision,
+                        reason if isinstance(reason, str) else None,
+                    )
             # Unknown message types are ignored — keeps the protocol
             # forward-compatible the same way it was pre-refactor.
     except WebSocketDisconnect:

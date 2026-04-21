@@ -98,6 +98,13 @@ type SessionState = {
   // reconnect can deliver a duplicate `message_complete` for a turn
   // that finished in the DB while we were away; dedupe on push.
   completedMessageIds: Set<string>;
+  // Outstanding tool-use approval prompt. Non-null means the agent
+  // is blocked waiting for the user to click Approve / Deny in the
+  // modal. Cleared by a matching `approval_resolved` event (any tab),
+  // or optimistically by the agent connection right after sending the
+  // response. Reconnect replays the `approval_request` from the ring
+  // buffer so the modal reappears if the tab was closed mid-prompt.
+  pendingApproval: api.ApprovalRequestEvent | null;
 };
 
 function emptyState(): SessionState {
@@ -110,7 +117,8 @@ function emptyState(): SessionState {
     toolCalls: [],
     hasMore: false,
     lastSeq: 0,
-    completedMessageIds: new Set()
+    completedMessageIds: new Set(),
+    pendingApproval: null
   };
 }
 
@@ -150,6 +158,9 @@ class ConversationStore {
   );
   toolCalls = $derived<LiveToolCall[]>(this.active()?.toolCalls ?? []);
   hasMore = $derived<boolean>(this.active()?.hasMore ?? false);
+  pendingApproval = $derived<api.ApprovalRequestEvent | null>(
+    this.active()?.pendingApproval ?? null
+  );
 
   /** Highest `_seq` rendered for a session; passed to the server on
    * (re)connect as the replay cursor. */
@@ -205,6 +216,18 @@ class ConversationStore {
    * deleted so its in-flight buffer doesn't leak. */
   forget(sessionId: string): void {
     delete this.states[sessionId];
+  }
+
+  /** Clear the pending approval optimistically right after sending
+   * the response — waiting for the server's `approval_resolved` event
+   * would leave the modal open through the WS round-trip and look
+   * unresponsive. If the server rejects the response, the modal will
+   * re-appear on the next `approval_request` replay. */
+  clearPendingApproval(sessionId: string, requestId: string): void {
+    const state = this.states[sessionId];
+    if (!state) return;
+    if (state.pendingApproval?.request_id !== requestId) return;
+    state.pendingApproval = null;
   }
 
   pushUserMessage(sessionId: string, content: string): void {
@@ -361,6 +384,24 @@ class ConversationStore {
         state.streamingActive = false;
         return;
       case 'user_message':
+        return;
+      case 'approval_request':
+        // If an older (already-resolved or stale) request replays on
+        // reconnect, don't overwrite a newer pending one. `_seq`
+        // ordering guarantees the newest-by-seq request wins.
+        state.pendingApproval = {
+          type: 'approval_request',
+          session_id: event.session_id,
+          request_id: event.request_id,
+          tool_name: event.tool_name,
+          input: event.input,
+          tool_use_id: event.tool_use_id
+        };
+        return;
+      case 'approval_resolved':
+        if (state.pendingApproval?.request_id === event.request_id) {
+          state.pendingApproval = null;
+        }
         return;
       case 'runner_status':
         // Sent once right after replay on every (re)connect. If the

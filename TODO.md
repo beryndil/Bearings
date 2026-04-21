@@ -461,6 +461,17 @@ is feature-complete.
   large enough to justify the split; all imports use `$lib/api`
   unchanged. `voidFetch` helper added to core for DELETE-without-
   body endpoints. All 168 backend + 39 frontend tests pass.
+- [ ] `src/bearings/agent/runner.py` (509 lines after v0.3.10)
+  over the 400-line cap. Natural split: extract the approval
+  broker (can_use_tool / resolve_approval / _deny_all_pending /
+  _emit_resolved + the pending-approvals dict) into an
+  `ApprovalBroker` helper the runner composes. Keeps the runner
+  focused on the stream / ring buffer / prompt queue.
+- [ ] `frontend/src/lib/stores/conversation.svelte.ts` (440 lines
+  after v0.3.10) over the cap. Natural split: move the event
+  reducer into `conversation/reducer.ts` (token / thinking /
+  tool-call / approval cases) and keep the class as state +
+  derived getters + load/persist.
 
 ### Browser verification pending
 
@@ -469,6 +480,61 @@ walkthrough". Every v0.2 UI surface needs exercising; unit tests
 cover shape, not feel.
 
 ### Other
+
+## v0.3.10 — shipped
+
+Tool-use approval UI for plan-mode (and any gated tool).
+
+- [x] Backend `can_use_tool` callback wired through
+  `ClaudeAgentOptions`. `SessionRunner.can_use_tool` emits an
+  `ApprovalRequest` event, parks an `asyncio.Future` per pending
+  id, and returns `PermissionResultAllow` / `PermissionResultDeny`
+  when resolved. `ws_agent._build_runner` late-binds it to the
+  agent so the session stays ignorant of the runner.
+- [x] New event types `ApprovalRequest` and `ApprovalResolved` in
+  `agent/events.py`. Resolved fans out after each decision so a
+  second tab mirroring the same session can drop its stale modal.
+- [x] WS `approval_response { request_id, decision, reason? }`
+  frame in `api/ws_agent.py`. Unknown / already-resolved ids are
+  a no-op so two tabs racing on the same modal is safe.
+- [x] Stop + shutdown paths deny every pending approval with
+  `interrupt=True` so the SDK unblocks and the stream loop
+  reaches its wind-down check. Without this, a park on a pending
+  approval would hang the worker indefinitely on stop.
+- [x] Ring-buffer replay covers reconnect-mid-approval for free —
+  the `ApprovalRequest` event sits in `_event_log` and re-emits
+  to any subscriber that reconnects with `since_seq`. No extra
+  persistence needed.
+- [x] Frontend `ApprovalRequestEvent` / `ApprovalResolvedEvent`
+  types in `api/core.ts`, added to the `AgentEvent` union.
+- [x] `ConversationStore.pendingApproval` per-session state;
+  reducer cases for `approval_request` / `approval_resolved`;
+  `clearPendingApproval` for optimistic dismissal after the user
+  clicks a button.
+- [x] `AgentConnection.respondToApproval(id, decision, reason?)`
+  sends the WS frame and clears the modal optimistically.
+- [x] `ApprovalModal.svelte` — non-dismissable overlay with
+  Approve / Deny. ESC is swallowed at capture-phase so no other
+  handler can accidentally resolve the gate. Disabled state +
+  "Reconnecting…" hint when the socket is down.
+- [x] 5 new pytest cases in `tests/test_approval.py` (round-trip,
+  deny-with-reason, unknown-id no-op, stop denies pending,
+  shutdown denies all). 7 new vitest cases for the modal + 4 for
+  the reducer (`approval_request` sets, matching `approval_resolved`
+  clears, mismatched id ignored, `clearPendingApproval` id-gate).
+- [x] 232 backend tests + 89 frontend tests pass; ruff + mypy green.
+
+Deliberate scope cuts (follow-ups):
+- Badge-vs-modal race: if the user clicks the sky `/plan off`
+  badge while an `ExitPlanMode` approval is pending, the mode
+  flip does NOT auto-resolve the modal. User has to click
+  Approve / Deny. Considered surprising UX but simpler than
+  wiring a permission-mode-change → pending-approval canceller
+  with the right semantics for non-ExitPlanMode gated tools
+  (Edit, Bash) that the badge shouldn't resolve.
+- "Deny and stop" single button: today the Stop button already
+  denies pending approvals via `request_stop`, so the two-button
+  modal + Stop button covers the intent without a third button.
 
 ## v0.3.0 — shipped
 

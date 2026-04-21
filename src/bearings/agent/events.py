@@ -75,6 +75,38 @@ class ErrorEvent(BaseModel):
     message: str
 
 
+class ApprovalRequest(BaseModel):
+    """Tool-use permission request raised by the SDK's `can_use_tool`
+    callback. Fired whenever the agent tries to use a tool that the
+    current `permission_mode` gates — most visibly `ExitPlanMode` while
+    in plan mode, but also any write-capable tool under a restrictive
+    mode. The runner parks an `asyncio.Future` keyed by `request_id`
+    and blocks until the frontend sends a matching
+    `{type:"approval_response"}` frame, at which point the SDK is
+    released with either `PermissionResultAllow` or `PermissionResultDeny`.
+    Replays cleanly over the ring buffer so a mid-approval reconnect
+    re-renders the modal."""
+
+    type: Literal["approval_request"] = "approval_request"
+    session_id: str
+    request_id: str
+    tool_name: str
+    input: dict[str, object] = Field(default_factory=dict)
+    tool_use_id: str | None = None
+
+
+class ApprovalResolved(BaseModel):
+    """Emitted when a pending approval is resolved (either by user
+    click, by runner shutdown, or by `request_stop`). Frontend uses
+    this to clear the modal on every connected tab so a second tab
+    doesn't hold a stale pending prompt after the first tab answered."""
+
+    type: Literal["approval_resolved"] = "approval_resolved"
+    session_id: str
+    request_id: str
+    decision: Literal["allow", "deny"]
+
+
 AgentEvent = (
     UserMessage
     | Token
@@ -85,4 +117,6 @@ AgentEvent = (
     | MessageStart
     | MessageComplete
     | ErrorEvent
+    | ApprovalRequest
+    | ApprovalResolved
 )

@@ -68,6 +68,30 @@ export class AgentConnection {
     return true;
   }
 
+  /** Resolve a pending tool-use approval prompt. Clears the modal
+   * optimistically via the conversation store; the server's matching
+   * `approval_resolved` broadcast will arrive shortly after and be a
+   * no-op thanks to the store's id check. Returns false when the
+   * socket is not open — the modal stays visible and the user can
+   * retry after reconnect (the backend Future is still parked). */
+  respondToApproval(
+    requestId: string,
+    decision: 'allow' | 'deny',
+    reason?: string
+  ): boolean {
+    if (!this.socket || this.state !== 'open' || !this.sessionId) return false;
+    this.socket.send(
+      JSON.stringify({
+        type: 'approval_response',
+        request_id: requestId,
+        decision,
+        ...(reason ? { reason } : {})
+      })
+    );
+    conversation.clearPendingApproval(this.sessionId, requestId);
+    return true;
+  }
+
   close(): void {
     this.wantConnected = false;
     if (this.reconnectTimer !== null) {

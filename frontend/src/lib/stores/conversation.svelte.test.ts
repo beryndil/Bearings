@@ -179,3 +179,67 @@ describe('tool_output_delta reducer', () => {
     expect(tc?.output?.length).toBeLessThanOrEqual(TOOL_OUTPUT_CAP_CHARS + 100);
   });
 });
+
+describe('approval reducer', () => {
+  function approvalRequest(
+    sessionId: string,
+    requestId: string,
+    toolName = 'ExitPlanMode'
+  ): AgentEvent {
+    return {
+      type: 'approval_request',
+      session_id: sessionId,
+      request_id: requestId,
+      tool_name: toolName,
+      input: { plan: '# do stuff' },
+      tool_use_id: 'tu_1'
+    };
+  }
+
+  function approvalResolved(
+    sessionId: string,
+    requestId: string,
+    decision: 'allow' | 'deny' = 'allow'
+  ): AgentEvent {
+    return {
+      type: 'approval_resolved',
+      session_id: sessionId,
+      request_id: requestId,
+      decision
+    };
+  }
+
+  it('approval_request populates pendingApproval', () => {
+    const sid = uniqueSession('approval-req');
+    conversation.sessionId = sid;
+    conversation.handleEvent(approvalRequest(sid, 'req-a'));
+    expect(conversation.pendingApproval?.request_id).toBe('req-a');
+    expect(conversation.pendingApproval?.tool_name).toBe('ExitPlanMode');
+  });
+
+  it('approval_resolved with matching id clears the modal', () => {
+    const sid = uniqueSession('approval-clear');
+    conversation.sessionId = sid;
+    conversation.handleEvent(approvalRequest(sid, 'req-b'));
+    conversation.handleEvent(approvalResolved(sid, 'req-b', 'deny'));
+    expect(conversation.pendingApproval).toBe(null);
+  });
+
+  it('approval_resolved for a different id leaves the modal up', () => {
+    const sid = uniqueSession('approval-mismatch');
+    conversation.sessionId = sid;
+    conversation.handleEvent(approvalRequest(sid, 'req-c'));
+    conversation.handleEvent(approvalResolved(sid, 'req-other', 'allow'));
+    expect(conversation.pendingApproval?.request_id).toBe('req-c');
+  });
+
+  it('clearPendingApproval drops the modal only when the id matches', () => {
+    const sid = uniqueSession('approval-optimistic');
+    conversation.sessionId = sid;
+    conversation.handleEvent(approvalRequest(sid, 'req-d'));
+    conversation.clearPendingApproval(sid, 'req-wrong');
+    expect(conversation.pendingApproval?.request_id).toBe('req-d');
+    conversation.clearPendingApproval(sid, 'req-d');
+    expect(conversation.pendingApproval).toBe(null);
+  });
+});

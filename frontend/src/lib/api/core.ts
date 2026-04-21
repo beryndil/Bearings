@@ -46,6 +46,34 @@ export type MessageCompleteEvent = {
 };
 export type ErrorEvent = { type: 'error'; session_id: string; message: string };
 
+/** Tool-use permission prompt raised by the SDK's `can_use_tool`
+ * callback. Fires whenever the agent tries a tool the current
+ * `permission_mode` gates — ExitPlanMode while in plan mode is the
+ * canonical case. The backend is parked on a Future; the frontend
+ * resolves it by sending `{type:"approval_response", request_id,
+ * decision}`. The modal is deliberately non-dismissable — closing
+ * the tab mid-approval is fine (reconnect replays the event from
+ * the ring buffer), but ESC / backdrop-click MUST NOT resolve the
+ * gate because silent-allow is worse than explicit deny. */
+export type ApprovalRequestEvent = {
+  type: 'approval_request';
+  session_id: string;
+  request_id: string;
+  tool_name: string;
+  input: Record<string, unknown>;
+  tool_use_id: string | null;
+};
+
+/** Broadcast when an approval is resolved from any path (user click,
+ * runner shutdown, user Stop). A second tab mirroring this session
+ * uses it to clear its own modal when the first tab answered. */
+export type ApprovalResolvedEvent = {
+  type: 'approval_resolved';
+  session_id: string;
+  request_id: string;
+  decision: 'allow' | 'deny';
+};
+
 /** Ground-truth snapshot of the server's runner state, sent once per
  * WebSocket connection right after replay. Lets a reconnecting client
  * reconcile stale `streamingActive` flags — after a server restart the
@@ -74,6 +102,8 @@ export type AgentEvent = (
   | MessageCompleteEvent
   | ErrorEvent
   | RunnerStatusEvent
+  | ApprovalRequestEvent
+  | ApprovalResolvedEvent
 ) &
   SeqStamped;
 

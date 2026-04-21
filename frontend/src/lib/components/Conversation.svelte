@@ -3,6 +3,7 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import ApprovalModal from '$lib/components/ApprovalModal.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import { buildTurns } from '$lib/turns';
@@ -162,6 +163,14 @@
   bind:open={editingSession}
   sessionId={sessions.selectedId}
 />
+
+{#if conversation.pendingApproval}
+  <ApprovalModal
+    request={conversation.pendingApproval}
+    connected={agent.state === 'open'}
+    onRespond={(id, decision, reason) => agent.respondToApproval(id, decision, reason)}
+  />
+{/if}
 
 <section class="bg-slate-900 overflow-hidden flex flex-col min-w-0">
   <header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">

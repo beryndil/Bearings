@@ -8,6 +8,7 @@ from uuid import uuid4
 import aiosqlite
 from claude_agent_sdk import (
     AssistantMessage,
+    CanUseTool,
     ClaudeAgentOptions,
     ClaudeSDKClient,
     PermissionMode,
@@ -85,6 +86,13 @@ class AgentSession:
         # stream() call's options. Flipping this (via
         # set_permission_mode) is how `/plan` engages plan mode.
         self.permission_mode = permission_mode
+        # Optional `can_use_tool` callback passed to `ClaudeAgentOptions`.
+        # When set (by the runner, post-construction), the SDK invokes
+        # it whenever a tool call needs permission — the runner parks
+        # a Future and fans an `ApprovalRequest` event out to WS
+        # subscribers, resolving the Future when the UI replies. Left
+        # None for unit tests that don't exercise permission gating.
+        self.can_use_tool: CanUseTool | None = None
         # Tracks the currently-active SDK client so `interrupt()` can
         # reach into an in-flight stream. Set inside `stream()` under
         # the `async with`; cleared on exit.
@@ -109,6 +117,8 @@ class AgentSession:
             options_kwargs["resume"] = self.sdk_session_id
         if self.thinking is not None:
             options_kwargs["thinking"] = self.thinking
+        if self.can_use_tool is not None:
+            options_kwargs["can_use_tool"] = self.can_use_tool
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called
