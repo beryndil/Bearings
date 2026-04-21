@@ -491,6 +491,88 @@ cover shape, not feel.
 
 ### Other
 
+- [ ] **Investigate long hang on a single assistant turn (2026-04-21).**
+  Dave reported I sat silent for far too long between his "are you hung
+  up?" prompt and the eventual plan-agent response during the token-cost
+  mitigation planning session (transcript
+  `~/.claude/projects/-home-beryndil-Projects-Bearings/f57209ca-38b8-41b8-a6e7-cf1439c0b50d.jsonl`).
+  Unknown whether the culprit is (a) a long-running sub-agent not
+  forwarding progress events, (b) the WS pipeline buffering without
+  flushing partial deltas, or (c) Claude Code itself. Check: does the
+  Bearings stream-loop emit any keepalive / "thinking" frames while a
+  Task sub-agent is running? Does `message_delta` make it to the socket
+  mid-sub-agent? Does the frontend show *anything* during the gap or a
+  dead spinner? Reproduce with a deliberately long Task call and
+  instrument.
+
+## v0.3.16 — shipped
+
+Wave 1 of the token-cost-mitigation plan
+(`~/.claude/plans/enumerated-inventing-ullman.md`): context-pressure
+meter + pre-submit budget gate. Addresses the two failures Dave hit
+in the session that prompted the plan — (1) research-context-loss
+from silent auto-compaction, (2) cost creep from a session that kept
+growing past the configured cap. The meter is the "eyes" every later
+wave builds on; the budget gate is a cheap blast-radius cap that
+refuses a turn *before* it burns tokens instead of after.
+
+- [x] Migration `0013_session_context_usage.sql` adds three cached
+  columns — `last_context_pct REAL`, `last_context_tokens INTEGER`,
+  `last_context_max INTEGER`. Reason: the SDK only exposes
+  `get_context_usage()` while a `ClaudeSDKClient` is alive, so without
+  a cache the meter would flicker to blank between turns / on reload.
+  `db/schema.sql` back-filled to match.
+- [x] `agent/events.py` gains a `ContextUsage` Pydantic event
+  (literal discriminator `"context_usage"`) carrying
+  `total_tokens`, `max_tokens`, `percentage`, `model`,
+  `is_auto_compact_enabled`, `auto_compact_threshold`. Added to the
+  `AgentEvent` union so WS serialization and reducer dispatch pick
+  it up without bespoke plumbing.
+- [x] `agent/session.py` — new `_capture_context_usage(client)` calls
+  `client.get_context_usage()` *inside* the `async with
+  ClaudeSDKClient()` block (the SDK subprocess tears down on exit,
+  so the call has to happen before we leave the context) and
+  swallows any SDK exception — an advisory meter must never kill
+  a successful turn. The captured event is yielded **before**
+  `MessageComplete` because `SessionRunner` breaks its receive
+  loop on MessageComplete; yielding after would silently drop the
+  snapshot.
+- [x] `agent/runner.py` — `submit_prompt()` now checks the session
+  row's `total_cost_usd` vs. `max_budget_usd` before queueing. If
+  the cap is already met, emits an `ErrorEvent("budget cap
+  reached…")` and returns without putting the prompt. This
+  complements the SDK's in-turn `max_budget_usd` advisory (which
+  only fires after tokens are spent). A new `ContextUsage` branch
+  in the turn loop persists the snapshot via
+  `store.set_session_context_usage` as the event flows through.
+- [x] `db/_sessions.py` — `SESSION_BASE_COLS` extended with the three
+  new columns; `set_session_context_usage(conn, session_id, *, pct,
+  tokens, max_tokens)` clamps `pct` to `[0, 100]` before the UPDATE.
+  Re-exported from `db/store.py`.
+- [x] `api/models.py` — `SessionOut` grows `last_context_pct`,
+  `last_context_tokens`, `last_context_max` so the cached snapshot
+  rides on every session GET without a second round-trip.
+- [x] Frontend: `ContextUsageEvent` added to `AgentEvent` union in
+  `lib/api/core.ts`; `Session` type grows the three cached fields in
+  `lib/api/sessions.ts`. Reducer (`conversation/reducer.ts`) gains a
+  `ContextUsageState` slot + `case 'context_usage'` handler. Store
+  (`conversation.svelte.ts`) exposes `contextUsage` via `$derived`
+  and seeds it from the session row on load so the meter paints
+  immediately on first render, not after the next turn.
+- [x] New `ContextMeter.svelte` compact pill rendered in the
+  Conversation header. Threshold bands shift one earlier when
+  auto-compact is off (50/75/90% → 40/60/80%) since there's no
+  safety net catching an overflow. Slate / amber / orange / red
+  tailwind classes, `aria-label` + `title` carry the full
+  `X/Y tokens (Z%)` breakdown on hover.
+- [x] Backend tests: 3 new in `test_agent_session.py` pinning
+  ContextUsage ordering (before MessageComplete), SDK-exception
+  tolerance, and missing-field defaulting; 4 new in `test_runner.py`
+  covering persistence on event pass-through, the budget-gate refuse
+  path, under-cap allow-through, and the no-cap always-allow path.
+  289 backend tests pass (up from 282). Ruff + mypy strict green.
+  Frontend: 113 vitest cases pass, svelte-check clean.
+
 ## v0.3.15 — shipped
 
 First-turn context priming on fresh runners. Belt-and-suspenders

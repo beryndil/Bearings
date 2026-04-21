@@ -13,7 +13,7 @@ from bearings.db._common import _date_filter, _new_id, _now
 SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
     "max_budget_usd, total_cost_usd, session_instructions, sdk_session_id, "
-    "permission_mode"
+    "permission_mode, last_context_pct, last_context_tokens, last_context_max"
 )
 
 # claude-agent-sdk PermissionMode values. Kept as a module-level
@@ -254,6 +254,29 @@ async def set_session_permission_mode(
     await conn.execute(
         "UPDATE sessions SET permission_mode = ? WHERE id = ?",
         (mode, session_id),
+    )
+    await conn.commit()
+
+
+async def set_session_context_usage(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    *,
+    pct: float,
+    tokens: int,
+    max_tokens: int,
+) -> None:
+    """Cache the latest ContextUsage snapshot on the session row (see
+    migration 0013). Called by the runner on every `ContextUsage` WS
+    event so a fresh page load has a number to show before the next
+    turn's live event arrives. Clamps the percentage to `[0, 100]` to
+    keep downstream UI math simple; token counts are stored verbatim.
+    No-op if the row is gone (UPDATE matches zero rows)."""
+    safe_pct = max(0.0, min(100.0, float(pct)))
+    await conn.execute(
+        "UPDATE sessions SET last_context_pct = ?, last_context_tokens = ?, "
+        "last_context_max = ? WHERE id = ?",
+        (safe_pct, int(tokens), int(max_tokens), session_id),
     )
     await conn.commit()
 

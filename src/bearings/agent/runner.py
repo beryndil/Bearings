@@ -40,6 +40,7 @@ from bearings import metrics
 from bearings.agent.approval_broker import ApprovalBroker
 from bearings.agent.events import (
     AgentEvent,
+    ContextUsage,
     ErrorEvent,
     MessageComplete,
     MessageStart,
@@ -175,7 +176,31 @@ class SessionRunner:
 
     async def submit_prompt(self, prompt: str) -> None:
         """Queue a prompt for this session. Prompts are processed
-        sequentially — if a turn is already in flight, this one waits."""
+        sequentially — if a turn is already in flight, this one waits.
+
+        If the session has `max_budget_usd` set and `total_cost_usd`
+        has already met or exceeded it, the prompt is refused with a
+        wire `ErrorEvent` instead of being queued. The SDK's
+        `max_budget_usd` advisory only fires *during* a turn once
+        cost accrues, so without this pre-check a user who's past
+        their cap can kick off another turn that runs to completion
+        before the advisory bites. Fail-closed at the gate."""
+        row = await store.get_session(self.db, self.session_id)
+        if row is not None:
+            cap = row.get("max_budget_usd")
+            spent = row.get("total_cost_usd") or 0.0
+            if cap is not None and float(spent) >= float(cap):
+                await self._emit_event(
+                    ErrorEvent(
+                        session_id=self.session_id,
+                        message=(
+                            f"Budget cap reached: ${float(spent):.2f} of "
+                            f"${float(cap):.2f}. Raise the cap in session "
+                            "settings or fork to a new session to continue."
+                        ),
+                    )
+                )
+                return
         await self._prompts.put(prompt)
 
     async def set_permission_mode(self, mode: Any) -> None:
@@ -369,6 +394,26 @@ class SessionRunner:
                     error=event.error,
                 )
                 metrics.tool_calls_finished.labels(ok=str(event.ok).lower()).inc()
+            elif isinstance(event, ContextUsage):
+                # Persist the latest snapshot on the session row so a
+                # fresh page load / reconnect has a number to paint
+                # before the next turn's live event arrives. Failure
+                # here must not drop the event for live subscribers —
+                # the fan-out to `_emit_event` already happened at the
+                # top of the loop. Swallow DB errors quietly.
+                try:
+                    await store.set_session_context_usage(
+                        self.db,
+                        self.session_id,
+                        pct=event.percentage,
+                        tokens=event.total_tokens,
+                        max_tokens=event.max_tokens,
+                    )
+                except Exception:
+                    log.exception(
+                        "runner %s: failed to persist context usage",
+                        self.session_id,
+                    )
             elif isinstance(event, MessageComplete):
                 await _persist_assistant_turn(
                     self.db,

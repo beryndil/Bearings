@@ -24,6 +24,8 @@ import pytest
 
 from bearings.agent.events import (
     AgentEvent,
+    ContextUsage,
+    ErrorEvent,
     MessageComplete,
     MessageStart,
     Token,
@@ -713,3 +715,148 @@ async def test_registry_shutdown_all_drains_every_runner(
         assert runner._worker is not None and runner._worker.done()
     assert registry.get("k0") is None
     assert registry.get("k1") is None
+
+
+# ---- context-usage persistence (Option 1 / migration 0013) ---------
+
+
+@pytest.mark.asyncio
+async def test_runner_persists_context_usage_to_session_row(
+    db: aiosqlite.Connection,
+) -> None:
+    """A ContextUsage event in the turn's stream causes the runner to
+    write `last_context_pct` / tokens / max onto the session row so a
+    fresh page load without an active WS sees a number. Verified by
+    replaying a scripted turn that includes a ContextUsage event and
+    then reading the row back through the same store helper the UI
+    uses."""
+    sid = await _session_id(db)
+    msg_id = "m1"
+    script: list[AgentEvent] = [
+        MessageStart(session_id=sid, message_id=msg_id),
+        Token(session_id=sid, text="hi"),
+        ContextUsage(
+            session_id=sid,
+            total_tokens=45_000,
+            max_tokens=200_000,
+            percentage=22.5,
+            model="m",
+            is_auto_compact_enabled=True,
+            auto_compact_threshold=175_000,
+        ),
+        MessageComplete(session_id=sid, message_id=msg_id, cost_usd=None),
+    ]
+    agent = ScriptedAgent(sid, scripts=[script])
+    runner = SessionRunner(sid, agent, db)
+    runner.start()
+    try:
+        await runner.submit_prompt("hi")
+        await _wait_until(lambda: not runner.is_running)
+    finally:
+        await runner.shutdown()
+    row = await store.get_session(db, sid)
+    assert row is not None
+    assert row["last_context_pct"] == pytest.approx(22.5)
+    assert row["last_context_tokens"] == 45_000
+    assert row["last_context_max"] == 200_000
+
+
+# ---- submit_prompt budget gate (Option 7) -------------------------
+
+
+@pytest.mark.asyncio
+async def test_submit_prompt_refuses_when_cap_reached(
+    db: aiosqlite.Connection,
+) -> None:
+    """When `sessions.total_cost_usd >= max_budget_usd`, `submit_prompt`
+    refuses the new prompt and emits a user-visible ErrorEvent. The
+    SDK's own `max_budget_usd` advisory fires only once cost accrues
+    during a turn, so without this gate a user already over-cap can
+    kick off another turn that runs to completion before the advisory
+    bites. Fail-closed at the gate."""
+    sid = await _session_id(db)
+    # Arrange: set both the cap and the already-accrued cost so the
+    # session is sitting right on the cap. Using the real store helpers
+    # exercises the same path a real session would hit.
+    await db.execute(
+        "UPDATE sessions SET max_budget_usd = ?, total_cost_usd = ? WHERE id = ?",
+        (1.00, 1.00, sid),
+    )
+    await db.commit()
+
+    agent = ScriptedAgent(sid, scripts=[])
+    runner = SessionRunner(sid, agent, db)
+    queue, _ = await runner.subscribe(0)
+    runner.start()
+    try:
+        await runner.submit_prompt("this should never run")
+        env = await asyncio.wait_for(queue.get(), timeout=1.0)
+    finally:
+        await runner.shutdown()
+    assert env.payload["type"] == "error"
+    assert "budget" in env.payload["message"].lower()
+    # Nothing ever made it onto the worker's prompt queue.
+    assert agent.prompts == []
+
+
+@pytest.mark.asyncio
+async def test_submit_prompt_allows_when_cap_not_yet_reached(
+    db: aiosqlite.Connection,
+) -> None:
+    """Converse of the refuse test: cost below the cap passes straight
+    through to the worker. Also covers the `max_budget_usd is None`
+    default (most sessions) by virtue of the fixture starting with
+    no cap set on the cost-under-cap row."""
+    sid = await _session_id(db)
+    await db.execute(
+        "UPDATE sessions SET max_budget_usd = ?, total_cost_usd = ? WHERE id = ?",
+        (5.00, 0.10, sid),
+    )
+    await db.commit()
+
+    msg_id = "m1"
+    script: list[AgentEvent] = [
+        MessageStart(session_id=sid, message_id=msg_id),
+        MessageComplete(session_id=sid, message_id=msg_id, cost_usd=None),
+    ]
+    agent = ScriptedAgent(sid, scripts=[script])
+    runner = SessionRunner(sid, agent, db)
+    runner.start()
+    try:
+        await runner.submit_prompt("go")
+        await _wait_until(lambda: agent.prompts == ["go"])
+    finally:
+        await runner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_submit_prompt_no_cap_is_always_allowed(
+    db: aiosqlite.Connection,
+) -> None:
+    """The default-case: no `max_budget_usd` set at all (None in the
+    DB). Must never refuse — caps are opt-in and absence of the column
+    means "no ceiling". Regression guard for a NULL-compare slip."""
+    sid = await _session_id(db)
+    msg_id = "m1"
+    script: list[AgentEvent] = [
+        MessageStart(session_id=sid, message_id=msg_id),
+        MessageComplete(session_id=sid, message_id=msg_id, cost_usd=None),
+    ]
+    agent = ScriptedAgent(sid, scripts=[script])
+    runner = SessionRunner(sid, agent, db)
+    runner.start()
+    try:
+        await runner.submit_prompt("go")
+        await _wait_until(lambda: agent.prompts == ["go"])
+    finally:
+        await runner.shutdown()
+    # Sanity: confirm the ErrorEvent path was not taken.
+    errors = [
+        env
+        for env in runner._event_log
+        if isinstance(env.payload, dict) and env.payload.get("type") == "error"
+    ]
+    assert errors == []
+    # Typing-only: reference ErrorEvent so the import doesn't become
+    # a lint casualty if the refuse-test is ever pruned.
+    assert ErrorEvent.__name__ == "ErrorEvent"

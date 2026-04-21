@@ -1,6 +1,6 @@
 {
   "name": "bearings-frontend",
-  "version": "0.3.13",
+  "version": "0.3.16",
   "private": true,
   "type": "module",
   "scripts": {

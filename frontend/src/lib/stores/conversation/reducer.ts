@@ -116,6 +116,19 @@ export type SessionState = {
   // response. Reconnect replays the `approval_request` from the ring
   // buffer so the modal reappears if the tab was closed mid-prompt.
   pendingApproval: api.ApprovalRequestEvent | null;
+  // Most recent context-window snapshot from `context_usage` events.
+  // Null until the session has completed one assistant turn. The
+  // conversation header reads this to render the context-pressure
+  // meter; the session row's cached columns back the first paint
+  // after load / reconnect, then live events take over.
+  contextUsage: ContextUsageState | null;
+};
+
+export type ContextUsageState = {
+  percentage: number;
+  totalTokens: number;
+  maxTokens: number;
+  isAutoCompactEnabled: boolean;
 };
 
 export function emptyState(): SessionState {
@@ -129,7 +142,8 @@ export function emptyState(): SessionState {
     hasMore: false,
     lastSeq: 0,
     completedMessageIds: new Set(),
-    pendingApproval: null
+    pendingApproval: null,
+    contextUsage: null
   };
 }
 
@@ -305,6 +319,18 @@ export function applyEvent(
       if (state.pendingApproval?.request_id === event.request_id) {
         state.pendingApproval = null;
       }
+      return;
+    case 'context_usage':
+      // Snapshot only — the reducer owns no derived math here. The
+      // header component does the color-band lookup from `percentage`
+      // at render time so the thresholds live in one place (the
+      // component) rather than being split between reducer and view.
+      state.contextUsage = {
+        percentage: event.percentage,
+        totalTokens: event.total_tokens,
+        maxTokens: event.max_tokens,
+        isAutoCompactEnabled: event.is_auto_compact_enabled
+      };
       return;
     case 'runner_status':
       // Sent once right after replay on every (re)connect. If the

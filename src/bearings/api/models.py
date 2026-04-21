@@ -47,6 +47,14 @@ class SessionOut(BaseModel):
     # here, which the frontend renders as 'default' in the selector.
     # One of: 'default', 'plan', 'acceptEdits', 'bypassPermissions'.
     permission_mode: str | None = None
+    # Most recent ContextUsage snapshot (migration 0013). NULL on
+    # sessions that have yet to complete an assistant turn, or that
+    # predate the column. Frontend renders a context-pressure meter
+    # from these when present; live updates come via the `context_usage`
+    # WS event.
+    last_context_pct: float | None = None
+    last_context_tokens: int | None = None
+    last_context_max: int | None = None
 
 
 class MessageOut(BaseModel):

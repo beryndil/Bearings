@@ -9,6 +9,7 @@
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
+  import ContextMeter from '$lib/components/ContextMeter.svelte';
   import TokenMeter from '$lib/components/TokenMeter.svelte';
   import { buildTurns } from '$lib/turns';
   import {
@@ -327,6 +328,9 @@
             · {sessions.selected.message_count} msg{sessions.selected.message_count === 1
               ? ''
               : 's'}
+          {/if}
+          {#if conversation.contextUsage}
+            · <ContextMeter context={conversation.contextUsage} />
           {/if}
         {:else}
           select or create a session to start

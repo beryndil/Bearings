@@ -17,6 +17,14 @@ export type Session = {
    * Agent connection reads this on (re)connect so plan / auto-edit /
    * bypass choices survive reloads. */
   permission_mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | null;
+  /** Most recent ContextUsage snapshot (migration 0013). Null until
+   * the session has completed at least one assistant turn. Live
+   * updates flow through the `context_usage` WS event; these cached
+   * fields back the first paint on load / reconnect so the meter
+   * isn't empty between turns. */
+  last_context_pct: number | null;
+  last_context_tokens: number | null;
+  last_context_max: number | null;
 };
 
 export type SessionCreate = {

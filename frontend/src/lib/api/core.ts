@@ -65,6 +65,25 @@ export type MessageCompleteEvent = {
   cache_read_tokens?: number | null;
   cache_creation_tokens?: number | null;
 };
+/** Snapshot of Anthropic context-window usage emitted after every
+ * completed turn. Sourced from `ClaudeSDKClient.get_context_usage()`
+ * (the CLI `/context` command's data). Used to drive the header
+ * context-pressure meter so Dave can see when a session is close to
+ * auto-compacting and act (checkpoint / fork / delegate) before it
+ * happens. `percentage` is 0..100. `is_auto_compact_enabled` lets the
+ * UI distinguish "approaching the compact threshold" (yellow) from
+ * "past safe capacity with no compaction safety net" (red). */
+export type ContextUsageEvent = {
+  type: 'context_usage';
+  session_id: string;
+  total_tokens: number;
+  max_tokens: number;
+  percentage: number;
+  model: string;
+  is_auto_compact_enabled: boolean;
+  auto_compact_threshold?: number | null;
+};
+
 export type ErrorEvent = { type: 'error'; session_id: string; message: string };
 
 /** Tool-use permission prompt raised by the SDK's `can_use_tool`
@@ -121,6 +140,7 @@ export type AgentEvent = (
   | ToolOutputDeltaEvent
   | MessageStartEvent
   | MessageCompleteEvent
+  | ContextUsageEvent
   | ErrorEvent
   | RunnerStatusEvent
   | ApprovalRequestEvent

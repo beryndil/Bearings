@@ -138,6 +138,9 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     message_count: 0,
     session_instructions: null,
     permission_mode: null,
+    last_context_pct: null,
+    last_context_tokens: null,
+    last_context_max: null,
     ...overrides
   };
 }

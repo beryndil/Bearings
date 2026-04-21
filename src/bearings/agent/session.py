@@ -24,6 +24,7 @@ from claude_agent_sdk import (
 
 from bearings.agent.events import (
     AgentEvent,
+    ContextUsage,
     ErrorEvent,
     MessageComplete,
     MessageStart,
@@ -223,6 +224,41 @@ class AgentSession:
             "</previous-conversation>\n\n"
         )
 
+    async def _capture_context_usage(self, client: ClaudeSDKClient) -> ContextUsage | None:
+        """Pull the SDK's current context-window snapshot and translate
+        it into a `ContextUsage` wire event. Called inside the
+        `ClaudeSDKClient` context manager at the end of a turn so the
+        underlying CLI subprocess is still live — calling after
+        `async with` exit would hit a closed connection.
+
+        Best-effort: any SDK or parsing failure returns None and the
+        turn continues. The context meter is purely advisory — losing
+        an update must not take down a successful turn. Swallowing
+        errors here is the one place in this module where we accept a
+        silent miss; everywhere else errors surface as `ErrorEvent`."""
+        try:
+            resp = await client.get_context_usage()
+        except Exception:
+            return None
+
+        def _opt_int(value: object) -> int | None:
+            if isinstance(value, bool) or not isinstance(value, int):
+                return None
+            return value
+
+        try:
+            return ContextUsage(
+                session_id=self.session_id,
+                total_tokens=int(resp.get("totalTokens") or 0),
+                max_tokens=int(resp.get("maxTokens") or 0),
+                percentage=float(resp.get("percentage") or 0.0),
+                model=str(resp.get("model") or self.model),
+                is_auto_compact_enabled=bool(resp.get("isAutoCompactEnabled", False)),
+                auto_compact_threshold=_opt_int(resp.get("autoCompactThreshold")),
+            )
+        except Exception:
+            return None
+
     async def stream(self, prompt: str) -> AsyncIterator[AgentEvent]:
         options_kwargs: dict[str, Any] = {
             "cwd": self.working_dir,
@@ -263,6 +299,7 @@ class AgentSession:
         message_id = uuid4().hex
         cost_usd: float | None = None
         usage: dict[str, Any] | None = None
+        context_event: ContextUsage | None = None
         try:
             async with ClaudeSDKClient(options=options) as client:
                 self._client = client
@@ -309,8 +346,21 @@ class AgentSession:
                             cost_usd = msg.total_cost_usd
                             usage = msg.usage
                             break
+                    # Capture the context-usage snapshot while the CLI
+                    # subprocess is still live. The async-with exit
+                    # below tears it down; calling afterward would hit
+                    # a closed connection.
+                    context_event = await self._capture_context_usage(client)
                 finally:
                     self._client = None
+            # Yield the context-usage snapshot *before* MessageComplete
+            # because the runner's stream loop breaks on MessageComplete
+            # to persist the turn — anything after that is dropped on
+            # the floor. The frontend reducer handles the two events on
+            # independent state slots (fringe vs. meter) so ordering
+            # doesn't create a visible glitch.
+            if context_event is not None:
+                yield context_event
             tokens = _extract_tokens(usage)
             yield MessageComplete(
                 session_id=self.session_id,

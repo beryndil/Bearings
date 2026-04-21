@@ -16,6 +16,7 @@ from claude_agent_sdk import (
 )
 
 from bearings.agent.events import (
+    ContextUsage,
     ErrorEvent,
     MessageComplete,
     MessageStart,
@@ -976,3 +977,112 @@ async def test_history_prefix_truncates_long_messages(tmp_path: Any) -> None:
     # pin an upper bound well below the raw body length to catch
     # regressions where truncation silently stops firing.
     assert len(prefix) < len(huge)
+
+
+# ---- context-usage capture (Option 1 / migration 0013) ---------------
+
+
+class _CtxClient(FakeClient):
+    """FakeClient variant that answers `get_context_usage()` with a
+    canned payload. The SDK's real response has a pile of fields we
+    don't touch here; this fake returns only what `_capture_context_usage`
+    actually reads so a future SDK shape-change gets caught by mypy on
+    the real code path, not this fixture."""
+
+    def __init__(
+        self,
+        messages: list[Any],
+        options: Any = None,
+        usage: dict[str, Any] | Exception | None = None,
+    ) -> None:
+        super().__init__(messages, options)
+        self._usage = usage
+
+    async def get_context_usage(self) -> dict[str, Any]:
+        if isinstance(self._usage, Exception):
+            raise self._usage
+        if self._usage is None:
+            raise AttributeError("no usage configured")
+        return self._usage
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_context_usage_before_message_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A completed turn yields ContextUsage right before MessageComplete
+    so the runner (which breaks on MessageComplete) sees the event
+    before it exits the stream loop. Field values track the SDK payload."""
+    payload = {
+        "totalTokens": 45000,
+        "maxTokens": 200000,
+        "percentage": 22.5,
+        "model": "claude-sonnet-4-6",
+        "isAutoCompactEnabled": True,
+        "autoCompactThreshold": 175000,
+    }
+
+    def factory(options: Any = None) -> _CtxClient:
+        return _CtxClient([_assistant(TextBlock("hi")), _result()], options, usage=payload)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="claude-sonnet-4-6")
+    events = [ev async for ev in session.stream("hi")]
+    types = [type(e).__name__ for e in events]
+    assert types == ["MessageStart", "Token", "ContextUsage", "MessageComplete"]
+    ctx = events[-2]
+    assert isinstance(ctx, ContextUsage)
+    assert ctx.total_tokens == 45000
+    assert ctx.max_tokens == 200000
+    assert ctx.percentage == pytest.approx(22.5)
+    assert ctx.is_auto_compact_enabled is True
+    assert ctx.auto_compact_threshold == 175000
+
+
+@pytest.mark.asyncio
+async def test_stream_skips_context_usage_when_sdk_call_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If `get_context_usage()` raises (older SDK, transport hiccup, CLI
+    crash-on-exit), the turn still completes cleanly — no ContextUsage
+    event, no propagated error. The meter is advisory; losing it must
+    never take down a successful turn."""
+
+    def factory(options: Any = None) -> _CtxClient:
+        return _CtxClient(
+            [_assistant(TextBlock("hi")), _result()],
+            options,
+            usage=RuntimeError("SDK refused the query"),
+        )
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("hi")]
+    types = [type(e).__name__ for e in events]
+    assert types == ["MessageStart", "Token", "MessageComplete"]
+    assert not any(isinstance(e, ContextUsage) for e in events)
+    assert not any(isinstance(e, ErrorEvent) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_context_usage_tolerates_missing_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unexpectedly sparse SDK payload still yields an event — we
+    zero-fill the missing numeric fields and default the flags. Better
+    to render 0% than skip the meter entirely on an SDK quirk."""
+
+    def factory(options: Any = None) -> _CtxClient:
+        return _CtxClient([_assistant(TextBlock("hi")), _result()], options, usage={})
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    events = [ev async for ev in session.stream("hi")]
+    ctx_events = [e for e in events if isinstance(e, ContextUsage)]
+    assert len(ctx_events) == 1
+    ctx = ctx_events[0]
+    assert ctx.total_tokens == 0
+    assert ctx.max_tokens == 0
+    assert ctx.percentage == 0.0
+    assert ctx.is_auto_compact_enabled is False
+    assert ctx.auto_compact_threshold is None

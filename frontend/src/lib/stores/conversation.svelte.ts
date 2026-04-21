@@ -7,6 +7,7 @@ import {
   capToolOutput,
   emptyState,
   hydrateToolCall,
+  type ContextUsageState,
   type LiveToolCall,
   type SessionState
 } from './conversation/reducer';
@@ -14,7 +15,7 @@ import {
 // Re-export so existing callers (components, tests) keep importing
 // from `$lib/stores/conversation.svelte` without knowing a reducer
 // module exists.
-export { TOOL_OUTPUT_CAP_CHARS, capToolOutput, type LiveToolCall };
+export { TOOL_OUTPUT_CAP_CHARS, capToolOutput, type ContextUsageState, type LiveToolCall };
 
 const PAGE_SIZE = 50;
 
@@ -55,6 +56,7 @@ class ConversationStore {
   pendingApproval = $derived<api.ApprovalRequestEvent | null>(
     this.active()?.pendingApproval ?? null
   );
+  contextUsage = $derived<ContextUsageState | null>(this.active()?.contextUsage ?? null);
 
   /** Highest `_seq` rendered for a session; passed to the server on
    * (re)connect as the replay cursor. */
@@ -92,6 +94,25 @@ class ConversationStore {
       ];
       state.completedMessageIds = new Set(page.messages.map((m) => m.id));
       this.totalCost = session.total_cost_usd;
+      // Seed the context meter from the cached columns so a fresh
+      // load / reconnect has a number to render before the next turn's
+      // live `context_usage` event fires. `isAutoCompactEnabled` isn't
+      // persisted on the row (it's a per-turn flag), so we default
+      // true — the SDK ships with auto-compact on, and a false reading
+      // would mis-paint the threshold band more alarmingly than
+      // warranted. The next live event overwrites this.
+      if (
+        session.last_context_pct !== null &&
+        session.last_context_tokens !== null &&
+        session.last_context_max !== null
+      ) {
+        state.contextUsage = {
+          percentage: session.last_context_pct,
+          totalTokens: session.last_context_tokens,
+          maxTokens: session.last_context_max,
+          isAutoCompactEnabled: true
+        };
+      }
       // Returned so AgentConnection.connect() can seed its
       // permissionMode from the persisted column without a second
       // getSession round-trip.

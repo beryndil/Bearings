@@ -77,6 +77,34 @@ class MessageComplete(BaseModel):
     cache_creation_tokens: int | None = None
 
 
+class ContextUsage(BaseModel):
+    """Snapshot of Anthropic context-window usage after a turn.
+
+    Sourced from `ClaudeSDKClient.get_context_usage()`, which mirrors
+    what the CLI `/context` command shows. We emit one event per turn,
+    right after `MessageComplete`, so the UI can render a "pressure"
+    meter and decide when to nag the user toward `/checkpoint` or
+    sub-agent delegation. Persistence on the session row (migration
+    0013) backs the first paint after a reload so the meter isn't
+    empty between reloads and the next turn.
+
+    `total_tokens`/`max_tokens` are stored verbatim so the UI can
+    render "45k / 200k" without another round-trip. `percentage` is
+    0..100 (SDK's own scale). `is_auto_compact_enabled` + threshold
+    let the UI color the threshold band distinctly — a session with
+    auto-compact off at 80% is in real danger; one at 80% with
+    auto-compact enabled is just approaching the trigger."""
+
+    type: Literal["context_usage"] = "context_usage"
+    session_id: str
+    total_tokens: int
+    max_tokens: int
+    percentage: float
+    model: str
+    is_auto_compact_enabled: bool
+    auto_compact_threshold: int | None = None
+
+
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     session_id: str
@@ -124,6 +152,7 @@ AgentEvent = (
     | ToolOutputDelta
     | MessageStart
     | MessageComplete
+    | ContextUsage
     | ErrorEvent
     | ApprovalRequest
     | ApprovalResolved

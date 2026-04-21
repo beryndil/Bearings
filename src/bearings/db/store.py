@@ -34,6 +34,7 @@ from bearings.db._sessions import (
     list_all_sessions,
     list_sessions,
     set_sdk_session_id,
+    set_session_context_usage,
     set_session_permission_mode,
     update_session,
 )
@@ -83,6 +84,7 @@ __all__ = [
     "put_tag_memory",
     "search_messages",
     "set_sdk_session_id",
+    "set_session_context_usage",
     "set_session_permission_mode",
     "update_session",
     "update_tag",
