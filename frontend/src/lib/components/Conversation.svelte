@@ -148,8 +148,14 @@
   // which is the desired behavior: the UI only guarantees Undo for
   // the most-recent op. Undo closures are pure per-op; the parent
   // clears them on dismiss/undo.
+  //
+  // Slice 7: `warnings` carries any tool-call-group split flags the
+  // server surfaced for this op. Rendered above the message in the
+  // toast so the user sees them before tapping Undo. Empty or absent
+  // on successful well-formed ops (the common case).
   type UndoState = {
     message: string;
+    warnings: api.ReorgWarning[];
     run: () => Promise<void>;
   };
   let undo = $state<UndoState | null>(null);
@@ -328,6 +334,7 @@
       const auditId = result.audit_id;
       undo = {
         message: `Moved ${result.moved} message to ${label}.`,
+        warnings: result.warnings,
         run: async () => {
           await api.reorgMove(targetSessionId, {
             target_session_id: sourceId,
@@ -367,6 +374,7 @@
       const auditId = result.audit_id;
       undo = {
         message: `Moved ${result.moved} message${plural} to ${label}.`,
+        warnings: result.warnings,
         run: async () => {
           await api.reorgMove(targetSessionId, {
             target_session_id: sourceId,
@@ -407,6 +415,7 @@
         message: `Split off ${movedCount} message${movedCount === 1 ? '' : 's'} into "${
           result.session.title ?? '(untitled)'
         }".`,
+        warnings: result.result.warnings,
         run: async () => {
           const rows = await api.listMessages(newId);
           if (rows.length > 0) {
@@ -452,6 +461,7 @@
           movedCount === 0
             ? `No messages to merge into ${label}.`
             : `Merged ${movedCount} message${plural} into ${label}.`,
+        warnings: result.warnings,
         run: async () => {
           if (sourceIds.length > 0) {
             await api.reorgMove(targetSessionId, {
@@ -763,6 +773,7 @@
 {#if undo}
   <ReorgUndoToast
     message={undo.message}
+    warnings={undo.warnings}
     onUndo={undo.run}
     onDismiss={onUndoDismiss}
   />

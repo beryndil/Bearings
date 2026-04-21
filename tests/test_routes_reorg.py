@@ -95,6 +95,52 @@ def _seed_ordered(
     return ids
 
 
+def _seed_roles(
+    db_path: Path,
+    session_id: str,
+    roles_and_contents: list[tuple[str, str]],
+) -> list[str]:
+    """Like `_seed_ordered` but lets the test pick a role per row so a
+    conversation with alternating assistant/user turns can be built up
+    in chronological order."""
+    base = datetime.now(UTC)
+    ids: list[str] = []
+    for i, (role, content) in enumerate(roles_and_contents):
+        stamp = (base + timedelta(seconds=i)).isoformat()
+        ids.append(_seed_message(db_path, session_id, role, content, created_at=stamp))
+    return ids
+
+
+def _seed_tool_call(
+    db_path: Path,
+    session_id: str,
+    *,
+    name: str,
+    message_id: str | None,
+    tc_id: str | None = None,
+) -> str:
+    """Insert a tool_calls row for the warning-detector tests. `name`
+    shows up in warning messages; `message_id` None models an orphan
+    call that should be ignored by the detector."""
+    call_id = tc_id or uuid4().hex
+
+    async def _run() -> None:
+        conn = await aiosqlite.connect(str(db_path))
+        try:
+            await conn.execute("PRAGMA foreign_keys = ON")
+            await conn.execute(
+                "INSERT INTO tool_calls (id, session_id, message_id, name, "
+                "input, started_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (call_id, session_id, message_id, name, "{}", datetime.now(UTC).isoformat()),
+            )
+            await conn.commit()
+        finally:
+            await conn.close()
+
+    asyncio.run(_run())
+    return call_id
+
+
 # ---------- move ------------------------------------------------------
 
 
@@ -615,6 +661,178 @@ def test_delete_audit_404_on_missing_id(client: TestClient) -> None:
     src = _create(client, title="src")
     resp = client.delete(f"/api/sessions/{src['id']}/reorg/audits/99999")
     assert resp.status_code == 404
+
+
+# ---------- warnings (Slice 7) ----------------------------------------
+
+
+def test_move_emits_warning_when_split_would_orphan_tool_call(
+    client: TestClient, tmp_settings: Settings
+) -> None:
+    """Moving an assistant row but leaving its paired tool_result user
+    row behind triggers the warn. Source is assistant-then-user; moving
+    only the assistant orphans it."""
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    ids = _seed_roles(
+        tmp_settings.storage.db_path,
+        src["id"],
+        [("assistant", "calls tool"), ("user", "tool result")],
+    )
+    _seed_tool_call(tmp_settings.storage.db_path, src["id"], name="Bash", message_id=ids[0])
+
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/move",
+        json={"target_session_id": dst["id"], "message_ids": [ids[0]]},
+    )
+    assert resp.status_code == 200
+    warnings = resp.json()["warnings"]
+    assert len(warnings) == 1
+    assert warnings[0]["code"] == "orphan_tool_call"
+    assert "Bash" in warnings[0]["message"]
+    assert warnings[0]["details"]["assistant_message_id"] == ids[0]
+    assert warnings[0]["details"]["user_message_id"] == ids[1]
+
+
+def test_move_no_warning_when_whole_pair_moves(client: TestClient, tmp_settings: Settings) -> None:
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    ids = _seed_roles(
+        tmp_settings.storage.db_path,
+        src["id"],
+        [("assistant", "calls"), ("user", "result")],
+    )
+    _seed_tool_call(tmp_settings.storage.db_path, src["id"], name="Bash", message_id=ids[0])
+
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/move",
+        json={"target_session_id": dst["id"], "message_ids": ids},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["warnings"] == []
+
+
+def test_split_emits_warning_when_boundary_cuts_group(
+    client: TestClient, tmp_settings: Settings
+) -> None:
+    """Split after the assistant leaves the user tool_result stranded
+    on the new session — same orphan, same warning."""
+    src = _create(client, title="src")
+    ids = _seed_roles(
+        tmp_settings.storage.db_path,
+        src["id"],
+        [("user", "kickoff"), ("assistant", "calls"), ("user", "result")],
+    )
+    _seed_tool_call(tmp_settings.storage.db_path, src["id"], name="Read", message_id=ids[1])
+    tag_id = _default_tag(client)
+
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/split",
+        json={
+            "after_message_id": ids[1],  # assistant stays, user result moves
+            "new_session": {"title": "spin", "tag_ids": [tag_id]},
+        },
+    )
+    assert resp.status_code == 201
+    warnings = resp.json()["result"]["warnings"]
+    assert len(warnings) == 1
+    assert warnings[0]["code"] == "orphan_tool_call"
+    assert warnings[0]["details"]["tool_names"] == "Read"
+
+
+def test_merge_never_emits_warnings(client: TestClient, tmp_settings: Settings) -> None:
+    """Merge moves every source row together — the pair always rides
+    the same boundary, so the detector has nothing to flag."""
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    ids = _seed_roles(
+        tmp_settings.storage.db_path,
+        src["id"],
+        [("assistant", "calls"), ("user", "result")],
+    )
+    _seed_tool_call(tmp_settings.storage.db_path, src["id"], name="Bash", message_id=ids[0])
+
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/merge",
+        json={"target_session_id": dst["id"], "delete_source": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["warnings"] == []
+
+
+# ---------- Prometheus counter (Slice 7) -----------------------------
+
+
+def _counter_value(client: TestClient, op: str) -> float:
+    """Read bearings_session_reorg_total{op=...} from /metrics. Returns
+    0.0 when the label combo hasn't been incremented yet — the counter
+    only materializes the label pair on first `.inc()`."""
+    from bearings.metrics import session_reorg_total
+
+    return float(session_reorg_total.labels(op=op)._value.get())
+
+
+def test_metric_increments_on_move(client: TestClient, tmp_settings: Settings) -> None:
+    before = _counter_value(client, "move")
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    ids = _seed_ordered(tmp_settings.storage.db_path, src["id"], ["a"])
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/move",
+        json={"target_session_id": dst["id"], "message_ids": ids},
+    )
+    assert resp.status_code == 200
+    assert _counter_value(client, "move") == before + 1
+
+
+def test_metric_increments_on_split(client: TestClient, tmp_settings: Settings) -> None:
+    before = _counter_value(client, "split")
+    src = _create(client, title="src")
+    ids = _seed_ordered(tmp_settings.storage.db_path, src["id"], ["a", "b"])
+    tag_id = _default_tag(client)
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/split",
+        json={
+            "after_message_id": ids[0],
+            "new_session": {"title": "x", "tag_ids": [tag_id]},
+        },
+    )
+    assert resp.status_code == 201
+    assert _counter_value(client, "split") == before + 1
+
+
+def test_metric_increments_on_merge(client: TestClient, tmp_settings: Settings) -> None:
+    before = _counter_value(client, "merge")
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    _seed_ordered(tmp_settings.storage.db_path, src["id"], ["a"])
+    resp = client.post(
+        f"/api/sessions/{src['id']}/reorg/merge",
+        json={"target_session_id": dst["id"], "delete_source": False},
+    )
+    assert resp.status_code == 200
+    assert _counter_value(client, "merge") == before + 1
+
+
+def test_metric_does_not_increment_on_noop_move(client: TestClient, tmp_settings: Settings) -> None:
+    """Idempotent re-run with zero moves must not inflate the counter —
+    it only reflects real ops."""
+    src = _create(client, title="src")
+    dst = _create(client, title="dst")
+    ids = _seed_ordered(tmp_settings.storage.db_path, src["id"], ["a"])
+    first = client.post(
+        f"/api/sessions/{src['id']}/reorg/move",
+        json={"target_session_id": dst["id"], "message_ids": ids},
+    )
+    assert first.status_code == 200
+    before_second = _counter_value(client, "move")
+    second = client.post(
+        f"/api/sessions/{src['id']}/reorg/move",
+        json={"target_session_id": dst["id"], "message_ids": ids},
+    )
+    assert second.status_code == 200
+    assert second.json()["moved"] == 0
+    assert _counter_value(client, "move") == before_second
 
 
 def test_noop_move_records_no_audit(client: TestClient, tmp_settings: Settings) -> None:

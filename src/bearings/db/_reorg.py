@@ -9,6 +9,14 @@ audit write lives outside `move_messages_tx` so callers can record
 the exact op name (`move` / `split` / `merge`) and the target title
 snapshot without the primitive having to know about routing concerns.
 
+Slice 7 added `detect_tool_call_group_warnings` — a pure function
+that scans a proposed move and flags any tool-call groups (assistant
+message + its immediate-next user message carrying the tool_result)
+that would be split across the move boundary. The routes warn,
+never refuse — the user decides whether to proceed. Orphan pairs
+produce an incoherent history on replay; better to surface that in
+the undo toast than silently break a session.
+
 `sessions.message_count` is derived via `SELECT COUNT(*)` in
 `_sessions.SESSION_COUNT`, so nothing in here has to recompute it —
 touching `messages.session_id` is enough for the next read to see the
@@ -186,3 +194,83 @@ async def delete_reorg_audit(conn: aiosqlite.Connection, audit_id: int) -> bool:
     deleted = cursor.rowcount > 0
     await conn.commit()
     return deleted
+
+
+def detect_tool_call_group_warnings(
+    messages: Sequence[dict[str, Any]],
+    tool_calls: Sequence[dict[str, Any]],
+    moved_ids: Sequence[str],
+) -> list[dict[str, Any]]:
+    """Scan a proposed move for tool-call groups split across the boundary.
+
+    A *tool-call group* in Claude's API is an assistant message that
+    emitted one or more `ToolUseBlock`s, paired with the immediate-
+    next user message carrying the matching `ToolResultBlock`s.
+    Splitting that pair yields an invalid history on replay: one side
+    sees "assistant requested tool X" with no matching result, the
+    other sees a bare tool_result with no originating call.
+
+    This is advisory. The route surfaces the warnings on the response;
+    the UI renders them in the undo toast. Never refuses the op — per
+    the plan, the user decides whether to proceed.
+
+    Args:
+        messages: Every message in the source session, oldest first.
+            Each dict must carry `id` and `role`.
+        tool_calls: Every tool_call row for the source session. Used
+            to identify which assistant messages actually emitted
+            tool calls and to collect the tool names for the warning
+            message. Orphan tool calls (null `message_id`) are
+            ignored — they don't belong to any group.
+        moved_ids: The message ids that will be moved to the target.
+            Order doesn't matter.
+
+    Returns:
+        A list of warning dicts with shape
+        ``{code, message, details: {assistant_message_id,
+        user_message_id, tool_names}}`` — one per split group. Empty
+        when no splits are detected. Warning order follows message
+        order so the UI can render them deterministically.
+    """
+    moved = set(moved_ids)
+    # Map assistant message id -> list of tool names, for groups only.
+    tool_names_by_msg: dict[str, list[str]] = {}
+    for tc in tool_calls:
+        msg_id = tc.get("message_id")
+        if msg_id is None:
+            continue  # orphan — not part of a group
+        tool_names_by_msg.setdefault(msg_id, []).append(str(tc.get("name", "")))
+
+    warnings: list[dict[str, Any]] = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "assistant":
+            continue
+        assistant_id = msg["id"]
+        tool_names = tool_names_by_msg.get(assistant_id)
+        if not tool_names:
+            continue  # assistant turn with no tool calls — nothing to pair
+        # The matching result lives on the immediate-next user row. If
+        # there isn't one, the pair is already incomplete; the move
+        # can't make it worse so don't warn.
+        if i + 1 >= len(messages):
+            continue
+        user_msg = messages[i + 1]
+        if user_msg.get("role") != "user":
+            continue
+        user_id = user_msg["id"]
+        if (assistant_id in moved) == (user_id in moved):
+            continue  # both move together, or both stay — no split
+        warnings.append(
+            {
+                "code": "orphan_tool_call",
+                "message": (
+                    f"Moving would separate tool call(s) {', '.join(tool_names)} from their result"
+                ),
+                "details": {
+                    "assistant_message_id": assistant_id,
+                    "user_message_id": user_id,
+                    "tool_names": ",".join(tool_names),
+                },
+            }
+        )
+    return warnings

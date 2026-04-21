@@ -50,3 +50,15 @@ ws_events_sent = Counter(
     ["type"],
     registry=REGISTRY,
 )
+
+# Slice 7 of the Session Reorg plan
+# (`~/.claude/plans/sparkling-triaging-otter.md`). One label per op so
+# move/split/merge volume can be compared independently. Incremented in
+# `routes_reorg.py` after the route commits; a failed op (400/404 or a
+# raised exception) never bumps the counter.
+session_reorg_total = Counter(
+    "bearings_session_reorg_total",
+    "Session reorg operations completed, by op type.",
+    ["op"],
+    registry=REGISTRY,
+)

@@ -574,15 +574,58 @@ cover shape, not feel.
     Dave can retitle, retag, drag messages between proposals, and
     approve individually. Fallback until Wave 3: rule-based heuristic
     (long-silence split + keyword-shift split) as placeholder.
-  - [ ] **Slice 7 — Polish.** Tool-call-group warnings on splits that
-    would orphan a call/result pair (warn, not refuse — user decides).
-    Prometheus `bearings_session_reorg_total{op}` counter. Optional
-    audit table if the divider isn't enough.
+  - [x] **Slice 7 — Polish.** Shipped as v0.3.22.
+    `store.detect_tool_call_group_warnings` scans proposed moves
+    for assistant/user (tool_use + tool_result) pairs that would
+    straddle the boundary; routes surface the warning on the
+    response and `ReorgUndoToast` renders each one in amber above
+    the main message. Prometheus `bearings_session_reorg_total{op}`
+    counter incremented on every real op (not idempotent no-ops).
+    The "optional audit table" fallback wasn't needed — the
+    `ReorgAuditDivider` stream already covers that purpose.
 
   Open design questions (see plan §"Open questions for Dave"):
   cost-attribution policy (leave on source vs. follow messages),
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
+
+## v0.3.22 — shipped
+
+Slice 7 (Polish) of the Session Reorg plan
+(`~/.claude/plans/sparkling-triaging-otter.md`). Tool-call-group
+warnings on splits that would orphan a call/result pair + a
+Prometheus counter for per-op volume. Ships the last unblocked
+piece of the reorg plan.
+
+- [x] `store.detect_tool_call_group_warnings(messages, tool_calls,
+  moved_ids)` — pure function, no DB writes. Flags any assistant
+  message with ≥1 tool_calls whose immediate-next user message (the
+  tool_result carrier) would end up on the opposite side of the
+  boundary from the assistant.
+- [x] `/reorg/move` and `/reorg/split` populate
+  `warnings: [{code: 'orphan_tool_call', message, details: {
+  assistant_message_id, user_message_id, tool_names }}]` in the
+  response. `/reorg/merge` always returns `[]` — merge moves every
+  source row together so no pair can be split by it.
+- [x] Warnings computed BEFORE `move_messages_tx` so the scan sees
+  both halves of any affected pair on the source.
+- [x] `ReorgUndoToast` renders an amber banner above the main
+  message for each warning (`data-testid="reorg-undo-warning"`,
+  `data-warning-code="orphan_tool_call"`). Hidden entirely when the
+  list is empty — no visual change on the common path.
+- [x] `bearings_session_reorg_total{op=move|split|merge}` counter
+  in `metrics.py`. Instrumented in each route at commit time so a
+  failed / no-op call never bumps the counter.
+- [x] 17 new pytest (354 total, up from 337): 9 warning-detector
+  unit tests + 4 route-level warning tests + 4 metric tests.
+- [x] 2 new vitest (147 total, up from 145) for the toast's warning
+  render branch.
+
+Reorg-plan close-out:
+
+- Slices 1–5 + 7 shipped. Slice 6 (LLM-assisted analyze) remains
+  BLOCKED on token-cost Wave 3 (the sub-agent researcher). Dave
+  declined the local-LLM / heuristic fallback variants.
 
 ## v0.3.21 — shipped
 

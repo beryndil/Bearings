@@ -13,8 +13,12 @@ Every route stops any live runner on the affected sessions so the
 SDK's in-memory context rebuilds against the new DB state on the
 next turn (v0.3.15 priming is the belt).
 
-Tool-call-group warnings are still deferred to Slice 7; the shared
-`warnings: []` slot lets that land without breaking the shape.
+Slice 7 wired in tool-call-group warnings (via
+`store.detect_tool_call_group_warnings`) and a
+`bearings_session_reorg_total{op}` Prometheus counter. Warnings are
+advisory — the op still runs, the UI surfaces them. Merge never
+produces group-split warnings because it moves every source row
+together, preserving chronology.
 """
 
 from __future__ import annotations
@@ -32,9 +36,11 @@ from bearings.api.models import (
     ReorgMoveResult,
     ReorgSplitRequest,
     ReorgSplitResult,
+    ReorgWarning,
     SessionOut,
 )
 from bearings.db import store
+from bearings.metrics import session_reorg_total
 
 router = APIRouter(
     prefix="/sessions",
@@ -68,6 +74,25 @@ async def _stop_runner_if_live(app_state: Any, session_id: str) -> None:
     await runner.request_stop()
 
 
+async def _detect_warnings(
+    conn: Any,
+    source_id: str,
+    moved_ids: list[str],
+) -> list[ReorgWarning]:
+    """Gather tool-call-group-split warnings for a proposed move.
+
+    Pure read against the source session's current state — safe to
+    call before or after the move since it only compares message ids.
+    We call it before so the warning reflects *what was asked for*,
+    not what landed (idempotent re-moves would otherwise silently
+    show an empty list).
+    """
+    msgs = await store.list_messages(conn, source_id)
+    calls = await store.list_tool_calls(conn, source_id)
+    raw = store.detect_tool_call_group_warnings(msgs, calls, moved_ids)
+    return [ReorgWarning(**w) for w in raw]
+
+
 @router.post("/{session_id}/reorg/move", response_model=ReorgMoveResult)
 async def reorg_move(
     session_id: str,
@@ -84,6 +109,11 @@ async def reorg_move(
     target = await store.get_session(conn, body.target_session_id)
     if target is None:
         raise HTTPException(status_code=404, detail="target session not found")
+
+    # Detect tool-call-group splits BEFORE the move so the source
+    # still has both halves of any affected pair — otherwise the
+    # pair's already partly on the target and the scan can't see it.
+    warnings = await _detect_warnings(conn, session_id, body.message_ids)
 
     result = await store.move_messages_tx(
         conn,
@@ -104,13 +134,14 @@ async def reorg_move(
             op="move",
         )
         await conn.commit()
+        session_reorg_total.labels(op="move").inc()
     await _stop_runner_if_live(request.app.state, session_id)
     await _stop_runner_if_live(request.app.state, body.target_session_id)
 
     return ReorgMoveResult(
         moved=result.moved,
         tool_calls_followed=result.tool_calls_followed,
-        warnings=[],
+        warnings=warnings,
         audit_id=audit_id,
     )
 
@@ -152,6 +183,13 @@ async def reorg_split(
     if not moved_ids:
         raise HTTPException(status_code=400, detail="no messages after the anchor to split")
 
+    # Warning scan against the pre-split source — the proposed moved
+    # set is the post-anchor tail, any tool-call pair that straddles
+    # the anchor boundary is the one we flag.
+    source_calls = await store.list_tool_calls(conn, session_id)
+    raw_warnings = store.detect_tool_call_group_warnings(all_messages, source_calls, moved_ids)
+    warnings = [ReorgWarning(**w) for w in raw_warnings]
+
     new_row = await store.create_session(
         conn,
         working_dir=body.new_session.working_dir or source["working_dir"],
@@ -179,6 +217,7 @@ async def reorg_split(
             op="split",
         )
         await conn.commit()
+        session_reorg_total.labels(op="split").inc()
     # Only the source can have a live runner — the new session id is
     # one we just created, so no runner exists for it yet.
     await _stop_runner_if_live(request.app.state, session_id)
@@ -190,7 +229,7 @@ async def reorg_split(
         result=ReorgMoveResult(
             moved=move_result.moved,
             tool_calls_followed=move_result.tool_calls_followed,
-            warnings=[],
+            warnings=warnings,
             audit_id=audit_id,
         ),
     )
@@ -260,9 +299,15 @@ async def reorg_merge(
         await store.delete_session(conn, session_id)
         deleted = True
 
+    if result.moved > 0:
+        session_reorg_total.labels(op="merge").inc()
+
     await _stop_runner_if_live(request.app.state, session_id)
     await _stop_runner_if_live(request.app.state, body.target_session_id)
 
+    # Merge moves every source row together, so it cannot create a
+    # group split — both halves of any pre-existing pair ride the
+    # same boundary. Warnings intentionally left empty.
     return ReorgMergeResult(
         moved=result.moved,
         tool_calls_followed=result.tool_calls_followed,

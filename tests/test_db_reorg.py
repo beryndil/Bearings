@@ -19,6 +19,7 @@ from bearings.db.store import (
     create_session,
     delete_reorg_audit,
     delete_session,
+    detect_tool_call_group_warnings,
     get_session,
     init_db,
     insert_message,
@@ -371,3 +372,104 @@ async def test_reorg_audit_rejects_unknown_op(
             op="archive",  # type: ignore[arg-type]
         )
     await conn.rollback()
+
+
+# ---------- detect_tool_call_group_warnings (Slice 7) ----------------
+
+
+def _msg(msg_id: str, role: str) -> dict[str, object]:
+    return {"id": msg_id, "role": role}
+
+
+def _tc(tc_id: str, name: str, message_id: str | None) -> dict[str, object]:
+    return {"id": tc_id, "name": name, "message_id": message_id}
+
+
+def test_warnings_empty_when_no_tool_calls() -> None:
+    """No tool calls at all → no groups, no warnings ever."""
+    msgs = [_msg("a", "assistant"), _msg("u", "user")]
+    assert detect_tool_call_group_warnings(msgs, [], ["a"]) == []
+
+
+def test_warnings_empty_when_pair_moves_together() -> None:
+    """Moving both halves of a group is always safe."""
+    msgs = [_msg("a", "assistant"), _msg("u", "user")]
+    calls = [_tc("tc1", "Bash", "a")]
+    assert detect_tool_call_group_warnings(msgs, calls, ["a", "u"]) == []
+
+
+def test_warnings_empty_when_pair_stays_together() -> None:
+    """Leaving both halves behind is equally safe."""
+    msgs = [
+        _msg("user0", "user"),
+        _msg("a", "assistant"),
+        _msg("u", "user"),
+        _msg("later", "user"),
+    ]
+    calls = [_tc("tc1", "Bash", "a")]
+    # Only move the unrelated tail row.
+    assert detect_tool_call_group_warnings(msgs, calls, ["later"]) == []
+
+
+def test_warnings_flag_split_when_assistant_moves_without_result() -> None:
+    """Moving the assistant but leaving its result orphans the call."""
+    msgs = [_msg("a", "assistant"), _msg("u", "user")]
+    calls = [_tc("tc1", "Bash", "a"), _tc("tc2", "Read", "a")]
+    warnings = detect_tool_call_group_warnings(msgs, calls, ["a"])
+    assert len(warnings) == 1
+    w = warnings[0]
+    assert w["code"] == "orphan_tool_call"
+    assert "Bash" in w["message"]
+    assert "Read" in w["message"]
+    assert w["details"]["assistant_message_id"] == "a"
+    assert w["details"]["user_message_id"] == "u"
+    assert w["details"]["tool_names"] == "Bash,Read"
+
+
+def test_warnings_flag_split_when_result_moves_without_assistant() -> None:
+    """Symmetric: moving only the user result orphans the call too."""
+    msgs = [_msg("a", "assistant"), _msg("u", "user")]
+    calls = [_tc("tc1", "Bash", "a")]
+    warnings = detect_tool_call_group_warnings(msgs, calls, ["u"])
+    assert len(warnings) == 1
+    assert warnings[0]["details"]["assistant_message_id"] == "a"
+    assert warnings[0]["details"]["user_message_id"] == "u"
+
+
+def test_warnings_ignore_orphan_tool_calls_with_null_message_id() -> None:
+    """Tool calls with no anchor message aren't part of a group."""
+    msgs = [_msg("a", "assistant"), _msg("u", "user")]
+    calls = [_tc("orphan", "Bash", None)]
+    assert detect_tool_call_group_warnings(msgs, calls, ["a"]) == []
+
+
+def test_warnings_skip_trailing_assistant_with_no_following_user() -> None:
+    """Incomplete pair (assistant is the last message) — pre-existing,
+    not caused by the move. Don't nag."""
+    msgs = [_msg("a", "assistant")]
+    calls = [_tc("tc1", "Bash", "a")]
+    assert detect_tool_call_group_warnings(msgs, calls, ["a"]) == []
+
+
+def test_warnings_skip_when_next_message_is_not_user() -> None:
+    """An assistant-followed-by-assistant means the tool result went
+    somewhere else (or the pair is malformed). Don't synthesize a
+    group that isn't there."""
+    msgs = [_msg("a", "assistant"), _msg("a2", "assistant")]
+    calls = [_tc("tc1", "Bash", "a")]
+    assert detect_tool_call_group_warnings(msgs, calls, ["a"]) == []
+
+
+def test_warnings_collect_multiple_splits_in_order() -> None:
+    """Two pairs straddling the boundary → two warnings, message order."""
+    msgs = [
+        _msg("a1", "assistant"),
+        _msg("u1", "user"),
+        _msg("a2", "assistant"),
+        _msg("u2", "user"),
+    ]
+    calls = [_tc("tc1", "Bash", "a1"), _tc("tc2", "Read", "a2")]
+    # Move both assistants but neither user — splits both pairs.
+    warnings = detect_tool_call_group_warnings(msgs, calls, ["a1", "a2"])
+    ids = [w["details"]["assistant_message_id"] for w in warnings]
+    assert ids == ["a1", "a2"]

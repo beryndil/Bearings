@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
 
+  import type { ReorgWarning } from '$lib/api';
+
   // Slice 3 of the Session Reorg plan
   // (`~/.claude/plans/sparkling-triaging-otter.md`). A transient
   // bottom-right toast that gives the user a 30-second window to
@@ -9,16 +11,33 @@
   //     when complete. The toast disables the button while awaiting.
   //   - `onDismiss` — fired on either timeout elapsed, explicit × tap,
   //     or a successful undo. Clears the parent's pending-op state.
+  //
+  // Slice 7 added optional `warnings` — advisory flags from the
+  // server (currently only "orphan_tool_call" for split/move ops that
+  // would separate a tool call from its result). Rendered as a
+  // collapsed amber block above the main message so the user can
+  // decide whether to Undo before the window elapses. Never fatal —
+  // the op has already committed by the time the toast mounts.
 
   type Props = {
     message: string;
+    /** Advisory warnings from the server. Omit or pass `[]` when the
+     * caller has nothing to surface — the warn block hides entirely
+     * in that case so the toast stays compact on the common path. */
+    warnings?: ReorgWarning[];
     /** Milliseconds of grace period. Defaults to 30_000 per plan. */
     windowMs?: number;
     onUndo: () => Promise<void> | void;
     onDismiss: () => void;
   };
 
-  const { message, windowMs = 30_000, onUndo, onDismiss }: Props = $props();
+  const {
+    message,
+    warnings = [],
+    windowMs = 30_000,
+    onUndo,
+    onDismiss
+  }: Props = $props();
 
   const startedAt = Date.now();
   let remaining = $state(30);
@@ -69,30 +88,45 @@
 {#if !done}
   <div
     class="fixed bottom-4 right-4 z-50 rounded-lg border border-slate-700 bg-slate-900
-      shadow-2xl px-4 py-3 flex items-center gap-3 max-w-sm"
+      shadow-2xl px-4 py-3 flex flex-col gap-2 max-w-sm"
     role="status"
     aria-live="polite"
     data-testid="reorg-undo-toast"
   >
-    <span class="text-xs text-slate-200 flex-1">
-      {message}
-    </span>
-    <button
-      type="button"
-      class="text-xs text-amber-300 hover:text-amber-200 font-medium disabled:opacity-50"
-      onclick={runUndo}
-      disabled={undoing}
-      data-testid="reorg-undo-button"
-    >
-      {undoing ? 'Undoing…' : `Undo (${remaining}s)`}
-    </button>
-    <button
-      type="button"
-      class="text-slate-500 hover:text-slate-300 text-xs"
-      aria-label="Dismiss undo toast"
-      onclick={dismiss}
-    >
-      ✕
-    </button>
+    {#if warnings.length > 0}
+      <ul
+        class="text-[11px] text-amber-300 border border-amber-500/40 bg-amber-500/10
+          rounded px-2 py-1 space-y-0.5"
+        data-testid="reorg-undo-warnings"
+      >
+        {#each warnings as warning (warning.code + warning.message)}
+          <li data-testid="reorg-undo-warning" data-warning-code={warning.code}>
+            <span class="mr-1" aria-hidden="true">⚠</span>{warning.message}
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-slate-200 flex-1">
+        {message}
+      </span>
+      <button
+        type="button"
+        class="text-xs text-amber-300 hover:text-amber-200 font-medium disabled:opacity-50"
+        onclick={runUndo}
+        disabled={undoing}
+        data-testid="reorg-undo-button"
+      >
+        {undoing ? 'Undoing…' : `Undo (${remaining}s)`}
+      </button>
+      <button
+        type="button"
+        class="text-slate-500 hover:text-slate-300 text-xs"
+        aria-label="Dismiss undo toast"
+        onclick={dismiss}
+      >
+        ✕
+      </button>
+    </div>
   </div>
 {/if}

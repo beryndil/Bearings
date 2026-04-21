@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ReorgWarning } from '$lib/api';
+
 import ReorgUndoToast from './ReorgUndoToast.svelte';
 
 afterEach(() => {
@@ -72,6 +74,44 @@ describe('ReorgUndoToast', () => {
     resolve();
     // Cleanup: let the microtask complete.
     await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it('omits the warning block when no warnings are passed', () => {
+    const { queryByTestId } = render(ReorgUndoToast, {
+      message: 'done',
+      onUndo: vi.fn(),
+      onDismiss: vi.fn()
+    });
+    // Default path: toast stays compact, no amber banner.
+    expect(queryByTestId('reorg-undo-warnings')).toBeNull();
+  });
+
+  it('renders each warning message above the body when warnings are present', () => {
+    const warnings: ReorgWarning[] = [
+      {
+        code: 'orphan_tool_call',
+        message: "Moving would separate tool call(s) Bash from their result",
+        details: { assistant_message_id: 'a', user_message_id: 'u', tool_names: 'Bash' }
+      },
+      {
+        code: 'orphan_tool_call',
+        message: "Moving would separate tool call(s) Read from their result",
+        details: { assistant_message_id: 'a2', user_message_id: 'u2', tool_names: 'Read' }
+      }
+    ];
+    const { getByTestId, getAllByTestId } = render(ReorgUndoToast, {
+      message: 'Moved 2 messages.',
+      warnings,
+      onUndo: vi.fn(),
+      onDismiss: vi.fn()
+    });
+    expect(getByTestId('reorg-undo-warnings')).toBeInTheDocument();
+    const rows = getAllByTestId('reorg-undo-warning');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('Bash');
+    expect(rows[1].textContent).toContain('Read');
+    // Each row tags itself with the warning code for filtering/styling.
+    expect(rows[0].getAttribute('data-warning-code')).toBe('orphan_tool_call');
   });
 
   it('auto-dismiss does not fire after the user clicks Undo', async () => {

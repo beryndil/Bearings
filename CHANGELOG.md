@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.22] - 2026-04-21
+
+### Added
+
+- Tool-call-group warnings on reorg ops — Slice 7 (Polish) of the
+  Session Reorg plan (`~/.claude/plans/sparkling-triaging-otter.md`).
+  A new pure function `store.detect_tool_call_group_warnings` scans
+  a proposed move for assistant/user pairs (tool_use + tool_result)
+  that would be split across the boundary. The move route populates
+  `warnings: [{code: 'orphan_tool_call', message, details}]` in the
+  response; the split route does the same for its tail-move. Advisory
+  only — the op still runs. Merge never produces these warnings
+  because it moves every source row together.
+- `ReorgUndoToast` now renders any advisory warnings as an amber
+  block above the main message (`data-testid="reorg-undo-warning"`
+  per row, tagged with `data-warning-code`). Absent / empty warnings
+  keep the toast compact — no visual change on the common path.
+- `bearings_session_reorg_total{op=move|split|merge}` Prometheus
+  counter — exposed at `/metrics`. Only real ops bump the counter:
+  idempotent no-op moves (0 rows changed) don't inflate it, matching
+  the audit-row write behavior.
+
+### Changed
+
+- Slice 3/4/5 undo closures (`doMove`, `doBulkMove`, `doSplit`,
+  `doMerge` in `Conversation.svelte`) now carry the response's
+  `warnings` list into the `UndoState`. Merge always passes `[]`
+  since the server never emits group-split warnings for merge.
+- `routes_reorg.py` computes warnings BEFORE calling
+  `move_messages_tx` so the scan sees both halves of any affected
+  pair on the source; computing after would miss pairs whose
+  halves were already split by the move itself.
+
+### Notes
+
+- 17 new pytest (354 total, up from 337): 9 unit tests for the
+  warning detector's edge cases + 4 route-level warning tests + 4
+  metric-increment tests (including "no-op move doesn't inflate").
+- 2 new vitest (147 total, up from 145) for the new warning render
+  branch in `ReorgUndoToast`.
+- This ships the last of the Slice 7 "Polish" bucket's unblocked
+  work. Slice 6 (LLM-assisted analyze) stays deferred — it's gated
+  on token-cost Wave 3 (the sub-agent researcher) and Dave declined
+  the fallback-LLM variant.
+
 ## [0.3.21] - 2026-04-21
 
 ### Added
