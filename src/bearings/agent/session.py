@@ -15,6 +15,7 @@ from claude_agent_sdk import (
     StreamEvent,
     TextBlock,
     ThinkingBlock,
+    ThinkingConfig,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -55,11 +56,19 @@ class AgentSession:
         db: aiosqlite.Connection | None = None,
         sdk_session_id: str | None = None,
         permission_mode: PermissionMode | None = None,
+        thinking: ThinkingConfig | None = None,
     ) -> None:
         self.session_id = session_id
         self.working_dir = working_dir
         self.model = model
         self.max_budget_usd = max_budget_usd
+        # Extended-thinking config passed through to
+        # `ClaudeAgentOptions.thinking`. When set, the SDK adds the
+        # corresponding `--thinking` / `--max-thinking-tokens` flag to
+        # the CLI invocation and the model emits ThinkingBlocks / live
+        # thinking deltas, which we surface as `Thinking` wire events
+        # for the Conversation view's collapsed thinking block.
+        self.thinking = thinking
         # Optional DB connection for the v0.2 prompt assembler. When
         # set, `stream()` calls `assemble_prompt` and passes the
         # concatenated layered prompt as `system_prompt`. Unit tests
@@ -98,6 +107,8 @@ class AgentSession:
             # Resume the prior SDK session so conversation history is
             # on the CLI side even though this is a fresh client.
             options_kwargs["resume"] = self.sdk_session_id
+        if self.thinking is not None:
+            options_kwargs["thinking"] = self.thinking
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called

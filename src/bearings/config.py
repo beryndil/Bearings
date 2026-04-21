@@ -3,10 +3,18 @@ from __future__ import annotations
 import os
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Shorthand for the two knobs we expose for extended thinking:
+#   - "adaptive": model decides how much to think (recommended default).
+#   - "disabled": never emit thinking blocks.
+# `None` means "don't pass anything", which falls through to the SDK's
+# own default (currently: thinking off unless the model is configured for
+# it). We default to "adaptive" so sessions show reasoning in the UI.
+ThinkingMode = Literal["adaptive", "disabled"]
 
 
 def _xdg(var: str, default: Path) -> Path:
@@ -31,6 +39,13 @@ class AuthCfg(BaseModel):
 class AgentCfg(BaseModel):
     working_dir: Path = Field(default_factory=lambda: Path.home())
     model: str = "claude-opus-4-7"
+    # Extended-thinking control. "adaptive" lets Claude decide how much
+    # to think per turn (minimal on simple prompts, deeper on complex
+    # ones); "disabled" turns thinking off entirely; `None` skips the
+    # flag so the SDK's own default applies. The Conversation view
+    # renders the resulting thinking blocks in a collapsed `<details>`
+    # next to each assistant turn.
+    thinking: ThinkingMode | None = "adaptive"
 
 
 class StorageCfg(BaseModel):

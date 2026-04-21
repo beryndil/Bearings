@@ -165,6 +165,55 @@ async def test_stream_passes_sdk_session_id_as_resume(
 
 
 @pytest.mark.asyncio
+async def test_stream_passes_thinking_config_to_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a ThinkingConfig is supplied, the SDK options must carry it
+    through verbatim so extended thinking is requested from the CLI."""
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession(
+        "s",
+        working_dir="/tmp",
+        model="m",
+        thinking={"type": "adaptive"},
+    )
+    _ = [ev async for ev in session.stream("hi")]
+    assert captured["options"].thinking == {"type": "adaptive"}
+
+
+@pytest.mark.asyncio
+async def test_stream_omits_thinking_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default (`thinking=None`) leaves the SDK's own default in place —
+    no `thinking` key on the options dataclass."""
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    _ = [ev async for ev in session.stream("hi")]
+    assert captured["options"].thinking is None
+
+
+@pytest.mark.asyncio
 async def test_stream_captures_sdk_session_id_from_assistant(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
