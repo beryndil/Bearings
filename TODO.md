@@ -546,11 +546,17 @@ cover shape, not feel.
     messages back into source AND deletes the freshly-orphaned new
     session so a cancelled split leaves no sidebar residue. 12 new
     Svelte tests, 125 frontend total. Backend unchanged.
-  - [ ] **Slice 4 — UI: bulk select (~4h).** Toggle mode on session
-    header; checkbox per message row; shift-click selects range;
-    floating action bar at bottom with "Move N…" / "Split into new
-    session…" / "Cancel". Keyboard shortcut `m` / `s` when in bulk
-    mode.
+  - [x] **Slice 4 — UI: bulk select.** Shipped as v0.3.20. Toggle
+    button (`☐` / `☑`) in the session header enters bulk mode.
+    Each message row renders a checkbox; shift-click selects the
+    inclusive span against `conversation.messages`; floating
+    `BulkActionBar.svelte` with Move N / Split / Cancel buttons +
+    `m` / `s` / `Esc` shortcuts (ignored while typing a prompt).
+    `doBulkMove` helper shared by split-into-existing and bulk ops;
+    undo deletes the freshly-created target when the op was move-
+    to-new-session so cancelled ops leave no sidebar residue. New
+    `defaultCreating` prop on `SessionPickerModal` so bulk-split
+    opens straight into the create form.
   - [ ] **Slice 5 — Merge route + audit divider (~4h).**
     `POST /.../reorg/merge` with `delete_source` flag. Source session
     renders a persistent divider: "N messages moved to <target title>
@@ -573,6 +579,74 @@ cover shape, not feel.
   cost-attribution policy (leave on source vs. follow messages),
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
+
+## v0.3.20 — shipped
+
+Slice 4 of the Session Reorg plan
+(`~/.claude/plans/sparkling-triaging-otter.md`): bulk-select mode for
+triaging 4+ messages at once. Pure frontend — no backend changes.
+
+- [x] `☐` / `☑` toggle in the session header next to the existing
+  ✎/⇣/⎘ trio. Only rendered when a session is selected. Click to
+  enter bulk mode; click again (or Esc, or Cancel in the action
+  bar) to exit. Exiting clears the selection.
+- [x] `MessageTurn.svelte` picks up optional `bulkMode`,
+  `selectedIds: ReadonlySet<string>`, and `onToggleSelect(msg,
+  shiftKey)` props. When `bulkMode` is true, each article renders
+  a checkbox in the header (instead of the per-message `⋯` menu)
+  and selected rows get an emerald border + tinted background.
+  Checkbox click intercepts default so the parent's shift-aware
+  toggle runs first.
+- [x] `BulkActionBar.svelte` — fixed bottom-center floating bar
+  with `{count} selected`, "Move N…", "Split into new session…",
+  and "Cancel". Move/Split disable at `count === 0`; Cancel stays
+  live so the user can always exit the mode. Keyboard: `m` fires
+  move, `s` fires split, `Esc` fires cancel. Handlers check
+  `document.activeElement` against INPUT/TEXTAREA/contentEditable
+  and bail if so — typing a prompt doesn't trigger a move. Modifier
+  keys (Cmd/Ctrl/Alt) fall through to the browser unchanged.
+- [x] Shift-click range selection in `Conversation.svelte`:
+  `onBulkToggleSelect(msg, shiftKey)` tracks `lastSelectedId`; if
+  shift is held and the anchor is still in `conversation.messages`,
+  selects the inclusive `[lo, hi]` slice; otherwise single-toggles.
+  Stale anchor (message scrolled out of the window) falls back to
+  single-select.
+- [x] Picker-op type extended to `'move' | 'split' | 'bulk-move' |
+  'bulk-split'`. `pickerBulkIds` snapshots the selection at open
+  so the op is stable if the user tweaks selection mid-picker.
+  Title + confirm label adapt to the op: "Move 4 selected messages
+  to…" / "Split here" etc. `bulk-split` passes `defaultCreating={true}`
+  so the picker opens straight into the create-new-session form.
+- [x] New `doBulkMove(sourceId, msgIds, targetId, label,
+  deleteTargetOnUndo=false)` helper in `Conversation.svelte`.
+  Replaces the bespoke move+undo closure in split-into-existing;
+  shared by bulk-move and bulk-split flows. `deleteTargetOnUndo`
+  cleans up the freshly-created target when an undo cancels a
+  move-to-new-session. On success, clears bulk mode + selection
+  so the user isn't stuck selecting rows that just vanished.
+- [x] `defaultCreating?: boolean` prop added to
+  `SessionPickerModal.svelte`. Resets to the flag's value on each
+  open. Back button from the create form still works since
+  `creating` is a local `$state` var.
+- [x] 13 new frontend tests across
+  `BulkActionBar.test.ts` (8 — count display, disabled states,
+  click callbacks, m/s/Esc shortcuts, modifier passthrough,
+  input-focus ignore) and `MessageTurn.test.ts` (5 — menu-vs-
+  checkbox render branch, click with shift flag, selected-row
+  highlight, checkbox check state). 138 frontend total (up from
+  125). Backend untouched — 314 pytest + ruff + mypy strict still
+  green.
+
+Deferred to later slices (intentional):
+
+- [ ] Merge route + audit divider (Slice 5): persistent "N messages
+  moved to X · Undo" line in the source after a move; undo button
+  deactivates at 30s but the divider stays as audit trail.
+- [ ] Tool-call-group warnings on split boundaries (Slice 7).
+  Currently the response's `warnings: []` arrives but is never
+  shown. The toast needs to render them before the Undo button.
+- [ ] LLM-assisted analyze (Slice 6) still BLOCKED on token-cost
+  Wave 3 (sub-agent researcher). Revisit once that lands.
 
 ## v0.3.19 — shipped
 

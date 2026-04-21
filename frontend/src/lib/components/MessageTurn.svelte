@@ -20,6 +20,14 @@
      * callers that don't care about reorg can omit them. */
     onMoveMessage?: (msg: Message) => void;
     onSplitAfter?: (msg: Message) => void;
+    /** Slice 4: bulk-select mode. When `bulkMode` is true, the `⋯`
+     * menu is hidden and a checkbox renders in the message header
+     * instead. `selectedIds` is the live set; toggling a row fires
+     * `onToggleSelect` with the message and whether Shift was held
+     * (for range selection, handled by the parent). */
+    bulkMode?: boolean;
+    selectedIds?: ReadonlySet<string>;
+    onToggleSelect?: (msg: Message, shiftKey: boolean) => void;
   };
 
   const {
@@ -34,7 +42,10 @@
     copiedMsgId,
     onCopyMessage,
     onMoveMessage,
-    onSplitAfter
+    onSplitAfter,
+    bulkMode = false,
+    selectedIds,
+    onToggleSelect
   }: Props = $props();
 
   const runningCount = $derived(toolCalls.filter((t) => t.ok === null).length);
@@ -86,16 +97,48 @@
     openMenuId = null;
     onSplitAfter?.(msg);
   }
+
+  function isSelected(id: string): boolean {
+    return selectedIds?.has(id) ?? false;
+  }
+
+  function onCheckboxClick(e: MouseEvent, msg: Message) {
+    // The checkbox itself is triggered by the browser before this
+    // handler fires; we intercept to deliver the shiftKey flag to
+    // the parent so shift-click-range logic lives in one place.
+    e.preventDefault();
+    onToggleSelect?.(msg, e.shiftKey);
+  }
 </script>
 
 {#if user}
-  <article class="relative rounded border border-slate-800 bg-slate-800/60 px-3 py-2 group">
+  <article
+    class="relative rounded border px-3 py-2 group
+      {bulkMode && isSelected(user.id)
+        ? 'border-emerald-500 bg-emerald-900/10'
+        : 'border-slate-800 bg-slate-800/60'}"
+    data-testid="user-article"
+    data-message-id={user.id}
+  >
     <header
       class="flex items-center justify-between text-[10px] uppercase tracking-wider
         text-slate-500 mb-1"
     >
-      <span>user</span>
-      {#if reorgEnabled}
+      <span class="flex items-center gap-2">
+        {#if bulkMode}
+          <input
+            type="checkbox"
+            class="accent-emerald-500 cursor-pointer"
+            aria-label={`Select user message ${user.id}`}
+            checked={isSelected(user.id)}
+            onclick={(e) => onCheckboxClick(e, user!)}
+            data-testid="bulk-checkbox"
+            data-message-id={user.id}
+          />
+        {/if}
+        <span>user</span>
+      </span>
+      {#if reorgEnabled && !bulkMode}
         <div class="relative" data-reorg-menu>
           <button
             type="button"
@@ -201,14 +244,33 @@
 {#if assistant || isStreaming}
   <article
     class="relative rounded border px-3 py-2 bg-slate-900 group
-      {isStreaming ? 'border-amber-900/50' : 'border-slate-800'}"
+      {bulkMode && assistant && isSelected(assistant.id)
+        ? 'border-emerald-500 bg-emerald-900/10'
+        : isStreaming
+          ? 'border-amber-900/50'
+          : 'border-slate-800'}"
+    data-testid="assistant-article"
+    data-message-id={assistant?.id ?? ''}
   >
     <header
       class="flex items-center justify-between text-[10px] uppercase tracking-wider mb-1
         {isStreaming ? 'text-amber-400' : 'text-slate-500'}"
     >
-      <span>assistant{isStreaming ? ' · streaming' : ''}</span>
-      {#if assistant && reorgEnabled}
+      <span class="flex items-center gap-2">
+        {#if bulkMode && assistant}
+          <input
+            type="checkbox"
+            class="accent-emerald-500 cursor-pointer"
+            aria-label={`Select assistant message ${assistant.id}`}
+            checked={isSelected(assistant.id)}
+            onclick={(e) => onCheckboxClick(e, assistant!)}
+            data-testid="bulk-checkbox"
+            data-message-id={assistant.id}
+          />
+        {/if}
+        <span>assistant{isStreaming ? ' · streaming' : ''}</span>
+      </span>
+      {#if assistant && reorgEnabled && !bulkMode}
         <div class="relative" data-reorg-menu>
           <button
             type="button"

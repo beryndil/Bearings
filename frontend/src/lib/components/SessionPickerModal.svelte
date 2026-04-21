@@ -34,6 +34,10 @@
      * Disable when the flow only makes sense against an existing
      * target (e.g. eventual Merge op). */
     allowCreate?: boolean;
+    /** When `true`, the create-new-session form is shown by default
+     * instead of the existing-session list. Used by bulk-split so
+     * users don't have to click "+ Create a new session" first. */
+    defaultCreating?: boolean;
     onPickExisting: (sessionId: string) => void;
     onPickNew?: (draft: NewSessionDraft) => void;
     onCancel: () => void;
@@ -45,6 +49,7 @@
     confirmLabel = 'Move here',
     title = 'Move messages to…',
     allowCreate = true,
+    defaultCreating = false,
     onPickExisting,
     onPickNew,
     onCancel
@@ -65,7 +70,7 @@
     query = '';
     highlighted = null;
     filterTagIds = [];
-    creating = false;
+    creating = defaultCreating;
     newTitle = '';
     newTagIds = [];
     createError = null;

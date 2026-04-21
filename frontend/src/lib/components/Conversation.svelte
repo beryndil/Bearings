@@ -5,6 +5,7 @@
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
+  import BulkActionBar from '$lib/components/BulkActionBar.svelte';
   import CommandMenu from '$lib/components/CommandMenu.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
@@ -97,10 +98,17 @@
 
   // Slice 3: Session Reorg — Move + Split ops driven from the per-
   // message ⋯ menu. `pickerOp` flips the picker's confirm label; the
-  // anchor is the message the menu was opened from.
+  // anchor is the message the menu was opened from. Slice 4 added the
+  // bulk variants: `bulk-move` moves the current selection to an
+  // existing or new target, `bulk-split` moves the selection into a
+  // fresh session (picker opens on the create form).
+  type PickerOp = 'move' | 'split' | 'bulk-move' | 'bulk-split';
   let pickerOpen = $state(false);
-  let pickerOp = $state<'move' | 'split'>('move');
+  let pickerOp = $state<PickerOp>('move');
   let pickerAnchor = $state<api.Message | null>(null);
+  // Snapshot of the ids at picker-open for bulk ops — keeps the op
+  // stable if the user happens to tweak the selection after opening.
+  let pickerBulkIds = $state<string[]>([]);
 
   // Pending undo toast — one at a time. A new reorg op replaces it,
   // which is the desired behavior: the UI only guarantees Undo for
@@ -112,21 +120,94 @@
   };
   let undo = $state<UndoState | null>(null);
 
+  // Slice 4: bulk-select mode. A lightweight parallel lane on top of
+  // the existing reorg flows — checkboxes on each row, a floating
+  // action bar, shift-click range selection. When active, the per-
+  // message ⋯ menu is hidden in MessageTurn so the two surfaces
+  // don't compete.
+  let bulkMode = $state(false);
+  let selectedIds = $state<Set<string>>(new Set());
+  let lastSelectedId = $state<string | null>(null);
+
+  function toggleBulkMode() {
+    bulkMode = !bulkMode;
+    if (!bulkMode) {
+      selectedIds = new Set();
+      lastSelectedId = null;
+    }
+  }
+
+  function onBulkToggleSelect(msg: api.Message, shiftKey: boolean) {
+    const all = conversation.messages;
+    if (shiftKey && lastSelectedId) {
+      const a = all.findIndex((m) => m.id === lastSelectedId);
+      const b = all.findIndex((m) => m.id === msg.id);
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        const next = new Set(selectedIds);
+        for (let i = lo; i <= hi; i++) next.add(all[i].id);
+        selectedIds = next;
+        lastSelectedId = msg.id;
+        return;
+      }
+    }
+    const next = new Set(selectedIds);
+    if (next.has(msg.id)) next.delete(msg.id);
+    else next.add(msg.id);
+    selectedIds = next;
+    lastSelectedId = msg.id;
+  }
+
   function openMoveFor(msg: api.Message) {
     pickerOp = 'move';
     pickerAnchor = msg;
+    pickerBulkIds = [];
     pickerOpen = true;
   }
 
   function openSplitFor(msg: api.Message) {
     pickerOp = 'split';
     pickerAnchor = msg;
+    pickerBulkIds = [];
+    pickerOpen = true;
+  }
+
+  function onBulkMove() {
+    if (selectedIds.size === 0) return;
+    pickerOp = 'bulk-move';
+    pickerAnchor = null;
+    pickerBulkIds = [...selectedIds];
+    pickerOpen = true;
+  }
+
+  function onBulkSplit() {
+    if (selectedIds.size === 0) return;
+    pickerOp = 'bulk-split';
+    pickerAnchor = null;
+    pickerBulkIds = [...selectedIds];
     pickerOpen = true;
   }
 
   function closePicker() {
     pickerOpen = false;
     pickerAnchor = null;
+    pickerBulkIds = [];
+  }
+
+  function pickerTitle(op: PickerOp, bulkCount: number): string {
+    if (op === 'split') return 'Split remaining messages into…';
+    if (op === 'bulk-move') {
+      return `Move ${bulkCount} selected message${bulkCount === 1 ? '' : 's'} to…`;
+    }
+    if (op === 'bulk-split') {
+      return `Split ${bulkCount} selected message${bulkCount === 1 ? '' : 's'} into a new session`;
+    }
+    return 'Move message to…';
+  }
+
+  function pickerConfirmLabel(op: PickerOp): string {
+    if (op === 'split' || op === 'bulk-split') return 'Split here';
+    return 'Move here';
   }
 
   /** Run after a successful Move so the view reconciles against the
@@ -159,6 +240,46 @@
             target_session_id: sourceId,
             message_ids: [msgId]
           });
+          await reconcileAfterReorg([sourceId, targetSessionId]);
+        }
+      };
+    } catch (e) {
+      conversation.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  /** Slice 4: bulk move of an explicit id list into an existing target.
+   * Undo is a straight reverse move — no session cleanup needed since
+   * the target already existed before the op. */
+  async function doBulkMove(
+    sourceId: string,
+    msgIds: string[],
+    targetSessionId: string,
+    label: string,
+    deleteTargetOnUndo = false
+  ) {
+    try {
+      const result = await api.reorgMove(sourceId, {
+        target_session_id: targetSessionId,
+        message_ids: msgIds
+      });
+      await reconcileAfterReorg([sourceId, targetSessionId]);
+      // Exit bulk mode on success — the rows the user was selecting
+      // are gone from this view, so the checkboxes would dangle.
+      bulkMode = false;
+      selectedIds = new Set();
+      lastSelectedId = null;
+      const plural = result.moved === 1 ? '' : 's';
+      undo = {
+        message: `Moved ${result.moved} message${plural} to ${label}.`,
+        run: async () => {
+          await api.reorgMove(targetSessionId, {
+            target_session_id: sourceId,
+            message_ids: msgIds
+          });
+          if (deleteTargetOnUndo) {
+            await api.deleteSession(targetSessionId);
+          }
           await reconcileAfterReorg([sourceId, targetSessionId]);
         }
       };
@@ -206,15 +327,33 @@
 
   async function onPickerPickExisting(targetId: string) {
     const sourceId = sessions.selectedId;
-    const msg = pickerAnchor;
-    if (!sourceId || !msg) {
+    if (!sourceId) {
       closePicker();
       return;
     }
     const targetLabel =
       sessions.list.find((s) => s.id === targetId)?.title ?? 'session';
+    const op = pickerOp;
+    const msg = pickerAnchor;
+    const bulkIds = pickerBulkIds;
     closePicker();
-    if (pickerOp === 'move') {
+
+    if (op === 'bulk-move') {
+      if (bulkIds.length === 0) return;
+      await doBulkMove(sourceId, bulkIds, targetId, `"${targetLabel}"`);
+      return;
+    }
+    if (op === 'bulk-split') {
+      // Split-into-existing collapses to a bulk move against the
+      // chosen target. The user opened the picker in "split into
+      // new" mode but backed out to pick an existing row — that's
+      // semantically a bulk move, so treat it that way.
+      if (bulkIds.length === 0) return;
+      await doBulkMove(sourceId, bulkIds, targetId, `"${targetLabel}"`);
+      return;
+    }
+    if (!msg) return;
+    if (op === 'move') {
       await doMove(sourceId, msg.id, targetId, `"${targetLabel}"`);
       return;
     }
@@ -229,49 +368,55 @@
       conversation.error = 'No messages after the anchor to split.';
       return;
     }
-    try {
-      const result = await api.reorgMove(sourceId, {
-        target_session_id: targetId,
-        message_ids: toMove
-      });
-      await reconcileAfterReorg([sourceId, targetId]);
-      undo = {
-        message: `Moved ${result.moved} message${result.moved === 1 ? '' : 's'} to "${targetLabel}".`,
-        run: async () => {
-          await api.reorgMove(targetId, {
-            target_session_id: sourceId,
-            message_ids: toMove
-          });
-          await reconcileAfterReorg([sourceId, targetId]);
-        }
-      };
-    } catch (e) {
-      conversation.error = e instanceof Error ? e.message : String(e);
-    }
+    await doBulkMove(sourceId, toMove, targetId, `"${targetLabel}"`);
   }
 
   async function onPickerPickNew(draft: { title: string; tag_ids: number[] }) {
     const sourceId = sessions.selectedId;
-    const msg = pickerAnchor;
-    if (!sourceId || !msg) {
+    if (!sourceId) {
       closePicker();
       return;
     }
+    const op = pickerOp;
+    const msg = pickerAnchor;
+    const bulkIds = pickerBulkIds;
     closePicker();
-    if (pickerOp === 'split') {
+
+    if (op === 'split' && msg) {
       await doSplit(sourceId, msg.id, draft);
       return;
     }
-    // Move to a brand-new session: create the row first, then move.
-    // Use the api call directly (not sessions.create) so we don't
-    // flip the selected session out from under the user mid-triage.
-    // `reconcileAfterReorg` will refresh the sidebar list to include
-    // the newly created row once the move completes.
+    if (op === 'bulk-move' || op === 'bulk-split') {
+      if (bulkIds.length === 0) return;
+      const created = await createEmptySession(sourceId, draft);
+      if (!created) return;
+      await doBulkMove(
+        sourceId,
+        bulkIds,
+        created.id,
+        `"${created.title ?? '(untitled)'}"`,
+        true
+      );
+      return;
+    }
+    if (!msg) return;
+    // Single-message move to a brand-new session: create the row,
+    // then move. Use the api call directly (not sessions.create) so
+    // we don't flip the selected session out from under the user
+    // mid-triage. `reconcileAfterReorg` refreshes the sidebar list.
+    const created = await createEmptySession(sourceId, draft);
+    if (!created) return;
+    await doMove(sourceId, msg.id, created.id, `"${created.title ?? '(untitled)'}"`);
+  }
+
+  async function createEmptySession(
+    sourceId: string,
+    draft: { title: string; tag_ids: number[] }
+  ): Promise<api.Session | null> {
     const source = sessions.list.find((s) => s.id === sourceId);
-    if (!source) return;
-    let created: api.Session;
+    if (!source) return null;
     try {
-      created = await api.createSession({
+      return await api.createSession({
         working_dir: source.working_dir,
         model: source.model,
         title: draft.title,
@@ -279,9 +424,8 @@
       });
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
-      return;
+      return null;
     }
-    await doMove(sourceId, msg.id, created.id, `"${created.title ?? '(untitled)'}"`);
   }
 
   function onUndoDismiss() {
@@ -460,8 +604,9 @@
 <SessionPickerModal
   open={pickerOpen}
   excludeIds={sessions.selectedId ? [sessions.selectedId] : []}
-  title={pickerOp === 'split' ? 'Split remaining messages into…' : 'Move message to…'}
-  confirmLabel={pickerOp === 'split' ? 'Split here' : 'Move here'}
+  title={pickerTitle(pickerOp, pickerBulkIds.length)}
+  confirmLabel={pickerConfirmLabel(pickerOp)}
+  defaultCreating={pickerOp === 'bulk-split'}
   onPickExisting={onPickerPickExisting}
   onPickNew={onPickerPickNew}
   onCancel={closePicker}
@@ -472,6 +617,15 @@
     message={undo.message}
     onUndo={undo.run}
     onDismiss={onUndoDismiss}
+  />
+{/if}
+
+{#if bulkMode}
+  <BulkActionBar
+    count={selectedIds.size}
+    onMove={onBulkMove}
+    onSplit={onBulkSplit}
+    onCancel={toggleBulkMode}
   />
 {/if}
 
@@ -517,6 +671,17 @@
             disabled={copiedSession}
           >
             {copiedSession ? '✓' : '⎘'}
+          </button>
+          <button
+            type="button"
+            class="text-xs hover:text-slate-300 {bulkMode ? 'text-emerald-400' : 'text-slate-500'}"
+            aria-label="Toggle bulk select mode"
+            aria-pressed={bulkMode}
+            title={bulkMode ? 'Exit bulk select' : 'Bulk select messages'}
+            onclick={toggleBulkMode}
+            data-testid="bulk-toggle"
+          >
+            {bulkMode ? '☑' : '☐'}
           </button>
         {/if}
       </h1>
@@ -645,6 +810,9 @@
           {onCopyMessage}
           onMoveMessage={openMoveFor}
           onSplitAfter={openSplitFor}
+          {bulkMode}
+          {selectedIds}
+          onToggleSelect={onBulkToggleSelect}
         />
       {/each}
 

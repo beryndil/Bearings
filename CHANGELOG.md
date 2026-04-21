@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.20] - 2026-04-21
+
+### Added
+
+- Bulk-select mode — Slice 4 of the Session Reorg plan
+  (`~/.claude/plans/sparkling-triaging-otter.md`). A `☐` toggle next
+  to the session header's ✎/⇣/⎘ trio puts the conversation into
+  bulk-select mode: each message row grows a checkbox, the per-
+  message `⋯` menu tucks away, and a floating action bar anchors to
+  the bottom of the viewport.
+- `BulkActionBar.svelte` — floating bottom-center toolbar with
+  "Move N…", "Split into new session…", and "Cancel" buttons. Bound
+  keyboard shortcuts (`m` move, `s` split, `Esc` cancel) are ignored
+  while an input/textarea holds focus so typing a prompt stays
+  unaffected. Cmd/Ctrl/Alt + key combinations fall through to the
+  browser unchanged.
+- Shift-click range selection — clicking one checkbox and shift-
+  clicking another selects the inclusive span between them, computed
+  against the live `conversation.messages` index. Falls back to
+  single-select if the anchor has scrolled out of the window since.
+- Bulk Move opens the existing `SessionPickerModal` with the picker
+  title adapted to the selection count ("Move 4 selected messages
+  to…") and routes through a new `doBulkMove` helper shared by
+  single-row moves, split-into-existing, and bulk ops. Undo reverses
+  the move and (for move-to-new-session) deletes the freshly-created
+  target so cancelled ops leave no sidebar residue.
+- Bulk Split reuses the same picker but opens with
+  `defaultCreating={true}` so the create-new-session form shows
+  first. New `defaultCreating` prop added to `SessionPickerModal`.
+
+### Changed
+
+- `MessageTurn.svelte` now accepts optional `bulkMode`, `selectedIds`
+  (a `ReadonlySet<string>`), and `onToggleSelect(msg, shiftKey)`
+  props. Selected rows pick up an emerald border + tinted background
+  so the selection is obvious at a glance. When `bulkMode` is true
+  the per-message `⋯` menu is hidden in favor of the checkbox.
+- Split-into-existing now routes through `doBulkMove` — previously
+  had a bespoke copy of the move+undo closure. One code path, one
+  undo shape.
+
+### Fixed
+
+- `MessageTurn` articles now expose `data-testid="user-article"` /
+  `"assistant-article"` plus `data-message-id`, making the bulk-mode
+  highlight test-addressable without needing to query by class.
+
 ## [0.3.19] - 2026-04-21
 
 ### Added
