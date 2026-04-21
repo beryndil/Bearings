@@ -511,12 +511,11 @@ cover shape, not feel.
   session drifting across 4 unrelated topics and becoming painful to
   reload. 7 shippable slices:
 
-  - [ ] **Slice 1 — DB primitive (~4h).** `store.move_messages_tx(
-    source_id, target_id, message_ids)` — single SQLite transaction,
-    recomputes `sessions.message_count` on both sides, follows
-    `tool_calls.session_id` + `tool_calls.message_id` for anchored
-    rows, rolls back on bad input. Unit tests for happy path, bad
-    input, tool-call-follow, message_count recompute.
+  - [x] **Slice 1 — DB primitive.** Shipped as v0.3.17. See section
+    below. Note: `sessions.message_count` is a SELECT COUNT(*) subquery
+    in `_sessions.SESSION_COUNT`, not a stored column, so the primitive
+    doesn't "recompute" it — the next read just picks up the new count.
+    Simpler than the original slice scope.
   - [ ] **Slice 2 — Move + Split routes (~4h).**
     `POST /sessions/{id}/reorg/move` and `.../reorg/split`. Split
     creates a new sessions row inline from a body-supplied
@@ -557,6 +556,42 @@ cover shape, not feel.
   cost-attribution policy (leave on source vs. follow messages),
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
+
+## v0.3.17 — shipped
+
+Slice 1 of the Session Reorg plan
+(`~/.claude/plans/sparkling-triaging-otter.md`): the transactional DB
+primitive underpinning move / split / merge / archive. No API, no UI
+— purely the shared `store.move_messages_tx` helper so Slice 2 (routes)
+can compose the user-facing ops on top without re-deriving atomicity.
+
+- [x] New `src/bearings/db/_reorg.py` (101 lines) with
+  `MoveResult` (frozen dataclass: `moved`, `tool_calls_followed`) and
+  `async def move_messages_tx(conn, *, source_id, target_id,
+  message_ids)`. Single-transaction: UPDATE messages, UPDATE tool_calls
+  (only anchored — orphan calls with null `message_id` stay on source),
+  UPDATE both sessions' `updated_at`, one `conn.commit()` on the happy
+  path, `conn.rollback()` on any exception.
+- [x] Idempotent by design: the `WHERE session_id = source_id` guard
+  means a second call on already-moved ids returns `moved=0` without
+  error. `updated_at` only bumps when `moved > 0`, so a no-op retry
+  doesn't perturb the sidebar sort order.
+- [x] `ValueError` on `source == target` or missing target session.
+  Source-missing is tolerated (returns zero counts — no-op). Unknown
+  ids in the input set are silently skipped (partial input is fine).
+- [x] Observation that supersedes the original plan framing:
+  `sessions.message_count` is a `SELECT COUNT(*)` subquery
+  (`_sessions.SESSION_COUNT`), not a stored column, so the primitive
+  doesn't need a recompute step — next `list_sessions` read picks up
+  the new count automatically. Plan notes + Slice 1 TODO item updated.
+- [x] Re-exported from `src/bearings/db/store.py` as
+  `move_messages_tx` + `MoveResult`.
+- [x] 10 new tests in `tests/test_db_reorg.py`: happy-path +
+  message_count verify, tool_calls follow anchored message, orphan
+  tool_call stays, idempotent re-run, unknown-id skip, empty-input
+  noop, `source == target` rejection, missing-target rejection,
+  updated_at bump on both sides, no-bump on noop retry. 299 backend
+  tests pass (up from 289). Ruff + mypy strict green.
 
 ## v0.3.16 — shipped
 

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.17] - 2026-04-21
+
+### Added
+
+- `move_messages_tx()` primitive in a new `src/bearings/db/_reorg.py`
+  module. Atomically moves a set of message rows from one session to
+  another in a single transaction. Tool calls anchored to a moved
+  message (via `tool_calls.message_id`) follow their message; orphan
+  calls (null `message_id`) stay with the source. Both sessions'
+  `updated_at` bump only when at least one row actually moves, so a
+  no-op idempotent re-run doesn't perturb sidebar ordering.
+  `sessions.message_count` is a subquery-derived column, so the next
+  `list_sessions` read reflects the move with no recompute step in
+  the primitive itself. Raises `ValueError` on `source == target` or
+  missing target session; tolerates unknown ids by skipping them.
+  Slice 1 of the Session Reorg plan
+  (`~/.claude/plans/sparkling-triaging-otter.md`) — Slice 2
+  (move/split routes) builds on this. 299 backend tests pass (up from
+  289; 10 new in `test_db_reorg.py`). Ruff + mypy strict green.
+
 ## [0.3.14] - 2026-04-21
 
 ### Added
