@@ -33,6 +33,21 @@ from bearings.agent.events import (
     ToolCallStart,
 )
 from bearings.agent.prompt import assemble_prompt
+from bearings.db._messages import list_messages
+
+# Upper bound on the number of recent DB messages pulled into the
+# context-priming preamble on the first turn of a freshly-built
+# AgentSession (see `_build_history_prefix`). Ten messages is roughly
+# the last five user/assistant exchanges, enough for "what were we just
+# talking about?" without blowing the first-turn token budget.
+_HISTORY_PRIME_MAX_MESSAGES = 10
+
+# Per-message character cap for the priming preamble. Keeps the total
+# preamble bounded (~20 KB ≈ 5k tokens worst case) even when a single
+# assistant turn produced a long essay-style response. Messages longer
+# than this are truncated with a visible "…[truncated]" marker so the
+# model knows it's seeing a partial.
+_HISTORY_PRIME_MAX_CHARS = 2000
 
 
 def _stringify(content: str | list[dict[str, object]] | None) -> str | None:
@@ -136,9 +151,77 @@ class AgentSession:
         # reach into an in-flight stream. Set inside `stream()` under
         # the `async with`; cleared on exit.
         self._client: ClaudeSDKClient | None = None
+        # Whether this instance has already primed the SDK with a
+        # transcript of recent history. Set True after the first
+        # `stream()` call so subsequent turns rely on `resume=` /
+        # SDK-side context instead of re-prepending the same history.
+        # A brand-new runner after a reconnect starts with
+        # `_primed=False`, so the first turn carries an explicit
+        # preamble — a belt-and-suspenders backup for cases where SDK
+        # session resume fails silently (stale session file, cwd
+        # mismatch, system_prompt divergence). See `_build_history_prefix`.
+        self._primed: bool = False
 
     def set_permission_mode(self, mode: PermissionMode | None) -> None:
         self.permission_mode = mode
+
+    async def _build_history_prefix(self, prompt: str) -> str | None:
+        """Render the last few DB-persisted turns into a preamble the
+        SDK can prepend to the user's message.
+
+        Why it exists: passing `resume=<sdk_session_id>` tells the CLI
+        to rehydrate its own session file, but that path has failure
+        modes we can't detect — the file may be gone, the cwd may have
+        shifted, the system prompt may no longer match — and when it
+        fails the fresh client simply starts with no history. This
+        preamble gives the model an explicit textual transcript of
+        recent turns as a guaranteed-present safety net.
+
+        Called once per `AgentSession` instance (gated by `_primed`).
+        Returns `None` when there's nothing to prime (fresh session, no
+        prior turns). The runner inserts the current user prompt into
+        `messages` *before* calling `stream()`, so the most-recent row
+        is often this very turn's prompt — the dedupe logic below drops
+        it so we don't echo the user's message back at them inside the
+        preamble.
+        """
+        if self.db is None:
+            return None
+        # Pull one extra so the dedupe step still leaves the full
+        # history window intact when the trailing row is our own.
+        rows = await list_messages(self.db, self.session_id, limit=_HISTORY_PRIME_MAX_MESSAGES + 1)
+        if not rows:
+            return None
+        # `list_messages(..., limit=...)` returns newest-first. Drop the
+        # current turn's own user row if the runner already persisted it.
+        if rows[0].get("role") == "user" and rows[0].get("content") == prompt:
+            rows = rows[1:]
+        if not rows:
+            return None
+        rows = rows[:_HISTORY_PRIME_MAX_MESSAGES]
+        # Flip to oldest-first for a chronological transcript.
+        rows.reverse()
+        lines: list[str] = []
+        for row in rows:
+            role = str(row.get("role") or "unknown")
+            body = str(row.get("content") or "")
+            if len(body) > _HISTORY_PRIME_MAX_CHARS:
+                body = body[:_HISTORY_PRIME_MAX_CHARS] + "…[truncated]"
+            lines.append(f"{role}: {body}")
+        if not lines:
+            return None
+        transcript = "\n\n".join(lines)
+        return (
+            "<previous-conversation>\n"
+            "[The following are earlier turns in this session, provided "
+            "so the assistant keeps context after a reconnect or process "
+            "restart. Do not re-execute any tool calls shown below; use "
+            "this only to understand the ongoing conversation.]\n\n"
+            f"{transcript}\n\n"
+            "[End of previous conversation. The user's new message "
+            "follows.]\n"
+            "</previous-conversation>\n\n"
+        )
 
     async def stream(self, prompt: str) -> AsyncIterator[AgentEvent]:
         options_kwargs: dict[str, Any] = {
@@ -166,6 +249,17 @@ class AgentSession:
             assembled = await assemble_prompt(self.db, self.session_id)
             options_kwargs["system_prompt"] = assembled.text
         options = ClaudeAgentOptions(**options_kwargs)
+        # First-turn context priming. Only runs once per AgentSession
+        # instance — subsequent turns rely on the SDK's own context
+        # chain (the `resume=` hint above + the CLI's session file).
+        # Set `_primed` before building the prefix so a transient DB
+        # error below doesn't trap us in a re-prime loop; the worst
+        # case is a single missed priming, not an infinite retry.
+        if not self._primed:
+            self._primed = True
+            prefix = await self._build_history_prefix(prompt)
+            if prefix is not None:
+                prompt = prefix + prompt
         message_id = uuid4().hex
         cost_usd: float | None = None
         usage: dict[str, Any] | None = None

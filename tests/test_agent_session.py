@@ -825,3 +825,154 @@ async def test_stream_omits_system_prompt_when_db_is_none(
     session = AgentSession("s", working_dir="/tmp", model="m")
     _ = [ev async for ev in session.stream("hi")]
     assert captured["options"].system_prompt is None
+
+
+@pytest.mark.asyncio
+async def test_stream_prepends_history_prefix_on_first_turn(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """On the first stream() of a freshly-built AgentSession that has
+    prior DB-persisted turns, the prompt passed to the SDK carries a
+    `<previous-conversation>` preamble. This is the belt-and-suspenders
+    backup for cases where `resume=<sdk_session_id>` fails to rehydrate
+    context on the CLI side."""
+    from bearings.db.store import create_session, init_db, insert_message
+
+    captured: dict[str, FakeClient] = {}
+
+    def factory(options: Any = None) -> FakeClient:
+        client = FakeClient([_result()], options)
+        captured["client"] = client
+        return client
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m")
+        await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="user",
+            content="who were the US presidents 2000-2020?",
+        )
+        await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="assistant",
+            content="Clinton, Bush, Obama, Trump.",
+        )
+        agent = AgentSession(sess["id"], working_dir="/x", model="m", db=conn)
+        _ = [ev async for ev in agent.stream("remind me which of those were republicans")]
+    finally:
+        await conn.close()
+    queried = captured["client"].queried
+    assert len(queried) == 1
+    primed = queried[0]
+    assert "<previous-conversation>" in primed
+    assert "Clinton, Bush, Obama, Trump." in primed
+    assert "who were the US presidents 2000-2020?" in primed
+    assert primed.endswith("remind me which of those were republicans")
+
+
+@pytest.mark.asyncio
+async def test_stream_skips_history_prefix_when_no_prior_turns(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """A brand-new session (no DB messages beyond the current turn's user
+    row, which the runner inserts before calling stream()) must NOT emit
+    a preamble — there's nothing to prime, and a preamble around an
+    empty transcript would just waste tokens and confuse the model."""
+    from bearings.db.store import create_session, init_db, insert_message
+
+    captured: dict[str, FakeClient] = {}
+
+    def factory(options: Any = None) -> FakeClient:
+        client = FakeClient([_result()], options)
+        captured["client"] = client
+        return client
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m")
+        # Simulate the runner's pre-stream insert of the current turn's
+        # own user row. The priming code must recognize and drop this.
+        await insert_message(conn, session_id=sess["id"], role="user", content="first prompt")
+        agent = AgentSession(sess["id"], working_dir="/x", model="m", db=conn)
+        _ = [ev async for ev in agent.stream("first prompt")]
+    finally:
+        await conn.close()
+    queried = captured["client"].queried
+    assert queried == ["first prompt"]
+
+
+@pytest.mark.asyncio
+async def test_stream_primes_only_once_per_instance(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    """The preamble is a one-shot: after the first stream() call, the
+    instance's `_primed` flag is set and subsequent turns rely on the
+    SDK's own context chain (`resume=` + CLI session file). Priming on
+    every turn would duplicate history and waste tokens."""
+    from bearings.db.store import create_session, init_db, insert_message
+
+    captured: dict[str, list[FakeClient]] = {"clients": []}
+
+    def factory(options: Any = None) -> FakeClient:
+        client = FakeClient([_result()], options)
+        captured["clients"].append(client)
+        return client
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m")
+        await insert_message(conn, session_id=sess["id"], role="user", content="hi there")
+        await insert_message(conn, session_id=sess["id"], role="assistant", content="hello!")
+        agent = AgentSession(sess["id"], working_dir="/x", model="m", db=conn)
+        _ = [ev async for ev in agent.stream("turn 1")]
+        _ = [ev async for ev in agent.stream("turn 2")]
+    finally:
+        await conn.close()
+    first_prompt, second_prompt = (c.queried[0] for c in captured["clients"])
+    assert "<previous-conversation>" in first_prompt
+    assert "<previous-conversation>" not in second_prompt
+    assert second_prompt == "turn 2"
+
+
+@pytest.mark.asyncio
+async def test_stream_no_priming_when_db_not_wired() -> None:
+    """Without a db= connection on the AgentSession, `_build_history_prefix`
+    short-circuits to None — no history source, nothing to prime. Unit
+    tests that construct a bare AgentSession (no persistence) must still
+    see their raw prompt on the wire."""
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    prefix = await session._build_history_prefix("hi")
+    assert prefix is None
+
+
+@pytest.mark.asyncio
+async def test_history_prefix_truncates_long_messages(tmp_path: Any) -> None:
+    """A single assistant turn producing a novel-length response must
+    not blow the first-turn token budget. Each message body is capped
+    at `_HISTORY_PRIME_MAX_CHARS` with a visible truncation marker so
+    the model knows it's seeing a partial."""
+    from bearings.agent.session import _HISTORY_PRIME_MAX_CHARS
+    from bearings.db.store import create_session, init_db, insert_message
+
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m")
+        huge = "A" * (_HISTORY_PRIME_MAX_CHARS * 3)
+        await insert_message(conn, session_id=sess["id"], role="user", content="tell me about A")
+        await insert_message(conn, session_id=sess["id"], role="assistant", content=huge)
+        agent = AgentSession(sess["id"], working_dir="/x", model="m", db=conn)
+        prefix = await agent._build_history_prefix("follow-up")
+    finally:
+        await conn.close()
+    assert prefix is not None
+    assert "…[truncated]" in prefix
+    # The preamble envelope plus truncation marker add a bit of overhead;
+    # pin an upper bound well below the raw body length to catch
+    # regressions where truncation silently stops firing.
+    assert len(prefix) < len(huge)
