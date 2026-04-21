@@ -8,7 +8,9 @@
   import CommandMenu from '$lib/components/CommandMenu.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
+  import ReorgUndoToast from '$lib/components/ReorgUndoToast.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
+  import SessionPickerModal from '$lib/components/SessionPickerModal.svelte';
   import ContextMeter from '$lib/components/ContextMeter.svelte';
   import TokenMeter from '$lib/components/TokenMeter.svelte';
   import { buildTurns } from '$lib/turns';
@@ -91,6 +93,199 @@
     setTimeout(() => {
       if (copiedMsgId === msg.id) copiedMsgId = null;
     }, 1500);
+  }
+
+  // Slice 3: Session Reorg — Move + Split ops driven from the per-
+  // message ⋯ menu. `pickerOp` flips the picker's confirm label; the
+  // anchor is the message the menu was opened from.
+  let pickerOpen = $state(false);
+  let pickerOp = $state<'move' | 'split'>('move');
+  let pickerAnchor = $state<api.Message | null>(null);
+
+  // Pending undo toast — one at a time. A new reorg op replaces it,
+  // which is the desired behavior: the UI only guarantees Undo for
+  // the most-recent op. Undo closures are pure per-op; the parent
+  // clears them on dismiss/undo.
+  type UndoState = {
+    message: string;
+    run: () => Promise<void>;
+  };
+  let undo = $state<UndoState | null>(null);
+
+  function openMoveFor(msg: api.Message) {
+    pickerOp = 'move';
+    pickerAnchor = msg;
+    pickerOpen = true;
+  }
+
+  function openSplitFor(msg: api.Message) {
+    pickerOp = 'split';
+    pickerAnchor = msg;
+    pickerOpen = true;
+  }
+
+  function closePicker() {
+    pickerOpen = false;
+    pickerAnchor = null;
+  }
+
+  /** Run after a successful Move so the view reconciles against the
+   * server. Refreshes the sidebar + active conversation so the moved
+   * rows disappear immediately instead of waiting for the next event. */
+  async function reconcileAfterReorg(affectedIds: string[]) {
+    await sessions.refresh(sessions.filter);
+    const currentSid = sessions.selectedId;
+    if (currentSid && affectedIds.includes(currentSid)) {
+      await conversation.load(currentSid);
+    }
+  }
+
+  async function doMove(
+    sourceId: string,
+    msgId: string,
+    targetSessionId: string,
+    label: string
+  ) {
+    try {
+      const result = await api.reorgMove(sourceId, {
+        target_session_id: targetSessionId,
+        message_ids: [msgId]
+      });
+      await reconcileAfterReorg([sourceId, targetSessionId]);
+      undo = {
+        message: `Moved ${result.moved} message to ${label}.`,
+        run: async () => {
+          await api.reorgMove(targetSessionId, {
+            target_session_id: sourceId,
+            message_ids: [msgId]
+          });
+          await reconcileAfterReorg([sourceId, targetSessionId]);
+        }
+      };
+    } catch (e) {
+      conversation.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function doSplit(
+    sourceId: string,
+    anchorMsgId: string,
+    draft: { title: string; tag_ids: number[] }
+  ) {
+    try {
+      const result = await api.reorgSplit(sourceId, {
+        after_message_id: anchorMsgId,
+        new_session: { title: draft.title, tag_ids: draft.tag_ids }
+      });
+      await reconcileAfterReorg([sourceId, result.session.id]);
+      const newId = result.session.id;
+      const movedCount = result.result.moved;
+      // The inverse of a split is "move everything back into source"
+      // — we captured the messages that were moved implicitly (all
+      // rows after the anchor); list them fresh off the new session.
+      undo = {
+        message: `Split off ${movedCount} message${movedCount === 1 ? '' : 's'} into "${
+          result.session.title ?? '(untitled)'
+        }".`,
+        run: async () => {
+          const rows = await api.listMessages(newId);
+          if (rows.length > 0) {
+            await api.reorgMove(newId, {
+              target_session_id: sourceId,
+              message_ids: rows.map((m) => m.id)
+            });
+          }
+          await api.deleteSession(newId);
+          await reconcileAfterReorg([sourceId, newId]);
+        }
+      };
+    } catch (e) {
+      conversation.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function onPickerPickExisting(targetId: string) {
+    const sourceId = sessions.selectedId;
+    const msg = pickerAnchor;
+    if (!sourceId || !msg) {
+      closePicker();
+      return;
+    }
+    const targetLabel =
+      sessions.list.find((s) => s.id === targetId)?.title ?? 'session';
+    closePicker();
+    if (pickerOp === 'move') {
+      await doMove(sourceId, msg.id, targetId, `"${targetLabel}"`);
+      return;
+    }
+    // Split into an EXISTING session = "move everything after anchor
+    // over there." No new session created, so we reuse the move route
+    // with the collected post-anchor ids.
+    const all = conversation.messages;
+    const idx = all.findIndex((m) => m.id === msg.id);
+    if (idx < 0) return;
+    const toMove = all.slice(idx + 1).map((m) => m.id);
+    if (toMove.length === 0) {
+      conversation.error = 'No messages after the anchor to split.';
+      return;
+    }
+    try {
+      const result = await api.reorgMove(sourceId, {
+        target_session_id: targetId,
+        message_ids: toMove
+      });
+      await reconcileAfterReorg([sourceId, targetId]);
+      undo = {
+        message: `Moved ${result.moved} message${result.moved === 1 ? '' : 's'} to "${targetLabel}".`,
+        run: async () => {
+          await api.reorgMove(targetId, {
+            target_session_id: sourceId,
+            message_ids: toMove
+          });
+          await reconcileAfterReorg([sourceId, targetId]);
+        }
+      };
+    } catch (e) {
+      conversation.error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function onPickerPickNew(draft: { title: string; tag_ids: number[] }) {
+    const sourceId = sessions.selectedId;
+    const msg = pickerAnchor;
+    if (!sourceId || !msg) {
+      closePicker();
+      return;
+    }
+    closePicker();
+    if (pickerOp === 'split') {
+      await doSplit(sourceId, msg.id, draft);
+      return;
+    }
+    // Move to a brand-new session: create the row first, then move.
+    // Use the api call directly (not sessions.create) so we don't
+    // flip the selected session out from under the user mid-triage.
+    // `reconcileAfterReorg` will refresh the sidebar list to include
+    // the newly created row once the move completes.
+    const source = sessions.list.find((s) => s.id === sourceId);
+    if (!source) return;
+    let created: api.Session;
+    try {
+      created = await api.createSession({
+        working_dir: source.working_dir,
+        model: source.model,
+        title: draft.title,
+        tag_ids: draft.tag_ids
+      });
+    } catch (e) {
+      conversation.error = e instanceof Error ? e.message : String(e);
+      return;
+    }
+    await doMove(sourceId, msg.id, created.id, `"${created.title ?? '(untitled)'}"`);
+  }
+
+  function onUndoDismiss() {
+    undo = null;
   }
 
   async function onCopySession() {
@@ -262,6 +457,24 @@
   sessionId={sessions.selectedId}
 />
 
+<SessionPickerModal
+  open={pickerOpen}
+  excludeIds={sessions.selectedId ? [sessions.selectedId] : []}
+  title={pickerOp === 'split' ? 'Split remaining messages into…' : 'Move message to…'}
+  confirmLabel={pickerOp === 'split' ? 'Split here' : 'Move here'}
+  onPickExisting={onPickerPickExisting}
+  onPickNew={onPickerPickNew}
+  onCancel={closePicker}
+/>
+
+{#if undo}
+  <ReorgUndoToast
+    message={undo.message}
+    onUndo={undo.run}
+    onDismiss={onUndoDismiss}
+  />
+{/if}
+
 {#if conversation.pendingApproval}
   <ApprovalModal
     request={conversation.pendingApproval}
@@ -430,6 +643,8 @@
           highlightQuery={conversation.highlightQuery}
           {copiedMsgId}
           {onCopyMessage}
+          onMoveMessage={openMoveFor}
+          onSplitAfter={openSplitFor}
         />
       {/each}
 

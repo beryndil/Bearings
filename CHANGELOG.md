@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.19] - 2026-04-21
+
+### Added
+
+- Session reorg UI — per-message `⋯` menu on every user / assistant
+  article in the conversation view exposes "Move to session…" and
+  "Split here…". Slice 3 of the Session Reorg plan
+  (`~/.claude/plans/sparkling-triaging-otter.md`), built directly on
+  the v0.3.18 backend routes. Reveals on row hover + keyboard focus
+  so it stays out of the way during normal reading.
+- `SessionPickerModal.svelte` — searchable (title / working_dir /
+  model), tag-filterable candidate list with an inline
+  "create a new session" affordance (title + tags; other fields
+  inherit from the source). Up/down arrow + Enter to confirm, Esc to
+  cancel. The picker exposes two discriminated callbacks
+  (`onPickExisting` / `onPickNew`) so the parent chooses the right
+  backend path without re-parsing the draft.
+- `ReorgUndoToast.svelte` — 30-second grace window after a reorg.
+  Bottom-right toast shows `Undo (Ns)` and runs an inverse move on
+  click; dismisses on timeout, explicit ×, or a successful undo.
+  Split's inverse pulls the moved messages back into the source and
+  deletes the freshly-orphaned target session so a cancelled split
+  leaves no sidebar residue.
+- `reorgMove()` and `reorgSplit()` in `$lib/api/sessions.ts` with
+  `ReorgMoveResult` / `ReorgSplitResult` / `NewSessionSpec` types.
+  Mirrors the v0.3.18 Pydantic shapes; `warnings: []` is surfaced so
+  Slice 7 can populate it without another type-plumbing round.
+
+### Changed
+
+- `MessageTurn.svelte` gained optional `onMoveMessage` and
+  `onSplitAfter` callbacks. When either is provided, each rendered
+  user / assistant article picks up a hover-revealed `⋯` trigger with
+  an outside-click-dismissed popover. Existing callers that don't
+  wire the props keep the exact previous render.
+- `Conversation.svelte` orchestrates the reorg flow end-to-end: opens
+  the picker on menu click, dispatches to move vs. split based on the
+  menu choice, reconciles sidebar + active-session state after the
+  round-trip, and presents the undo toast. Move-to-a-brand-new
+  session creates the row via `api.createSession` directly (not
+  `sessions.create`) so the selection doesn't flicker away from the
+  session the user is currently triaging.
+
+12 new Svelte component tests across `SessionPickerModal.test.ts`
+and `ReorgUndoToast.test.ts`. 125 frontend tests pass (up from 113).
+Backend is unchanged — 314 tests still green, ruff + mypy strict
+clean.
+
 ## [0.3.18] - 2026-04-21
 
 ### Added

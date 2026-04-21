@@ -505,6 +505,22 @@ cover shape, not feel.
   dead spinner? Reproduce with a deliberately long Task call and
   instrument.
 
+- [ ] **Feature: "More info" button next to Copy on assistant responses
+  (2026-04-21).** Dave's ask: each assistant turn already has a Copy
+  button in its action row; add a sibling button that, when clicked,
+  sends a follow-up prompt to the agent asking it to go into more
+  detail on the *same* issue/topic from that response. Should feel
+  like a one-click "elaborate" shortcut — no typing required. Open
+  design points: (a) exact prompt text (e.g. "Please go into more
+  detail on your previous response" vs. a richer template that
+  references the specific turn), (b) whether the button should be
+  per-message or only on the most recent assistant turn, (c) whether
+  to show a subtle hint in the composer before sending so Dave can
+  edit/cancel, (d) button placement + icon in the existing action
+  row without crowding Copy. Likely surface: the message actions
+  component in `frontend/src/lib/components/` that currently renders
+  the copy button on assistant turns.
+
 - [ ] **Feature: Session Reorg — message triage across sessions.**
   Plan: `~/.claude/plans/sparkling-triaging-otter.md`. Session:
   `a0a4f828…` (tag: Bearings). Motivating failure was the "Checklists"
@@ -522,12 +538,14 @@ cover shape, not feel.
     threading deferred — `request_stop()` carries no public reason
     string today; adding the param is speculative plumbing, will add
     when the UI wants to surface the stop cause.
-  - [ ] **Slice 3 — UI: hover-action Move + Split (~1 day).**
-    Message-row "⋯" menu with "Move to session…" and "Split here…".
-    New `SessionPickerModal.svelte` (searchable, tag-filter, "create
-    new session…" inline row). 30-second undo toast that runs the
-    inverse move. Svelte tests for the picker interactions and the
-    undo timing.
+  - [x] **Slice 3 — UI: hover-action Move + Split.** Shipped as
+    v0.3.19. Per-message `⋯` menu in `MessageTurn.svelte` exposes
+    Move + Split; new `SessionPickerModal.svelte` (searchable,
+    tag-filter, inline create-new), 30-second `ReorgUndoToast.svelte`
+    running an inverse move. Note: split's inverse pulls the moved
+    messages back into source AND deletes the freshly-orphaned new
+    session so a cancelled split leaves no sidebar residue. 12 new
+    Svelte tests, 125 frontend total. Backend unchanged.
   - [ ] **Slice 4 — UI: bulk select (~4h).** Toggle mode on session
     header; checkbox per message row; shift-click selects range;
     floating action bar at bottom with "Move N…" / "Split into new
@@ -555,6 +573,73 @@ cover shape, not feel.
   cost-attribution policy (leave on source vs. follow messages),
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
+
+## v0.3.19 — shipped
+
+Slice 3 of the Session Reorg plan
+(`~/.claude/plans/sparkling-triaging-otter.md`): the UI half of the
+triage flow. Pure frontend — no backend changes.
+
+- [x] `reorgMove()` + `reorgSplit()` API client functions in
+  `frontend/src/lib/api/sessions.ts` with matching
+  `ReorgMoveResult` / `ReorgSplitResult` / `NewSessionSpec` /
+  `ReorgWarning` types. `warnings` is surfaced now even though it's
+  always `[]` pending Slice 7 — keeps the type plumbing work
+  one-shot.
+- [x] `SessionPickerModal.svelte` — searchable (title / working_dir
+  / model), tag-filterable candidate list; inline
+  "create-new-session" sub-form with title + tag selection. Arrow
+  keys + Enter select; Esc cancels. Callbacks split into
+  `onPickExisting(sessionId)` and `onPickNew({title, tag_ids})` so
+  the parent dispatches to the right backend route without
+  re-parsing the draft.
+- [x] `ReorgUndoToast.svelte` — 30-second grace window with a live
+  countdown. Runs the caller's inverse-op closure on click;
+  auto-dismisses on timeout or explicit ×. Kept the setInterval
+  cadence at 250ms so the shown seconds don't drift.
+- [x] `MessageTurn.svelte` picks up optional `onMoveMessage` /
+  `onSplitAfter` callbacks. When present, a hover-revealed `⋯`
+  button on each user / assistant article opens a small popover
+  with Move + Split entries; outside-click dismisses. Tests using
+  old `MessageTurn` props keep working since the new callbacks are
+  optional.
+- [x] `Conversation.svelte` orchestrates the full flow:
+  * Menu click → opens `SessionPickerModal` in move vs. split mode.
+  * `onPickExisting` for move → `reorgMove` with just the one id.
+  * `onPickExisting` for split → `reorgMove` with all ids after
+    anchor (the existing-session "split into" path).
+  * `onPickNew` for split → `reorgSplit` creates the new session
+    atomically server-side.
+  * `onPickNew` for move → `api.createSession` first (without
+    calling `sessions.create` to avoid flipping the selected
+    session out from under the user), then `reorgMove`.
+  * `reconcileAfterReorg` refreshes the sidebar + active
+    conversation so moved rows disappear immediately.
+  * Undo closure captures the inverse op and is handed to the
+    toast; split's undo also deletes the freshly-orphaned target.
+- [x] 12 new tests across `SessionPickerModal.test.ts` (7) and
+  `ReorgUndoToast.test.ts` (5). Exercises row exclusion + search
+  narrowing + Enter/Escape + inline create validation, and undo
+  timer arithmetic + in-flight disable + no-double-dismiss.
+- [x] 125 frontend tests pass (up from 113). Backend untouched —
+  314 pytest + ruff + mypy strict still green.
+
+Deferred to later slices (intentional):
+
+- [ ] Bulk-select mode (Slice 4): toggle + checkbox per message +
+  shift-click + floating action bar. The per-message menu feels
+  right for 1–3 row triage, but a session that drifts across 4
+  topics (the Checklists failure) wants bulk.
+- [ ] Merge route + audit divider (Slice 5): persistent "N messages
+  moved to X · Undo" line in the source after a move; undo button
+  deactivates at 30s but the divider stays as audit trail.
+- [ ] Tool-call-group warnings on split boundaries (Slice 7).
+  Currently the response's `warnings: []` arrives but is never
+  shown. When Slice 7 ships, the toast needs to render them before
+  the Undo button — plumbing for that will be a 2-line Conversation
+  change.
+- [ ] LLM-assisted analyze (Slice 6) still BLOCKED on token-cost
+  Wave 3 (sub-agent researcher). Revisit once that lands.
 
 ## v0.3.18 — shipped
 

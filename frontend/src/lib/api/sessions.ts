@@ -195,3 +195,74 @@ export function getSessionTokens(
 ): Promise<TokenTotals> {
   return jsonFetch<TokenTotals>(fetchImpl, `/api/sessions/${sessionId}/tokens`);
 }
+
+/** Result shape shared by the reorg/move and reorg/split endpoints.
+ * `warnings` is always present but empty until Slice 7 wires the
+ * tool-call-group detector in — keep the field in view now so the
+ * UI can handle it without a second round of type plumbing. */
+export type ReorgWarning = {
+  code: string;
+  message: string;
+  details: Record<string, string>;
+};
+
+export type ReorgMoveResult = {
+  moved: number;
+  tool_calls_followed: number;
+  warnings: ReorgWarning[];
+};
+
+export type ReorgMoveRequest = {
+  target_session_id: string;
+  message_ids: string[];
+};
+
+export type NewSessionSpec = {
+  title: string;
+  description?: string | null;
+  tag_ids: number[];
+  model?: string | null;
+  working_dir?: string | null;
+};
+
+export type ReorgSplitRequest = {
+  after_message_id: string;
+  new_session: NewSessionSpec;
+};
+
+export type ReorgSplitResult = {
+  session: Session;
+  result: ReorgMoveResult;
+};
+
+/** Cherry-pick message ids out of `sourceId` into `targetSessionId`.
+ * Both sessions must exist; source != target. Server stops any live
+ * runner on both sides so the next turn rebuilds against the new
+ * DB state. Tool-call rows anchored to a moved message follow. */
+export function reorgMove(
+  sourceId: string,
+  body: ReorgMoveRequest,
+  fetchImpl: typeof fetch = fetch
+): Promise<ReorgMoveResult> {
+  return jsonFetch<ReorgMoveResult>(fetchImpl, `/api/sessions/${sourceId}/reorg/move`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
+/** Split `sourceId` at `after_message_id`: creates a new session
+ * (inheriting model / working_dir from the source unless overridden)
+ * and moves every chronologically-later message into it in one
+ * transaction. Returns the new session row + the move result. */
+export function reorgSplit(
+  sourceId: string,
+  body: ReorgSplitRequest,
+  fetchImpl: typeof fetch = fetch
+): Promise<ReorgSplitResult> {
+  return jsonFetch<ReorgSplitResult>(fetchImpl, `/api/sessions/${sourceId}/reorg/split`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
