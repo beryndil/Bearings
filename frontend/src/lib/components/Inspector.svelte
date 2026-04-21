@@ -4,10 +4,10 @@
   import { getSystemPrompt, type SystemPrompt } from '$lib/api';
   import { stickToBottom } from '$lib/actions/autoscroll';
 
-  function statusBadge(ok: boolean | null): { label: string; classes: string } {
-    if (ok === null) return { label: 'running', classes: 'bg-amber-900 text-amber-300' };
-    if (ok) return { label: 'ok', classes: 'bg-emerald-900 text-emerald-300' };
-    return { label: 'error', classes: 'bg-rose-900 text-rose-300' };
+  function callMarker(ok: boolean | null): { glyph: string; cls: string } {
+    if (ok === null) return { glyph: '●', cls: 'text-amber-400' };
+    if (ok) return { glyph: '✓', cls: 'text-emerald-400' };
+    return { glyph: '✗', cls: 'text-rose-400' };
   }
 
   function formatDuration(ms: number): string {
@@ -38,6 +38,14 @@
   let scrollContainer: HTMLElement | undefined = $state();
   const running = $derived(
     conversation.toolCalls.filter((t) => t.ok === null).length
+  );
+  // Aggregate signal so stickToBottom re-evaluates whenever a new call
+  // arrives or any call's output/error grows.
+  const toolStreamSignal = $derived(
+    conversation.toolCalls.reduce(
+      (acc, c) => acc + (c.output?.length ?? 0) + (c.error?.length ?? 0),
+      conversation.toolCalls.length
+    )
   );
 
   let systemPrompt = $state<SystemPrompt | null>(null);
@@ -152,7 +160,7 @@
 
 <aside
   bind:this={scrollContainer}
-  class="bg-slate-900 overflow-y-auto border-l border-slate-800 p-4 flex flex-col gap-3"
+  class="h-full bg-slate-900 overflow-y-auto border-l border-slate-800 p-4 flex flex-col gap-3"
 >
   <details class="disclosure-group" bind:open={contextOpen}>
     <summary class="flex items-baseline justify-between gap-2 cursor-pointer">
@@ -259,51 +267,23 @@
     {#if conversation.toolCalls.length === 0}
       <p class="text-slate-500 text-sm mt-3">No tool calls yet.</p>
     {:else}
-      <ul class="flex flex-col gap-2 mt-3">
-        {#each conversation.toolCalls as call (call.id)}
-          {@const badge = statusBadge(call.ok)}
-          {@const streamLen =
-            (call.output?.length ?? 0) + (call.error?.length ?? 0)}
-          <li
-            class="tool-card rounded border border-slate-800 bg-slate-950/40
-              text-xs overflow-hidden"
-          >
-            <details>
-              <summary
-                class="cursor-pointer p-2 flex items-center justify-between
-                  gap-2 hover:bg-slate-900/40"
-              >
-                <span class="flex flex-col min-w-0 gap-0.5">
-                  <span class="font-mono font-medium truncate">{call.name}</span>
-                  <span class="text-[10px] text-slate-500">
-                    {elapsed(call.startedAt, call.finishedAt)}
-                  </span>
-                </span>
-                <span
-                  class="{badge.classes} px-1.5 py-0.5 rounded text-[10px] uppercase
-                    shrink-0"
-                >
-                  {badge.label}
-                </span>
-              </summary>
-              <div
-                use:stickToBottom={streamLen}
-                class="max-h-80 overflow-y-auto bg-black/70 border-t border-slate-800
-                  p-2 font-mono text-[10px] leading-relaxed"
-              >
-                <pre
-                  class="whitespace-pre-wrap break-all text-slate-300"><span
-                    class="text-emerald-400">$ {call.name}</span>
+      <div
+        use:stickToBottom={toolStreamSignal}
+        class="mt-3 max-h-[32rem] overflow-y-auto rounded border border-slate-800
+          bg-black/70 p-2 font-mono text-[10px] leading-relaxed text-slate-300"
+      >
+        {#each conversation.toolCalls as call, i (call.id)}
+          {@const mark = callMarker(call.ok)}
+          <pre
+            class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"><span
+              class="text-emerald-400">$ {call.name}</span> <span
+              class={mark.cls}>{mark.glyph}</span> <span
+              class="text-slate-500">{elapsed(call.startedAt, call.finishedAt)}</span>
 {JSON.stringify(call.input, null, 2)}{#if call.output !== null}
-
 {call.output}{/if}{#if call.error}
-
 <span class="text-rose-400">error: {call.error}</span>{/if}</pre>
-              </div>
-            </details>
-          </li>
         {/each}
-      </ul>
+      </div>
     {/if}
   </details>
 </aside>
@@ -326,13 +306,5 @@
   }
   .disclosure-group:not([open]) > summary::before {
     content: '▸';
-  }
-  /* Tool-call cards use a bare summary (no marker) so the collapsed
-   * row keeps its original name + badge look. */
-  .tool-card > details > summary {
-    list-style: none;
-  }
-  .tool-card > details > summary::-webkit-details-marker {
-    display: none;
   }
 </style>
