@@ -38,8 +38,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.active_ws = active
     # RunnerRegistry owns per-session agent loops decoupled from WS
     # lifetime. Sessions keep running when the UI walks away; see
-    # bearings.agent.runner for the contract.
-    app.state.runners = RunnerRegistry()
+    # bearings.agent.runner for the contract. The reaper evicts
+    # runners that have been idle + unsubscribed past the configured
+    # TTL so a long-lived server doesn't accumulate one worker +
+    # ring buffer per session the user ever opened.
+    app.state.runners = RunnerRegistry(
+        idle_ttl_seconds=settings.runner.idle_ttl_seconds,
+        reap_interval_seconds=settings.runner.reap_interval_seconds,
+    )
+    app.state.runners.start_reaper()
     try:
         yield
     finally:

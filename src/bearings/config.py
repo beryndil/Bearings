@@ -68,6 +68,21 @@ class MetricsCfg(BaseModel):
     enabled: bool = False
 
 
+class RunnerCfg(BaseModel):
+    # Seconds a `SessionRunner` is allowed to sit "quiet" (no turn in
+    # flight AND no WebSocket subscribers) before the registry reaper
+    # evicts it, freeing its worker task + 5000-slot ring buffer. The
+    # runner is recreated on the next WS connect; SDK session id is
+    # persisted so the resumed turn still has history. Set to 0 to
+    # disable the reaper (v0.3.13 behavior — runners live until the
+    # session is deleted or the app shuts down).
+    idle_ttl_seconds: float = 900.0
+    # How often the reaper wakes to scan. One pass is cheap (a dict
+    # comprehension under a short-held asyncio.Lock), so this only
+    # controls eviction latency, not overhead.
+    reap_interval_seconds: float = 60.0
+
+
 class BillingCfg(BaseModel):
     # Defaults to "payg" so nothing changes for developer-API users who
     # were using Bearings before this knob existed. Max/Pro subscribers
@@ -89,6 +104,7 @@ class Settings(BaseSettings):
     storage: StorageCfg = Field(default_factory=StorageCfg)
     metrics: MetricsCfg = Field(default_factory=MetricsCfg)
     billing: BillingCfg = Field(default_factory=BillingCfg)
+    runner: RunnerCfg = Field(default_factory=RunnerCfg)
 
     config_file: Path = Field(default_factory=lambda: CONFIG_HOME / "config.toml")
 

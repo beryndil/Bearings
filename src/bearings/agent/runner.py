@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections import deque
 from typing import Any, Literal
 from uuid import uuid4
@@ -120,6 +121,16 @@ class SessionRunner:
         # `resolve_approval` from the WS handler and tells it to deny
         # everything on stop / shutdown.
         self._approval = ApprovalBroker(session_id, self._emit_event)
+        # Monotonic timestamp of the moment the runner most recently
+        # became "quiet" — idle AND zero subscribers. The registry's
+        # reaper uses `now - _quiet_since` vs. the configured TTL to
+        # decide whether to evict. `None` means the runner is currently
+        # active on at least one axis (a turn is running or a WS is
+        # attached); initialized at construction because a just-built
+        # runner has no subscribers yet and status is idle — the ws
+        # handler flips the clock off via `subscribe()` immediately,
+        # so this initial window is effectively zero.
+        self._quiet_since: float | None = time.monotonic()
 
     # ---- lifecycle -------------------------------------------------
 
@@ -222,11 +233,40 @@ class SessionRunner:
         seq they saw; fresh clients pass 0 to replay the whole window."""
         queue: asyncio.Queue[_Envelope] = asyncio.Queue()
         self._subscribers.add(queue)
+        # A WS is attached — not quiet anymore. Clearing unconditionally
+        # is simpler than checking prior state; the idle→running path
+        # clears it too.
+        self._quiet_since = None
         replay = [env for env in self._event_log if env.seq > since_seq]
         return queue, replay
 
     def unsubscribe(self, queue: asyncio.Queue[_Envelope]) -> None:
         self._subscribers.discard(queue)
+        # If the last WS just walked away and no turn is in flight, the
+        # reaper clock starts now. If a turn is still running, wait for
+        # the worker's idle transition to start the clock — we don't
+        # want to evict a runner that's actively producing events even
+        # though its client left.
+        if self._status == "idle" and not self._subscribers:
+            self._quiet_since = time.monotonic()
+
+    # ---- reaper hook ----------------------------------------------
+
+    def should_reap(self, now: float, ttl_seconds: float) -> bool:
+        """Does this runner qualify for idle eviction?
+
+        True iff it's currently quiet (idle, no subscribers) AND has
+        been quiet for at least `ttl_seconds`. The registry reaper
+        calls this under its lock; the runner itself does not take
+        action on eviction — that's the registry's job (pop + shutdown).
+        """
+        if self._status != "idle":
+            return False
+        if self._subscribers:
+            return False
+        if self._quiet_since is None:
+            return False
+        return (now - self._quiet_since) >= ttl_seconds
 
     # ---- worker ----------------------------------------------------
 
@@ -236,6 +276,10 @@ class SessionRunner:
             if isinstance(item, _Shutdown):
                 return
             self._status = "running"
+            # A turn is live — not quiet regardless of subscriber count.
+            # Clear here rather than spread the condition through every
+            # status mutation site.
+            self._quiet_since = None
             self._stop_requested = False
             try:
                 await self._execute_turn(item)
@@ -244,6 +288,11 @@ class SessionRunner:
                 await self._emit_event(ErrorEvent(session_id=self.session_id, message=str(exc)))
             finally:
                 self._status = "idle"
+                # If nobody's watching, start the reaper clock. A
+                # connected subscriber keeps the clock off until it
+                # unsubscribes.
+                if not self._subscribers:
+                    self._quiet_since = time.monotonic()
 
     async def _execute_turn(self, prompt: str) -> None:  # noqa: C901
         """Run one agent turn end-to-end. Mirrors the pre-runner

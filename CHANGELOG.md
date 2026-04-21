@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.14] - 2026-04-21
+
+### Added
+
+- Idle-runner reaper. `RunnerRegistry` now evicts `SessionRunner`
+  instances that have been "quiet" (no turn in flight AND no
+  WebSocket subscribers) longer than `runner.idle_ttl_seconds`
+  (default 900s / 15 min). Frees the worker task + 5000-slot ring
+  buffer for sessions the user hopped into once and walked away
+  from, so a long-lived server doesn't accumulate one runner per
+  session ever opened. The runner is recreated on the next WS
+  connect; `sdk_session_id` is persisted so the resumed turn still
+  has full CLI history. Set `runner.idle_ttl_seconds = 0` in
+  `~/.config/bearings/config.toml` to restore v0.3.13 behavior
+  (runners live until delete or server restart).
+
+### Fixed
+
+- `bearings.__version__` was pinned at `0.3.9` while
+  `pyproject.toml` advanced through `0.3.10`–`0.3.13`, so
+  `/api/health` reported a stale version. Synced both to the new
+  `0.3.14` release.
+
 ## [0.3.13] - 2026-04-21
 
 ### Added

@@ -539,6 +539,155 @@ async def test_two_runners_execute_concurrently_without_crosstalk(
 
 
 @pytest.mark.asyncio
+async def test_should_reap_requires_idle_and_no_subscribers_past_ttl(
+    db: aiosqlite.Connection,
+) -> None:
+    """Pin the eviction predicate directly: `should_reap` returns True
+    only when status is idle, zero subscribers are attached, and the
+    quiet duration has passed the TTL. Subscribing a queue or flipping
+    to running must immediately disqualify the runner — otherwise the
+    reaper could shut down a runner mid-turn or with an active tab."""
+    sid = await _session_id(db)
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[]), db)
+    # Backdate the quiet clock so the TTL comparison can trip without a
+    # real sleep. Private attr access is intentional — we're pinning
+    # the predicate, not the emergent behavior.
+    runner._quiet_since = 0.0
+
+    now = 1000.0
+    assert runner.should_reap(now, ttl_seconds=100.0) is True
+    # Not yet past TTL.
+    assert runner.should_reap(now, ttl_seconds=2000.0) is False
+
+    # Subscriber attached → not reapable regardless of TTL.
+    queue, _ = await runner.subscribe(0)
+    assert runner.should_reap(now, ttl_seconds=100.0) is False
+    # Unsubscribe restarts the quiet clock; still idle, still reapable
+    # given enough time.
+    runner.unsubscribe(queue)
+    assert runner._quiet_since is not None
+    runner._quiet_since = 0.0
+    assert runner.should_reap(now, ttl_seconds=100.0) is True
+
+    # Mid-turn → not reapable even without subscribers.
+    runner._status = "running"
+    runner._quiet_since = None
+    assert runner.should_reap(now, ttl_seconds=0.0) is False
+
+
+@pytest.mark.asyncio
+async def test_turn_lifecycle_toggles_quiet_clock(db: aiosqlite.Connection) -> None:
+    """A turn should park the quiet clock while running and restart it
+    on return to idle when no subscriber is attached. This is the
+    emergent-behavior companion to the direct `should_reap` test — it
+    proves the worker's status transitions wire through to the clock
+    without us having to poke `_status` by hand."""
+    sid = await _session_id(db)
+    gate = asyncio.Event()
+    script = _message_script(sid, "msg-q", "hi")
+    agent = ScriptedAgent(sid, scripts=[script], gate=gate)
+    runner = SessionRunner(sid, agent, db)
+    runner.start()
+    try:
+        assert runner._quiet_since is not None  # fresh runner is quiet
+
+        await runner.submit_prompt("P")
+        await _wait_until(lambda: runner.is_running)
+        assert runner._quiet_since is None  # turn active → clock off
+
+        gate.set()
+        await _wait_until(lambda: not runner.is_running)
+        # No subscribers were attached, so idle return restarts the clock.
+        assert runner._quiet_since is not None
+    finally:
+        await runner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_registry_reaper_evicts_only_quiet_runners(
+    db: aiosqlite.Connection,
+) -> None:
+    """End-to-end reaper behavior across three runners: one quiet past
+    TTL (evicted), one mid-turn (kept), one with a live subscriber
+    (kept). Guards against a regression where the reaper shuts down
+    active work or where an idle-forever runner outlives the TTL."""
+    sid = await _session_id(db)
+    # Session rows for runners B and C so `_session_id` isn't ambiguous.
+    row_b = await store.create_session(db, working_dir="/tmp", model="m", title="B")
+    row_c = await store.create_session(db, working_dir="/tmp", model="m", title="C")
+
+    gate_b = asyncio.Event()
+    agent_a = ScriptedAgent(sid, scripts=[])
+    agent_b = ScriptedAgent(
+        row_b["id"],
+        scripts=[_message_script(row_b["id"], "msg-B", "b")],
+        gate=gate_b,
+    )
+    agent_c = ScriptedAgent(row_c["id"], scripts=[])
+
+    async def make(a_id: str) -> SessionRunner:
+        if a_id == sid:
+            return SessionRunner(sid, agent_a, db)
+        if a_id == row_b["id"]:
+            return SessionRunner(row_b["id"], agent_b, db)
+        return SessionRunner(row_c["id"], agent_c, db)
+
+    registry = RunnerRegistry(idle_ttl_seconds=60.0, reap_interval_seconds=3600.0)
+    try:
+        runner_a = await registry.get_or_create(sid, factory=make)
+        runner_b = await registry.get_or_create(row_b["id"], factory=make)
+        runner_c = await registry.get_or_create(row_c["id"], factory=make)
+
+        # B: start a turn and hold it on the gate → not reapable.
+        await runner_b.submit_prompt("go")
+        await _wait_until(lambda: runner_b.is_running)
+        # C: attach a subscriber → not reapable.
+        _qc, _ = await runner_c.subscribe(0)
+        # A: idle, no subs. Backdate so `now` in reap_once trips the TTL.
+        runner_a._quiet_since = 0.0
+
+        evicted = await registry.reap_once(now=1000.0)
+        assert evicted == [sid]
+        assert registry.get(sid) is None
+        assert registry.get(row_b["id"]) is runner_b
+        assert registry.get(row_c["id"]) is runner_c
+        assert runner_a._worker is not None and runner_a._worker.done()
+
+        # Release B so shutdown_all can drain it cleanly.
+        gate_b.set()
+        await _wait_until(lambda: not runner_b.is_running)
+    finally:
+        await registry.shutdown_all()
+
+
+@pytest.mark.asyncio
+async def test_registry_reaper_disabled_when_ttl_nonpositive(
+    db: aiosqlite.Connection,
+) -> None:
+    """TTL <= 0 is the opt-out. `reap_once` must short-circuit even
+    when a runner is well past any plausible TTL, and `start_reaper`
+    must not spawn a task — we reuse the v0.3.13 behavior of
+    "runners live until delete or shutdown" when the operator sets
+    `idle_ttl_seconds = 0`."""
+    sid = await _session_id(db)
+
+    async def factory(session_id: str) -> SessionRunner:
+        return SessionRunner(session_id, ScriptedAgent(session_id, scripts=[]), db)
+
+    registry = RunnerRegistry(idle_ttl_seconds=0.0)
+    try:
+        runner = await registry.get_or_create(sid, factory=factory)
+        runner._quiet_since = 0.0
+        registry.start_reaper()
+        assert registry._reaper is None
+        evicted = await registry.reap_once(now=1e9)
+        assert evicted == []
+        assert registry.get(sid) is runner
+    finally:
+        await registry.shutdown_all()
+
+
+@pytest.mark.asyncio
 async def test_registry_shutdown_all_drains_every_runner(
     db: aiosqlite.Connection,
 ) -> None:
