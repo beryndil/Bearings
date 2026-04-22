@@ -30,6 +30,7 @@ function session(overrides: Partial<Session> = {}): Session {
     last_context_max: null,
     closed_at: null,
     kind: 'chat',
+    checklist_item_id: null,
     ...overrides
   };
 }

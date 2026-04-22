@@ -27,7 +27,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- `checklists` / `checklist_items` tables. The runner + WS + reorg
     -- endpoints guard on this column. See migration 0016.
     kind TEXT NOT NULL DEFAULT 'chat'
-        CHECK (kind IN ('chat', 'checklist'))
+        CHECK (kind IN ('chat', 'checklist')),
+    -- Inverse pointer for per-item paired chats (migration 0017).
+    -- When non-NULL this chat session is "about" a specific checklist
+    -- item; the prompt assembler injects a checklist-context layer on
+    -- every turn so the agent can see the parent checklist, sibling
+    -- items, and the current item's state. SET NULL cascade so a
+    -- deleted item degrades the chat to a plain session with a
+    -- "(checklist deleted)" breadcrumb rather than destroying history.
+    checklist_item_id INTEGER REFERENCES checklist_items(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -129,10 +137,24 @@ CREATE TABLE IF NOT EXISTS checklist_items (
     checked_at TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    -- Forward pointer for per-item paired chats (migration 0017).
+    -- NULL when the user has never opened "Work on this" for the item;
+    -- non-NULL = exactly one paired chat session was spawned. SET NULL
+    -- cascade so deleting the paired chat reverts the item to the
+    -- "no chat opened yet" state rather than destroying the item.
+    chat_session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_checklist_items_checklist
     ON checklist_items(checklist_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_checklist_items_parent
     ON checklist_items(parent_item_id);
+-- Pairing lookups (migration 0017). Point queries in both directions
+-- are common: ChecklistView pulls items-with-pairing per checklist,
+-- and the prompt assembler reverse-looks-up the item from the
+-- session id on every turn build.
+CREATE INDEX IF NOT EXISTS idx_checklist_items_chat_session
+    ON checklist_items(chat_session_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_checklist_item
+    ON sessions(checklist_item_id);

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from bearings import metrics
 from bearings.api.auth import require_auth
 from bearings.api.models import (
     ChecklistOut,
@@ -22,8 +23,10 @@ from bearings.api.models import (
     ItemOut,
     ItemToggle,
     ItemUpdate,
+    PairedChatCreate,
     ReorderRequest,
     ReorderResult,
+    SessionOut,
 )
 from bearings.db import store
 
@@ -138,3 +141,107 @@ async def reorder_items(session_id: str, body: ReorderRequest, request: Request)
     await _require_checklist_session(request, session_id)
     reordered = await store.reorder_items(request.app.state.db, session_id, body.item_ids)
     return ReorderResult(reordered=reordered)
+
+
+@router.get("/items/{item_id}/chat", response_model=SessionOut)
+async def get_paired_chat(session_id: str, item_id: int, request: Request) -> SessionOut:
+    """Resolve the paired chat for an item, or 404 if the item has
+    never been worked on in a chat. The ChecklistView uses this when
+    the user clicks a "Continue working" button on an already-paired
+    item — the button state comes from `ItemOut.chat_session_id` so
+    we could short-circuit client-side, but keeping a resolve
+    endpoint means the server stays authoritative if a race drops
+    the pairing."""
+    await _require_checklist_session(request, session_id)
+    conn = request.app.state.db
+    item = await store.get_item(conn, item_id)
+    if item is None or item["checklist_id"] != session_id:
+        raise HTTPException(status_code=404, detail="item not found")
+    chat_id = item["chat_session_id"]
+    if chat_id is None:
+        raise HTTPException(status_code=404, detail="no paired chat for this item")
+    chat_row = await store.get_session(conn, chat_id)
+    if chat_row is None:
+        # Pairing FK is SET NULL on chat delete, but a race between
+        # DELETE and GET can hand a stale id back. Surface as 404 and
+        # let the client re-fetch the item so the next click spawns
+        # a fresh paired chat.
+        raise HTTPException(status_code=404, detail="paired chat session is gone")
+    return SessionOut(**chat_row)
+
+
+@router.post("/items/{item_id}/chat", response_model=SessionOut, status_code=201)
+async def spawn_paired_chat(
+    session_id: str, item_id: int, body: PairedChatCreate, request: Request
+) -> SessionOut:
+    """Spawn a new chat session paired to a checklist item. Inherits
+    defaults (working_dir, model, tags) from the parent checklist
+    session when the client doesn't override them — the typical
+    workflow is "click Work on this, get a chat pre-wired to the
+    same project context." If the item already has a paired chat the
+    existing session is returned unchanged (idempotent spawn — the
+    UI routes to /chat and the first spawn wins); callers that need
+    a fresh chat must delete the old one first.
+
+    Raises 404 on unknown session or item, 400 when the parent is
+    not a checklist session, 400 when the parent carries no tags
+    (since every session requires ≥1 tag and defaults from the
+    parent means we must have *something* to attach)."""
+    await _require_checklist_session(request, session_id)
+    conn = request.app.state.db
+    item = await store.get_item(conn, item_id)
+    if item is None or item["checklist_id"] != session_id:
+        raise HTTPException(status_code=404, detail="item not found")
+    existing_chat_id = item["chat_session_id"]
+    if existing_chat_id is not None:
+        # Idempotent: return the existing pairing so a double-click
+        # doesn't create dangling chats. The frontend navigates on
+        # success; second click lands on the same session.
+        existing = await store.get_session(conn, existing_chat_id)
+        if existing is not None:
+            return SessionOut(**existing)
+        # Existing pointer is stale (chat deleted mid-flight, FK
+        # should have nulled but we raced). Fall through and spawn
+        # a fresh one — clear the stale pointer so the INSERT below
+        # doesn't trip the UNIQUE-ish semantics we rely on at the UI.
+        await store.set_item_chat_session(conn, item_id, None)
+
+    parent_session = await store.get_session(conn, session_id)
+    assert parent_session is not None  # _require_checklist_session checked
+    parent_tags = await store.list_session_tags(conn, session_id)
+    if not parent_tags and not body.tag_ids:
+        # Every session requires ≥1 tag (v0.2.13). The parent
+        # checklist is supposed to be tagged; if it isn't (imported
+        # from a pre-v0.2.13 export, say) the client must pass tags.
+        raise HTTPException(
+            status_code=400,
+            detail="parent checklist has no tags and no tag_ids supplied",
+        )
+    effective_tag_ids = body.tag_ids or [t["id"] for t in parent_tags]
+    # Validate every tag exists before inserting — matches routes_sessions.
+    for tag_id in effective_tag_ids:
+        if await store.get_tag(conn, tag_id) is None:
+            raise HTTPException(status_code=400, detail=f"tag_id {tag_id} does not exist")
+
+    working_dir = body.working_dir or parent_session["working_dir"]
+    model = body.model or parent_session["model"]
+    title = body.title if body.title is not None else f"{item['label']}"
+
+    chat_row = await store.create_session(
+        conn,
+        working_dir=working_dir,
+        model=model,
+        title=title,
+        description=body.description,
+        max_budget_usd=body.max_budget_usd,
+        kind="chat",
+        checklist_item_id=item_id,
+    )
+    for tag_id in effective_tag_ids:
+        await store.attach_tag(conn, chat_row["id"], tag_id)
+    await store.set_item_chat_session(conn, item_id, chat_row["id"])
+    metrics.sessions_created.inc()
+
+    refreshed = await store.get_session(conn, chat_row["id"])
+    assert refreshed is not None
+    return SessionOut(**refreshed)

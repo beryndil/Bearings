@@ -7,6 +7,7 @@
  */
 
 import { jsonFetch, voidFetch } from './core';
+import type { Session } from './sessions';
 
 export type ChecklistItem = {
   id: number;
@@ -20,6 +21,12 @@ export type ChecklistItem = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  /** v0.5.0 paired-chat pointer (migration 0017). Null until the user
+   * first clicks "💬 Work on this"; non-null means the item has a
+   * chat session dedicated to it. ChecklistView uses this to toggle
+   * the per-item button between "Work on this" (spawn) and
+   * "Continue working" (navigate). */
+  chat_session_id: string | null;
 };
 
 export type Checklist = {
@@ -139,4 +146,54 @@ export function reorderItems(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ item_ids: itemIds })
   });
+}
+
+/** Body for `POST /sessions/{id}/checklist/items/{item_id}/chat`. All
+ * fields optional — the server inherits `working_dir` / `model` /
+ * `tag_ids` from the parent checklist session when omitted, and
+ * defaults the title to the item label. */
+export type PairedChatCreate = {
+  working_dir?: string | null;
+  model?: string | null;
+  title?: string | null;
+  description?: string | null;
+  max_budget_usd?: number | null;
+  tag_ids?: number[];
+};
+
+/** Spawn (or return the existing) chat session paired to a checklist
+ * item. Idempotent: a second call returns the same session id, so a
+ * double-click on "💬 Work on this" doesn't create dangling chats.
+ * The returned `Session` carries `kind='chat'` + a non-null
+ * `checklist_item_id` pointing back at the source item. */
+export function spawnPairedChat(
+  sessionId: string,
+  itemId: number,
+  body: PairedChatCreate = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(
+    fetchImpl,
+    `/api/sessions/${sessionId}/checklist/items/${itemId}/chat`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }
+  );
+}
+
+/** Resolve the existing paired chat for a checklist item. 404s when
+ * the item has never been worked on. Prefer this over inspecting
+ * `ChecklistItem.chat_session_id` when you need the full session row;
+ * the pointer alone is enough to decide button state. */
+export function getPairedChat(
+  sessionId: string,
+  itemId: number,
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(
+    fetchImpl,
+    `/api/sessions/${sessionId}/checklist/items/${itemId}/chat`
+  );
 }

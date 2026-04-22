@@ -21,7 +21,8 @@ from bearings.db._common import _now
 
 CHECKLIST_COLS = "session_id, notes, created_at, updated_at"
 ITEM_COLS = (
-    "id, checklist_id, parent_item_id, label, notes, checked_at, sort_order, created_at, updated_at"
+    "id, checklist_id, parent_item_id, label, notes, checked_at, sort_order, "
+    "created_at, updated_at, chat_session_id"
 )
 # Top-level items ordered by sort_order then id; nested children
 # follow the same rule under their parent (resolved client-side for
@@ -234,6 +235,58 @@ async def delete_item(conn: aiosqlite.Connection, item_id: int) -> bool:
         )
     await conn.commit()
     return deleted
+
+
+async def set_item_chat_session(
+    conn: aiosqlite.Connection,
+    item_id: int,
+    chat_session_id: str | None,
+) -> dict[str, Any] | None:
+    """Pair (or unpair) a checklist item with a chat session. Passing
+    `None` clears the pairing — used when the user detaches or the
+    chat session is deleted elsewhere (the SET NULL cascade on the FK
+    handles deletions automatically, so this helper is strictly for
+    *intentional* unpair; the cascade saves us from needing an
+    on-session-delete callback). Bumps `updated_at` on both item and
+    checklist. Returns the refreshed item row or `None` if the id is
+    unknown.
+
+    Added in migration 0017 (Slice 4 of nimble-checking-heron)."""
+    now = _now()
+    cursor = await conn.execute(
+        "UPDATE checklist_items SET chat_session_id = ?, updated_at = ? WHERE id = ?",
+        (chat_session_id, now, item_id),
+    )
+    if cursor.rowcount == 0:
+        await conn.commit()
+        return None
+    await conn.execute(
+        "UPDATE checklists SET updated_at = ? WHERE session_id = "
+        "(SELECT checklist_id FROM checklist_items WHERE id = ?)",
+        (now, item_id),
+    )
+    await conn.commit()
+    return await get_item(conn, item_id)
+
+
+async def get_item_by_chat_session(
+    conn: aiosqlite.Connection,
+    chat_session_id: str,
+) -> dict[str, Any] | None:
+    """Reverse lookup: given a chat session id, return the checklist
+    item it's paired to (if any). Used by the prompt assembler to
+    build the checklist-context layer from the inverse side — the
+    session row already carries `checklist_item_id`, but fetching the
+    item via this helper keeps the SELECT local to this module and
+    picks up every ITEM_COLS field in one call.
+
+    Added in migration 0017."""
+    async with conn.execute(
+        f"SELECT {ITEM_COLS} FROM checklist_items WHERE chat_session_id = ?",
+        (chat_session_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    return dict(row) if row is not None else None
 
 
 async def reorder_items(

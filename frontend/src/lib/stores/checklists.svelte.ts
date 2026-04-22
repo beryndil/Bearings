@@ -124,6 +124,37 @@ class ChecklistStore {
     }
   }
 
+  /** Spawn (or resolve) the paired chat session for an item, wire the
+   * forward pointer in local state, and return the new/existing
+   * session row so the caller can route to /chat with it. Idempotent
+   * on the server, so a second call just returns the same id.
+   *
+   * Doesn't push the new session into the `sessions` store — the
+   * caller is responsible for refreshing the session list when the
+   * user navigates to the chat (matches the v0.4.1 NewSessionForm
+   * pattern where `sessions.create` is the one that mutates the
+   * sidebar list; here we only mutate the checklist item's local
+   * pairing pointer). */
+  async spawnChat(itemId: number): Promise<api.Session | null> {
+    const sid = this.sessionId;
+    if (!this.current || !sid) return null;
+    try {
+      const chat = await api.spawnPairedChat(sid, itemId);
+      // Wire the forward pointer into local state so the next render
+      // shows the "Continue working" button without a full reload.
+      this.current = {
+        ...this.current,
+        items: this.current.items.map((i) =>
+          i.id === itemId ? { ...i, chat_session_id: chat.id } : i
+        )
+      };
+      return chat;
+    } catch (e) {
+      this.error = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  }
+
   async reorder(orderedIds: number[]): Promise<void> {
     if (!this.current || !this.sessionId) return;
     const prevItems = this.current.items;

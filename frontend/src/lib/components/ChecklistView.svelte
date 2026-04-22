@@ -16,6 +16,7 @@
   import { onDestroy } from 'svelte';
   import { checklists } from '$lib/stores/checklists.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
+  import { agent } from '$lib/agent.svelte';
 
   const selected = $derived(sessions.selected);
 
@@ -92,11 +93,46 @@
   }
 
   async function handleToggle(itemId: number, checked: boolean) {
+    // Checking off an item that's paired to an open chat prompts the
+    // user: close the paired chat too, or leave it live? "Close"
+    // stamps `closed_at` so the sidebar sinks it into the Closed
+    // group; declining keeps the chat around (same pairing pointer,
+    // same history) so the user can return later. Unchecking never
+    // prompts — reopening a previously-closed chat is the user's
+    // call and happens from the sidebar, not this affordance.
+    if (checked) {
+      const item = checklists.current?.items.find((i) => i.id === itemId);
+      const pairedId = item?.chat_session_id ?? null;
+      if (pairedId) {
+        const pairedSession = sessions.list.find((s) => s.id === pairedId);
+        const isOpen = pairedSession ? !pairedSession.closed_at : false;
+        if (isOpen) {
+          const shouldClose = window.confirm(
+            'Close the paired chat session for this item too?'
+          );
+          if (shouldClose) await sessions.close(pairedId);
+        }
+      }
+    }
     await checklists.toggle(itemId, checked);
   }
 
   async function handleDelete(itemId: number) {
     await checklists.remove(itemId);
+  }
+
+  /** Spawn-or-navigate handler for the per-item "Work on this" /
+   * "Continue working" button. Idempotent on the server — a
+   * double-click lands on the same chat session. We select the
+   * target session after spawning so the right pane swaps to the
+   * Conversation view on the same click; the conversation store
+   * picks it up via the existing `sessions.selected` derivation. */
+  async function handleWorkOnThis(itemId: number) {
+    const chat = await checklists.spawnChat(itemId);
+    if (!chat) return;
+    sessions.list = [chat, ...sessions.list.filter((s) => s.id !== chat.id)];
+    sessions.select(chat.id);
+    await agent.connect(chat.id);
   }
 
   function onEditKey(ev: KeyboardEvent) {
@@ -170,6 +206,17 @@
                 {item.label}
               </button>
             {/if}
+            <button
+              type="button"
+              class="text-xs text-slate-400 opacity-0 hover:text-sky-400 group-hover:opacity-100"
+              aria-label={item.chat_session_id
+                ? `Continue working on ${item.label}`
+                : `Work on ${item.label} in a new chat`}
+              title={item.chat_session_id ? 'Continue working' : 'Work on this'}
+              onclick={() => handleWorkOnThis(item.id)}
+            >
+              {item.chat_session_id ? '↪' : '💬'}
+            </button>
             <button
               type="button"
               class="text-xs text-slate-500 opacity-0 hover:text-rose-400 group-hover:opacity-100"

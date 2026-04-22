@@ -14,7 +14,7 @@ SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
     "max_budget_usd, total_cost_usd, session_instructions, sdk_session_id, "
     "permission_mode, last_context_pct, last_context_tokens, last_context_max, "
-    "closed_at, kind"
+    "closed_at, kind, checklist_item_id"
 )
 
 # Valid values for sessions.kind. The column carries a CHECK constraint
@@ -40,22 +40,33 @@ async def create_session(
     description: str | None = None,
     max_budget_usd: float | None = None,
     kind: str = "chat",
+    checklist_item_id: int | None = None,
 ) -> dict[str, Any]:
     """Insert a new session row. `kind` defaults to `'chat'` so existing
     callers don't need to change; passing `'checklist'` is what the
     new checklist creation path sends. The companion `checklists` row
     is the caller's responsibility — this helper owns the `sessions`
     insert only, and rejects unknown kinds up front so bad input
-    surfaces as a ValueError rather than a SQLite IntegrityError."""
+    surfaces as a ValueError rather than a SQLite IntegrityError.
+
+    `checklist_item_id` (migration 0017) pairs this chat session to a
+    specific checklist item. The prompt assembler reads the pairing on
+    every turn build so the agent sees the parent checklist / sibling
+    items. Only meaningful when `kind='chat'` — it's a ValueError to
+    pair a checklist-kind session to a checklist item."""
     if kind not in _VALID_SESSION_KINDS:
         raise ValueError(f"unknown session kind: {kind!r}")
+    if checklist_item_id is not None and kind != "chat":
+        raise ValueError(
+            f"checklist_item_id only valid on kind='chat' sessions (got kind={kind!r})"
+        )
     session_id = _new_id()
     now = _now()
     await conn.execute(
         "INSERT INTO sessions "
         "(id, created_at, updated_at, working_dir, model, title, description, "
-        "max_budget_usd, kind) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "max_budget_usd, kind, checklist_item_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             session_id,
             now,
@@ -66,6 +77,7 @@ async def create_session(
             description,
             max_budget_usd,
             kind,
+            checklist_item_id,
         ),
     )
     await conn.commit()

@@ -624,6 +624,56 @@ the historical checklists as-is.
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
 
+## v0.5.0 — shipped
+
+Checklist Sessions — Slice 4 of
+`~/.claude/plans/nimble-checking-heron.md` lands per-item paired
+chat sessions with a "memory plug" so the agent knows which item
+it's addressing. Minor bump (0.4.1 → 0.5.0) because this ships a
+new primitive: a second `sessions.kind` (chat) that's structurally
+bound to a specific `checklist_items` row via symmetric FK
+pairing. No special "open chat from checklist" button — the UI
+exposes a per-item 💬 / ↪ affordance that either spawns a new
+paired chat or re-selects the existing one (idempotent).
+
+- [x] Migration 0017 adds `checklist_items.chat_session_id`
+  (nullable FK, ON DELETE SET NULL) and `sessions.checklist_item_id`
+  (nullable FK, ON DELETE SET NULL). Symmetric so either side
+  surviving orphans the other without cascade.
+- [x] Store helpers: `get_item_by_id`, `pair_item_with_chat`,
+  `get_paired_chat_for_item`. Both sides write atomically in a
+  single transaction; a second pair call on an already-paired item
+  is a no-op returning the existing chat row.
+- [x] Prompt assembler: new `checklist_context` layer between
+  `tag_memory` and `session`. Reads checklist + parent item fresh
+  on every turn (so edits from another tab land next turn), skips
+  cleanly on stale pointers (parent deleted, FK nulled), renders
+  a bulleted breadcrumb + the item's `notes` if present.
+- [x] API: `POST /sessions/{id}/checklist/items/{item_id}/chat`
+  spawns or returns the paired chat; `GET` the same route fetches
+  the existing pairing; both 404 on missing, 400 on wrong kind.
+  `ItemOut.chat_session_id` and `SessionOut.checklist_item_id`
+  round-trip.
+- [x] 25 backend tests covering migration shape, store helpers,
+  prompt layer (render + stale-pointer skip via
+  `PRAGMA foreign_keys = OFF`), and HTTP API including idempotent
+  spawn + cascade-on-delete.
+- [x] Frontend: `spawnPairedChat` / `getPairedChat` in
+  `api/checklists.ts`, `checklists.spawnChat()` store method,
+  ChecklistView per-item 💬 (Work on this) / ↪ (Continue working)
+  button that routes through the store then `sessions.select()` +
+  `agent.connect()`. Checking a box whose item has a paired chat
+  prompts "Close the paired chat too?" via `window.confirm`.
+- [x] Conversation breadcrumb: paired-chat headers render a
+  `📋 parent ›  item` row above the title with a one-click
+  link back to the checklist session. Effect resolves the item +
+  parent via `api.getChecklist` so the crumb survives hard
+  reloads.
+- [x] 2 frontend tests for the per-item affordance (Work-on spawn
+  path + the Continue-working re-render when `chat_session_id` is
+  set). Six existing fixture files updated to include the new
+  `checklist_item_id: null` field on Session.
+
 ## v0.4.1 — shipped
 
 Checklist Sessions — Slices 2 and 3 of

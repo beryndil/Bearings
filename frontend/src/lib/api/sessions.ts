@@ -36,6 +36,13 @@ export type Session = {
    * renders a structured list view instead. The right-pane and the
    * WS handler both gate on this field. */
   kind: 'chat' | 'checklist';
+  /** v0.5.0 per-item paired-chat pointer (migration 0017). Null on
+   * every plain chat session; non-null means the chat was spawned
+   * from a specific checklist item via "💬 Work on this" and the
+   * backend injects a `checklist_context` layer into the prompt on
+   * every turn. Conversation.svelte renders a breadcrumb when this
+   * is set. */
+  checklist_item_id: number | null;
 };
 
 export type SessionCreate = {

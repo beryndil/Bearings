@@ -640,6 +640,70 @@
     });
   });
 
+  // Paired-chat breadcrumb (v0.5.0, Slice 4 of nimble-checking-heron).
+  // When the selected session was spawned from a checklist item, we
+  // resolve the item + parent title so the header can render a
+  // clickable "📋 parent-title › item-label" trail back to the source.
+  // Refetches on session change; silent on 404 because the pairing
+  // may have been severed (checklist or item deleted) between renders.
+  type PairedChatCrumb = {
+    parentId: string;
+    parentTitle: string;
+    itemId: number;
+    itemLabel: string;
+  };
+  let pairedCrumb = $state<PairedChatCrumb | null>(null);
+
+  $effect(() => {
+    const current = sessions.selected;
+    if (!current || current.checklist_item_id == null) {
+      pairedCrumb = null;
+      return;
+    }
+    const sid = current.id;
+    const itemId = current.checklist_item_id;
+    // The item's parent checklist id is whichever session ids we
+    // already have in the sidebar store — scan for the one whose
+    // `kind === 'checklist'` with a matching item. The lookup is
+    // cheap (sidebar list is typically <100 entries) and avoids
+    // adding a dedicated reverse-lookup endpoint. If the parent
+    // isn't in the store (e.g. fresh page load, sidebar still
+    // loading), skip this pass and the effect reruns when the list
+    // updates.
+    const parent = sessions.list.find(
+      (s) => s.kind === 'checklist' && s.id !== sid
+    );
+    // Fallback path: fetch the item + checklist so the breadcrumb
+    // still renders even when the parent isn't in the sidebar yet.
+    // Use the item's `checklist_id` (== parent session id) so we
+    // don't need to guess.
+    (async () => {
+      // Probe every candidate checklist until one returns the item
+      // we care about. In practice the sidebar carries the parent
+      // for any recently-opened paired chat, so this rarely fans
+      // out beyond one call.
+      const candidates = parent ? [parent] : sessions.list.filter((s) => s.kind === 'checklist');
+      for (const cand of candidates) {
+        try {
+          const checklist = await api.getChecklist(cand.id);
+          const match = checklist.items.find((i) => i.id === itemId);
+          if (match && sessions.selected?.id === sid) {
+            pairedCrumb = {
+              parentId: cand.id,
+              parentTitle: cand.title ?? '(untitled checklist)',
+              itemId: match.id,
+              itemLabel: match.label
+            };
+            return;
+          }
+        } catch {
+          // Deleted or inaccessible — try the next candidate.
+        }
+      }
+      if (sessions.selected?.id === sid) pairedCrumb = null;
+    })();
+  });
+
   // Tag chips in the header. Refetch on session change and on
   // `updated_at` bumps (SessionEdit attach/detach bumps the server).
   let sessionTags = $state<api.Tag[]>([]);
@@ -840,6 +904,24 @@
 <section class="bg-slate-900 overflow-hidden flex flex-col min-w-0">
   <header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">
     <div class="min-w-0">
+      {#if pairedCrumb}
+        <nav
+          class="mb-1 flex items-center gap-1 text-xs text-slate-500"
+          aria-label="Paired checklist item"
+        >
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 hover:text-sky-400"
+            onclick={() => sessions.select(pairedCrumb!.parentId)}
+            title="Back to checklist"
+          >
+            <span aria-hidden="true">📋</span>
+            <span class="max-w-[16ch] truncate">{pairedCrumb.parentTitle}</span>
+          </button>
+          <span aria-hidden="true">›</span>
+          <span class="max-w-[24ch] truncate text-slate-300">{pairedCrumb.itemLabel}</span>
+        </nav>
+      {/if}
       <h1 class="text-lg font-medium flex items-center gap-2">
         {sessions.selected?.title ?? 'Bearings'}
         {#if sessions.selected}

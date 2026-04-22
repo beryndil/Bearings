@@ -70,6 +70,14 @@ class SessionOut(BaseModel):
     # backfill to 'chat'; 'checklist' gates the UI right-pane view and
     # rejects runner/WS/reorg attachment.
     kind: str = "chat"
+    # v0.5.0 per-item paired-chat pointer (migration 0017). NULL on
+    # every chat session unless the user spawned it via "💬 Work on
+    # this" from a checklist item; non-null is an INTEGER item id and
+    # the prompt assembler reads it on every turn to inject the
+    # checklist-context layer. SET NULL cascade on the FK means a
+    # deleted item degrades the chat to a plain session rather than
+    # destroying history.
+    checklist_item_id: int | None = None
 
 
 class MessageOut(BaseModel):
@@ -384,6 +392,12 @@ class ItemOut(BaseModel):
     sort_order: int
     created_at: str
     updated_at: str
+    # v0.5.0 paired-chat pointer (migration 0017). NULL when the user
+    # has never clicked "Work on this" for the item; non-null is the
+    # chat session id the agent spawns on first click. ChecklistView
+    # uses this field to toggle the per-item button state between
+    # "Work on this" (spawn) and "Continue working" (navigate).
+    chat_session_id: str | None = None
 
 
 class ChecklistOut(BaseModel):
@@ -411,3 +425,22 @@ class ReorderResult(BaseModel):
     any ids were skipped (foreign checklist, missing, etc.)."""
 
     reordered: int
+
+
+class PairedChatCreate(BaseModel):
+    """Body for the per-item "Work on this" spawn endpoint
+    (`POST /sessions/{id}/checklist/items/{item_id}/chat`). Same
+    shape as `SessionCreate` minus `kind` (paired chats are always
+    `kind='chat'`) and minus the implicit pairing (server fills in
+    `checklist_item_id` from the URL). `tag_ids` is required and
+    defaults are inherited from the parent checklist session when
+    the client doesn't override them.
+
+    Added in v0.5.0 (Slice 4 of nimble-checking-heron)."""
+
+    working_dir: str | None = None
+    model: str | None = None
+    title: str | None = None
+    description: str | None = None
+    max_budget_usd: float | None = None
+    tag_ids: list[int] = []
