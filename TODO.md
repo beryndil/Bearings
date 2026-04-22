@@ -44,6 +44,38 @@ it then. Do not exercise the historical checklists as-is.
 
 ## Open feature work
 
+- [ ] **Context menu system — v0.9.0-alpha → v0.9.3 (2026-04-22).**
+  Registry-driven right-click / long-press menus across 17 target types.
+  Canonical plan: `docs/context-menu-plan.md`. Baseline v0.8.0. Plan
+  makes five governing decisions:
+  (1) "Change model for continuation" mutates session in place, does
+  not fork.
+  (2) `session.archive` action ID aliases to existing close route —
+  no new archived state, no migration for archived_at.
+  (3) Unbuilt actions use hybrid signalling: 501-route actions fire a
+  stub toast on click; actions whose DB primitive does not exist yet
+  (checkpoint / template / attachment) render disabled with "Coming
+  in vX.Y.Z" tooltip.
+  (4) Ctrl+Shift+P command palette ships in Phase 4 alongside first
+  real menus, not in polish phase 12.
+  (5) Shift-right-click = advanced mode (spec wins);
+  Ctrl+Shift+right-click = native-Chrome-menu passthrough.
+  Six open questions remain (see §8 of the plan): Chrome
+  `always-show-context-menu` flag behavior, touch long-press
+  precedence on links-in-code-blocks, pending-ops panel home,
+  regenerate-from-message SDK-resume interaction, slash-command
+  shortcut collision precedence, TOML hot-reload. None block Phase 1.
+  Migrations reserved: 0022 session.pinned, 0023 message flags, 0024
+  checkpoints, 0025 session_templates. `Conversation.svelte` (1424
+  lines) is directive-only in this work — no new handler bodies may
+  land there.
+  - **Plan doc:** `docs/context-menu-plan.md`
+  - **Phase 1 entry criterion:** decisions 1-5 reviewed and accepted
+    (or amended) by Dave.
+  - **Phase-gated decisions still needed:** see plan §8 items
+    2 (before Phase 11), 3 (before Phase 16), 4 (before Phase 15),
+    5 (before Phase 10). Items 1 and 6 are document-only / deferred.
+
 - [ ] **Implement `bearings todo` CLI subcommand (2026-04-22).**
   Part of the TODO.md discipline enforcement layer (CLI + hooks +
   standard schema) accepted in Bearings session

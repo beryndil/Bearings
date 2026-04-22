@@ -4,6 +4,7 @@
   import { tags } from '$lib/stores/tags.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import { contextmenu } from '$lib/actions/contextmenu';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
@@ -359,6 +360,7 @@
       session.id
         ? 'bg-slate-800'
         : ''}"
+      use:contextmenu={{ target: { type: 'session', id: session.id } }}
     >
       <button
         type="button"

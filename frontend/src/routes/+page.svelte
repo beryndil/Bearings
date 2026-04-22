@@ -4,6 +4,7 @@
   import AuthGate from '$lib/components/AuthGate.svelte';
   import CheatSheet from '$lib/components/CheatSheet.svelte';
   import ChecklistView from '$lib/components/ChecklistView.svelte';
+  import ContextMenu from '$lib/components/context-menu/ContextMenu.svelte';
   import Conversation from '$lib/components/Conversation.svelte';
   import Inspector from '$lib/components/Inspector.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
@@ -240,6 +241,7 @@
 
 <AuthGate />
 <CheatSheet bind:open={showCheatSheet} />
+<ContextMenu />
 <main
   class="grid h-full"
   style="grid-template-columns: {panes.left}px 6px minmax(0,1fr) 6px {panes.right}px"

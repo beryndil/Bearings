@@ -2,6 +2,7 @@
   import type { Message } from '$lib/api';
   import type { LiveToolCall } from '$lib/stores/conversation.svelte';
   import { stickToBottom } from '$lib/actions/autoscroll';
+  import { contextmenu } from '$lib/actions/contextmenu';
   import CollapsibleBody from './CollapsibleBody.svelte';
 
   type Props = {
@@ -118,6 +119,14 @@
         : 'border-slate-800 bg-slate-800/60'}"
     data-testid="user-article"
     data-message-id={user.id}
+    use:contextmenu={{
+      target: {
+        type: 'message',
+        id: user.id,
+        sessionId: user.session_id,
+        role: 'user'
+      }
+    }}
   >
     <header
       class="flex items-center justify-between text-[10px] uppercase tracking-wider
@@ -252,6 +261,16 @@
           : 'border-slate-800'}"
     data-testid="assistant-article"
     data-message-id={assistant?.id ?? ''}
+    use:contextmenu={{
+      target: assistant
+        ? {
+            type: 'message',
+            id: assistant.id,
+            sessionId: assistant.session_id,
+            role: 'assistant'
+          }
+        : null
+    }}
   >
     <header
       class="flex items-center justify-between text-[10px] uppercase tracking-wider mb-1
