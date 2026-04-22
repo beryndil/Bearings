@@ -108,6 +108,13 @@ def _format_checklist_context(
         "Stay focused on the current item. Reference siblings by label only "
         "when the user brings them up or when they're directly relevant."
     )
+    lines.append(
+        "Do not propose working on sibling items, do not offer to continue to "
+        "the next item, and do not modify sibling items' state. When the user "
+        "considers this item resolved the session is finished — Dave will open "
+        "a new session for the next item. Closing this chat marks the item "
+        "done automatically; you do not need to offer to do that yourself."
+    )
     return "\n".join(lines)
 
 

@@ -112,13 +112,18 @@ async def update_item(session_id: str, item_id: int, body: ItemUpdate, request: 
 @router.post("/items/{item_id}/toggle", response_model=ItemOut)
 async def toggle_item(session_id: str, item_id: int, body: ItemToggle, request: Request) -> ItemOut:
     await _require_checklist_session(request, session_id)
-    existing = await store.get_item(request.app.state.db, item_id)
+    conn = request.app.state.db
+    existing = await store.get_item(conn, item_id)
     if existing is None or existing["checklist_id"] != session_id:
         raise HTTPException(status_code=404, detail="item not found")
-    row = await store.toggle_item(request.app.state.db, item_id, checked=body.checked)
+    row = await store.toggle_item(conn, item_id, checked=body.checked)
     if row is None:
         # Race: item was deleted between the check and the toggle.
         raise HTTPException(status_code=404, detail="item not found")
+    # Slice 4.1: if the cascade just completed the checklist, close
+    # the parent session. One-directional — unchecking never reopens.
+    if body.checked and await store.is_checklist_complete(conn, session_id):
+        await store.close_session(conn, session_id)
     return ItemOut(**row)
 
 

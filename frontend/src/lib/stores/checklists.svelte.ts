@@ -78,9 +78,15 @@ class ChecklistStore {
       ...this.current,
       items: prevItems.map((i) => (i.id === itemId ? { ...i, checked_at: stamp } : i))
     };
+    const sid = this.sessionId;
     try {
-      const updated = await api.toggleItem(this.sessionId, itemId, checked);
-      this._replaceItem(updated);
+      await api.toggleItem(sid, itemId, checked);
+      // v0.5.1 cascade: the server walks ancestors and may close the
+      // parent session when the checklist becomes complete. A single
+      // item-update response can't convey any of that, so re-fetch the
+      // authoritative list. Cheap compared to the alternative of
+      // reconstructing the cascade client-side.
+      this.current = await api.getChecklist(sid);
     } catch (e) {
       this.current = { ...this.current, items: prevItems };
       this.error = e instanceof Error ? e.message : String(e);

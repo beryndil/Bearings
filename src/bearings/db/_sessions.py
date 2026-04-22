@@ -339,7 +339,15 @@ async def close_session(
     an already-closed session refreshes the timestamp (cheap, no-op from
     the UI's view). Bumps `updated_at` so a re-sort after reopen pulls
     the session back to the top. Returns the refreshed row or `None` if
-    the id is unknown."""
+    the id is unknown.
+
+    Slice 4.1 cascade: when the session being closed is a paired chat
+    (`checklist_item_id IS NOT NULL`), also mark the linked checklist
+    item checked and cascade-up through `toggle_item`; then, if the
+    parent checklist is now complete, close the parent session too.
+    The cascade is bounded: the parent checklist session has no
+    `checklist_item_id` of its own so the second close can't re-enter
+    this branch — no infinite recursion."""
     now = _now()
     cursor = await conn.execute(
         "UPDATE sessions SET closed_at = ?, updated_at = ? WHERE id = ?",
@@ -348,6 +356,33 @@ async def close_session(
     await conn.commit()
     if cursor.rowcount == 0:
         return None
+    row = await get_session(conn, session_id)
+    if row is not None and row["checklist_item_id"] is not None:
+        # Local import to avoid a static cycle with _checklists (which
+        # itself needs to close the parent checklist session from its
+        # auto-close path). Both directions are intentional; keeping
+        # the imports local keeps the module graph acyclic at load
+        # time.
+        from bearings.db._checklists import (
+            get_item,
+            is_checklist_complete,
+            toggle_item,
+        )
+
+        item = await toggle_item(conn, row["checklist_item_id"], checked=True)
+        if item is not None:
+            parent_checklist_id = item["checklist_id"]
+            if await is_checklist_complete(conn, parent_checklist_id):
+                # Recurse: close the checklist session. No further
+                # cascade because the checklist row carries no
+                # checklist_item_id (ValueError-guarded at create).
+                await close_session(conn, parent_checklist_id)
+        else:
+            # Pointer dangled (item deleted mid-close). Refresh just
+            # in case the SET NULL cascade left the session pointer
+            # stale and swallow — the paired-chat close itself still
+            # committed, which is the user's real intent.
+            await get_item(conn, row["checklist_item_id"])
     return await get_session(conn, session_id)
 
 

@@ -634,6 +634,56 @@ the historical checklists as-is.
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
 
+## v0.5.1 — shipped
+
+Slice 4.1: paired-chat polish pass after Dave's v0.5.0 review. Tightens
+the coupling between checklist items and their chat sessions so the UX
+matches the mental model — the agent stays in its lane, closing the
+chat flips the item, checking the item closes the chat, completing the
+whole list closes the parent session, and parent items in nested
+checklists render with a disabled-but-visible checkbox whose state is
+derived from the cascade. Patch bump (0.5.0 → 0.5.1) because no new
+primitives land; every change is a tightening of v0.5.0 behavior.
+
+- [x] Prompt addendum: the `checklist_context` layer now includes a
+  stay-in-lane paragraph ("do not propose sibling items, closing this
+  chat marks the item done automatically") so the agent stops
+  offering to continue onto the next task.
+- [x] `close_session` cascade: closing a paired chat calls
+  `toggle_item(checked=True)` on the linked item, which cascades
+  up through parents via the new cascade-up logic, then recursively
+  closes the parent checklist session when `is_checklist_complete`
+  returns true. Bounded — the checklist session has no
+  `checklist_item_id`, so the recursion depth is ≤1.
+- [x] `toggle_item` cascade-up: walks from the leaf upward, and for
+  each ancestor sets `checked_at` iff every direct child has
+  `checked_at` set. Invariant runs inside the same transaction as the
+  leaf write so a concurrent reader never sees a half-updated chain.
+- [x] `is_checklist_complete` helper: true iff every root-level item
+  has `checked_at` AND the checklist has ≥1 root item. Nested
+  descendants are left to the cascade-up rule. Exported from
+  `store.py` so both routes and the `close_session` cascade share a
+  single source of truth.
+- [x] HTTP toggle route auto-closes the parent session when the last
+  unchecked root item becomes checked. One-directional — unchecking
+  a previously-checked item never reopens the session.
+- [x] ChecklistView drops the `window.confirm` prompt. Checking a
+  paired item closes the chat unconditionally; the cascade is
+  intentional and the extra click was friction.
+- [x] ChecklistView renders the paired chat's session title as an
+  always-visible `text-sky-400` link next to the item label
+  (replaces the opacity-0 `↪` hover affordance). Clicking selects
+  the paired session and connects the agent runner.
+- [x] ChecklistView nested rendering via `{#snippet itemRow}` with
+  `{@render itemRow(child)}` recursion. Parent items render with a
+  disabled checkbox whose tooltip explains that parents are
+  auto-checked from their children; paired-chat affordances hide on
+  parents (they're not work units).
+- [x] `checklists.toggle` store method re-fetches the full checklist
+  after the `toggleItem` call so the client picks up any cascade
+  effects the single-item response can't convey (parent auto-check,
+  parent auto-close).
+
 ## v0.5.0 — shipped
 
 Checklist Sessions — Slice 4 of

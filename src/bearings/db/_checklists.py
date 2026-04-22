@@ -195,10 +195,20 @@ async def update_item(
 async def toggle_item(
     conn: aiosqlite.Connection, item_id: int, *, checked: bool
 ) -> dict[str, Any] | None:
-    """Set or clear `checked_at`. Passing `checked=True` stamps the
-    current time; `checked=False` clears the column. No-op if the
-    item is already in the requested state — but `updated_at` is
-    still bumped so the UI can sort by recency."""
+    """Set or clear `checked_at` with cascade-up on ancestor items.
+    Passing `checked=True` stamps the current time on the leaf and,
+    for every ancestor whose direct children are now all checked,
+    also stamps the ancestor's `checked_at`. Passing `checked=False`
+    clears the leaf and clears any auto-checked ancestor whose
+    children no longer all carry `checked_at`. Returns the refreshed
+    leaf row or `None` when the id is unknown.
+
+    Cascade invariant: `parent.checked_at IS NOT NULL` iff every
+    direct child has `checked_at IS NOT NULL`. The UI disables the
+    parent's checkbox so parents are always derived — no manual
+    override. Cascade runs inside the same transaction as the leaf
+    write, so a concurrent reader never observes a partially-updated
+    ancestor chain."""
     now = _now()
     checked_at = now if checked else None
     cursor = await conn.execute(
@@ -208,13 +218,64 @@ async def toggle_item(
     if cursor.rowcount == 0:
         await conn.commit()
         return None
+    leaf = await get_item(conn, item_id)
+    if leaf is None:
+        await conn.commit()
+        return None
+    checklist_id = leaf["checklist_id"]
+    parent_id: int | None = leaf["parent_item_id"]
+    while parent_id is not None:
+        async with conn.execute(
+            "SELECT COUNT(*) AS total, "
+            "SUM(CASE WHEN checked_at IS NULL THEN 1 ELSE 0 END) AS unchecked "
+            "FROM checklist_items WHERE parent_item_id = ?",
+            (parent_id,),
+        ) as cursor_stats:
+            stats = await cursor_stats.fetchone()
+        # A parent with zero children is theoretically possible if a
+        # race deleted every child between the leaf write and the
+        # walk — treat as "not checked" (no children → no derivation).
+        total = stats["total"] if stats is not None else 0
+        unchecked = (stats["unchecked"] or 0) if stats is not None else 1
+        ancestor_checked_at = now if total > 0 and unchecked == 0 else None
+        await conn.execute(
+            "UPDATE checklist_items SET checked_at = ?, updated_at = ? WHERE id = ?",
+            (ancestor_checked_at, now, parent_id),
+        )
+        async with conn.execute(
+            "SELECT parent_item_id FROM checklist_items WHERE id = ?",
+            (parent_id,),
+        ) as cursor_up:
+            next_row = await cursor_up.fetchone()
+        parent_id = next_row["parent_item_id"] if next_row is not None else None
     await conn.execute(
-        "UPDATE checklists SET updated_at = ? WHERE session_id = "
-        "(SELECT checklist_id FROM checklist_items WHERE id = ?)",
-        (now, item_id),
+        "UPDATE checklists SET updated_at = ? WHERE session_id = ?",
+        (now, checklist_id),
     )
     await conn.commit()
     return await get_item(conn, item_id)
+
+
+async def is_checklist_complete(conn: aiosqlite.Connection, session_id: str) -> bool:
+    """Return True when every root-level item in the given checklist
+    has `checked_at` set AND the checklist has at least one root item.
+    An empty checklist is never "complete" — the auto-close rule
+    would fire on a brand-new session otherwise. Used by the HTTP
+    layer and the close-session cascade to decide whether to close
+    the parent checklist session."""
+    async with conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "SUM(CASE WHEN checked_at IS NULL THEN 1 ELSE 0 END) AS unchecked "
+        "FROM checklist_items "
+        "WHERE checklist_id = ? AND parent_item_id IS NULL",
+        (session_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return False
+    total = row["total"]
+    unchecked = row["unchecked"] or 0
+    return total > 0 and unchecked == 0
 
 
 async def delete_item(conn: aiosqlite.Connection, item_id: int) -> bool:

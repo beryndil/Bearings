@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 from bearings.agent.prompt import assemble_prompt
 from bearings.db.store import (
     attach_tag,
+    close_session,
     create_checklist,
     create_item,
     create_session,
@@ -31,6 +32,7 @@ from bearings.db.store import (
     get_item_by_chat_session,
     get_session,
     init_db,
+    is_checklist_complete,
     set_item_chat_session,
     toggle_item,
 )
@@ -546,3 +548,339 @@ def test_spawn_paired_chat_overrides_working_dir_and_model(client: TestClient) -
     chat = resp.json()
     assert chat["working_dir"] == "/elsewhere"
     assert chat["model"] == "claude-opus-4-7"
+
+
+# ---------------------------------------------------------------------------
+# Slice 4.1: cascade-up toggle + is_checklist_complete
+# ---------------------------------------------------------------------------
+
+
+async def _make_parent_with_children(
+    conn: Any, *, child_count: int = 2
+) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    """Helper: checklist + one root parent + N children under it.
+
+    Returns (session_id, parent_item, children_items)."""
+    cl = await create_session(conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist")
+    await create_checklist(conn, cl["id"])
+    parent = await create_item(conn, cl["id"], label="parent")
+    assert parent is not None
+    children: list[dict[str, Any]] = []
+    for i in range(child_count):
+        child = await create_item(conn, cl["id"], label=f"child {i}", parent_item_id=parent["id"])
+        assert child is not None
+        children.append(child)
+    return cl["id"], parent, children
+
+
+@pytest.mark.asyncio
+async def test_toggle_item_cascades_up_on_last_child_checked(tmp_path: Path) -> None:
+    """Checking the last unchecked child auto-checks the parent."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        _cl, parent, children = await _make_parent_with_children(conn, child_count=2)
+        await toggle_item(conn, children[0]["id"], checked=True)
+        mid = await get_item(conn, parent["id"])
+        assert mid is not None
+        assert mid["checked_at"] is None  # only one child checked so far
+        await toggle_item(conn, children[1]["id"], checked=True)
+        after = await get_item(conn, parent["id"])
+        assert after is not None
+        assert after["checked_at"] is not None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_toggle_item_cascades_up_uncheck_clears_parent(tmp_path: Path) -> None:
+    """Unchecking a child clears a previously auto-checked parent."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        _cl, parent, children = await _make_parent_with_children(conn, child_count=2)
+        # Check all children → parent auto-checks.
+        for child in children:
+            await toggle_item(conn, child["id"], checked=True)
+        # Uncheck one child → parent must clear.
+        await toggle_item(conn, children[0]["id"], checked=False)
+        after = await get_item(conn, parent["id"])
+        assert after is not None
+        assert after["checked_at"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_toggle_item_mixed_children_keeps_parent_unchecked(tmp_path: Path) -> None:
+    """Parent stays unchecked while any child remains unchecked."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        _cl, parent, children = await _make_parent_with_children(conn, child_count=3)
+        await toggle_item(conn, children[0]["id"], checked=True)
+        await toggle_item(conn, children[1]["id"], checked=True)
+        after = await get_item(conn, parent["id"])
+        assert after is not None
+        assert after["checked_at"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_toggle_item_three_level_cascade(tmp_path: Path) -> None:
+    """Three-level nesting: leaf → mid → root all propagate correctly."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        root = await create_item(conn, cl["id"], label="root")
+        assert root is not None
+        mid = await create_item(conn, cl["id"], label="mid", parent_item_id=root["id"])
+        assert mid is not None
+        leaf_a = await create_item(conn, cl["id"], label="leaf a", parent_item_id=mid["id"])
+        leaf_b = await create_item(conn, cl["id"], label="leaf b", parent_item_id=mid["id"])
+        assert leaf_a is not None and leaf_b is not None
+
+        # Check both leaves → mid should auto-check, then root should auto-check.
+        await toggle_item(conn, leaf_a["id"], checked=True)
+        mid_mid = await get_item(conn, mid["id"])
+        root_mid = await get_item(conn, root["id"])
+        assert mid_mid is not None and root_mid is not None
+        assert mid_mid["checked_at"] is None
+        assert root_mid["checked_at"] is None
+
+        await toggle_item(conn, leaf_b["id"], checked=True)
+        mid_after = await get_item(conn, mid["id"])
+        root_after = await get_item(conn, root["id"])
+        assert mid_after is not None and root_after is not None
+        assert mid_after["checked_at"] is not None
+        assert root_after["checked_at"] is not None
+
+        # Uncheck one leaf → both mid and root must clear.
+        await toggle_item(conn, leaf_a["id"], checked=False)
+        mid_un = await get_item(conn, mid["id"])
+        root_un = await get_item(conn, root["id"])
+        assert mid_un is not None and root_un is not None
+        assert mid_un["checked_at"] is None
+        assert root_un["checked_at"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_is_checklist_complete_all_roots_checked(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        a = await create_item(conn, cl["id"], label="a")
+        b = await create_item(conn, cl["id"], label="b")
+        assert a is not None and b is not None
+        assert await is_checklist_complete(conn, cl["id"]) is False
+        await toggle_item(conn, a["id"], checked=True)
+        assert await is_checklist_complete(conn, cl["id"]) is False
+        await toggle_item(conn, b["id"], checked=True)
+        assert await is_checklist_complete(conn, cl["id"]) is True
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_is_checklist_complete_empty_checklist(tmp_path: Path) -> None:
+    """An empty checklist is never complete — auto-close would fire on
+    every brand-new session otherwise."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        assert await is_checklist_complete(conn, cl["id"]) is False
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_is_checklist_complete_ignores_nested_children(tmp_path: Path) -> None:
+    """Completeness is decided on root items only — parent checked_at is
+    itself derived from the cascade, so checking `parent_item_id IS NULL`
+    gives the right semantic without double-counting descendants."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        _cl, parent, children = await _make_parent_with_children(conn, child_count=2)
+        cl_id = parent["checklist_id"]
+        # Only the one root parent exists; its children don't count
+        # toward the completeness decision (they're derived-up into the
+        # parent's checked_at via toggle_item's cascade).
+        assert await is_checklist_complete(conn, cl_id) is False
+        for child in children:
+            await toggle_item(conn, child["id"], checked=True)
+        # All children checked → parent auto-checked → root is checked
+        # → checklist is complete.
+        assert await is_checklist_complete(conn, cl_id) is True
+    finally:
+        await conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 4.1: close_session cascade on paired chat
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_close_session_on_paired_chat_checks_linked_item(tmp_path: Path) -> None:
+    """Closing a paired chat flips the linked item's `checked_at`."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        item_a = await create_item(conn, cl["id"], label="a")
+        item_b = await create_item(conn, cl["id"], label="b")
+        assert item_a is not None and item_b is not None
+        chat = await create_session(
+            conn,
+            working_dir="/tmp",
+            model="claude-sonnet-4-6",
+            kind="chat",
+            checklist_item_id=item_a["id"],
+        )
+        await set_item_chat_session(conn, item_a["id"], chat["id"])
+        await close_session(conn, chat["id"])
+        after = await get_item(conn, item_a["id"])
+        assert after is not None
+        assert after["checked_at"] is not None
+        # Sibling untouched.
+        sibling = await get_item(conn, item_b["id"])
+        assert sibling is not None
+        assert sibling["checked_at"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_close_session_on_paired_chat_autocloses_parent_when_last(tmp_path: Path) -> None:
+    """Closing the last paired chat of a checklist auto-closes the
+    parent checklist session (one-directional cascade)."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        only_item = await create_item(conn, cl["id"], label="only")
+        assert only_item is not None
+        chat = await create_session(
+            conn,
+            working_dir="/tmp",
+            model="claude-sonnet-4-6",
+            kind="chat",
+            checklist_item_id=only_item["id"],
+        )
+        await set_item_chat_session(conn, only_item["id"], chat["id"])
+        assert (await get_session(conn, cl["id"]))["closed_at"] is None  # type: ignore[index]
+        await close_session(conn, chat["id"])
+        parent_after = await get_session(conn, cl["id"])
+        assert parent_after is not None
+        assert parent_after["closed_at"] is not None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_close_session_on_unpaired_chat_is_noop_on_items(tmp_path: Path) -> None:
+    """Closing a plain (unpaired) chat doesn't touch any checklist."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        item = await create_item(conn, cl["id"], label="a")
+        assert item is not None
+        plain_chat = await create_session(conn, working_dir="/tmp", model="claude-sonnet-4-6")
+        await close_session(conn, plain_chat["id"])
+        after = await get_item(conn, item["id"])
+        assert after is not None
+        assert after["checked_at"] is None
+    finally:
+        await conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Slice 4.1: HTTP toggle → auto-close parent when checklist completes
+# ---------------------------------------------------------------------------
+
+
+def test_http_toggle_last_item_autocloses_parent_session(client: TestClient) -> None:
+    """Checking the last item via the HTTP toggle endpoint auto-closes
+    the parent checklist session (Slice 4.1 cascade through routes)."""
+    cl, item = _create_checklist_with_item(client, label="only item")
+    assert client.get(f"/api/sessions/{cl['id']}").json()["closed_at"] is None
+    resp = client.post(
+        f"/api/sessions/{cl['id']}/checklist/items/{item['id']}/toggle",
+        json={"checked": True},
+    )
+    assert resp.status_code == 200
+    session_after = client.get(f"/api/sessions/{cl['id']}").json()
+    assert session_after["closed_at"] is not None
+
+
+def test_http_unchecking_previously_complete_does_not_reopen(client: TestClient) -> None:
+    """Uncheck cascade is not symmetric — once the parent is closed, an
+    unchecking event must not reopen it. The user can always reopen
+    manually; auto-reopen would be jarring."""
+    cl, item = _create_checklist_with_item(client, label="only")
+    # Check → auto-close.
+    client.post(
+        f"/api/sessions/{cl['id']}/checklist/items/{item['id']}/toggle",
+        json={"checked": True},
+    )
+    closed_at = client.get(f"/api/sessions/{cl['id']}").json()["closed_at"]
+    assert closed_at is not None
+    # Uncheck → session stays closed.
+    client.post(
+        f"/api/sessions/{cl['id']}/checklist/items/{item['id']}/toggle",
+        json={"checked": False},
+    )
+    session_after = client.get(f"/api/sessions/{cl['id']}").json()
+    assert session_after["closed_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Slice 4.1: prompt layer in-lane addendum
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_prompt_layer_contains_in_lane_addendum(tmp_path: Path) -> None:
+    """The checklist_context layer must explicitly instruct the agent to
+    stay focused on the current item and not propose moving on — this is
+    Dave's stay-in-your-lane requirement from v0.5.1."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        cl = await create_session(
+            conn, working_dir="/tmp", model="claude-sonnet-4-6", kind="checklist"
+        )
+        await create_checklist(conn, cl["id"])
+        item = await create_item(conn, cl["id"], label="focus task")
+        assert item is not None
+        chat = await create_session(
+            conn,
+            working_dir="/tmp",
+            model="claude-sonnet-4-6",
+            kind="chat",
+            checklist_item_id=item["id"],
+        )
+        result = await assemble_prompt(conn, chat["id"])
+    finally:
+        await conn.close()
+    ctx = next(layer for layer in result.layers if layer.kind == "checklist_context")
+    # The addendum must include a stay-in-lane instruction and the
+    # "closing marks done automatically" contract so the agent doesn't
+    # offer to do it itself.
+    assert "Do not propose working on sibling items" in ctx.content
+    assert "Closing this chat marks the item" in ctx.content

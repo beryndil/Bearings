@@ -163,7 +163,7 @@ const CHECKLIST_WITH_ONE_ITEM = {
   ]
 };
 
-const PAIRED_CHAT_SESSION = {
+const PAIRED_CHAT_SESSION: Session = {
   id: 'chat-1',
   created_at: '2026-04-21T00:01:00+00:00',
   updated_at: '2026-04-21T00:01:00+00:00',
@@ -205,21 +205,170 @@ describe('ChecklistView paired-chat affordance', () => {
     expect(connectSpy).toHaveBeenCalledWith('chat-1');
   });
 
-  it('renders "Continue working" affordance once the item is paired', async () => {
+  it('renders paired-chat link affordance once the item is paired', async () => {
     const paired = {
       ...CHECKLIST_WITH_ONE_ITEM,
       items: [
         {
           ...CHECKLIST_WITH_ONE_ITEM.items[0],
-          chat_session_id: 'chat-existing'
+          chat_session_id: 'chat-1'
         }
       ]
     };
     queueResponses([{ ok: true, body: paired }]);
+    // The paired session has to exist in the sidebar list for the
+    // title-link to render.
+    sessions.list = [session(), PAIRED_CHAT_SESSION];
     const { getByRole, queryByRole } = render(ChecklistView);
     await waitFor(() => expect(checklists.current?.items.length).toBe(1));
-    // "Continue working" button visible; "Work on" button is not.
-    expect(getByRole('button', { name: /Continue working on Install deps/ })).toBeTruthy();
+    // The paired-chat title link replaces the old "Continue working"
+    // hover affordance — always-visible, aria-label is "Open paired
+    // chat: <title>". The "Work on" spawn button disappears on a
+    // paired item.
+    expect(getByRole('button', { name: /Open paired chat: Install deps/ })).toBeTruthy();
     expect(queryByRole('button', { name: /Work on Install deps/ })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slice 4.1: tightened paired-chat coupling + nested rendering
+// ---------------------------------------------------------------------------
+
+const CHECKLIST_WITH_PAIRED_ITEM = {
+  session_id: 'sess-cl',
+  notes: null,
+  created_at: '2026-04-21T00:00:00+00:00',
+  updated_at: '2026-04-21T00:00:00+00:00',
+  items: [
+    {
+      id: 7,
+      checklist_id: 'sess-cl',
+      parent_item_id: null,
+      label: 'Install deps',
+      notes: null,
+      checked_at: null,
+      sort_order: 0,
+      created_at: '2026-04-21T00:00:00+00:00',
+      updated_at: '2026-04-21T00:00:00+00:00',
+      chat_session_id: 'chat-1'
+    }
+  ]
+};
+
+const CHECKLIST_WITH_NESTED = {
+  session_id: 'sess-cl',
+  notes: null,
+  created_at: '2026-04-21T00:00:00+00:00',
+  updated_at: '2026-04-21T00:00:00+00:00',
+  items: [
+    {
+      id: 1,
+      checklist_id: 'sess-cl',
+      parent_item_id: null,
+      label: 'Root parent',
+      notes: null,
+      checked_at: null,
+      sort_order: 0,
+      created_at: '2026-04-21T00:00:00+00:00',
+      updated_at: '2026-04-21T00:00:00+00:00',
+      chat_session_id: null
+    },
+    {
+      id: 2,
+      checklist_id: 'sess-cl',
+      parent_item_id: 1,
+      label: 'Child leaf',
+      notes: null,
+      checked_at: null,
+      sort_order: 0,
+      created_at: '2026-04-21T00:00:00+00:00',
+      updated_at: '2026-04-21T00:00:00+00:00',
+      chat_session_id: null
+    }
+  ]
+};
+
+describe('ChecklistView Slice 4.1', () => {
+  it('checking a paired item closes the chat without a confirm', async () => {
+    // Toggle path: PATCH item (returns updated) → GET /checklist (store
+    // re-fetch after cascade) → close_session (sessions.close) →
+    // sessions.refresh (GET /sessions) from handleToggle's post-check.
+    const toggledItem = {
+      ...CHECKLIST_WITH_PAIRED_ITEM.items[0],
+      checked_at: '2026-04-21T00:02:00+00:00'
+    };
+    const toggledChecklist = { ...CHECKLIST_WITH_PAIRED_ITEM, items: [toggledItem] };
+    const closedChat = { ...PAIRED_CHAT_SESSION, closed_at: '2026-04-21T00:02:00+00:00' };
+    queueResponses([
+      { ok: true, body: CHECKLIST_WITH_PAIRED_ITEM }, // initial load
+      { ok: true, body: closedChat }, // sessions.close
+      { ok: true, body: toggledItem }, // PATCH toggle
+      { ok: true, body: toggledChecklist }, // re-fetch after cascade
+      { ok: true, body: [closedChat] } // sessions.refresh after check
+    ]);
+    // Seed the paired chat session into the sidebar so handleToggle
+    // can find it and call sessions.close.
+    sessions.list = [session(), PAIRED_CHAT_SESSION];
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    const { container } = render(ChecklistView);
+    await waitFor(() => expect(checklists.current?.items.length).toBe(1));
+    const box = container.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement | null;
+    expect(box).not.toBeNull();
+    await fireEvent.click(box!);
+    // No confirm dialog — the click flow must never prompt.
+    await waitFor(() => expect(checklists.current?.items[0].checked_at).not.toBeNull());
+    expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it('renders the paired chat title as a sky-colored link next to the item', async () => {
+    queueResponses([{ ok: true, body: CHECKLIST_WITH_PAIRED_ITEM }]);
+    // The paired chat must be visible in sessions.list for the link to
+    // resolve — the ChecklistView looks it up by id to render the title.
+    sessions.list = [session(), PAIRED_CHAT_SESSION];
+    const { container } = render(ChecklistView);
+    await waitFor(() => expect(checklists.current?.items.length).toBe(1));
+    const link = container.querySelector(
+      '[data-testid="paired-chat-link"]'
+    ) as HTMLButtonElement | null;
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toMatch(/Install deps/);
+    // Class carries the sky-400 color so it's never an ignore-me glyph.
+    expect(link!.className).toMatch(/text-sky-400/);
+  });
+
+  it('clicking the paired-chat link selects that session', async () => {
+    queueResponses([{ ok: true, body: CHECKLIST_WITH_PAIRED_ITEM }]);
+    sessions.list = [session(), PAIRED_CHAT_SESSION];
+    const connectSpy = vi.spyOn(agent, 'connect').mockResolvedValue();
+    const { container } = render(ChecklistView);
+    await waitFor(() => expect(checklists.current?.items.length).toBe(1));
+    const link = container.querySelector(
+      '[data-testid="paired-chat-link"]'
+    ) as HTMLButtonElement;
+    await fireEvent.click(link);
+    await waitFor(() => expect(sessions.selectedId).toBe('chat-1'));
+    expect(connectSpy).toHaveBeenCalledWith('chat-1');
+  });
+
+  it('renders parents with a disabled checkbox and nested children', async () => {
+    queueResponses([{ ok: true, body: CHECKLIST_WITH_NESTED }]);
+    const { container } = render(ChecklistView);
+    await waitFor(() => expect(checklists.current?.items.length).toBe(2));
+    const parentLi = container.querySelector('li[data-item-id="1"]');
+    expect(parentLi).not.toBeNull();
+    expect(parentLi!.getAttribute('data-parent')).toBe('true');
+    const parentBox = parentLi!.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(parentBox.disabled).toBe(true);
+    // Child rendered inside the parent's subtree, not at the root level.
+    const childLi = parentLi!.querySelector('li[data-item-id="2"]');
+    expect(childLi).not.toBeNull();
+    const childBox = childLi!.querySelector(
+      'input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(childBox.disabled).toBe(false);
   });
 });
