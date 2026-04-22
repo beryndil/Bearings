@@ -1981,6 +1981,76 @@ Bearings shortcoming.
 
 ## Performance optimization
 
+### 2026-04-21 — Audit: frontend timeline re-derivation
+
+**Static analysis (Conversation.svelte + turns.ts + reducer.ts):**
+
+- Per WS event the reducer mutates one of `streamingText`, `streamingThinking`,
+  or replaces `state.toolCalls` with `.map()` (every `tool_output_delta` /
+  `tool_call_end`). All three feed `$derived` getters on `ConversationStore`.
+- `Conversation.svelte` has two stacked `$derived` blocks downstream:
+  1. `turns = $derived(buildTurns({...}))` — O(messages + toolCalls) per fire:
+     allocates a fresh `Map<messageId, LiveToolCall[]>`, walks every message,
+     allocates a new `Turn[]`.
+  2. `timeline = $derived.by(...)` — O(turns + audits) plus an O(n log n)
+     **sort** by ISO timestamp. Allocates a new `TimelineItem[]`.
+- Highest-frequency triggers: `token`, `thinking`, `tool_output_delta`,
+  `tool_call_end`. On a typical streaming turn (~30 tok/s plus tool deltas),
+  worst case is ≥30 buildTurns + timeline rebuilds per second.
+- Open question: Svelte 5's `$derived` is lazy + memoized within a microtask,
+  so rapid back-to-back state mutations may collapse to a single recompute
+  per frame. **This is the question the instrumentation answers** — without
+  numbers, we can't tell whether the rewrite is worth the risk.
+
+**Instrumentation in place:**
+
+- `frontend/src/lib/components/Conversation.svelte` now has two
+  `console.count` calls (DEV only) on the `turns` and `timeline` derivations,
+  tagged `bearings:audit:buildTurns` and `bearings:audit:timeline`.
+
+**Reproduction:**
+
+1. `cd frontend && npm run dev`
+2. Open the UI, pick a session, send a prompt that produces a long
+   tool-heavy reply (e.g. a Bash command with streaming output).
+3. Watch the DevTools console. Compare counter increments against:
+   - WS event count (Network tab → WS frames),
+   - approximate token rate from the model.
+4. If counters track WS events ~1:1 → confirmed hot, proceed to refactor.
+   If counters fire ≪ WS events (batched per frame) → close the audit, the
+   `$derived` scheduler already mitigates it.
+
+**Measured 2026-04-21 (one tool-heavy turn: 3 bash commands + summary
+paragraph; estimated ~200–300 WS frames):**
+
+- `bearings:audit:buildTurns`: **224 fires**
+- `bearings:audit:timeline`:  **227 fires**
+
+Ratio to estimated WS frames is essentially 1:1. Svelte's `$derived`
+scheduler is **not** batching these — every WS event walks the full
+message + tool-call list in `buildTurns` and rebuilds + resorts the
+whole `timeline`. The 3-fire gap is `timeline` reacting to the
+`audits` array fetched on session load, which `buildTurns` doesn't
+see. **Audit verdict: hot. Refactor is justified.**
+
+**Refactor sketch (only if confirmed hot, and only after sibling
+`Profile event frequencies before deeper work` lands real numbers):**
+
+- Promote `turns` and `timeline` from `$derived` to `$state` arrays held
+  inside `ConversationStore`, keyed by session id.
+- Build the full array once on `load(sessionId)` and `loadOlder()`.
+- Mutate the **tail turn** in place during streaming: push tokens into
+  `tail.streamingContent`, append tool calls to `tail.toolCalls`. Push a
+  new tail on `message_complete`.
+- Insert audits at their sorted position only on `refreshAudits()` —
+  audit timestamps don't shift mid-stream, so no per-event resort.
+- Keying via `{#each timeline as item (item.key)}` already in place; just
+  needs the underlying array to mutate-in-place rather than re-allocate.
+
+**Cleanup ticket:** remove the two `console.count` calls before merging
+the refactor (or sooner if the audit closes inconclusive — they're noise
+in DevTools either way).
+
 ### 2026-04-21 — Profile event frequencies (wire + DB)
 
 Pulled `/metrics` and queried SQLite to confirm which event types
