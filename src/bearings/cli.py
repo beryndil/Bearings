@@ -7,11 +7,16 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import IO, Any
 
 from websockets.asyncio.client import connect as ws_connect
 
 from bearings import __version__
+from bearings.bearings_dir import pending as pending_ops
+from bearings.bearings_dir.check import run_check
+from bearings.bearings_dir.init_dir import init_directory
+from bearings.bearings_dir.onboard import render_brief
 from bearings.config import load_settings
 
 # Ordered by popularity on Linux so the first hit on PATH is likely
@@ -66,6 +71,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output format: json (one event per line, default) or pretty (human-readable).",
     )
     send.add_argument("message", help="Prompt text")
+
+    here = sub.add_parser(
+        "here",
+        help="Per-directory `.bearings/` context (init, check).",
+    )
+    here_sub = here.add_subparsers(dest="here_command", required=True)
+    here_init = here_sub.add_parser(
+        "init", help="Run onboarding ritual and write .bearings/ to CWD"
+    )
+    here_init.add_argument(
+        "--dir",
+        default=None,
+        help="Target directory (default: current working directory)",
+    )
+    here_check = here_sub.add_parser(
+        "check",
+        help="Re-validate environment + git state, bump state.toml.last_validated",
+    )
+    here_check.add_argument(
+        "--dir",
+        default=None,
+        help="Target directory (default: current working directory)",
+    )
+
+    pending = sub.add_parser(
+        "pending",
+        help="Manage in-flight operations in .bearings/pending.toml",
+    )
+    pending_sub = pending.add_subparsers(dest="pending_command", required=True)
+    p_add = pending_sub.add_parser("add", help="Add or update a pending operation")
+    p_add.add_argument("name", help="Unique operation name")
+    p_add.add_argument("--description", default="", help="Human-readable description (≤500 chars)")
+    p_add.add_argument(
+        "--command",
+        dest="op_command",
+        default=None,
+        help="Command that would resolve this op (≤2048 chars)",
+    )
+    p_add.add_argument(
+        "--dir",
+        default=None,
+        help="Target directory (default: current working directory)",
+    )
+    p_resolve = pending_sub.add_parser("resolve", help="Remove a pending operation")
+    p_resolve.add_argument("name", help="Name of the operation to resolve")
+    p_resolve.add_argument(
+        "--dir",
+        default=None,
+        help="Target directory (default: current working directory)",
+    )
+    p_list = pending_sub.add_parser("list", help="List pending operations (oldest first)")
+    p_list.add_argument(
+        "--dir",
+        default=None,
+        help="Target directory (default: current working directory)",
+    )
 
     return parser
 
@@ -198,4 +259,69 @@ def main(argv: Sequence[str] | None = None) -> int:
         url = f"ws://{host}:{port}/ws/sessions/{args.session}{query}"
         return asyncio.run(_run_send(url, args.message, sys.stdout, pretty=args.format == "pretty"))
 
+    if args.command == "here":
+        return _run_here(args)
+
+    if args.command == "pending":
+        return _run_pending(args)
+
+    return 1
+
+
+def _resolve_dir(raw: str | None) -> Path:
+    """Resolve the `--dir` CLI flag to an absolute path. None → CWD."""
+    return Path(raw).resolve() if raw else Path.cwd().resolve()
+
+
+def _run_here(args: argparse.Namespace) -> int:
+    target = _resolve_dir(args.dir)
+    if args.here_command == "init":
+        brief, root = init_directory(target)
+        print(render_brief(brief))
+        print()
+        print(f"Wrote .bearings/ to {root}")
+        return 0
+    if args.here_command == "check":
+        try:
+            state = run_check(target)
+        except FileNotFoundError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        dirty = "dirty" if state.dirty else "clean"
+        branch = state.branch or "(detached)"
+        print(f"Revalidated {target}: branch {branch}, {dirty}.")
+        print(f"last_validated = {state.environment.last_validated.isoformat()}")
+        for note in state.environment.notes:
+            print(f"  note: {note}")
+        return 0
+    return 1
+
+
+def _run_pending(args: argparse.Namespace) -> int:
+    target = _resolve_dir(args.dir)
+    if args.pending_command == "add":
+        op = pending_ops.add(
+            target,
+            args.name,
+            description=args.description,
+            command=args.op_command,
+        )
+        print(f"Pending: {op.name} (started {op.started.isoformat()})")
+        return 0
+    if args.pending_command == "resolve":
+        removed = pending_ops.resolve(target, args.name)
+        if removed is None:
+            print(f"No pending op named {args.name!r}.", file=sys.stderr)
+            return 1
+        print(f"Resolved: {removed.name}")
+        return 0
+    if args.pending_command == "list":
+        ops = pending_ops.list_ops(target)
+        if not ops:
+            print("(no pending operations)")
+            return 0
+        for op in ops:
+            desc = f" — {op.description}" if op.description else ""
+            print(f"  {op.started.isoformat()}  {op.name}{desc}")
+        return 0
     return 1

@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-22
+
+Directory Context System — foundation. Per-directory ground truth on
+disk so any session landing in a tracked directory can read
+`.bearings/` and know what's happening here instead of relying on
+ephemeral chat memory. Directly addresses the Twrminal-transcript
+failure mode where a session opened blind and improvised. Minor bump
+because this is a new primitive, not a fix.
+
+v0.6.0 ships the filesystem layer only — agent-prompt integration,
+auto-onboarding on WS-open, and the `checks/on_open.sh` runner follow
+in v0.6.1 / v0.6.2 / v0.6.3+. No existing code paths change; the new
+surface is additive.
+
+### Added
+
+- New package `bearings.bearings_dir` with five Pydantic v2 schemas
+  (`Manifest`, `State`, `EnvironmentBlock`, `Pending`,
+  `PendingOperation`, `HistoryEntry`). Field caps ride on every
+  descriptive string (`description` ≤ 500, history `summary` ≤ 200,
+  list fields ≤ 64 entries) so a hand-edited or malicious file can't
+  blow the per-turn prompt budget. `extra="forbid"` catches typos
+  instead of silently dropping them.
+- Atomic TOML IO (`bearings_dir.io`): tempfile + `os.replace` with
+  `fsync` before rename on a single filesystem, plus `fcntl.flock`
+  (shared for reads, exclusive for writes) so two sessions can't
+  interleave a write. A corrupt TOML or Pydantic-invalid file is
+  renamed to `corrupted-YYYYMMDDHHMMSS-<name>` with a `.reason`
+  sidecar and treated as missing — the next session re-onboards
+  cleanly instead of crashing. Windows is single-session-only; lock
+  functions no-op there so dev on Windows still works.
+- `history.jsonl` append/read helpers. Append-only JSONL keeps two
+  writers safe without a flock (line-atomic on POSIX when each line
+  fits in `PIPE_BUF`, which the 200-char summary cap ensures). A
+  single corrupt line is skipped rather than failing the whole read.
+- Seven-step onboarding ritual (`bearings_dir.onboard.run_onboarding`):
+  (1) identify via project-root markers + README head,
+  (2) `git status` / stashes / in-progress merge-rebase-cherry-pick-
+  bisect markers, (3) environment — venv + `uv sync --locked
+  --dry-run` freshness check + language version pins, (4) sibling
+  clones under `$HOME/{Projects,code,dev,src}` matching remote,
+  (5) unfinished-work grep + narrative-file reads + the **naming-
+  inconsistency scan** that surfaces the Twrminal/Bearings class of
+  drift as a *note, not a defect*, (6) tag-match against caller-
+  supplied rows (no DB coupling — the CLI/WS handler owns the
+  lookup), (7) structured `Brief` dataclass the caller renders.
+  Pure read; writing is the caller's job.
+- `bearings here init` — runs the ritual in CWD (or `--dir`), prints
+  the brief, writes `manifest.toml` + `state.toml` + empty
+  `pending.toml`. Pending is created empty so the flock target
+  exists and a concurrent add doesn't race on creation.
+- `bearings here check` — re-runs the cheap subset of the ritual
+  (steps 2/3/5), bumps `state.toml.environment.last_validated`.
+  Errors with a useful message when run before `here init`.
+- `bearings pending add|resolve|list` CRUD with a full Python API in
+  `bearings_dir.pending`. `add` is idempotent on name and preserves
+  `started` across re-notices so the 30-day stale-op detection
+  planned for v0.6.1 stays meaningful when a second session re-
+  notices the same broken lockfile.
+- 45 new tests across five files (`test_bearings_dir_{schema,io,
+  pending,onboard,cli}.py`). Notable coverage: schema caps, corrupt-
+  file quarantine (both TOML-parse and Pydantic-validate paths), a
+  concurrent-writer race (20 rewrites from two threads — final file
+  still parses), the Twrminal naming-inconsistency false-positive
+  fixture, simulated-crash test that verifies `os.replace` failure
+  preserves prior content with no stray tempfiles.
+
+### Changed
+
+- TODO.md `v0.4.x — Directory Context System (open)` heading
+  retargeted to `v0.6.x` and its decisions + v0.6.0 items checked
+  off. The `v0.4.x` label was drafted before Checklist Sessions
+  claimed v0.4.0/0.4.1 and Slice 4 + polish took v0.5.0/0.5.1;
+  Directory Context System slid to the next new-primitive minor
+  slot.
+
 ## [0.3.29] - 2026-04-21
 
 ### Changed

@@ -1771,7 +1771,15 @@ Deliberate scope cuts (follow-ups):
   mark. `icon-192.png`, `icon-512.png`, `favicon.png` regenerated
   via `rsvg-convert`.
 
-## v0.4.x — Directory Context System (open)
+## v0.6.x — Directory Context System (open)
+
+**Version retargeted 2026-04-22.** The original `v0.4.x` label was
+drafted before Checklist Sessions claimed `v0.4.0` / `v0.4.1` and
+Slice 4 + polish took `v0.5.0` / `v0.5.1`. Directory Context System
+now lands as the next new-primitive minor bump, `v0.6.0`. Section
+body otherwise unchanged from the v0.4 draft.
+
+
 
 Per-directory ground truth on disk so any session that lands in a
 directory can read `.bearings/` and know what's happening here
@@ -1794,75 +1802,70 @@ Each tracked directory gets a `.bearings/` folder:
 └── checks/on_open.sh # optional user-written health probe
 ```
 
-### Decisions to resolve before code
+### Decisions resolved 2026-04-22
 
-- [ ] **CLI namespace.** `bearings init` is already taken (it
-  initializes the global config + DB). Either rename the existing
-  command (`bearings setup` / `bearings bootstrap`) or namespace
-  the new one (`bearings here init` / `bearings dir init`).
-- [ ] **"Session" vocabulary.** Three `session_id`s in play: Bearings
-  row, claude-agent-sdk session (from v0.3.5), directory-history
-  entry. Pick which the `history.jsonl.session_id` field refers to
-  (leaning: Bearings row id) and document.
-- [ ] **Directory-session boundary.** When does a `history.jsonl`
-  line get written — one per WS connection? One per logical
-  "visit"? Leaning: WS connect/disconnect lifecycle.
-- [ ] **Confirmation UX for onboarding.** Spec's
-  `Save this as the directory's bearings? [Y/n]` is a TTY
-  affordance. In the browser UI, the natural fit is: brief is the
-  first assistant message; user replies "yes" or edits; agent
-  writes on confirm.
-- [ ] **Claude-Code-terminal awareness.** Is `.bearings/` only for
-  sessions started through the Bearings WebUI, or do we also want
-  terminal `claude` invocations to pick it up (via a shell-init
-  hook or wrapper)? Scope-defining.
-- [ ] **Version sequencing.** Big-bang 1→10 in v0.4.0 or phased
-  across 0.4.0 / 0.4.1 / 0.4.2? Leaning phased so revert is
-  surgical if something's wrong mid-way.
+- [x] **CLI namespace** → namespace the new one: `bearings here
+  init` / `bearings here check`. Renaming the existing `init`
+  would break muscle memory and systemd/docs references.
+- [x] **"Session" vocabulary** → `history.jsonl.session_id` is the
+  **Bearings row id**. Stable across reconnects, visible in the DB;
+  the SDK session id churns and directory-history ids would be
+  circular.
+- [x] **Directory-session boundary** → WS connect/disconnect
+  lifecycle. Clean hook points already exist in `ws_agent.py`.
+- [x] **Confirmation UX for onboarding** → brief is the first
+  assistant message; user replies "yes" or edits; agent writes on
+  confirm. TTY `[Y/n]` prompt doesn't fit the browser UI.
+- [x] **Claude-Code-terminal awareness** → Bearings WebUI only for
+  v0.6.x. Shell-init hooks are a rabbit hole; terminal sessions can
+  read `.bearings/*.toml` manually. Revisit post-v0.6.
+- [x] **Version sequencing** → phased across v0.6.0 / v0.6.1 /
+  v0.6.2 / v0.6.3+. Each slice is independently revertable.
 
-### v0.4.0 — foundation
+### v0.6.0 — foundation (shipped 2026-04-22)
 
-- [ ] **Pydantic schema** for all five file shapes
+- [x] **Pydantic schemas** for all five file shapes
   (`Manifest`, `State`, `Pending`, `HistoryEntry`, plus the
-  `PendingOperation` sub-model). Validators cap field lengths
-  (`description` ≤ 500, history `summary` ≤ 200). Invalid files
-  moved to `.bearings/corrupted-YYYYMMDDHHMM.toml` and treated as
-  missing so the next session re-onboards instead of crashing.
-- [ ] **Read/write helpers** with atomic writes for
-  `state.toml` / `pending.toml` (temp file + `os.replace`) so a
-  crash mid-write can't corrupt. File-level `fcntl.flock` for
-  concurrent-session safety on Unix; Windows documented as
-  single-session only.
-- [ ] **Onboarding ritual as a command** (name TBD per decision
-  above). Seven steps implemented:
-  1. Identify — walk up for `.git`, `pyproject.toml`,
-     `package.json`, `Cargo.toml`, `go.mod`, `CLAUDE.md`,
-     `README.md`. Read first 50 lines of README.
-  2. Git state — `git status --porcelain`, stashes, in-progress
-     merge/rebase/cherry-pick/bisect markers under `.git/`.
-  3. Environment validation — Python venv path sanity, lockfile
-     freshness (use `uv sync --locked --dry-run` or lock-vs-site-
-     packages diff, not `uv pip check`), language version pins
-     (`.python-version`, `.nvmrc`, `rust-toolchain.toml`), DB
-     file existence, unapplied migrations.
-  4. Related directories — sibling clones with matching remote
-     under `$HOME/Projects`, `$HOME/code`, `$HOME/dev`,
-     `$HOME/src`.
-  5. Unfinished work — `TODO` / `FIXME` / `XXX` / `WIP` grep
-     respecting `.gitignore`; read `TODO.md`, `CHANGELOG.md`,
-     `TESTING_NOTES.md`; **naming-inconsistency grep** (exact
-     Twrminal / Bearings failure mode).
-  6. Tag match — `SELECT * FROM tags WHERE ? LIKE
-     default_working_dir || '%'` against the Bearings DB.
-  7. Present structured brief; on confirm, write manifest + state
-     (and pending if ops were detected).
-- [ ] **`bearings check` command.** Re-run steps 2, 3, 5; bump
-  `state.toml.environment.last_validated`; surface any new
-  inconsistencies.
-- [ ] **`bearings pending` CRUD** — `add <name>`, `resolve <name>`,
-  `list`. Full Python API + CLI. Tests for concurrent writes.
+  `PendingOperation` sub-model) in `bearings_dir/schema.py`.
+  Validators cap field lengths (`description` ≤ 500, history
+  `summary` ≤ 200, notes/commits/operations lists ≤ 64). Invalid
+  files moved to `.bearings/corrupted-YYYYMMDDHHMM-<name>` with a
+  `.reason` sidecar and treated as missing so the next session re-
+  onboards instead of crashing.
+- [x] **Atomic read/write helpers** in `bearings_dir/io.py`:
+  tempfile + `os.replace` (same filesystem, `fsync` before rename)
+  so a crash mid-write can't corrupt the target. File-level
+  `fcntl.flock` on Unix (shared for reads, exclusive for writes);
+  Windows documented as single-session-only — the lock functions
+  no-op there so dev on Windows still works.
+- [x] **Onboarding ritual** in `bearings_dir/onboard.py` — all
+  seven steps: identify (primary-marker scan + README head),
+  git state (status/stashes/merge-rebase markers), environment
+  (venv + `uv sync --locked --dry-run` + language pins), related
+  (sibling clones under `$HOME/{Projects,code,dev,src}`),
+  unfinished (TODO grep + narrative heads + the **naming-
+  inconsistency grep** that surfaces the Twrminal case as a note,
+  not a defect), tag-match (prefix match against caller-supplied
+  tag rows — no DB coupling in v0.6.0), and `render_brief()` for
+  human-readable output. The ritual is pure-read; the CLI/WS
+  handler owns the confirm-and-write.
+- [x] **`bearings here init`** — runs the ritual and writes
+  manifest + state + empty pending.
+- [x] **`bearings here check`** — re-runs steps 2/3/5 and bumps
+  `state.toml.environment.last_validated`.
+- [x] **`bearings pending` CRUD** — `add <name>`, `resolve <name>`,
+  `list`, idempotent on name (preserves `started` across re-
+  notices so 30-day stale-op detection in v0.6.1 stays
+  meaningful). Full Python API in `bearings_dir/pending.py` + CLI
+  in `cli.py`.
+- [x] **Tests** — 45 new tests across `test_bearings_dir_{schema,
+  io,pending,onboard,cli}.py`. Covers the schema caps, corrupt-
+  file quarantine, a concurrent-writer test (20 rewrites from two
+  threads — final file still parses), the Twrminal naming-
+  inconsistency false-positive, `run_check` idempotence, and the
+  full CLI surface. All 509 pytest tests green, ruff/mypy clean.
 
-### v0.4.1 — session-layer integration
+### v0.6.1 — session-layer integration
 
 - [ ] **`history.jsonl` session lifecycle writer.** Session-start
   appends a marker (`started`, `session_id`, `branch`); session-end
@@ -1881,7 +1884,7 @@ Each tracked directory gets a `.bearings/` folder:
   pending operation's `started` > 30 days old, flag in the brief
   as "stale, may already be resolved."
 
-### v0.4.2 — automatic onboarding
+### v0.6.2 — automatic onboarding
 
 - [ ] **Auto-trigger on WS-open.** When a Bearings session opens in
   a directory without `.bearings/`, generate and present the brief
@@ -1894,7 +1897,7 @@ Each tracked directory gets a `.bearings/` folder:
   not as a problem. This false-positive copy ships in the test
   fixture.
 
-### v0.4.3+ — polish
+### v0.6.3+ — polish
 
 - [ ] **`checks/on_open.sh` execution framework.** Spawn with
   timeout, capture stderr, attach exit code + stderr snippet to
