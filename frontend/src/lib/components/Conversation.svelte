@@ -16,6 +16,7 @@
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import SessionPickerModal from '$lib/components/SessionPickerModal.svelte';
   import ContextMeter from '$lib/components/ContextMeter.svelte';
+  import LiveTodos from '$lib/components/LiveTodos.svelte';
   import TokenMeter from '$lib/components/TokenMeter.svelte';
   import { buildTurns } from '$lib/turns';
   import {
@@ -1418,6 +1419,11 @@
     bind:this={scrollContainer}
     class="relative flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4"
   >
+    {#if conversation.todos !== null}
+      <div class="sticky top-0 z-10 -mx-4 -mt-4 px-4 pt-4 pb-2 bg-slate-950/95 backdrop-blur">
+        <LiveTodos todos={conversation.todos} />
+      </div>
+    {/if}
     {#if conversation.hasMore}
       <p class="text-[10px] text-slate-600 text-center">
         {conversation.loadingOlder ? 'Loading older…' : 'Scroll up to load older messages'}

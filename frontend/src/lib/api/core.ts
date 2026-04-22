@@ -126,6 +126,31 @@ export type RunnerStatusEvent = {
   is_running: boolean;
 };
 
+/** One entry in a TodoWrite list. Wire shape carries `active_form`
+ * (snake_case) because the runner serialises with python field names.
+ * Claude Code's SDK emits `activeForm` (camelCase) into the tool
+ * input, but the Pydantic alias on `agent.events.TodoItem` normalises
+ * that before it hits the wire so the frontend only deals with one
+ * shape. `status` is the full three-value enum observed in the
+ * historical `tool_calls` rows. */
+export type TodoItem = {
+  content: string;
+  active_form: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+};
+
+/** Sidecar event fired whenever the agent calls `TodoWrite`. The raw
+ * `tool_call_start` still travels alongside this — the Inspector pane
+ * keeps audit-level visibility, while the LiveTodos widget consumes
+ * the parsed list from here without hand-parsing tool input. Full
+ * replacement semantics: every fire carries the entire list, so the
+ * reducer simply overwrites `state.todos`. */
+export type TodoWriteUpdateEvent = {
+  type: 'todo_write_update';
+  session_id: string;
+  todos: TodoItem[];
+};
+
 /** Every frame from the server now carries a monotonic `_seq` so the
  * client can track "what have I already seen" and pass `since_seq` on
  * reconnect to replay only events delivered while it was away. */
@@ -145,6 +170,7 @@ export type AgentEvent = (
   | RunnerStatusEvent
   | ApprovalRequestEvent
   | ApprovalResolvedEvent
+  | TodoWriteUpdateEvent
 ) &
   SeqStamped;
 

@@ -6,11 +6,15 @@ links the two after an assistant-turn persist."""
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import Any
 
 import aiosqlite
 
 from bearings.db._common import _date_filter, _new_id, _now
+
+log = logging.getLogger(__name__)
 
 
 async def insert_message(
@@ -313,6 +317,45 @@ async def list_tool_calls(conn: aiosqlite.Connection, session_id: str) -> list[d
         (session_id,),
     ) as cursor:
         return [dict(row) async for row in cursor]
+
+
+async def get_latest_todowrite(
+    conn: aiosqlite.Connection, session_id: str
+) -> list[dict[str, Any]] | None:
+    """Return the `todos` array from the most recent `TodoWrite` tool
+    call in this session, or `None` when the session has never invoked
+    TodoWrite.
+
+    The list is a direct parse of the `tool_calls.input` JSON column
+    — no schema normalisation happens here. Callers that need a
+    typed shape hand it to `TodoItem.model_validate`. An empty array
+    is distinct from `None`: the agent is allowed to post
+    `{"todos": []}` to clear the list, and the widget should
+    render "empty" rather than "no todo session yet."
+
+    Malformed JSON or a missing `todos` key is logged and treated as
+    `None`: a corrupt row shouldn't break the first paint of the
+    widget for an otherwise healthy session. The row still exists in
+    `tool_calls` for Inspector-level debugging."""
+    sql = (
+        "SELECT input FROM tool_calls "
+        "WHERE session_id = ? AND name = 'TodoWrite' "
+        "ORDER BY started_at DESC, id DESC LIMIT 1"
+    )
+    async with conn.execute(sql, (session_id,)) as cursor:
+        row = await cursor.fetchone()
+    if row is None:
+        return None
+    try:
+        payload = json.loads(row["input"])
+    except (json.JSONDecodeError, TypeError):
+        log.warning("tool_calls.input for latest TodoWrite in %s is not JSON", session_id)
+        return None
+    todos = payload.get("todos") if isinstance(payload, dict) else None
+    if not isinstance(todos, list):
+        log.warning("TodoWrite payload for %s missing `todos` list", session_id)
+        return None
+    return todos
 
 
 async def list_all_messages(

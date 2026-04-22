@@ -45,6 +45,7 @@ from bearings.agent.events import (
     MessageComplete,
     MessageStart,
     Thinking,
+    TodoWriteUpdate,
     Token,
     ToolCallEnd,
     ToolCallStart,
@@ -530,6 +531,14 @@ class SessionRunner:
                     )
                     tool_call_ids.append(event.tool_call_id)
                     metrics.tool_calls_started.inc()
+                    # TodoWrite is a first-class UI signal, not just a
+                    # generic tool call: fire a higher-level
+                    # `TodoWriteUpdate` so the frontend sticky widget
+                    # updates without hand-parsing `tool_calls[*].input`.
+                    # The raw `ToolCallStart` already went out above, so
+                    # Inspector / audit paths keep seeing it verbatim.
+                    if event.name == "TodoWrite":
+                        await self._emit_todo_write_update(event.input)
                 elif isinstance(event, ToolOutputDelta):
                     # Buffer the chunk instead of writing immediately.
                     # The coalescer flushes on count/time thresholds so
@@ -717,6 +726,28 @@ class SessionRunner:
         buf = self._tool_buffers.pop(tool_call_id, None)
         if buf is not None and buf.flush_task is not None:
             buf.flush_task.cancel()
+
+    async def _emit_todo_write_update(self, tool_input: dict[str, Any]) -> None:
+        """Translate a raw `TodoWrite` tool input into a
+        `TodoWriteUpdate` event and fan it out through `_emit_event`.
+
+        Tolerant of malformed payloads: if the SDK (or a future schema
+        bump) sends something we can't parse, we log at warning and
+        skip the emit rather than fail the turn. The underlying
+        `tool_call_start` already landed — subscribers still have the
+        raw version via the Inspector pane, so "live widget doesn't
+        update" is recoverable; "turn crashes on unexpected shape" is
+        not."""
+        try:
+            update = TodoWriteUpdate.model_validate({"session_id": self.session_id, **tool_input})
+        except Exception as exc:  # noqa: BLE001 — intentional broad catch
+            log.warning(
+                "todo_write_update parse failed for session %s: %s",
+                self.session_id,
+                exc,
+            )
+            return
+        await self._emit_event(update)
 
     async def _emit_event(self, event: AgentEvent) -> None:
         """Fan an event out to every subscriber and append to the ring

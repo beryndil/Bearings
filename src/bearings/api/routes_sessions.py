@@ -19,6 +19,8 @@ from bearings.api.models import (
     SystemPromptLayerOut,
     SystemPromptOut,
     TagOut,
+    TodoItemOut,
+    TodosOut,
     TokenTotalsOut,
     ToolCallOut,
 )
@@ -295,6 +297,37 @@ async def list_tool_calls(session_id: str, request: Request) -> list[ToolCallOut
         raise HTTPException(status_code=404, detail="session not found")
     rows = await store.list_tool_calls(conn, session_id)
     return [ToolCallOut(**r) for r in rows]
+
+
+@router.get("/{session_id}/todos", response_model=TodosOut)
+async def get_session_todos(session_id: str, request: Request) -> TodosOut:
+    """Return the latest TodoWrite snapshot for a session — feeds the
+    first paint of the sticky LiveTodos widget. Live updates after
+    that are delivered via the `todo_write_update` WS event; this
+    route exists so reloading the page or switching sessions doesn't
+    show an empty widget while the next TodoWrite call lands.
+
+    Tolerates malformed historical rows: `store.get_latest_todowrite`
+    logs-and-returns-None for a row whose `input` isn't valid JSON or
+    lacks a `todos` list, so the widget degrades to "no todos" rather
+    than a 500."""
+    conn = request.app.state.db
+    if await store.get_session(conn, session_id) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    raw = await store.get_latest_todowrite(conn, session_id)
+    if raw is None:
+        return TodosOut(todos=None)
+    items: list[TodoItemOut] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            items.append(TodoItemOut.model_validate(entry))
+        except Exception:  # noqa: BLE001 — tolerate individual bad rows
+            # Skip malformed rows silently; a widget with N-1 items is
+            # still useful while the agent updates on the next call.
+            continue
+    return TodosOut(todos=items)
 
 
 @router.post("/import", response_model=SessionOut)

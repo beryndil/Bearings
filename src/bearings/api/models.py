@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionCreate(BaseModel):
@@ -139,6 +139,34 @@ class ToolCallOut(BaseModel):
     error: str | None = None
     started_at: str
     finished_at: str | None = None
+
+
+class TodoItemOut(BaseModel):
+    """One row in the live TodoWrite list. Mirrors
+    `agent.events.TodoItem` on purpose — the first-paint REST shape
+    and the live WS event carry the same per-item schema so the
+    frontend reducer can treat them interchangeably.
+
+    `active_form` is aliased to `activeForm` on the wire (both in
+    and out) to match what the Claude Code SDK emits (camelCase)
+    and what the widget renders in the "Working on X…" footer when
+    an item is in_progress."""
+
+    content: str
+    active_form: str | None = Field(default=None, alias="activeForm")
+    status: Literal["pending", "in_progress", "completed"]
+
+    model_config = {"populate_by_name": True}
+
+
+class TodosOut(BaseModel):
+    """Reply shape for `GET /sessions/{id}/todos`. `todos` is `None`
+    when the session has never invoked the TodoWrite tool, or an
+    empty list when the agent explicitly cleared the list. This
+    distinction lets the frontend render "no active todo session"
+    vs. "todo session active but currently empty"."""
+
+    todos: list[TodoItemOut] | None
 
 
 class SearchHit(BaseModel):

@@ -44,6 +44,26 @@ it then. Do not exercise the historical checklists as-is.
 
 ## Open feature work
 
+- [ ] **Implement `bearings todo` CLI subcommand (2026-04-22).**
+  Part of the TODO.md discipline enforcement layer (CLI + hooks +
+  standard schema) accepted in Bearings session
+  `1a2b1c1e-06a5-4d39-b35f-7dba25f81da8`. New `bearings todo`
+  subcommand with four operations: `open` (list open entries from
+  ./TODO.md and nested), `check` (lint for missing headers, age >60d,
+  shipped-looking words inside Open entries), `add` (append a properly-
+  formatted stub), `recent` (used by hooks for injection). `TodoEntry`
+  dataclass + regex parser + tests + CHANGELOG + v0.8.0 bump. Lands
+  in src/bearings/cli.py.
+  - **Spec** (must exist before this starts):
+    `~/.claude/specs/todo-discipline-v1.md`
+  - **Bearings session for this work:**
+    `4cb745a0b5c34e648ca4f37e49c00093` ("bearings todo CLI subcommand")
+  - **Depends on:** spec session
+    `986e99685b2d4954afc6b98448f7f6df` ("TODO.md discipline spec v1")
+  - **Followed by:** session
+    `54b9290a287648f6b1516a449a72d95d` ("Install TODO discipline
+    hooks+migrate") — installs the hooks once this CLI is on PATH.
+
 - [ ] **Investigate long hang on a single assistant turn (2026-04-21).**
   Dave reported I sat silent for far too long between his "are you hung
   up?" prompt and the eventual plan-agent response during the token-cost
@@ -915,3 +935,57 @@ which ones are actually Low vs higher.
   "security audit: cleanup (low priority)") are usually
   trustworthy but project-scoped bracketed items need Dave's
   judgment on their actual priority.
+
+## Live TodoWrite widget (deferred from 2026-04-22)
+
+Initial spike landed 2026-04-22 — `TodoWriteUpdate` WS event, sticky
+`LiveTodos.svelte` widget above the turn stream, `GET /sessions/{id}/todos`
+for first-paint. Derived from the latest `tool_calls` row where
+`name='TodoWrite'`, no schema migration.
+
+**Design record (what we decided and why):**
+- SDK has no TodoWrite-aware event; the tool arrives as a regular
+  `ToolUseBlock(name="TodoWrite", input={todos:[...]})`. Input is a
+  full replacement of the list every call — positional identity, no
+  item ids. Status enum: `pending | in_progress | completed`.
+- State model is **derive on the fly** from `tool_calls`. No session
+  column; `sessions.latest_todos_json` was considered and rejected
+  because the sub-millisecond MAX(started_at) query already exists.
+- Rendering surface is **sticky at the top of the Conversation pane**
+  (option b from the scouting report), not inline per-turn (would
+  render 40+ stale widgets on a chatty session) and not a new
+  Inspector tab (demotes operational progress to audit/debug land).
+- **Does NOT reuse the existing `checklists` / `checklist_items`
+  subsystem.** Those are a separate session kind (`kind='checklist'`,
+  PK'd by `session_id`) — fighting that invariant to shoehorn an
+  in-chat progress list would blur two UX concepts. Keep the
+  TodoWrite view purely over `tool_calls`.
+
+**Follow-ups left on the table:**
+
+- [ ] **Auto-collapse policy.** Current widget always shows when the
+  session has any todos. Candidate rule: collapse ~30s after the
+  latest update lands and every item is `completed`. Flicker risk if
+  the agent emits a fresh "pending" item immediately after; build and
+  tune against a real multi-turn session before committing.
+- [ ] **Historical navigation.** Every TodoWrite payload is still in
+  `tool_calls` (not just the latest). A "step back through todo
+  states" affordance would let Dave see the progression. Not v1 — no
+  evidence the audit trail is useful in-band; the Inspector's raw
+  tool-call list already covers debug cases.
+- [ ] **Push unchecked items to working-dir TODO.md on session close.**
+  Explicitly deferred — see the "Nearest TODO.md" ambiguity flagged in
+  the research-agent action-row entry above. Resolve that first.
+  Manual "Send these to TODO.md" button on the widget is the right
+  shape when it lands, not an auto-dump.
+- [ ] **Widget placement interaction with ContextMeter/TokenMeter.**
+  First-pass lives above the turn stream; if the conversation header
+  gets more sticky elements, a dedicated "status strip" region should
+  be refactored out. Defer until a second sticky row shows up.
+- [ ] **Hide widget when `todos` is an empty list.** Spike treats empty
+  array as "render with 0 items" for simplicity; v2 should treat it
+  as "no active todo session, hide the card entirely."
+- [ ] **Dave's adoption question.** He doesn't use TodoWrite today. The
+  widget now exists as an incentive to try it; re-evaluate at v0.8 or
+  whenever he has actually used TodoWrite in a real session whether
+  the sticky placement is earning its screen real-estate.

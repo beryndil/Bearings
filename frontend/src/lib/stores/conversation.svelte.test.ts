@@ -243,3 +243,93 @@ describe('approval reducer', () => {
     expect(conversation.pendingApproval).toBe(null);
   });
 });
+
+describe('todo_write_update reducer', () => {
+  function todoUpdate(
+    sessionId: string,
+    todos: Array<{
+      content: string;
+      active_form: string | null;
+      status: 'pending' | 'in_progress' | 'completed';
+    }>
+  ): AgentEvent {
+    return {
+      type: 'todo_write_update',
+      session_id: sessionId,
+      todos
+    };
+  }
+
+  it('todos is null before any todo_write_update fires', () => {
+    const sid = uniqueSession('todos-initial');
+    conversation.sessionId = sid;
+    // Kick the per-session state into existence without a TodoWrite.
+    conversation.handleEvent(startCall(sid, 'tc-seed'));
+    expect(conversation.todos).toBe(null);
+  });
+
+  it('first update assigns the full list (no prior state to merge)', () => {
+    const sid = uniqueSession('todos-first');
+    conversation.sessionId = sid;
+    conversation.handleEvent(
+      todoUpdate(sid, [
+        { content: 'Read the spec', active_form: 'Reading the spec', status: 'in_progress' },
+        { content: 'Write the code', active_form: 'Writing the code', status: 'pending' }
+      ])
+    );
+    expect(conversation.todos).toHaveLength(2);
+    expect(conversation.todos?.[0].status).toBe('in_progress');
+    expect(conversation.todos?.[0].active_form).toBe('Reading the spec');
+  });
+
+  it('subsequent update fully replaces the list (no per-item merge)', () => {
+    const sid = uniqueSession('todos-replace');
+    conversation.sessionId = sid;
+    conversation.handleEvent(
+      todoUpdate(sid, [
+        { content: 'A', active_form: null, status: 'in_progress' },
+        { content: 'B', active_form: null, status: 'pending' }
+      ])
+    );
+    conversation.handleEvent(
+      todoUpdate(sid, [
+        { content: 'A', active_form: null, status: 'completed' },
+        { content: 'B', active_form: null, status: 'in_progress' },
+        { content: 'C', active_form: null, status: 'pending' }
+      ])
+    );
+    expect(conversation.todos).toHaveLength(3);
+    expect(conversation.todos?.[0].status).toBe('completed');
+    expect(conversation.todos?.[2].content).toBe('C');
+  });
+
+  it('empty todos array is distinct from null (explicit clear semantics)', () => {
+    const sid = uniqueSession('todos-empty');
+    conversation.sessionId = sid;
+    conversation.handleEvent(
+      todoUpdate(sid, [{ content: 'x', active_form: null, status: 'pending' }])
+    );
+    expect(conversation.todos).toHaveLength(1);
+    conversation.handleEvent(todoUpdate(sid, []));
+    expect(conversation.todos).toEqual([]);
+    // null would mean "never invoked"; empty means "explicitly cleared".
+    expect(conversation.todos).not.toBe(null);
+  });
+
+  it('todo_write_update for one session does not leak into another', () => {
+    const sidA = uniqueSession('todos-iso-a');
+    const sidB = uniqueSession('todos-iso-b');
+    conversation.sessionId = sidA;
+    conversation.handleEvent(
+      todoUpdate(sidA, [{ content: 'A-task', active_form: null, status: 'in_progress' }])
+    );
+    // Event for a different session should not touch the active view.
+    conversation.handleEvent(
+      todoUpdate(sidB, [{ content: 'B-task', active_form: null, status: 'pending' }])
+    );
+    expect(conversation.todos).toHaveLength(1);
+    expect(conversation.todos?.[0].content).toBe('A-task');
+    conversation.sessionId = sidB;
+    expect(conversation.todos?.[0].content).toBe('B-task');
+  });
+});

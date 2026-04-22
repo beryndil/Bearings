@@ -29,6 +29,7 @@ from bearings.agent.events import (
     MessageComplete,
     MessageStart,
     Token,
+    ToolCallStart,
 )
 from bearings.agent.registry import RunnerRegistry
 from bearings.agent.runner import RING_MAX, SessionRunner
@@ -248,6 +249,100 @@ async def test_worker_executes_turn_and_persists(db: aiosqlite.Connection) -> No
         roles_and_content = [(r["role"], r["content"]) for r in rows]
         assert ("user", "hi") in roles_and_content
         assert ("assistant", "hello") in roles_and_content
+    finally:
+        await runner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_todowrite_tool_call_emits_sidecar_update(db: aiosqlite.Connection) -> None:
+    """When the SDK yields a `ToolCallStart` named `TodoWrite`, the
+    runner persists the tool call normally AND emits a sidecar
+    `TodoWriteUpdate` event carrying the parsed todo list.
+
+    The sidecar is the whole reason the live widget works without
+    hand-parsing `tool_calls[*].input` in the frontend: the reducer
+    handles a dedicated event type, and the Inspector still sees the
+    raw `ToolCallStart` for audit. Order matters — the raw event
+    must land before the sidecar so subscribers that peek at
+    `tool_calls` on the update see the row already inserted."""
+    sid = await _session_id(db)
+    todos = [
+        {"content": "First step", "activeForm": "Doing first step", "status": "in_progress"},
+        {"content": "Second step", "activeForm": "Doing second step", "status": "pending"},
+    ]
+    script: list[AgentEvent] = [
+        MessageStart(session_id=sid, message_id="msg-tw"),
+        ToolCallStart(
+            session_id=sid,
+            tool_call_id="tc-todo-1",
+            name="TodoWrite",
+            input={"todos": todos},
+        ),
+        MessageComplete(session_id=sid, message_id="msg-tw", cost_usd=None),
+    ]
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[script]), db)
+    queue, _ = await runner.subscribe(0)
+    runner.start()
+    try:
+        await runner.submit_prompt("kick off a multi-step task")
+
+        seen: list[dict[str, Any]] = []
+        while not any(p["type"] == "message_complete" for p in seen):
+            env = await asyncio.wait_for(queue.get(), timeout=2.0)
+            seen.append(env.payload)
+
+        types = [p["type"] for p in seen]
+        assert "tool_call_start" in types
+        assert "todo_write_update" in types
+        # Order: raw call must land before the sidecar update so a
+        # subscriber reading `tool_calls` on the update sees the row.
+        assert types.index("tool_call_start") < types.index("todo_write_update")
+
+        update = next(p for p in seen if p["type"] == "todo_write_update")
+        assert update["session_id"] == sid
+        assert [t["status"] for t in update["todos"]] == ["in_progress", "pending"]
+        assert update["todos"][0]["content"] == "First step"
+        # Wire shape: the alias 'activeForm' collapses to the python-
+        # side field name 'active_form' on serialisation. The frontend
+        # contract (core.ts) mirrors this.
+        assert update["todos"][0]["active_form"] == "Doing first step"
+    finally:
+        await runner.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_todowrite_malformed_input_does_not_crash_turn(
+    db: aiosqlite.Connection,
+) -> None:
+    """A malformed TodoWrite payload (missing `todos`, wrong type on an
+    item, etc.) must not kill the turn. The sidecar `TodoWriteUpdate`
+    is skipped — the raw `ToolCallStart` still lands and the turn
+    completes. Fail-soft because the live widget is a nice-to-have,
+    not a correctness-critical path."""
+    sid = await _session_id(db)
+    script: list[AgentEvent] = [
+        MessageStart(session_id=sid, message_id="msg-bad"),
+        ToolCallStart(
+            session_id=sid,
+            tool_call_id="tc-bad",
+            name="TodoWrite",
+            # Item missing the required `status` field — model_validate rejects.
+            input={"todos": [{"content": "no status here"}]},
+        ),
+        MessageComplete(session_id=sid, message_id="msg-bad", cost_usd=None),
+    ]
+    runner = SessionRunner(sid, ScriptedAgent(sid, scripts=[script]), db)
+    queue, _ = await runner.subscribe(0)
+    runner.start()
+    try:
+        await runner.submit_prompt("trigger malformed todowrite")
+        seen: list[str] = []
+        while "message_complete" not in seen:
+            env = await asyncio.wait_for(queue.get(), timeout=2.0)
+            seen.append(env.payload["type"])
+        # Raw tool call still there — only the sidecar was skipped.
+        assert "tool_call_start" in seen
+        assert "todo_write_update" not in seen
     finally:
         await runner.shutdown()
 

@@ -122,6 +122,14 @@ export type SessionState = {
   // meter; the session row's cached columns back the first paint
   // after load / reconnect, then live events take over.
   contextUsage: ContextUsageState | null;
+  // Live TodoWrite snapshot — drives the sticky LiveTodos widget at
+  // the top of the Conversation pane. `null` means the session has
+  // never invoked the TodoWrite tool; an empty array means the agent
+  // explicitly cleared its list. Full-replacement semantics: every
+  // `todo_write_update` event overwrites this field, no per-item
+  // merging (TodoWrite itself ships no ids and uses positional
+  // identity only).
+  todos: api.TodoItem[] | null;
 };
 
 export type ContextUsageState = {
@@ -143,7 +151,8 @@ export function emptyState(): SessionState {
     lastSeq: 0,
     completedMessageIds: new Set(),
     pendingApproval: null,
-    contextUsage: null
+    contextUsage: null,
+    todos: null
   };
 }
 
@@ -340,6 +349,16 @@ export function applyEvent(
         maxTokens: event.max_tokens,
         isAutoCompactEnabled: event.is_auto_compact_enabled
       };
+      return;
+    case 'todo_write_update':
+      // Full replacement — the runner's TodoWriteUpdate carries the
+      // whole list every time (matches TodoWrite's own semantics).
+      // No per-item merge, no diffing. Replay after reconnect fires
+      // the sequence of updates in order so the final state lands
+      // correctly even if intermediate snapshots are skipped; we
+      // don't dedupe because each fire is a fresh snapshot the view
+      // can render safely.
+      state.todos = event.todos;
       return;
     case 'runner_status':
       // Sent once right after replay on every (re)connect. If the

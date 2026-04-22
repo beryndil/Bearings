@@ -1,3 +1,4 @@
+import type { TodoItem } from './core';
 import { jsonFetch, voidFetch } from './core';
 
 export type Session = {
@@ -292,6 +293,23 @@ export function getSessionTokens(
   fetchImpl: typeof fetch = fetch
 ): Promise<TokenTotals> {
   return jsonFetch<TokenTotals>(fetchImpl, `/api/sessions/${sessionId}/tokens`);
+}
+
+/** Reply shape for `GET /sessions/{id}/todos`. `todos` is `null` when
+ * the session has never invoked TodoWrite; an empty array means the
+ * agent explicitly cleared its list. The LiveTodos widget uses the
+ * distinction to render "no active todo session" vs. "todo session
+ * active but currently empty." Live updates after first paint come
+ * via the `todo_write_update` WS event. */
+export type SessionTodos = {
+  todos: TodoItem[] | null;
+};
+
+export function getSessionTodos(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<SessionTodos> {
+  return jsonFetch<SessionTodos>(fetchImpl, `/api/sessions/${sessionId}/todos`);
 }
 
 /** Result shape shared by the reorg/move and reorg/split endpoints.

@@ -57,6 +57,7 @@ class ConversationStore {
     this.active()?.pendingApproval ?? null
   );
   contextUsage = $derived<ContextUsageState | null>(this.active()?.contextUsage ?? null);
+  todos = $derived<api.TodoItem[] | null>(this.active()?.todos ?? null);
 
   /** Highest `_seq` rendered for a session; passed to the server on
    * (re)connect as the replay cursor. */
@@ -78,10 +79,11 @@ class ConversationStore {
     const state = this.ensureState(sessionId);
     this.error = null;
     try {
-      const [session, page, toolCalls] = await Promise.all([
+      const [session, page, toolCalls, todos] = await Promise.all([
         api.getSession(sessionId),
         api.listMessagesPage(sessionId, { limit: PAGE_SIZE }),
-        api.listToolCalls(sessionId)
+        api.listToolCalls(sessionId),
+        api.getSessionTodos(sessionId)
       ]);
       // Don't wipe in-flight streaming state. We're refreshing the
       // completed-message window from the DB; the ring-buffer replay
@@ -93,6 +95,16 @@ class ConversationStore {
         ...state.toolCalls.filter((tc) => !toolCalls.some((row) => row.id === tc.id))
       ];
       state.completedMessageIds = new Set(page.messages.map((m) => m.id));
+      // Seed the LiveTodos widget from the server's derived snapshot.
+      // Live `todo_write_update` events overwrite this on the next
+      // TodoWrite call; until then, the first paint matches whatever
+      // the agent's most recent TodoWrite invocation landed. Don't
+      // clobber if a replayed WS event already populated todos
+      // (race between `load()`'s fetch and a ring-buffer replay) —
+      // the WS snapshot is at least as fresh as the REST snapshot.
+      if (state.todos === null) {
+        state.todos = todos.todos;
+      }
       this.totalCost = session.total_cost_usd;
       // Seed the context meter from the cached columns so a fresh
       // load / reconnect has a number to render before the next turn's

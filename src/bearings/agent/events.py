@@ -161,6 +161,45 @@ class ApprovalResolved(BaseModel):
     decision: Literal["allow", "deny"]
 
 
+class TodoItem(BaseModel):
+    """One entry in a TodoWrite payload. `content` is the noun-phrase
+    task description ("Write the tests"), `active_form` is the agent's
+    self-narrated progress form ("Writing the tests") which the SDK
+    emits alongside `content` and the widget can surface when the item
+    is `in_progress`. `status` is the three-valued enum observed from
+    every TodoWrite call in the historical `tool_calls` table.
+
+    Field aliased to `activeForm` to match the exact wire shape the
+    Claude Code SDK emits (camelCase), so a direct parse of the raw
+    tool input dict doesn't require per-field renames on the runner
+    side."""
+
+    content: str
+    active_form: str | None = Field(default=None, alias="activeForm")
+    status: Literal["pending", "in_progress", "completed"]
+
+    model_config = {"populate_by_name": True}
+
+
+class TodoWriteUpdate(BaseModel):
+    """Live snapshot of a session's TodoWrite list, emitted whenever
+    the agent calls the `TodoWrite` tool. Sidecar to the regular
+    `tool_call_start` — the runner still persists the tool call like
+    any other, *and* fires this event so the frontend store can update
+    the sticky widget without hand-parsing raw tool inputs.
+
+    Full-replacement semantics: each TodoWrite call carries the entire
+    list (that's how the underlying tool works — no deltas, no item
+    ids, positional identity only), so the reducer can simply replace
+    its `todos` field. The payload shape mirrors the SDK input dict:
+    `{"todos": [{"content":..., "activeForm":..., "status":...}]}`,
+    validated into `TodoItem` at the boundary."""
+
+    type: Literal["todo_write_update"] = "todo_write_update"
+    session_id: str
+    todos: list[TodoItem] = Field(default_factory=list)
+
+
 AgentEvent = (
     UserMessage
     | Token
@@ -175,4 +214,5 @@ AgentEvent = (
     | TurnReplayed
     | ApprovalRequest
     | ApprovalResolved
+    | TodoWriteUpdate
 )

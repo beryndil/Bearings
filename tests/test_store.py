@@ -12,6 +12,7 @@ from bearings.db.store import (
     create_session,
     delete_session,
     finish_tool_call,
+    get_latest_todowrite,
     get_session,
     get_session_token_totals,
     import_session,
@@ -514,6 +515,84 @@ async def test_append_tool_output_returns_false_when_missing(tmp_path: Path) -> 
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         assert await append_tool_output(conn, tool_call_id="nope", chunk="x") is False
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_todowrite_returns_none_when_no_calls(tmp_path: Path) -> None:
+    """A fresh session has never invoked TodoWrite — the helper must
+    return `None` (not an empty list), so the widget can distinguish
+    "no todo session yet" from "todo session active but currently
+    empty"."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        assert await get_latest_todowrite(conn, sess["id"]) is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_todowrite_returns_most_recent_payload(tmp_path: Path) -> None:
+    """Three TodoWrite calls; helper returns the list from the latest
+    one. Non-TodoWrite tool calls in between are ignored."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        await insert_tool_call_start(
+            conn,
+            session_id=sess["id"],
+            tool_call_id="tw-1",
+            name="TodoWrite",
+            input_json='{"todos":[{"content":"A","activeForm":"Aing","status":"pending"}]}',
+        )
+        await asyncio.sleep(0.002)
+        await insert_tool_call_start(
+            conn,
+            session_id=sess["id"],
+            tool_call_id="bash-1",
+            name="Bash",
+            input_json='{"command":"ls"}',
+        )
+        await asyncio.sleep(0.002)
+        await insert_tool_call_start(
+            conn,
+            session_id=sess["id"],
+            tool_call_id="tw-2",
+            name="TodoWrite",
+            input_json=(
+                '{"todos":['
+                '{"content":"A","activeForm":"Aing","status":"completed"},'
+                '{"content":"B","activeForm":"Bing","status":"in_progress"}'
+                "]}"
+            ),
+        )
+        todos = await get_latest_todowrite(conn, sess["id"])
+        assert todos is not None
+        assert [t["status"] for t in todos] == ["completed", "in_progress"]
+        assert todos[0]["content"] == "A"
+        assert todos[1]["activeForm"] == "Bing"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_get_latest_todowrite_returns_none_for_malformed_row(tmp_path: Path) -> None:
+    """Malformed JSON (or a missing `todos` key) degrades to None so a
+    single corrupt row can't break the widget's first paint. The
+    Inspector still has the raw row for debugging."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        await insert_tool_call_start(
+            conn,
+            session_id=sess["id"],
+            tool_call_id="tw-bad",
+            name="TodoWrite",
+            input_json="not valid json {",
+        )
+        assert await get_latest_todowrite(conn, sess["id"]) is None
     finally:
         await conn.close()
 
