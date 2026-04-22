@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-04-22
+
+Live-updating session sidebar (Phase 1). Activity happening in the
+background — sessions running without a WS subscription on the
+current tab, or sessions already active when the tab loaded — now
+surfaces in the sidebar within ~3 s without a page reload. Fixes the
+symptom where an actively-running session stayed stuck at its old
+list position until the user refreshed.
+
+### Added
+
+- `SessionStore.softRefresh()` — fetches `/api/sessions` with the
+  current filter and reconciles against the local list. Rows present
+  on the server replace the local copy unless the local `updated_at`
+  is strictly newer (protects optimistic `touchSession` / `bumpCost`
+  from a flicker while the server catches up). New rows are
+  inserted, rows the server no longer returns are dropped, and
+  `selectedId` clears if the selected session vanished. Final sort
+  mirrors the server's `updated_at DESC, id DESC`.
+
+### Changed
+
+- `startRunningPoll` now fires `listRunningSessions()` and
+  `softRefresh()` in parallel each 3 s. Running-badge updates keep
+  their existing cadence; the list reconciliation piggybacks on the
+  same timer so non-originating activity reaches every open tab
+  without a new WS channel. Phase 2 (server-side `/ws/sessions`
+  broadcast) is planned — see `TODO.md` — and will supersede the
+  poll once landed.
+- `add_session_cost` also bumps `sessions.updated_at`. The current
+  call path in `runner.py` pairs it with `mark_session_completed`
+  (which already bumps), so behavior is unchanged today — but any
+  future path that records cost without a MessageComplete now stays
+  sort-correct by default.
+
 ## [0.6.1] - 2026-04-22
 
 Fix in-flight turn loss across service restarts. When
