@@ -63,6 +63,17 @@ log = logging.getLogger(__name__)
 # assistant message is in the DB either way).
 RING_MAX = 5000
 
+# Coalescing window for `ToolOutputDelta` → DB writes. A chatty tool
+# (tree, grep, long build log) can emit hundreds of small deltas per
+# second; persisting each one ran a full UPDATE + commit on the
+# aiosqlite thread. Buffering per `tool_call_id` and flushing on either
+# threshold reduces write count by ~20–30× for bursty tools while
+# keeping mid-turn history endpoint reads within one flush window of
+# the live stream. WS fan-out is NOT coalesced — subscribers still see
+# every delta in real time; only the DB write is batched.
+TOOL_OUTPUT_FLUSH_INTERVAL_S = 0.075
+TOOL_OUTPUT_FLUSH_CHUNK_COUNT = 32
+
 
 # Sentinel queued into `_prompts` by `shutdown()` so the worker exits
 # its blocking `get()` and winds down cleanly.
@@ -71,6 +82,25 @@ class _Shutdown:
 
 
 _SHUTDOWN = _Shutdown()
+
+
+class _ToolOutputBuffer:
+    """Pending deltas for one `tool_call_id` waiting on a coalesced write.
+
+    `flush_task` is the asyncio timer that will fire at
+    `TOOL_OUTPUT_FLUSH_INTERVAL_S` after the first chunk landed. It's
+    `None` between flushes; a new timer is scheduled the next time a
+    chunk arrives into an empty buffer. `chunks` accumulates raw delta
+    strings — they're joined once at flush time so we only pay the
+    concat cost per flush, not per arrival.
+    """
+
+    __slots__ = ("chunks", "flush_task")
+
+    def __init__(self) -> None:
+        self.chunks: list[str] = []
+        self.flush_task: asyncio.Task[None] | None = None
+
 
 RunnerStatus = Literal["idle", "running"]
 
@@ -122,6 +152,13 @@ class SessionRunner:
         # `resolve_approval` from the WS handler and tells it to deny
         # everything on stop / shutdown.
         self._approval = ApprovalBroker(session_id, self._emit_event)
+        # Per-tool-call coalescing buffers for `ToolOutputDelta` →
+        # `append_tool_output` writes. Entries are created on first
+        # chunk arrival and removed on flush or on `ToolCallEnd`
+        # (`finish_tool_call` writes the canonical output so any
+        # dropped buffered chunks are irrelevant by then). Managed
+        # only by the worker task — no locking needed.
+        self._tool_buffers: dict[str, _ToolOutputBuffer] = {}
         # Monotonic timestamp of the moment the runner most recently
         # became "quiet" — idle AND zero subscribers. The registry's
         # reaper uses `now - _quiet_since` vs. the configured TTL to
@@ -357,91 +394,107 @@ class SessionRunner:
         persisted = False
         stopped = False
 
-        async for event in self.agent.stream(prompt):
-            await self._emit_event(event)
-            if isinstance(event, MessageStart):
-                current_message_id = event.message_id
-            elif isinstance(event, Token):
-                buf.append(event.text)
-            elif isinstance(event, Thinking):
-                thinking_buf.append(event.text)
-            elif isinstance(event, ToolCallStart):
-                await store.insert_tool_call_start(
-                    self.db,
-                    session_id=self.session_id,
-                    tool_call_id=event.tool_call_id,
-                    name=event.name,
-                    input_json=json.dumps(event.input),
-                )
-                tool_call_ids.append(event.tool_call_id)
-                metrics.tool_calls_started.inc()
-            elif isinstance(event, ToolOutputDelta):
-                # Persist each chunk as it arrives so the history
-                # endpoint + any reconnecting WebSocket see the
-                # cumulative output. `finish_tool_call` later
-                # overwrites with the canonical final string, so a
-                # missed delta doesn't leave a permanent gap.
-                await store.append_tool_output(
-                    self.db,
-                    tool_call_id=event.tool_call_id,
-                    chunk=event.delta,
-                )
-            elif isinstance(event, ToolCallEnd):
-                await store.finish_tool_call(
-                    self.db,
-                    tool_call_id=event.tool_call_id,
-                    output=event.output,
-                    error=event.error,
-                )
-                metrics.tool_calls_finished.labels(ok=str(event.ok).lower()).inc()
-            elif isinstance(event, ContextUsage):
-                # Persist the latest snapshot on the session row so a
-                # fresh page load / reconnect has a number to paint
-                # before the next turn's live event arrives. Failure
-                # here must not drop the event for live subscribers —
-                # the fan-out to `_emit_event` already happened at the
-                # top of the loop. Swallow DB errors quietly.
-                try:
-                    await store.set_session_context_usage(
+        try:
+            async for event in self.agent.stream(prompt):
+                await self._emit_event(event)
+                if isinstance(event, MessageStart):
+                    current_message_id = event.message_id
+                elif isinstance(event, Token):
+                    buf.append(event.text)
+                elif isinstance(event, Thinking):
+                    thinking_buf.append(event.text)
+                elif isinstance(event, ToolCallStart):
+                    await store.insert_tool_call_start(
                         self.db,
-                        self.session_id,
-                        pct=event.percentage,
-                        tokens=event.total_tokens,
-                        max_tokens=event.max_tokens,
+                        session_id=self.session_id,
+                        tool_call_id=event.tool_call_id,
+                        name=event.name,
+                        input_json=json.dumps(event.input),
                     )
-                except Exception:
-                    log.exception(
-                        "runner %s: failed to persist context usage",
-                        self.session_id,
+                    tool_call_ids.append(event.tool_call_id)
+                    metrics.tool_calls_started.inc()
+                elif isinstance(event, ToolOutputDelta):
+                    # Buffer the chunk instead of writing immediately.
+                    # The coalescer flushes on count/time thresholds so
+                    # a chatty tool doesn't cost one UPDATE + commit
+                    # per delta. History endpoint + reconnecting
+                    # WebSocket see cumulative output within one flush
+                    # window of the live stream. `finish_tool_call`
+                    # later overwrites with the canonical final string,
+                    # so a dropped flush can't leave a permanent gap.
+                    await self._buffer_tool_output(event.tool_call_id, event.delta)
+                elif isinstance(event, ToolCallEnd):
+                    # Drop any buffered deltas before writing the
+                    # canonical output — `finish_tool_call` fully
+                    # overwrites `output` so the buffered chunks
+                    # would be clobbered anyway. Doing it in this
+                    # order also prevents a late timer from racing
+                    # past the canonical write.
+                    self._drop_tool_buffer(event.tool_call_id)
+                    await store.finish_tool_call(
+                        self.db,
+                        tool_call_id=event.tool_call_id,
+                        output=event.output,
+                        error=event.error,
                     )
-            elif isinstance(event, MessageComplete):
-                await _persist_assistant_turn(
-                    self.db,
-                    session_id=self.session_id,
-                    message_id=event.message_id,
-                    content="".join(buf),
-                    thinking="".join(thinking_buf) or None,
-                    tool_call_ids=tool_call_ids,
-                    cost_usd=event.cost_usd,
-                    input_tokens=event.input_tokens,
-                    output_tokens=event.output_tokens,
-                    cache_read_tokens=event.cache_read_tokens,
-                    cache_creation_tokens=event.cache_creation_tokens,
-                )
-                if self.agent.sdk_session_id is not None:
-                    await store.set_sdk_session_id(
-                        self.db, self.session_id, self.agent.sdk_session_id
+                    metrics.tool_calls_finished.labels(ok=str(event.ok).lower()).inc()
+                elif isinstance(event, ContextUsage):
+                    # Persist the latest snapshot on the session row
+                    # so a fresh page load / reconnect has a number
+                    # to paint before the next turn's live event
+                    # arrives. Failure here must not drop the event
+                    # for live subscribers — the fan-out to
+                    # `_emit_event` already happened at the top of
+                    # the loop. Swallow DB errors quietly.
+                    try:
+                        await store.set_session_context_usage(
+                            self.db,
+                            self.session_id,
+                            pct=event.percentage,
+                            tokens=event.total_tokens,
+                            max_tokens=event.max_tokens,
+                        )
+                    except Exception:
+                        log.exception(
+                            "runner %s: failed to persist context usage",
+                            self.session_id,
+                        )
+                elif isinstance(event, MessageComplete):
+                    await _persist_assistant_turn(
+                        self.db,
+                        session_id=self.session_id,
+                        message_id=event.message_id,
+                        content="".join(buf),
+                        thinking="".join(thinking_buf) or None,
+                        tool_call_ids=tool_call_ids,
+                        cost_usd=event.cost_usd,
+                        input_tokens=event.input_tokens,
+                        output_tokens=event.output_tokens,
+                        cache_read_tokens=event.cache_read_tokens,
+                        cache_creation_tokens=event.cache_creation_tokens,
                     )
-                persisted = True
-                break
+                    if self.agent.sdk_session_id is not None:
+                        await store.set_sdk_session_id(
+                            self.db, self.session_id, self.agent.sdk_session_id
+                        )
+                    persisted = True
+                    break
 
-            if self._stop_requested:
-                stopped = True
-                try:
-                    await self.agent.interrupt()
-                except Exception:
-                    pass
-                break
+                if self._stop_requested:
+                    stopped = True
+                    try:
+                        await self.agent.interrupt()
+                    except Exception:
+                        pass
+                    break
+        finally:
+            # Flush any buffered tool-output deltas on every exit
+            # path (normal completion, stop-requested break, or an
+            # exception bubbling out of the stream). If a `ToolCallEnd`
+            # arrives later — e.g. after a reconnecting turn — the
+            # canonical output still overwrites; this just keeps
+            # mid-stream progress visible for the interrupted case.
+            await self._flush_all_tool_buffers()
 
         if stopped and not persisted:
             msg_id = current_message_id or uuid4().hex
@@ -458,6 +511,95 @@ class SessionRunner:
                 tool_call_ids=tool_call_ids,
                 cost_usd=None,
             )
+
+    # ---- tool-output coalescing -----------------------------------
+
+    async def _buffer_tool_output(self, tool_call_id: str, chunk: str) -> None:
+        """Append a `ToolOutputDelta` chunk to its per-tool-call buffer.
+
+        Triggers an immediate synchronous flush if the chunk count hits
+        `TOOL_OUTPUT_FLUSH_CHUNK_COUNT`; otherwise arms a timer so the
+        buffer drains within `TOOL_OUTPUT_FLUSH_INTERVAL_S` of the
+        first buffered chunk. Called only from the worker task."""
+        buf = self._tool_buffers.get(tool_call_id)
+        if buf is None:
+            buf = _ToolOutputBuffer()
+            self._tool_buffers[tool_call_id] = buf
+        buf.chunks.append(chunk)
+        if len(buf.chunks) >= TOOL_OUTPUT_FLUSH_CHUNK_COUNT:
+            # Count-triggered flush: cancel the pending timer so it
+            # doesn't fire on an already-drained buffer, then write now.
+            if buf.flush_task is not None:
+                buf.flush_task.cancel()
+                buf.flush_task = None
+            await self._flush_tool_buffer(tool_call_id)
+            return
+        if buf.flush_task is None:
+            buf.flush_task = asyncio.create_task(
+                self._delayed_flush(tool_call_id),
+                name=f"tool-flush:{self.session_id}:{tool_call_id}",
+            )
+
+    async def _delayed_flush(self, tool_call_id: str) -> None:
+        """Timer coroutine: wait the coalescing window, then flush.
+
+        No-op if the buffer was already drained (count trigger, turn
+        teardown, or `ToolCallEnd`) before the timer fired. Swallows
+        `CancelledError` from the synchronous-flush path."""
+        try:
+            await asyncio.sleep(TOOL_OUTPUT_FLUSH_INTERVAL_S)
+        except asyncio.CancelledError:
+            return
+        buf = self._tool_buffers.get(tool_call_id)
+        if buf is not None:
+            # Clear the handle before flushing so a chunk that arrives
+            # mid-flush is free to arm a fresh timer.
+            buf.flush_task = None
+            await self._flush_tool_buffer(tool_call_id)
+
+    async def _flush_tool_buffer(self, tool_call_id: str) -> None:
+        """Pop the buffer for `tool_call_id` and write its joined
+        chunks in a single `append_tool_output` call.
+
+        No-op if no buffer exists or it's empty. Safe to call any
+        number of times; each call is a single UPDATE + commit."""
+        buf = self._tool_buffers.pop(tool_call_id, None)
+        if buf is None or not buf.chunks:
+            return
+        if buf.flush_task is not None:
+            # Defensive: the caller is expected to clear/cancel, but
+            # covering both paths keeps the contract simple.
+            buf.flush_task.cancel()
+            buf.flush_task = None
+        payload = "".join(buf.chunks)
+        try:
+            await store.append_tool_output(self.db, tool_call_id=tool_call_id, chunk=payload)
+        except Exception:
+            # Mirror the pre-coalescing behavior: a DB hiccup on a
+            # streamed delta shouldn't kill the turn. `finish_tool_call`
+            # will still land the canonical output on `ToolCallEnd`.
+            log.exception(
+                "runner %s: failed to flush tool output for %s",
+                self.session_id,
+                tool_call_id,
+            )
+
+    async def _flush_all_tool_buffers(self) -> None:
+        """Drain every buffered tool call. Called on turn teardown
+        (normal completion, stop, exception) and runner shutdown so
+        mid-stream chunks don't get stranded if no `ToolCallEnd`
+        arrives (e.g. interrupted turn)."""
+        for tool_call_id in list(self._tool_buffers):
+            await self._flush_tool_buffer(tool_call_id)
+
+    def _drop_tool_buffer(self, tool_call_id: str) -> None:
+        """Discard any buffered deltas for `tool_call_id` without
+        writing them. Used by the `ToolCallEnd` arm: `finish_tool_call`
+        overwrites `output` with the canonical final string, so any
+        buffered chunks would be immediately clobbered anyway."""
+        buf = self._tool_buffers.pop(tool_call_id, None)
+        if buf is not None and buf.flush_task is not None:
+            buf.flush_task.cancel()
 
     async def _emit_event(self, event: AgentEvent) -> None:
         """Fan an event out to every subscriber and append to the ring
