@@ -885,3 +885,33 @@ Remaining:
   typecheck are green; the in-browser drop test happens after the
   next server restart (restart would kick the live Bearings session
   — defer until Dave picks his moment).
+
+## Severity backfill — remaining Low-defaulted sessions (2026-04-22)
+
+Context: the first severity-classification pass on 2026-04-22 15:14
+reclassified 76 sessions by examining content. Since then ~106 new
+sessions landed; 33 of them currently still carry the default `Low`
+severity tag auto-attached by `ensure_default_severity` on create.
+Most look like paired-chat / checklist-item sessions with bracketed
+titles (`[I5]`, `[DN10]`, `[S10]`, etc.) where the severity
+reflects the item's real priority and Dave is the only judge of
+which ones are actually Low vs higher.
+
+- [ ] Review the 33 post-first-pass Low-tagged sessions and decide
+  which deserve escalation. Query to enumerate:
+  ```sql
+  SELECT s.id, s.title, s.created_at FROM sessions s
+  JOIN session_tags st ON st.session_id = s.id
+  JOIN tags t ON t.id = st.tag_id
+  WHERE t.name = 'Low' AND t.tag_group = 'severity'
+    AND s.created_at > '2026-04-22 15:14'
+  ORDER BY s.created_at;
+  ```
+  Current distribution (2026-04-22 evening): Blocker=17,
+  Critical=36, Medium=64, Low=40, QoL=25 (total 182). The sidebar
+  severity filter + color picker shipped in v0.7.2/v0.7.3 make
+  this a click-through pass rather than a SQL exercise. No
+  automated classification attempted: title signals (e.g.
+  "security audit: cleanup (low priority)") are usually
+  trustworthy but project-scoped bracketed items need Dave's
+  judgment on their actual priority.
