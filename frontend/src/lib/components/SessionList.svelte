@@ -159,6 +159,10 @@
 
   async function onSelect(id: string) {
     sessions.select(id);
+    // Clear the "finished but unviewed" amber dot for this session.
+    // Fire-and-forget: the optimistic path in `markViewed` updates the
+    // local row synchronously so the dot goes away immediately.
+    void sessions.markViewed(id);
     // Checklist sessions don't run an agent loop — attaching the WS
     // would trip the server's kind-guard (close 4400). Close any
     // existing agent connection so the UI reflects the switch.
@@ -188,6 +192,17 @@
    * which sessions are still working after she's walked away. */
   function isRunning(id: string): boolean {
     return sessions.running.has(id);
+  }
+
+  /** True when the session has produced output since the user last
+   * looked at it — drives the amber "finished but unviewed" dot.
+   * Suppressed while the session is actively running so the green
+   * ping owns the slot during live work. */
+  function isUnviewed(session: api.Session): boolean {
+    if (isRunning(session.id)) return false;
+    if (!session.last_completed_at) return false;
+    if (!session.last_viewed_at) return true;
+    return session.last_completed_at > session.last_viewed_at;
   }
 
   function formatTimestamp(ts: string): string {
@@ -332,6 +347,24 @@
                 ></span>
                 <span
                   class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"
+                ></span>
+              </span>
+            {:else if isUnviewed(session)}
+              <!-- Finished-but-unviewed indicator: a solid amber dot,
+                   no animation. Means the session produced output
+                   since the user last opened it. Suppressed while
+                   `isRunning` is true so the green ping above owns
+                   the slot during live work. Cleared when the user
+                   selects the session or the tab regains focus
+                   while it's already selected. -->
+              <span
+                class="relative inline-flex h-2 w-2 shrink-0"
+                aria-label="Session finished — unread"
+                title="Session finished — unread since last view"
+                data-testid="unviewed-dot"
+              >
+                <span
+                  class="relative inline-flex h-2 w-2 rounded-full bg-amber-400"
                 ></span>
               </span>
             {/if}

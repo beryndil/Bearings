@@ -170,6 +170,19 @@ async def reopen_session(session_id: str, request: Request) -> SessionOut:
     return SessionOut(**row)
 
 
+@router.post("/{session_id}/viewed", response_model=SessionOut)
+async def mark_session_viewed(session_id: str, request: Request) -> SessionOut:
+    """Stamp `last_viewed_at` so the sidebar clears the "finished but
+    unviewed" amber dot. Called by the frontend when the user selects
+    the session or the browser tab regains focus while the session is
+    selected. Does NOT bump `updated_at` — viewing doesn't change sort
+    position. Idempotent: a second call just refreshes the timestamp."""
+    row = await store.mark_session_viewed(request.app.state.db, session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return SessionOut(**row)
+
+
 @router.delete("/{session_id}")
 async def delete_session(session_id: str, request: Request) -> dict[str, bool]:
     ok = await store.delete_session(request.app.state.db, session_id)

@@ -14,7 +14,7 @@ SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
     "max_budget_usd, total_cost_usd, session_instructions, sdk_session_id, "
     "permission_mode, last_context_pct, last_context_tokens, last_context_max, "
-    "closed_at, kind, checklist_item_id"
+    "closed_at, kind, checklist_item_id, last_completed_at, last_viewed_at"
 )
 
 # Valid values for sessions.kind. The column carries a CHECK constraint
@@ -450,3 +450,50 @@ async def list_all_sessions(
     )
     async with conn.execute(sql, params) as cursor:
         return [dict(row) async for row in cursor]
+
+
+async def touch_session(conn: aiosqlite.Connection, session_id: str) -> None:
+    """Bump only `updated_at` so the session floats to the top of the
+    sidebar sort. Called when a session starts working — runner goes
+    idle → running — so the "active session" signal reaches every open
+    client on the next poll, not just the one that submitted the
+    prompt. `insert_message` already bumps on fresh prompts; this
+    helper also covers the runner-boot replay path where the user row
+    is already in the DB and wouldn't otherwise re-sort.
+
+    No-op on unknown ids (UPDATE matches zero rows)."""
+    await conn.execute(
+        "UPDATE sessions SET updated_at = ? WHERE id = ?",
+        (_now(), session_id),
+    )
+    await conn.commit()
+
+
+async def mark_session_completed(conn: aiosqlite.Connection, session_id: str) -> None:
+    """Stamp `last_completed_at` (and `updated_at`) at the moment a
+    MessageComplete lands. Drives the sidebar's "finished but unviewed"
+    indicator — compared at render time against `last_viewed_at` to
+    decide whether to paint the amber dot.
+
+    No-op on unknown ids."""
+    now = _now()
+    await conn.execute(
+        "UPDATE sessions SET last_completed_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, session_id),
+    )
+    await conn.commit()
+
+
+async def mark_session_viewed(conn: aiosqlite.Connection, session_id: str) -> dict[str, Any] | None:
+    """Stamp `last_viewed_at` so the sidebar can clear the "finished
+    but unviewed" indicator. Does NOT bump `updated_at` — viewing a
+    session shouldn't change its sort position. Returns the refreshed
+    row, or None if the id is unknown."""
+    cursor = await conn.execute(
+        "UPDATE sessions SET last_viewed_at = ? WHERE id = ?",
+        (_now(), session_id),
+    )
+    await conn.commit()
+    if cursor.rowcount == 0:
+        return None
+    return await get_session(conn, session_id)

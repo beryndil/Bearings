@@ -35,7 +35,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- items, and the current item's state. SET NULL cascade so a
     -- deleted item degrades the chat to a plain session with a
     -- "(checklist deleted)" breadcrumb rather than destroying history.
-    checklist_item_id INTEGER REFERENCES checklist_items(id) ON DELETE SET NULL
+    checklist_item_id INTEGER REFERENCES checklist_items(id) ON DELETE SET NULL,
+    -- View-tracking pair (migration 0020). `last_completed_at` stamps
+    -- every runner MessageComplete so the sidebar can tell whether a
+    -- session has produced output since the user last looked. NULL on
+    -- sessions that have never finished an assistant turn.
+    last_completed_at TEXT,
+    -- `last_viewed_at` stamps every time the user focuses / selects
+    -- the session. NULL means "never viewed." Unviewed indicator is
+    -- computed at render time as
+    --   last_completed_at IS NOT NULL AND
+    --   (last_viewed_at IS NULL OR last_completed_at > last_viewed_at).
+    last_viewed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (

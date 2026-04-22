@@ -43,6 +43,16 @@ export type Session = {
    * every turn. Conversation.svelte renders a breadcrumb when this
    * is set. */
   checklist_item_id: number | null;
+  /** View-tracking pair (migration 0020). `last_completed_at` is the
+   * ISO timestamp of the most recent MessageComplete persisted for
+   * this session; null until the first assistant turn finishes. */
+  last_completed_at: string | null;
+  /** ISO timestamp of the last time the user focused / selected this
+   * session (via POST /{id}/viewed). Null means "never viewed." The
+   * sidebar paints an amber "finished but unviewed" dot when
+   * `last_completed_at` is non-null and either this is null or
+   * precedes it. */
+  last_viewed_at: string | null;
 };
 
 export type SessionCreate = {
@@ -193,6 +203,20 @@ export function reopenSession(
   fetchImpl: typeof fetch = fetch
 ): Promise<Session> {
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}/reopen`, {
+    method: 'POST'
+  });
+}
+
+/** Stamp `last_viewed_at` on the session so the sidebar clears the
+ * "finished but unviewed" amber dot. Fired on session select and on
+ * `visibilitychange` → visible while a session is selected. Does not
+ * change sort position; the server returns the refreshed row for the
+ * caller to merge into local state. Idempotent. */
+export function markSessionViewed(
+  id: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<Session> {
+  return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}/viewed`, {
     method: 'POST'
   });
 }

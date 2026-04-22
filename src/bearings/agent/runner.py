@@ -433,6 +433,19 @@ class SessionRunner:
             # status mutation site.
             self._quiet_since = None
             self._stop_requested = False
+            # Bump updated_at the moment the runner starts work so the
+            # sidebar floats this session to the top immediately — not
+            # after MessageComplete lands. Covers the replay-path too:
+            # `_Replay` skips `insert_message`, so without this touch
+            # the sort wouldn't move on a resumed orphan prompt. DB
+            # hiccup here must not abort the turn — swallow.
+            try:
+                await store.touch_session(self.db, self.session_id)
+            except Exception:
+                log.exception(
+                    "runner %s: touch_session on turn-start failed",
+                    self.session_id,
+                )
             try:
                 await self._execute_turn(prompt, persist_user=persist_user)
             except Exception as exc:
@@ -736,3 +749,8 @@ async def _persist_assistant_turn(
     )
     if cost_usd is not None:
         await store.add_session_cost(conn, session_id, cost_usd)
+    # Stamp last_completed_at for the sidebar's "finished but unviewed"
+    # amber dot. Runs on every assistant turn persist including the
+    # stop-requested synthetic, so an interrupted turn still counts as
+    # completed output for the viewer to read.
+    await store.mark_session_completed(conn, session_id)

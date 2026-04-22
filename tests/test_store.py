@@ -20,10 +20,13 @@ from bearings.db.store import (
     list_messages,
     list_sessions,
     list_tool_calls,
+    mark_session_completed,
+    mark_session_viewed,
     reopen_if_closed,
     reopen_session,
     set_sdk_session_id,
     set_session_permission_mode,
+    touch_session,
 )
 
 
@@ -726,5 +729,87 @@ async def test_get_session_token_totals_scoped_per_session(tmp_path: Path) -> No
         )
         assert (await get_session_token_totals(conn, a["id"]))["input_tokens"] == 5
         assert (await get_session_token_totals(conn, b["id"]))["input_tokens"] == 99
+    finally:
+        await conn.close()
+
+
+# ---------------------------------------------------------------------------
+# View tracking (migration 0020)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_touch_session_promotes_without_message(tmp_path: Path) -> None:
+    """`touch_session` bumps `updated_at` so a session with no new
+    messages still sorts to the top — covers the runner-boot replay
+    path where the user row already exists but the runner is about to
+    start the orphan's turn."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        older = await create_session(conn, working_dir="/a", model="m", title="older")
+        await asyncio.sleep(0.002)
+        newer = await create_session(conn, working_dir="/b", model="m", title="newer")
+        # newer sorts first right after creation.
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [newer["id"], older["id"]]
+        await asyncio.sleep(0.002)
+        await touch_session(conn, older["id"])
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [older["id"], newer["id"]]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_mark_session_completed_sets_column_and_bumps_updated(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/a", model="m")
+        before = await get_session(conn, sess["id"])
+        assert before is not None
+        assert before["last_completed_at"] is None
+        await asyncio.sleep(0.002)
+        await mark_session_completed(conn, sess["id"])
+        after = await get_session(conn, sess["id"])
+        assert after is not None
+        assert after["last_completed_at"] is not None
+        # Shared timestamp with the updated_at bump so sidebar sort
+        # and "finished" indicator agree.
+        assert after["last_completed_at"] == after["updated_at"]
+        assert after["updated_at"] > before["updated_at"]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_mark_session_viewed_stamps_without_bumping_sort(tmp_path: Path) -> None:
+    """Viewing a session must NOT change its sort position — otherwise
+    opening an old session would incorrectly bubble it above sessions
+    with actual new activity."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        older = await create_session(conn, working_dir="/a", model="m", title="older")
+        await asyncio.sleep(0.002)
+        newer = await create_session(conn, working_dir="/b", model="m", title="newer")
+        # Preserve the snapshot so we can compare updated_at.
+        older_before = await get_session(conn, older["id"])
+        assert older_before is not None
+        await asyncio.sleep(0.002)
+        viewed = await mark_session_viewed(conn, older["id"])
+        assert viewed is not None
+        assert viewed["last_viewed_at"] is not None
+        # updated_at unchanged: viewing doesn't re-sort.
+        assert viewed["updated_at"] == older_before["updated_at"]
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [newer["id"], older["id"]]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_mark_session_viewed_returns_none_for_unknown(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        assert await mark_session_viewed(conn, "deadbeef" * 4) is None
     finally:
         await conn.close()

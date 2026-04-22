@@ -71,6 +71,8 @@ function sess(overrides: Partial<Session> = {}): Session {
     closed_at: null,
     kind: 'chat',
     checklist_item_id: null,
+    last_completed_at: null,
+    last_viewed_at: null,
     ...overrides
   };
 }

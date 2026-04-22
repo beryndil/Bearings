@@ -46,6 +46,23 @@
     if ((auth.status === 'open' || auth.status === 'ok') && !booted) boot();
   });
 
+  // Tab regained focus while a session is selected → stamp
+  // `last_viewed_at` so the amber "finished but unviewed" dot clears
+  // for the session the user just came back to. Gated on
+  // `document.visibilityState` so a re-fire while the tab is still
+  // hidden (some browsers emit a second event on certain transitions)
+  // doesn't mark-viewed in the background.
+  $effect(() => {
+    function onVisibility() {
+      if (document.visibilityState !== 'visible') return;
+      const id = sessions.selectedId;
+      if (!id) return;
+      void sessions.markViewed(id);
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  });
+
   // `?` toggles the cheat-sheet, but only when focus isn't in a form
   // field (so typing a literal "?" in the prompt still works). Esc
   // closes whether or not focus is in a field.

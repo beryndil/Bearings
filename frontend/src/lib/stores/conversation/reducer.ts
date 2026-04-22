@@ -160,6 +160,10 @@ export type ReducerCtx = {
   /** A message was persisted (user push or message_complete): bump the
    * sidebar row's msg-count badge. */
   addMessageCount: (sessionId: string) => void;
+  /** Re-sort the sidebar so this session floats to the top. Fired on
+   * `message_start` so "working" sessions rise immediately rather than
+   * waiting for the response to complete. */
+  touchSession: (sessionId: string) => void;
   /** Surface an error to the user. */
   setError: (msg: string) => void;
   /** `runner_status` said the server is idle but we had streaming
@@ -187,6 +191,11 @@ export function applyEvent(
       if (state.completedMessageIds.has(event.message_id)) return;
       state.streamingMessageId = event.message_id;
       state.streamingActive = true;
+      // Agent started work — re-sort the session to the top so "where
+      // is it working right now?" is always the topmost row. Runs
+      // even for a replay-from-buffer start (no completion recorded
+      // yet) because that case means "work the user hasn't seen yet."
+      ctx.touchSession(event.session_id);
       return;
     case 'token':
       // Replay guard: if the start frame's message_id is already

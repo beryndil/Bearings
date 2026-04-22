@@ -563,3 +563,45 @@ def test_close_does_not_drop_live_runner(client: TestClient) -> None:
     resp = client.post(f"/api/sessions/{created['id']}/close")
     assert resp.status_code == 200
     assert tracker.shutdown_calls == 0
+
+
+# v0.7.x — view-tracking route (migration 0020).
+
+
+def test_post_viewed_stamps_last_viewed_at(client: TestClient) -> None:
+    created = _create(client, title="mark me viewed")
+    assert created["last_viewed_at"] is None
+
+    resp = client.post(f"/api/sessions/{created['id']}/viewed")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == created["id"]
+    assert body["last_viewed_at"] is not None
+
+
+def test_post_viewed_is_idempotent(client: TestClient) -> None:
+    """Second call just refreshes the timestamp — the UI can fire it
+    on every tab-focus without tracking prior state."""
+    created = _create(client, title="double-viewed")
+    first = client.post(f"/api/sessions/{created['id']}/viewed").json()
+    second = client.post(f"/api/sessions/{created['id']}/viewed").json()
+    assert first["last_viewed_at"] is not None
+    assert second["last_viewed_at"] >= first["last_viewed_at"]
+
+
+def test_post_viewed_does_not_change_sort(client: TestClient) -> None:
+    """Viewing must not bump `updated_at`: opening an idle session
+    shouldn't shove it above sessions with actual new activity."""
+    older = _create(client, title="older")
+    newer = _create(client, title="newer")
+    before = client.get("/api/sessions").json()
+    assert [s["id"] for s in before] == [newer["id"], older["id"]]
+
+    client.post(f"/api/sessions/{older['id']}/viewed")
+    after = client.get("/api/sessions").json()
+    assert [s["id"] for s in after] == [newer["id"], older["id"]]
+
+
+def test_post_viewed_missing_session_returns_404(client: TestClient) -> None:
+    resp = client.post("/api/sessions/" + "0" * 32 + "/viewed")
+    assert resp.status_code == 404

@@ -176,6 +176,11 @@ class ConversationStore {
       }
     ];
     sessions.bumpMessageCount(sessionId, 1);
+    // A fresh user entry is new activity — re-sort to top immediately
+    // rather than waiting for MessageStart / MessageComplete. Backend
+    // bumps the same column via insert_message; this just beats the
+    // next running-poll to the UI.
+    sessions.touchSession(sessionId);
     state.streamingText = '';
     state.streamingThinking = '';
     state.streamingActive = true;
@@ -193,6 +198,7 @@ class ConversationStore {
         sessions.bumpCost(sessionId, cost);
       },
       addMessageCount: (sessionId) => sessions.bumpMessageCount(sessionId, 1),
+      touchSession: (sessionId) => sessions.touchSession(sessionId),
       setError: (msg) => {
         this.error = msg;
       },

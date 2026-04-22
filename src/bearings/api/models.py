@@ -78,6 +78,16 @@ class SessionOut(BaseModel):
     # deleted item degrades the chat to a plain session rather than
     # destroying history.
     checklist_item_id: int | None = None
+    # View tracking (migration 0020). `last_completed_at` is the ISO
+    # timestamp of the most recent MessageComplete persisted for this
+    # session; NULL until the first assistant turn finishes.
+    last_completed_at: str | None = None
+    # ISO timestamp of the last time the user focused / selected this
+    # session (via POST /{id}/viewed). NULL means "never viewed."
+    # Sidebar renders the amber "finished but unviewed" dot when
+    # last_completed_at is non-null and either last_viewed_at is null
+    # or precedes it.
+    last_viewed_at: str | None = None
 
 
 class MessageOut(BaseModel):

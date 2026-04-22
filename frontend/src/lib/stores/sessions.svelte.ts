@@ -1,4 +1,5 @@
 import * as api from '$lib/api';
+import { tags } from '$lib/stores/tags.svelte';
 
 const STORAGE_KEY = 'bearings:selectedSessionId';
 
@@ -108,12 +109,17 @@ class SessionStore {
   }
 
   /** Close a session — patches the in-place row so the sidebar
-   * re-renders the open/closed split without a full refresh. */
+   * re-renders the open/closed split without a full refresh. Refreshes
+   * the tags store so each tag's `open_session_count` reflects the new
+   * lifecycle state (the sidebar renders it in green next to the total).
+   * Close can cascade on the backend (paired checklist/chat), so
+   * refetching is simpler than tracking which tags to decrement. */
   async close(id: string): Promise<api.Session | null> {
     this.error = null;
     try {
       const closed = await api.closeSession(id);
       this.list = this.list.map((s) => (s.id === id ? closed : s));
+      void tags.refresh();
       return closed;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -127,6 +133,7 @@ class SessionStore {
     try {
       const reopened = await api.reopenSession(id);
       this.list = this.list.map((s) => (s.id === id ? reopened : s));
+      void tags.refresh();
       return reopened;
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
@@ -134,24 +141,66 @@ class SessionStore {
     }
   }
 
-  /** Called by the conversation store when a MessageComplete event
-   * carries a cost delta, so the sidebar row reflects the new total
-   * without waiting for a full `refresh()`. Also mirrors the server's
-   * updated_at touch + re-sort so the active session floats to the
-   * top of the list. No-op if the session isn't in the list (e.g.
-   * it was deleted mid-stream). */
-  bumpCost(id: string, deltaUsd: number): void {
+  /** Bump the session's client-side `updated_at` and re-sort it to
+   * the top of the list. Called from:
+   *   - `pushUserMessage` — user typed a prompt, sort should update
+   *     immediately (the backend also bumps via `insert_message`, but
+   *     this beats the next poll tick to the UI).
+   *   - `MessageStart` arm in the reducer — agent began processing.
+   *   - `bumpCost` on `MessageComplete` — kept as a safeguard so a
+   *     session that skipped an earlier bump still ends at the top.
+   *
+   * No-op if the session isn't in the list (e.g. deleted mid-stream). */
+  touchSession(id: string): void {
     const now = new Date().toISOString();
     const hit = this.list.find((s) => s.id === id);
     if (!hit) return;
-    const updated: api.Session = {
-      ...hit,
-      updated_at: now,
-      total_cost_usd:
-        deltaUsd > 0 ? hit.total_cost_usd + deltaUsd : hit.total_cost_usd
-    };
+    if (hit.updated_at === now && this.list[0]?.id === id) return;
+    const updated: api.Session = { ...hit, updated_at: now };
     const rest = this.list.filter((s) => s.id !== id);
     this.list = [updated, ...rest];
+  }
+
+  /** Called by the conversation store when a MessageComplete event
+   * carries a cost delta, so the sidebar row reflects the new total
+   * without waiting for a full `refresh()`. Re-sorts to top via
+   * `touchSession` and stamps `last_completed_at` locally so the
+   * amber "finished but unviewed" dot can light up before the next
+   * poll pulls the canonical column. No-op if the session is gone. */
+  bumpCost(id: string, deltaUsd: number): void {
+    const hit = this.list.find((s) => s.id === id);
+    if (!hit) return;
+    const now = new Date().toISOString();
+    const rest = this.list.filter((s) => s.id !== id);
+    this.list = [
+      {
+        ...hit,
+        updated_at: now,
+        last_completed_at: now,
+        total_cost_usd:
+          deltaUsd > 0 ? hit.total_cost_usd + deltaUsd : hit.total_cost_usd
+      },
+      ...rest
+    ];
+  }
+
+  /** Stamp `last_viewed_at` so the "finished but unviewed" amber dot
+   * clears for this session. Optimistic: updates the local row first
+   * for instant UI feedback, then fires the POST. A transport failure
+   * is swallowed — the dot clearing is cosmetic, and the next
+   * refresh will reconcile. */
+  async markViewed(id: string): Promise<void> {
+    const now = new Date().toISOString();
+    this.list = this.list.map((s) =>
+      s.id === id ? { ...s, last_viewed_at: now } : s
+    );
+    try {
+      const updated = await api.markSessionViewed(id);
+      this.list = this.list.map((s) => (s.id === id ? updated : s));
+    } catch {
+      // Network blink or the session was deleted between select and
+      // POST — leave the optimistic stamp in place.
+    }
   }
 
   /** Bumps the sidebar's cached message_count. Called on user-push
