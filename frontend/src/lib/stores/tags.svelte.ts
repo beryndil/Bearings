@@ -5,6 +5,14 @@ import * as api from '$lib/api';
  * Daisy; the value lives in the browser and isn't synced to the DB. */
 const COLLAPSED_KEY = 'bearings.tagFilterPanel.collapsed';
 
+/** Sentinel id for the virtual "No severity" entry in the severity
+ * filter list. Real tag ids come from SQLite AUTOINCREMENT (always
+ * positive), so -1 is guaranteed to not collide. The backend
+ * `list_sessions(severity_tag_ids=[-1])` interprets this as
+ * "sessions with no severity-group tag attached" — the filter path
+ * for sessions orphaned by a deleted severity tag. */
+export const SEVERITY_NONE_ID = -1;
+
 function readCollapsed(): boolean {
   // Guard against SSR / jsdom: both set `globalThis` but jsdom's
   // localStorage is real, while SvelteKit SSR has none. Either way,

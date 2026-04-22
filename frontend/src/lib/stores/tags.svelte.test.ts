@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Tag } from '$lib/api';
-import { tags } from './tags.svelte';
+import { tags, SEVERITY_NONE_ID } from './tags.svelte';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -246,6 +246,20 @@ describe('tags store', () => {
     expect(tags.selectedSeverity).toEqual([]);
     // Other axis untouched.
     expect(tags.selected).toEqual([1]);
+  });
+
+  it('SEVERITY_NONE_ID flows through selectSeverity and filter like a real id', () => {
+    // Sentinel starts with the same Finder semantics as real tag ids.
+    tags.selectSeverity(SEVERITY_NONE_ID);
+    expect(tags.selectedSeverity).toEqual([SEVERITY_NONE_ID]);
+    expect(tags.hasSeverityFilter).toBe(true);
+    // Shift-click pairs the sentinel with a real severity.
+    tags.selectSeverity(9, { additive: true });
+    expect(tags.selectedSeverity).toEqual([SEVERITY_NONE_ID, 9]);
+    // Derived filter passes the sentinel straight through — api/sessions
+    // builds `severity_tags=-1,9` and the backend maps -1 to its
+    // NOT EXISTS branch.
+    expect(tags.filter.severityTags).toEqual([SEVERITY_NONE_ID, 9]);
   });
 
   it('togglePanel flips and persists the collapsed state', () => {

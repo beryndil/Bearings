@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tags } from '$lib/stores/tags.svelte';
+  import { tags, SEVERITY_NONE_ID } from '$lib/stores/tags.svelte';
   import TagEdit from '$lib/components/TagEdit.svelte';
   import SeverityShield from '$lib/components/icons/SeverityShield.svelte';
   import TagIcon from '$lib/components/icons/TagIcon.svelte';
@@ -51,6 +51,42 @@
       onclick={(e) => openEdit(tag.id, e)}
     >
       ✎
+    </button>
+  </li>
+{/snippet}
+
+{#snippet severityNoneRow()}
+  {@const noneSelected = tags.selectedSeverity.includes(SEVERITY_NONE_ID)}
+  <!-- Virtual "No severity" row. Finds sessions orphaned by a
+       deleted severity tag (or ones that pre-date the migration
+       and somehow dodged the backfill). The sentinel `-1` flows
+       through selectedSeverity and arrives at the backend as
+       `severity_tags=-1`; the store there maps it to a NOT EXISTS
+       clause so these rows are findable without inventing a real
+       tag. Snipped out rather than inlined so the `{@const}` sits
+       in a legal parent per Svelte's `const_tag_invalid_placement`
+       rule. -->
+  <li
+    class="group flex items-stretch rounded hover:bg-slate-800 {noneSelected
+      ? 'bg-emerald-900/60'
+      : ''}"
+    data-testid="severity-none-row"
+  >
+    <button
+      type="button"
+      class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs
+        text-left transition {noneSelected ? 'text-emerald-200' : 'text-slate-400'}"
+      aria-pressed={noneSelected}
+      title="Sessions with no severity tag attached · Shift+click to add to the selection"
+      onclick={(e) => tags.selectSeverity(SEVERITY_NONE_ID, { additive: e.shiftKey })}
+    >
+      <span class="flex items-center gap-1 min-w-0">
+        <!-- color=null renders the dim slate fallback shield, which
+             visually matches the "no severity" state as it appears
+             next to session titles in the sidebar. -->
+        <SeverityShield color={null} title="No severity" size={11} />
+        <span class="truncate italic">No severity</span>
+      </span>
     </button>
   </li>
 {/snippet}
@@ -149,6 +185,7 @@
             {#each tags.severityList as tag (tag.id)}
               {@render severityTagRow(tag)}
             {/each}
+            {@render severityNoneRow()}
           </ul>
         {/if}
       </div>

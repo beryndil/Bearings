@@ -214,6 +214,54 @@ async def test_list_sessions_severity_and_general_combine_with_and(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_list_sessions_no_severity_sentinel(tmp_path: Path) -> None:
+    """Sentinel `-1` in `severity_tag_ids` means "sessions with no
+    severity tag attached" — the sidebar exposes this as a virtual
+    'No severity' row so orphaned sessions (severity deleted, never
+    reassigned) are findable. Combines with real severity ids via OR."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        # s_blocker: carries Blocker.
+        # s_orphan: had Low, then the Low tag was deleted — severity gone.
+        # s_low: plain Low-tagged session — acts as control.
+        s_blocker = await create_session(conn, working_dir="/a", model="m", title="a")
+        s_orphan = await create_session(conn, working_dir="/b", model="m", title="b")
+        s_low = await create_session(conn, working_dir="/c", model="m", title="c")
+        async with conn.execute("SELECT id, name FROM tags WHERE tag_group='severity'") as cursor:
+            sev = {r["name"]: int(r["id"]) async for r in cursor}
+        await attach_tag(conn, s_blocker["id"], sev["Blocker"])
+        await attach_tag(conn, s_low["id"], sev["Low"])
+        # Orphan the middle session by attaching Low then deleting the
+        # Low row entirely. delete_tag cascades session_tags.
+        await attach_tag(conn, s_orphan["id"], sev["Low"])
+        # Re-read Low id after the delete won't work, so capture first,
+        # but note: we still have s_low that carries Low too. Deleting
+        # the Low tag wipes it from BOTH sessions. Instead, detach just
+        # the orphan's severity by deleting Blocker for that one — no,
+        # that still leaves a severity on others. Cleanest path: detach
+        # the orphan directly.
+        await conn.execute(
+            "DELETE FROM session_tags WHERE session_id = ?",
+            (s_orphan["id"],),
+        )
+        await conn.commit()
+
+        # Sentinel-only: just the orphan.
+        rows = await list_sessions(conn, severity_tag_ids=[-1])
+        assert {r["id"] for r in rows} == {s_orphan["id"]}
+
+        # Sentinel + Blocker (OR): orphan + the Blocker-tagged session.
+        rows = await list_sessions(conn, severity_tag_ids=[-1, sev["Blocker"]])
+        assert {r["id"] for r in rows} == {s_orphan["id"], s_blocker["id"]}
+
+        # Plain real-id list still excludes the orphan.
+        rows = await list_sessions(conn, severity_tag_ids=[sev["Blocker"]])
+        assert {r["id"] for r in rows} == {s_blocker["id"]}
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_list_sessions_includes_tag_ids(tmp_path: Path) -> None:
     """Medallion-row data: every row returned from list_sessions carries
     a `tag_ids` list so the sidebar can render per-tag icons without an

@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-04-22
+
+Tag color picker in the edit modal + "No severity" sentinel filter.
+Both are follow-ups to the v0.7.2 severity work that surfaced
+gaps once Dave started using the new sidebar: severity tags had
+colors baked in by migration 0021 but no UI to change them, and
+sessions whose severity tag got deleted vanished into a filter
+blind spot.
+
+### Added
+
+- `TagEdit.svelte` color picker: 12-swatch preset row (severity
+  ramp first) + a native `<input type="color">` for arbitrary hex
+  + a ✕ button to clear back to `null` (dim-slate fallback). The
+  current state is rendered as a small emerald ring on the active
+  option; the hex is echoed as font-mono next to the label so
+  Dave can eyeball the exact value. Wired into `tags.update`
+  through the existing `TagUpdate.color` field — no new endpoint.
+- "No severity" virtual row in the severity filter section.
+  Rendered by a dedicated `severityNoneRow` snippet (kept separate
+  so the `{@const}` has a legal parent). Clicking it flows a
+  sentinel id through `tags.selectSeverity` / `SessionFilter`
+  with Finder semantics intact (plain = single-select, shift =
+  additive, solo-reclick clears).
+- `stores/tags.svelte.ts` exports `SEVERITY_NONE_ID = -1` — the
+  single source of truth for the sentinel; API client, backend,
+  and UI all key off it.
+
+### Changed
+
+- `db._sessions.list_sessions` interprets `-1` in `severity_tag_ids`
+  as "sessions with no severity-group tag attached" and composes
+  it with real severity ids via OR (so selecting Blocker + No
+  severity together returns both buckets).
+
+### Tests
+
+- `tests/test_severity.py`: new
+  `test_list_sessions_no_severity_sentinel` covers sentinel-only,
+  sentinel + real id (OR), and verifies real-id-only queries
+  still exclude orphaned sessions.
+- `frontend/src/lib/stores/tags.svelte.test.ts`: new case asserts
+  `SEVERITY_NONE_ID` flows through `selectSeverity` and
+  `filter.severityTags` like a real id, including the shift-click
+  pairing with a concrete severity.
+- `frontend/src/lib/components/TagEdit.test.ts`: two new cases
+  cover swatch-click → PATCH body includes `color`, and ✕-click →
+  PATCH body carries `color: null`.
+
 ## [0.7.2] - 2026-04-22
 
 Severity tag group + sidebar redesign + Finder-click filter. Every

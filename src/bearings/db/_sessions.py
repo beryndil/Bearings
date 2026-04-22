@@ -158,15 +158,36 @@ async def list_sessions(
             params.extend(tag_ids)
 
     if severity_tag_ids:
-        sev_ph = ",".join("?" for _ in severity_tag_ids)
+        # Sentinel `-1` represents "no severity attached" — surfaced in
+        # the sidebar so the user can find sessions orphaned by a
+        # deleted severity tag. Real tag ids are always positive, so
+        # -1 is safe. Split real ids from the sentinel and combine
+        # both via OR (a session matches if it carries any listed
+        # severity OR has no severity at all).
+        real_ids = [tid for tid in severity_tag_ids if tid > 0]
+        want_none = any(tid == -1 for tid in severity_tag_ids)
+        sev_or: list[str] = []
+        if real_ids:
+            sev_ph = ",".join("?" for _ in real_ids)
+            sev_or.append(
+                f"s.id IN (SELECT session_id FROM session_tags WHERE tag_id IN ({sev_ph}))"
+            )
+            params.extend(real_ids)
+        if want_none:
+            # NOT EXISTS any severity-group tag on this session. Joins
+            # on tag_group = 'severity' to exclude sessions that
+            # happen to carry general tags but no severity.
+            sev_or.append(
+                "NOT EXISTS (SELECT 1 FROM session_tags st "
+                "JOIN tags t ON t.id = st.tag_id "
+                "WHERE st.session_id = s.id AND t.tag_group = 'severity')"
+            )
         # OR-within-group only: a session has exactly one severity, so
         # "sessions with any listed severity" is the only meaningful
         # combination rule here. Appended as a second AND clause so
         # the two axes narrow the result together.
-        where_clauses.append(
-            f"s.id IN (SELECT session_id FROM session_tags WHERE tag_id IN ({sev_ph}))"
-        )
-        params.extend(severity_tag_ids)
+        if sev_or:
+            where_clauses.append("(" + " OR ".join(sev_or) + ")")
 
     where = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     sql = (

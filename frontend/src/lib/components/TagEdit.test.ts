@@ -143,6 +143,55 @@ describe('TagEdit memory editor', () => {
     });
   });
 
+  it('clicking a palette swatch then saving PATCHes the tag with that color', async () => {
+    const stub = queueResponses([
+      // Start with no color so the ✕ button is highlighted initially.
+      { ok: true, body: { tag_id: 1, content: '', updated_at: 'x' } }, // GET /memory
+      { ok: true, body: tag({ color: '#dc2626' }) }, // PATCH tag
+      { ok: true, body: [tag({ color: '#dc2626' })] } // tags.refresh
+    ]);
+    const { getByRole, getByLabelText } = render(TagEdit, {
+      props: { open: true, tagId: 1 }
+    });
+    // The Blocker-red swatch is the first in the palette.
+    await fireEvent.click(getByLabelText('Use #dc2626'));
+    await fireEvent.click(getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      // Find the PATCH call and confirm it carried the chosen color.
+      const patchCall = stub.mock.calls.find(
+        (c) => (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse(String((patchCall?.[1] as RequestInit).body));
+      expect(body.color).toBe('#dc2626');
+    });
+  });
+
+  it('clearing the color via ✕ PATCHes with color=null', async () => {
+    const stub = queueResponses([
+      // Start seeded with a color so the clear button has something to clear.
+      { ok: true, body: { tag_id: 1, content: '', updated_at: 'x' } }, // GET /memory
+      { ok: true, body: tag({ color: null }) }, // PATCH
+      { ok: true, body: [tag({ color: null })] } // refresh
+    ]);
+    tags.list = [tag({ color: '#dc2626' })];
+    const { getByRole, getByLabelText } = render(TagEdit, {
+      props: { open: true, tagId: 1 }
+    });
+    await fireEvent.click(getByLabelText('Clear color'));
+    await fireEvent.click(getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      const patchCall = stub.mock.calls.find(
+        (c) => (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse(String((patchCall?.[1] as RequestInit).body));
+      expect(body.color).toBeNull();
+    });
+  });
+
   it('preview toggle renders markdown', async () => {
     queueResponses([
       { ok: true, body: { tag_id: 1, content: '# Heading', updated_at: 'x' } }

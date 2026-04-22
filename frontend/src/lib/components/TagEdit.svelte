@@ -15,6 +15,11 @@
   let sortOrder = $state(0);
   let defaultWorkingDir = $state('');
   let defaultModel = $state('');
+  /** Tag tint. Null = dim-slate fallback used by SeverityShield /
+   * TagIcon. Any hex string becomes the medallion fill. Exposed in
+   * the modal so severity rows (Blocker etc.) can be re-themed to
+   * match Daisy's palette preferences without a DB poke. */
+  let color = $state<string | null>(null);
   let memory = $state('');
   /** Tracks the memory content as it existed when the modal opened, so
    * save-time we can tell the difference between "user left it blank
@@ -30,6 +35,28 @@
   const current = $derived(
     tagId === null ? null : (tags.list.find((t) => t.id === tagId) ?? null)
   );
+
+  /** Preset swatches for the color row. The first five mirror the
+   * migration-0021 severity ramp (red → emerald) so a severity tag is
+   * one click from its canonical color after an accidental override.
+   * The rest are Tailwind-500-ish neutrals that pair well with both
+   * the dark sidebar and the shield bevel highlight. Kept as a const
+   * rather than fetched because the picker is cheap render and the
+   * palette isn't user-editable. */
+  const PALETTE = [
+    '#dc2626', // red-600 — Blocker
+    '#ea580c', // orange-600 — Critical
+    '#f59e0b', // amber-500 — Medium
+    '#84cc16', // lime-500 — Low
+    '#10b981', // emerald-500 — Quality of Life
+    '#06b6d4', // cyan-500
+    '#3b82f6', // blue-500
+    '#6366f1', // indigo-500
+    '#8b5cf6', // violet-500
+    '#ec4899', // pink-500
+    '#a3a3a3', // neutral-400
+    '#475569'  // slate-600 — matches the fallback
+  ] as const;
 
   async function loadMemory(id: number): Promise<void> {
     loadError = null;
@@ -69,6 +96,7 @@
     sortOrder = current.sort_order;
     defaultWorkingDir = current.default_working_dir ?? '';
     defaultModel = current.default_model ?? '';
+    color = current.color;
     memory = '';
     originalMemory = null;
     showPreview = false;
@@ -91,6 +119,7 @@
     try {
       await tags.update(tagId, {
         name: trimmedName,
+        color,
         pinned,
         sort_order: sortOrder,
         default_working_dir: blankToNull(defaultWorkingDir),
@@ -202,6 +231,59 @@
           <ModelSelect bind:value={defaultModel} />
         </div>
       </div>
+
+      <!-- Color picker. Drives the sidebar medallion tint — the
+           SeverityShield on severity rows, the luggage-tag TagIcon
+           on general rows. Null color (✕) falls back to the dim
+           slate used for the "no severity" / "no color chosen" look. -->
+      <section class="flex flex-col gap-1.5">
+        <div class="flex items-baseline justify-between">
+          <span class="text-slate-400 text-xs">Color</span>
+          <span class="text-[10px] font-mono text-slate-600">
+            {color ?? 'none — falls back to slate'}
+          </span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            class="w-6 h-6 rounded-full border flex items-center justify-center text-[10px]
+              text-slate-300 hover:border-slate-400 {color === null
+                ? 'border-emerald-400 ring-1 ring-emerald-400/60 bg-slate-800'
+                : 'border-slate-700 bg-slate-900'}"
+            onclick={() => (color = null)}
+            aria-label="Clear color"
+            title="Clear color — medallion falls back to dim slate"
+          >✕</button>
+          {#each PALETTE as swatch}
+            <button
+              type="button"
+              class="w-6 h-6 rounded-full border hover:scale-110 transition-transform {color?.toLowerCase() ===
+              swatch.toLowerCase()
+                ? 'border-emerald-400 ring-1 ring-emerald-400/60'
+                : 'border-slate-700'}"
+              style="background-color: {swatch}"
+              onclick={() => (color = swatch)}
+              aria-label={`Use ${swatch}`}
+              title={swatch}
+            ></button>
+          {/each}
+          <!-- Native picker for anything outside the palette. Its
+               value is always a hex (no null), so clearing still
+               routes through the ✕ button. -->
+          <label
+            class="inline-flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer ml-1"
+            title="Pick any hex color"
+          >
+            <input
+              type="color"
+              class="w-6 h-6 rounded border-0 bg-transparent cursor-pointer"
+              value={color ?? '#475569'}
+              oninput={(e) => (color = (e.currentTarget as HTMLInputElement).value)}
+            />
+            <span>custom</span>
+          </label>
+        </div>
+      </section>
 
       <section class="flex flex-col gap-1">
         <div class="flex items-baseline justify-between gap-2">
