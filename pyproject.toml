@@ -23,6 +23,7 @@ dependencies = [
     "tomli-w>=1.0",
     "prometheus-client>=0.21",
     "aiosqlite>=0.20",
+    "orjson>=3.9",
 ]
 
 [project.scripts]

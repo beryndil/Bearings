@@ -18,6 +18,7 @@ import asyncio
 import logging
 from typing import Any
 
+import orjson
 from claude_agent_sdk import ThinkingConfig
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
@@ -112,6 +113,18 @@ def _parse_since_seq(websocket: WebSocket) -> int:
         return 0
 
 
+async def _send_frame(websocket: WebSocket, frame: dict[str, Any]) -> None:
+    """Serialize `frame` with orjson and push it as a text frame.
+
+    Starlette's stock `send_json` routes through the stdlib `json`
+    encoder, which dominates CPU on event-heavy turns (tool output,
+    streaming deltas). orjson is ~2-3x faster on the dict/str/int
+    payloads we send. We decode to str because the frontend contract
+    is text frames — switching to `send_bytes` would flip the opcode
+    and break the client."""
+    await websocket.send_text(orjson.dumps(frame).decode())
+
+
 async def _forward_events(websocket: WebSocket, queue: asyncio.Queue[_Envelope]) -> None:
     """Pull envelopes off the runner's subscriber queue and write them
     to the socket. Each frame carries `_seq` so the client can advance
@@ -120,7 +133,7 @@ async def _forward_events(websocket: WebSocket, queue: asyncio.Queue[_Envelope])
         env = await queue.get()
         frame = {**env.payload, "_seq": env.seq}
         try:
-            await websocket.send_json(frame)
+            await _send_frame(websocket, frame)
         except (WebSocketDisconnect, RuntimeError):
             # Socket died under us — normal at navigation. The outer
             # handler's finally block will clean up the subscription.
@@ -166,12 +179,13 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     # persisted the partial). Sent before replay so the client has a
     # known starting point before the event stream resumes.
     try:
-        await websocket.send_json(
+        await _send_frame(
+            websocket,
             {
                 "type": "runner_status",
                 "session_id": session_id,
                 "is_running": runner.is_running,
-            }
+            },
         )
     except (WebSocketDisconnect, RuntimeError):
         runner.unsubscribe(queue)
@@ -183,7 +197,7 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     # live frame arrives.
     for env in replay:
         try:
-            await websocket.send_json({**env.payload, "_seq": env.seq})
+            await _send_frame(websocket, {**env.payload, "_seq": env.seq})
         except (WebSocketDisconnect, RuntimeError):
             runner.unsubscribe(queue)
             app.state.active_ws.discard(websocket)
