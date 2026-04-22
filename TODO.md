@@ -974,10 +974,15 @@ for first-paint. Derived from the latest `tool_calls` row where
   evidence the audit trail is useful in-band; the Inspector's raw
   tool-call list already covers debug cases.
 - [ ] **Push unchecked items to working-dir TODO.md on session close.**
-  Explicitly deferred — see the "Nearest TODO.md" ambiguity flagged in
-  the research-agent action-row entry above. Resolve that first.
-  Manual "Send these to TODO.md" button on the widget is the right
-  shape when it lands, not an auto-dump.
+  Dave greenlit this 2026-04-22 ("yes") — promoted from deferred to
+  an active follow-up, though still blocked on resolving the "Nearest
+  TODO.md" ambiguity flagged in the research-agent action-row entry
+  above. Manual "Send these to TODO.md" button on the widget is the
+  right shape; auto-dump is not. Concrete next step: once the
+  action-row nearest-TODO.md picker lands, reuse the same resolver
+  here and add a "Push N unchecked to {path}" affordance on the
+  LiveTodos card header (visible only when at least one pending or
+  in_progress item is present).
 - [ ] **Widget placement interaction with ContextMeter/TokenMeter.**
   First-pass lives above the turn stream; if the conversation header
   gets more sticky elements, a dedicated "status strip" region should
@@ -985,7 +990,12 @@ for first-paint. Derived from the latest `tool_calls` row where
 - [ ] **Hide widget when `todos` is an empty list.** Spike treats empty
   array as "render with 0 items" for simplicity; v2 should treat it
   as "no active todo session, hide the card entirely."
-- [ ] **Dave's adoption question.** He doesn't use TodoWrite today. The
-  widget now exists as an incentive to try it; re-evaluate at v0.8 or
-  whenever he has actually used TodoWrite in a real session whether
-  the sticky placement is earning its screen real-estate.
+- [x] **Dave's adoption question — ANSWERED 2026-04-22: yes, adopt.**
+  Dave greenlit using TodoWrite as part of his workflow going forward
+  once the widget shipped in v0.8.0 and eyeballed clean against the
+  Checklists session. This means the deferred follow-ups above are
+  no longer "waiting for someone to care" — they're now gated on
+  real usage surfacing the pain points (auto-collapse timing,
+  widget-placement conflicts with future sticky rows, empty-list
+  hide-vs-show). Re-evaluate each when the agent has run a handful
+  of real TodoWrite turns in Dave's normal workflow.
