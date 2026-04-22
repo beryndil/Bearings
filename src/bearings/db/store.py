@@ -11,6 +11,17 @@ concern, then re-export here.
 
 from __future__ import annotations
 
+from bearings.db._checklists import (
+    create_checklist,
+    create_item,
+    delete_item,
+    get_checklist,
+    get_item,
+    reorder_items,
+    toggle_item,
+    update_checklist,
+    update_item,
+)
 from bearings.db._common import MIGRATIONS_DIR, init_db
 from bearings.db._messages import (
     append_tool_output,
@@ -74,8 +85,11 @@ __all__ = [
     "attach_tag",
     "attach_tool_calls_to_message",
     "close_session",
+    "create_checklist",
+    "create_item",
     "create_session",
     "create_tag",
+    "delete_item",
     "delete_session",
     "delete_reorg_audit",
     "delete_tag",
@@ -83,6 +97,8 @@ __all__ = [
     "detach_tag",
     "detect_tool_call_group_warnings",
     "finish_tool_call",
+    "get_checklist",
+    "get_item",
     "get_session",
     "get_session_token_totals",
     "get_tag",
@@ -106,10 +122,14 @@ __all__ = [
     "record_reorg_audit",
     "reopen_if_closed",
     "reopen_session",
+    "reorder_items",
     "search_messages",
     "set_sdk_session_id",
     "set_session_context_usage",
     "set_session_permission_mode",
+    "toggle_item",
+    "update_checklist",
+    "update_item",
     "update_session",
     "update_tag",
 ]

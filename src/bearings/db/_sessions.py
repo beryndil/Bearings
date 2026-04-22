@@ -14,8 +14,14 @@ SESSION_BASE_COLS = (
     "id, created_at, updated_at, working_dir, model, title, description, "
     "max_budget_usd, total_cost_usd, session_instructions, sdk_session_id, "
     "permission_mode, last_context_pct, last_context_tokens, last_context_max, "
-    "closed_at"
+    "closed_at, kind"
 )
+
+# Valid values for sessions.kind. The column carries a CHECK constraint
+# that enforces the same set at the SQLite layer; this module-level
+# constant is the Python-side guard so `create_session` fails fast with
+# a readable error instead of a bare IntegrityError.
+_VALID_SESSION_KINDS = frozenset({"chat", "checklist"})
 
 # claude-agent-sdk PermissionMode values. Kept as a module-level
 # constant so `set_session_permission_mode` can reject typos before
@@ -33,15 +39,34 @@ async def create_session(
     title: str | None = None,
     description: str | None = None,
     max_budget_usd: float | None = None,
+    kind: str = "chat",
 ) -> dict[str, Any]:
+    """Insert a new session row. `kind` defaults to `'chat'` so existing
+    callers don't need to change; passing `'checklist'` is what the
+    new checklist creation path sends. The companion `checklists` row
+    is the caller's responsibility — this helper owns the `sessions`
+    insert only, and rejects unknown kinds up front so bad input
+    surfaces as a ValueError rather than a SQLite IntegrityError."""
+    if kind not in _VALID_SESSION_KINDS:
+        raise ValueError(f"unknown session kind: {kind!r}")
     session_id = _new_id()
     now = _now()
     await conn.execute(
         "INSERT INTO sessions "
         "(id, created_at, updated_at, working_dir, model, title, description, "
-        "max_budget_usd) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (session_id, now, now, working_dir, model, title, description, max_budget_usd),
+        "max_budget_usd, kind) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            session_id,
+            now,
+            now,
+            working_dir,
+            model,
+            title,
+            description,
+            max_budget_usd,
+            kind,
+        ),
     )
     await conn.commit()
     row = await get_session(conn, session_id)
@@ -162,11 +187,19 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
     created_at = str(src_session.get("created_at") or now)
     # `closed_at` round-trips so an export of a closed session restores
     # closed; `None` on payloads predating the column is the open default.
+    # `kind` defaults to 'chat' for payloads predating migration 0016;
+    # a bogus value falls back to 'chat' rather than failing the whole
+    # import (imports predate the feature for the vast majority of
+    # backups). Checklist bodies aren't in the v0.1.30 export shape yet
+    # — when they land, the importer will need a companion `checklists`
+    # insert here.
+    raw_kind = str(src_session.get("kind") or "chat")
+    kind = raw_kind if raw_kind in _VALID_SESSION_KINDS else "chat"
     await conn.execute(
         "INSERT INTO sessions "
         "(id, created_at, updated_at, working_dir, model, title, description, "
-        "max_budget_usd, closed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "max_budget_usd, closed_at, kind) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             new_session_id,
             created_at,
@@ -177,6 +210,7 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
             src_session.get("description"),
             src_session.get("max_budget_usd"),
             src_session.get("closed_at"),
+            kind,
         ),
     )
 

@@ -624,6 +624,49 @@ the historical checklists as-is.
   undo-window length (30s default), Slice-6 priority (ship 1–5 first
   or put 6 on the critical path), tool-call-group warn-vs-refuse.
 
+## v0.4.0 — shipped
+
+Checklist Sessions — Slice 1 of
+`~/.claude/plans/nimble-checking-heron.md`. Backend primitives only:
+the `sessions.kind` discriminator and two new tables
+(`checklists`, `checklist_items`) land with their full store surface
+but no API or UI yet. Existing chat sessions backfill as
+`kind = 'chat'` via the `NOT NULL DEFAULT` on migration 0016, so
+every current code path keeps working unchanged. Minor bump (0.3 →
+0.4) because this is a new primitive, not a fix.
+
+- [x] Migration 0016 — `sessions.kind` column + `checklists` /
+  `checklist_items` tables with cascade-on-delete from the session
+  row all the way down to items.
+- [x] `sessions.kind` threaded through `_sessions.SESSION_BASE_COLS`
+  so every `SELECT` picks it up; `create_session(..., kind=...)`
+  accepts `'chat'` (default) or `'checklist'`, rejects anything
+  else with a `ValueError` before the INSERT fires.
+- [x] `import_session` round-trips `kind` — exports that predate
+  0016 restore as chats without special-casing at the call site.
+- [x] `db/_checklists.py` with CRUD on checklists and items, a
+  single-round-trip `get_checklist` that returns items inline, a
+  `toggle_item` that stamps `checked_at`, and a `reorder_items`
+  that ignores foreign ids so a malicious client can't reorder a
+  list it doesn't own.
+- [x] Store re-export wall updated — every new helper is
+  importable via `from bearings.db import store` to keep the
+  existing facade convention.
+- [x] 17 new unit tests covering migration shape, kind
+  round-trip, CRUD, default-append sort_order, cascade from
+  session deletion, and the foreign-id reorder guard. Full suite
+  (398 tests) still green.
+
+Follow-ups (blocked on later slices of the same plan):
+
+- API layer — `routes_checklists.py`, WS/runner/reorg guards,
+  kind in the SessionCreate DTO (Slice 2).
+- Frontend — right-pane switch on `session.kind`, ChecklistView
+  component, NewSessionForm kind toggle (Slice 3). Slices 2 + 3
+  ship together in a single version bump; Slice 2 alone would
+  leave a usable REST surface but a broken UI pane for
+  checklist-kind sessions.
+
 ## v0.3.29 — shipped
 
 Retune ContextMeter flash threshold. Raised immediately after v0.3.28

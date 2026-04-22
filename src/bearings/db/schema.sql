@@ -20,7 +20,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- user marked the session closed and the sidebar renders it inside
     -- the collapsed "Closed" group. Reorg ops touching a closed session
     -- auto-clear the column. See migration 0015.
-    closed_at TEXT
+    closed_at TEXT,
+    -- Session kind discriminator: 'chat' (the historical default) runs
+    -- through the agent runner and renders a conversation; 'checklist'
+    -- carries no runner and renders a structured item list from the
+    -- `checklists` / `checklist_items` tables. The runner + WS + reorg
+    -- endpoints guard on this column. See migration 0016.
+    kind TEXT NOT NULL DEFAULT 'chat'
+        CHECK (kind IN ('chat', 'checklist'))
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -98,3 +105,34 @@ CREATE TABLE IF NOT EXISTS reorg_audits (
 
 CREATE INDEX IF NOT EXISTS idx_reorg_audits_source
     ON reorg_audits(source_session_id, created_at);
+
+-- Checklist primitives (Slice 1 of nimble-checking-heron). A checklist
+-- is a distinct session kind: exactly one `checklists` row per
+-- session whose `kind = 'checklist'`, and N items hanging off it.
+-- Cascade-on-delete sweeps items when the checklist goes, and sweeps
+-- the checklist when its session goes. `parent_item_id` is present
+-- for later nesting work — it stays NULL on top-level rows. See
+-- migration 0016.
+CREATE TABLE IF NOT EXISTS checklists (
+    session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    notes TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS checklist_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    checklist_id TEXT NOT NULL REFERENCES checklists(session_id) ON DELETE CASCADE,
+    parent_item_id INTEGER REFERENCES checklist_items(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    notes TEXT,
+    checked_at TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_checklist_items_checklist
+    ON checklist_items(checklist_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_checklist_items_parent
+    ON checklist_items(parent_item_id);
