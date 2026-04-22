@@ -193,6 +193,23 @@
     }
   }
 
+  /** Manual close/reopen toggle for the checklist session itself.
+   * Mirrors the Conversation header affordance so the user always has
+   * a one-click escape hatch — the auto-close cascade only fires when
+   * the list is complete, but an abandoned / WIP list still needs a
+   * way out. No confirm; reopen is equally cheap. */
+  async function onToggleClosed() {
+    const sid = sessions.selectedId;
+    if (!sid) return;
+    const current = sessions.selected;
+    if (!current) return;
+    if (current.closed_at) {
+      await sessions.reopen(sid);
+    } else {
+      await sessions.close(sid);
+    }
+  }
+
   function onEditKey(ev: KeyboardEvent) {
     if (ev.key === 'Enter') {
       ev.preventDefault();
@@ -210,6 +227,21 @@
     <h2 class="flex-1 truncate text-sm font-semibold">
       {selected?.title ?? 'Checklist'}
     </h2>
+    {#if selected}
+      <button
+        type="button"
+        class="text-xs hover:text-slate-300 {selected.closed_at
+          ? 'text-emerald-400'
+          : 'text-slate-500'}"
+        aria-label={selected.closed_at ? 'Reopen checklist' : 'Close checklist'}
+        aria-pressed={!!selected.closed_at}
+        title={selected.closed_at ? 'Reopen checklist' : 'Close checklist'}
+        onclick={onToggleClosed}
+        data-testid="close-checklist"
+      >
+        ✓
+      </button>
+    {/if}
   </header>
 
   {#if checklists.loading}
