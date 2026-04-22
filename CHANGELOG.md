@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-04-22
+
+Live TodoWrite widget surfaced as a sticky card at the top of the
+Conversation pane. The agent's own in-session task list, which the
+Claude Code TUI renders inline as a checkbox widget, now has a
+first-class home in Bearings instead of hiding as just another
+tool-call row in the Inspector. Complementary to — not a
+replacement for — cross-session `TODO.md` discipline.
+
+### Added
+
+- `TodoWriteUpdate` sidecar event (`agent/events.py`). The runner
+  watches every `ToolUseBlock(name="TodoWrite")` and, immediately
+  after the normal `tool_call_start` lands, emits a parsed
+  `todo_write_update` event carrying the full todos list. SDK has
+  no TodoWrite-awareness (confirmed via grep), so this awareness
+  lives entirely in Bearings. Emission order is pinned in a test:
+  raw call first, sidecar second, so subscribers can read the
+  `tool_calls` row on receipt.
+- `GET /api/sessions/{id}/todos` REST route + `get_latest_todowrite`
+  DB helper. Seeds the widget on page load / reconnect before the
+  next live event fires. Full-replacement semantics throughout —
+  every TodoWrite call overwrites the prior list, no per-item
+  merge. The frontend reducer is one assignment; the component is
+  pure render.
+- `LiveTodos.svelte` — sticky card mounted at the top of
+  `Conversation.svelte`. Tri-state glyphs (○ slate pending,
+  ● amber in_progress, ✓ emerald completed) mirror the
+  running-tool-call indicator in `MessageTurn.svelte` so "work in
+  flight" reads the same across the UI. Header shows `N/M`
+  progress plus the active item's `active_form` line so "what is
+  the agent doing right now" stays answerable without scrolling
+  into the tool-call panel. Empty array → "no active todos"
+  footer; `null` → component renders nothing (session has never
+  invoked TodoWrite).
+- Pydantic `Field(alias="activeForm")` with `populate_by_name=True`
+  on `TodoItem` so the SDK's camelCase input parses cleanly while
+  the wire format stays snake_case everywhere else in Bearings.
+
+### Tests
+
+- `tests/test_runner.py`: two new cases — TodoWrite call emits both
+  the raw `tool_call_start` and the sidecar `todo_write_update`
+  (ordering + payload content asserted); malformed TodoWrite input
+  does not crash the turn (raw call lands, sidecar skipped with a
+  warning log).
+- `tests/test_store.py`: three new cases cover
+  `get_latest_todowrite` — none when no calls, most-recent payload
+  wins across interleaved Bash/TodoWrite rows, malformed JSON
+  returns `None` (warning logged, no raise).
+- `frontend/src/lib/stores/conversation.svelte.test.ts`: five new
+  reducer cases — initial state is `null`, first update assigns,
+  subsequent update fully replaces (no per-item merge), empty
+  array is distinct from `null`, cross-session events stay
+  isolated.
+
 ## [0.7.3] - 2026-04-22
 
 Tag color picker in the edit modal + "No severity" sentinel filter.
