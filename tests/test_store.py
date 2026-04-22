@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from bearings.db.store import (
+    add_session_cost,
     append_tool_output,
     close_session,
     create_session,
@@ -811,5 +812,40 @@ async def test_mark_session_viewed_returns_none_for_unknown(tmp_path: Path) -> N
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         assert await mark_session_viewed(conn, "deadbeef" * 4) is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_add_session_cost_bumps_updated_at(tmp_path: Path) -> None:
+    """A cost delta bubbles the session to the top of the sort even if
+    no other activity column changes. Guards against a future call path
+    that records cost without pairing with `mark_session_completed`."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        older = await create_session(conn, working_dir="/a", model="m", title="older")
+        await asyncio.sleep(0.002)
+        newer = await create_session(conn, working_dir="/b", model="m", title="newer")
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [newer["id"], older["id"]]
+        older_before = await get_session(conn, older["id"])
+        assert older_before is not None
+        await asyncio.sleep(0.002)
+        assert await add_session_cost(conn, older["id"], 0.01) is True
+        older_after = await get_session(conn, older["id"])
+        assert older_after is not None
+        assert older_after["total_cost_usd"] == pytest.approx(0.01)
+        assert older_after["updated_at"] > older_before["updated_at"]
+        rows = await list_sessions(conn)
+        assert [r["id"] for r in rows] == [older["id"], newer["id"]]
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_add_session_cost_returns_false_for_unknown(tmp_path: Path) -> None:
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        assert await add_session_cost(conn, "deadbeef" * 4, 0.01) is False
     finally:
         await conn.close()

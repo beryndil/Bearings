@@ -216,6 +216,52 @@ class SessionStore {
     }
   }
 
+  /** Reconcile the list against the server without blowing away
+   * optimistic local state. Called by `startRunningPoll` every tick so
+   * activity that originated in another tab — or in a background
+   * session this tab never WS-subscribed to — reaches the sidebar
+   * without a full reload.
+   *
+   * Merge rules:
+   *   - Rows present server-side: take the server row, unless the local
+   *     row has a strictly newer `updated_at` (an optimistic
+   *     `touchSession` / `bumpCost` hasn't been persisted yet). Keeping
+   *     local-newer avoids a flicker where the just-bumped row drops
+   *     back down and then climbs again on the next poll.
+   *   - Rows gone from server: dropped. If the selected session was
+   *     deleted elsewhere, clear `selectedId` so callers don't keep
+   *     pointing at a ghost.
+   *   - New rows: inserted.
+   *   - Final order: `updated_at DESC, id DESC` — mirrors the server's
+   *     sort so the canonical order shows up regardless of which rows
+   *     won the local-vs-server tiebreak.
+   *
+   * Silent on transport errors — this is a background refresh; the
+   * next tick retries. `running`, `loading`, `error`, and `filter` are
+   * untouched. */
+  async softRefresh(): Promise<void> {
+    let fresh: api.Session[];
+    try {
+      fresh = await api.listSessions(this.filter);
+    } catch {
+      return;
+    }
+    const localById = new Map(this.list.map((s) => [s.id, s]));
+    const merged: api.Session[] = fresh.map((server) => {
+      const local = localById.get(server.id);
+      if (local && local.updated_at > server.updated_at) return local;
+      return server;
+    });
+    merged.sort((a, b) => {
+      if (a.updated_at !== b.updated_at) return a.updated_at < b.updated_at ? 1 : -1;
+      return a.id < b.id ? 1 : -1;
+    });
+    this.list = merged;
+    if (this.selectedId && !merged.some((s) => s.id === this.selectedId)) {
+      this.select(null);
+    }
+  }
+
   /** Bumps the sidebar's cached message_count. Called on user-push
    * (+1) and on MessageComplete (+1 for the assistant row). */
   bumpMessageCount(id: string, delta: number): void {
@@ -232,22 +278,35 @@ class SessionStore {
     writeStoredId(id);
   }
 
-  /** Poll the backend for session ids with in-flight runners. Safe to
-   * call repeatedly — existing timer is cleared first. Called from
-   * +page.svelte on boot so navigation away from a streaming session
-   * keeps the badge accurate. */
+  /** Poll the backend for session ids with in-flight runners AND for
+   * changes to the session list itself. Safe to call repeatedly —
+   * existing timer is cleared first. Called from +page.svelte on boot.
+   *
+   * The per-tick work splits in two:
+   *   - `listRunningSessions()` → refresh the `running` badge set.
+   *   - `softRefresh()` → pick up activity (new `updated_at`, new cost,
+   *     newly-created sessions, deletions) from other tabs or from
+   *     background sessions this tab never WS-subscribed to. Without
+   *     this, a session running while the user is on a different row
+   *     stays stuck at its old sidebar position until a full reload.
+   *
+   * Calls run in parallel — they're independent and both tolerate
+   * transport blips on their own. */
   startRunningPoll(): void {
     this.stopRunningPoll();
     const tick = async () => {
-      try {
-        const ids = await api.listRunningSessions();
-        this.running = new Set(ids);
-      } catch {
-        // Polling is a cosmetic feature — if the token expired or the
-        // server blinked, just drop the running set. The auth layer
-        // handles real 401s elsewhere.
-        this.running = new Set();
-      }
+      const runningCall = (async () => {
+        try {
+          const ids = await api.listRunningSessions();
+          this.running = new Set(ids);
+        } catch {
+          // Polling is a cosmetic feature — if the token expired or the
+          // server blinked, just drop the running set. The auth layer
+          // handles real 401s elsewhere.
+          this.running = new Set();
+        }
+      })();
+      await Promise.all([runningCall, this.softRefresh()]);
     };
     tick();
     this.runningTimer = setInterval(tick, RUNNING_POLL_MS);

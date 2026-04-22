@@ -427,11 +427,17 @@ async def reopen_if_closed(
 
 
 async def add_session_cost(conn: aiosqlite.Connection, session_id: str, delta_usd: float) -> bool:
-    """Accumulate SDK-reported cost onto the session row. Returns False if
-    the session row is gone (e.g. deleted mid-stream)."""
+    """Accumulate SDK-reported cost onto the session row. Also bumps
+    `updated_at` so a cost-only delta still re-sorts the sidebar — the
+    current call path in `runner.py` pairs this with
+    `mark_session_completed` (which bumps `updated_at` too), so the
+    double-touch is a no-op there, but any future path that records
+    cost without a MessageComplete stays sort-correct by default.
+
+    Returns False if the session row is gone (e.g. deleted mid-stream)."""
     cursor = await conn.execute(
-        "UPDATE sessions SET total_cost_usd = total_cost_usd + ? WHERE id = ?",
-        (delta_usd, session_id),
+        "UPDATE sessions SET total_cost_usd = total_cost_usd + ?, updated_at = ? WHERE id = ?",
+        (delta_usd, _now(), session_id),
     )
     await conn.commit()
     return cursor.rowcount > 0

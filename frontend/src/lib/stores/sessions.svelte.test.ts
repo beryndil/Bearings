@@ -17,6 +17,8 @@ afterEach(() => {
   sessions.selectedId = null;
   sessions.loading = false;
   sessions.error = null;
+  sessions.running = new Set();
+  sessions.filter = {};
 });
 
 function sess(overrides: Partial<Session> = {}): Session {
@@ -252,5 +254,141 @@ describe('sessions.scrollTick', () => {
     sessions.bumpCost('sess-b', 0.05);
     expect(sessions.list[0].id).toBe('sess-b');
     expect(sessions.scrollTick).toBe(before);
+  });
+});
+
+describe('sessions.softRefresh', () => {
+  it('reorders rows when the server reports newer activity on a background session', async () => {
+    // Local order: a (newest) on top, b underneath. While the user sits
+    // on a, session b runs in the background — the server's updated_at
+    // on b now beats a, so softRefresh should float b to the top.
+    sessions.list = [
+      sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' }),
+      sess({ id: 'b', updated_at: '2026-04-22T09:00:00+00:00' })
+    ];
+    sessions.selectedId = 'a';
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' }),
+          sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' })
+        ]
+      }
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list.map((s) => s.id)).toEqual(['b', 'a']);
+    expect(sessions.selectedId).toBe('a');
+  });
+
+  it('keeps the local row when local updated_at is strictly newer than server', async () => {
+    // Optimistic touchSession fired locally; server hasn't caught up.
+    // softRefresh must not drop the row back down and then snap it up
+    // on the next tick.
+    sessions.list = [
+      sess({ id: 'a', updated_at: '2026-04-22T12:00:00.500+00:00', total_cost_usd: 0.42 }),
+      sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' })
+    ];
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.11 }),
+          sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' })
+        ]
+      }
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list.map((s) => s.id)).toEqual(['a', 'b']);
+    // Local optimistic row survives the reconcile.
+    expect(sessions.list[0].total_cost_usd).toBeCloseTo(0.42);
+  });
+
+  it('takes server state when server updated_at is newer or equal', async () => {
+    // Equal timestamps prefer the server row so server-authoritative
+    // fields (cost, message_count) converge without needing a bump.
+    sessions.list = [
+      sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.0 })
+    ];
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.99 })
+        ]
+      }
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list[0].total_cost_usd).toBeCloseTo(0.99);
+  });
+
+  it('adds newly-created sessions and drops rows the server no longer returns', async () => {
+    sessions.list = [
+      sess({ id: 'stale', updated_at: '2026-04-22T08:00:00+00:00' }),
+      sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' })
+    ];
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({ id: 'fresh', updated_at: '2026-04-22T10:00:00+00:00' }),
+          sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' })
+        ]
+      }
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list.map((s) => s.id)).toEqual(['fresh', 'keep']);
+  });
+
+  it('clears selectedId when the selected session vanishes from the server list', async () => {
+    sessions.list = [sess({ id: 'gone' }), sess({ id: 'other' })];
+    sessions.selectedId = 'gone';
+    queueResponses([{ ok: true, body: [sess({ id: 'other' })] }]);
+    await sessions.softRefresh();
+    expect(sessions.selectedId).toBeNull();
+    expect(sessions.list.map((s) => s.id)).toEqual(['other']);
+  });
+
+  it('keeps the running set intact — softRefresh is not responsible for badges', async () => {
+    sessions.list = [sess({ id: 'a' })];
+    sessions.running = new Set(['a']);
+    queueResponses([{ ok: true, body: [sess({ id: 'a' })] }]);
+    await sessions.softRefresh();
+    expect(sessions.running.has('a')).toBe(true);
+  });
+
+  it('swallows transport errors — the next tick retries', async () => {
+    sessions.list = [sess({ id: 'a' })];
+    queueResponses([{ ok: false, status: 503, body: 'service unavailable' }]);
+    await sessions.softRefresh();
+    // List untouched, no error raised.
+    expect(sessions.list.map((s) => s.id)).toEqual(['a']);
+    expect(sessions.error).toBeNull();
+  });
+
+  it('forwards the active filter to the server fetch', async () => {
+    sessions.filter = { tags: [7, 9], mode: 'all' };
+    sessions.list = [];
+    const capturedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL | Request) => {
+        capturedUrls.push(String(url));
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return [];
+          },
+          async text() {
+            return '[]';
+          }
+        };
+      })
+    );
+    await sessions.softRefresh();
+    expect(capturedUrls).toHaveLength(1);
+    expect(capturedUrls[0]).toContain('tags=7%2C9');
+    expect(capturedUrls[0]).toContain('mode=all');
   });
 });

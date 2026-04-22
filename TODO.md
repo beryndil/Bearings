@@ -2482,3 +2482,43 @@ Treat as a single small PR (both live in the Conversation composer).
 Research + plan before implementing — this is the explicit follow-up
 to the 2026-04-22 research session that got eaten by the turn-loss
 bug now fixed in v0.6.1.
+
+## Live session list — Phase 2: `/ws/sessions` broadcast (deferred from 2026-04-22)
+
+Phase 1 shipped (softRefresh on the 3-second running-poll tick):
+SessionList now reconciles against `/api/sessions` periodically, so a
+background session or one active before this tab loaded reaches the
+top of the sidebar within ~3 s without a reload. Good enough for a
+single-user localhost workflow, but three seconds is long enough to
+notice and every tab re-fetches the full list payload each tick.
+
+Phase 2 is the proper architecture — sub-second latency and no
+periodic full-list fetches:
+
+- [ ] Server-wide pubsub in `src/bearings/agent/broker.py`: single
+  `asyncio`-fanned broker, bounded per-subscriber queue (mirror the
+  5000-item deque in `runner.py:59-61`).
+- [ ] Emit `session_created | session_updated | session_closed |
+  session_deleted` events from the mutation points:
+  - `src/bearings/db/_messages.py` on `insert_message` (covers the
+    `updated_at` bump).
+  - `src/bearings/db/_sessions.py` on create / close / reopen /
+    `touch_session` / `mark_session_completed` / `add_session_cost`.
+  - `src/bearings/agent/runner.py` on runner state transitions
+    (idle ↔ running) for the `running` badge.
+- [ ] New route `src/bearings/api/ws_sessions.py` (`GET /ws/sessions`)
+  that subscribes a client to the broker and streams events. Auth /
+  origin gating mirrors `ws_agent.py`.
+- [ ] Frontend `frontend/src/lib/stores/ws_sessions.svelte.ts`:
+  wrapper around the connection with the same reconnect/backoff used
+  by `ws_agent`. On each event, patch `sessions.list` in place and
+  re-sort; update `sessions.running` in place.
+- [ ] Once the broadcast is reliable, drop the Phase-1 `softRefresh`
+  call inside `startRunningPoll` (keep running-state poll until the
+  broker publishes runner state too, then drop the whole poll).
+
+Tests to add: broker fan-out + bounded-queue drop behavior; WS
+handshake and auth; frontend merge/re-sort on each event type;
+reconnect replays via a fresh `softRefresh` (keep the method even
+after removing the poll so reconnect has a cheap reconciliation
+path).
