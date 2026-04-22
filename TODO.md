@@ -2311,3 +2311,33 @@ Why deferred:
   escape).
 
 When v0.3 planning starts, revisit this entry. Until then: silence.
+
+## Per-session input ergonomics (deferred from 2026-04-22)
+
+Original ask (paraphrased from the prompt lost in the 2026-04-22 mid-turn
+incident — see v0.6.1 / `tests/test_runner_replay.py`):
+
+> When I leave a session and come back to it any text I typed and
+> didn't enter is gone. I'd also like each session to be able to
+> press up or down on the keyboard to navigate input history.
+
+Two discrete UI features, same input surface:
+
+- [ ] **Draft persistence.** Unsent text in a session's composer should
+  survive a page reload / tab switch / reconnect. Per-session key (not
+  global), cleared on submit. Candidates: `localStorage` keyed by
+  `session_id` (lives across reloads, dies on history clear), or
+  `sessionStorage` (dies on tab close — weaker but simpler). Probably
+  `localStorage` with a small size cap and a TTL so abandoned drafts
+  don't accumulate forever.
+- [ ] **Arrow-key history navigation.** `↑` / `↓` in the composer walks
+  the caller's prior `user` messages for *this session*, newest-first
+  on first `↑`. `Esc` or typing past the end restores the in-progress
+  draft (don't clobber the user's typing). Scope: per-session only
+  (don't leak prompts across sessions). Load from `list_messages(session_id)`
+  filtered to role='user', or cache in the store on first use.
+
+Treat as a single small PR (both live in the Conversation composer).
+Research + plan before implementing — this is the explicit follow-up
+to the 2026-04-22 research session that got eaten by the turn-loss
+bug now fixed in v0.6.1.
