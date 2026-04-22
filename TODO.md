@@ -2130,3 +2130,131 @@ calls; captured `bearings_ws_events_sent_total` via
     items (N = 200 as starting threshold, well below the observed 580
     max but above the 100 average).
 - FTS5 and token-batching stay off the checklist.
+
+## Security audit (2026-04-21) — pre-public-release
+
+Full findings live in this session's transcript. Three audits ran in
+parallel: privilege/agent-autonomy surface, architectural questionable
+decisions, exposed-secrets sweep. Secrets sweep came back clean (modulo
+identity leaks listed below). The other two converged on the same root
+cause: the codebase was built assuming "localhost = safe" and that
+assumption is wired into a dozen separate decisions.
+
+### Ship-blockers (fix before first public push)
+
+These are bugs, not preferences — no toggle, just fix.
+
+- [ ] **WS has no Origin check.** `src/bearings/api/ws_agent.py:144-148`.
+  Any tab in the same browser can drive the agent. Reject WS handshakes
+  whose `Origin` isn't `http://127.0.0.1:<port>` / `localhost`.
+- [ ] **Markdown XSS via `marked` + `{@html}` with no sanitizer.**
+  `frontend/src/lib/render.ts:104-107` + every consumer that mounts
+  `renderMarkdown` output via `{@html}` (`CollapsibleBody.svelte:102`,
+  `TagEdit.svelte:221`). Add `isomorphic-dompurify`; pipe `marked.parse()`
+  through it. Agent/tool output is attacker-influenced.
+- [ ] **`tests/test_tags.py:453,456,507,513`** — `/home/beryndil/Projects/Bearings`
+  hardcoded as test fixture. Identity leak in tracked code. Replace with
+  `tmp_path` or generic placeholder.
+- [ ] **Migrations run with no transaction wrapping, no checksum, no
+  downgrade detection.** `src/bearings/db/_common.py:36-49`. Wrap each
+  in `BEGIN/COMMIT`; record a checksum alongside the name; refuse to
+  start when applied-but-unknown rows exist.
+- [ ] **`/api/fs/list` enumerates the entire host.** `src/bearings/api/routes_fs.py:43-57`.
+  Clamp to a configured allow-root (default `Path.home()`).
+- [ ] **Resolve `CLAUDE.md:12` "Repository TBD"** — pick the org or remove
+  the note before the README ships.
+- [ ] **Decide on commit-email exposure.** `beryndil@hardknocks.university`
+  and `dwhennigan@gmail.com` are in commit history. If either should not
+  appear publicly, run `git filter-repo` (or fresh init) before first
+  push to a public remote.
+
+### Permission profiles / toggle layer (v0.2 release scope)
+
+Three profiles selected at first run or via `bearings init <profile>`:
+
+- **`safe`** (public default) — auth on with auto-generated token,
+  `working_dir` defaults to `~/.local/share/bearings/workspaces/<id>`
+  (sandbox subdir, *not* `$HOME`), `setting_sources=[]` so no global
+  Claude config inherits, no MCP inherit, no hook inherit,
+  `bypassPermissions` mode disabled and not persisted, Origin check
+  enforced (overlaps ship-blocker), `/api/fs/list` clamped to working_dir,
+  command/skill scanner scoped to project `.claude/` only, default
+  `max_budget_usd` ceiling.
+- **`workstation`** (middle) — auth on, `working_dir` defaults to `$HOME`
+  but Edit/Write requires per-call approval, MCP/hook inherit allowed,
+  `bypassPermissions` allowed but ephemeral (not persisted), everything
+  else as `safe`.
+- **`power-user`** (Dave's current behavior, opt-in) — current defaults
+  restored. Startup banner in stdout lists every gate that's open so the
+  user sees exactly what they're running.
+
+Each profile is a preset that writes `config.toml`. Every individual
+switch is also independently togglable for mix-and-match. Active profile
+shown in UI header.
+
+Implementation order:
+
+- [ ] Land all ship-blockers above (they're not behind a toggle).
+- [ ] Add config schema for every togglable gate (see findings list).
+- [ ] Build the three preset profiles.
+- [ ] Add startup banner that prints active profile + which gates are
+  open.
+- [ ] Rewrite README intro around the profile model.
+
+### High but not ship-blocker (fold into toggle layer)
+
+- [ ] Auth-token-in-WS-query-string + non-constant-time compare.
+  `src/bearings/api/auth.py:43-53`.
+- [ ] DB file written at default umask (world-readable on multi-user
+  boxes). `os.chmod(path, 0o600)` after create.
+- [ ] Runner survives WS disconnect for `idle_ttl_seconds=900` (closing
+  the browser ≠ stopping the agent). `safe` profile: ttl=0 or much
+  shorter.
+- [ ] Systemd unit has zero hardening — no `ProtectHome`, `PrivateTmp`,
+  `NoNewPrivileges`, `MemoryMax`. `config/bearings.service`.
+- [ ] Skill/command scanner walks `~/.claude/plugins` and surfaces
+  everything in the UI palette. `safe` profile: scope to project only.
+- [ ] `cfg.server.host=0.0.0.0` accepted with no interlock when auth=off.
+  Refuse to start if non-loopback bind + no auth + no TLS.
+- [ ] No global `max_budget_usd` default — runaway loop is unbounded.
+
+### Cleanup (low priority)
+
+- [ ] `LIKE` query unescaped wildcard DOS. `src/bearings/db/_messages.py:281-298`.
+  Use `LIKE ? ESCAPE '\\'` and escape `%` `_` `\` in input.
+- [ ] `permission_mode` column has no `CHECK` constraint at SQL level.
+  `src/bearings/db/schema.sql:18`.
+- [ ] WS subscriber queues unbounded. `src/bearings/agent/runner.py:308-321`.
+- [ ] `import_session` accepts arbitrary client-supplied JSON with no
+  schema validation, no size cap, bypasses the "every session has ≥1 tag"
+  invariant. `src/bearings/api/routes_sessions.py:223-232`.
+- [ ] `commands_scan` follows symlinks during `rglob`.
+  `src/bearings/api/commands_scan.py:60-77`.
+- [ ] Multiple silent `except Exception` swallows in `agent/session.py`,
+  `agent/runner.py`, `api/routes_tags.py`. Narrow the catches; surface
+  a wire `error` event when a failure persists.
+
+### v0.3+ — OS-level sandbox (DEFERRED, do not surface in "what's next")
+
+**Do not surface this entry when Dave asks "what's next" until the
+ship-blockers and toggle layer above have shipped.** This is intentionally
+parked for v0.3+ planning, after v0.2 closes.
+
+Once the toggle layer exists, add an opt-in `--sandbox=bwrap` mode that
+wraps each session in bubblewrap with a single bind-mounted project dir
+(the configured `working_dir`), no `$HOME`, no `~/.claude/`, no `~/.ssh`,
+no `/run/user/<uid>/keyring`. Flag "experimental" until proven.
+
+Why deferred:
+
+- `claude-agent-sdk` doesn't expose a clean wrapping point for the CLI
+  subprocess. Path is "swap the executable for a `bwrap`-wrapping shim"
+  or fork the SDK. Both are real engineering, not a config knob.
+- Fights the `power-user` profile by design — Dave wants `$HOME` reach.
+  Means a sandbox toggle on top of the profile system.
+- Toggle layer + `safe` profile already covers ~80% of the realistic
+  threat model for a stranger downloading the app. Sandbox is the
+  remaining 20% (defense vs. a jailbroken agent actively trying to
+  escape).
+
+When v0.3 planning starts, revisit this entry. Until then: silence.
