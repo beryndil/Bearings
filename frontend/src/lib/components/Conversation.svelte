@@ -1239,6 +1239,26 @@
       </div>
     </div>
   {/if}
+  {#if conversation.loadingInitial}
+    <!-- Full-pane overlay spinner. Painted in the same frame as the
+         click (agent.connect yields a paint frame right after flipping
+         loadingInitial), so it's visible BEFORE the REST fetch +
+         MessageTurn re-render pin the main thread. Without this the
+         user sees the whole app freeze on click and only after the
+         hang does the new session appear. pointer-events-none so it
+         doesn't block keyboard focus on the textarea below; z-30 puts
+         it above drag + upload hints but below the approval modal. -->
+    <div
+      class="pointer-events-none absolute inset-0 flex items-center justify-center
+        bg-slate-950/60 backdrop-blur-sm z-30"
+      data-testid="conversation-initial-loading"
+    >
+      <div class="flex flex-col items-center gap-3 text-sky-300">
+        <BearingsMark size={80} spin label="Loading session" />
+        <p class="text-xs uppercase tracking-wider text-slate-400">Loading session…</p>
+      </div>
+    </div>
+  {/if}
   <header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">
     <div class="min-w-0">
       {#if pairedCrumb}
@@ -1488,21 +1508,7 @@
     {/if}
     {#if !sessions.selectedId}
       <p class="text-slate-500 text-sm">No session selected.</p>
-    {:else if conversation.loadingInitial && conversation.messages.length === 0}
-      <!-- Initial-load pane. Heavy sessions (long transcripts with
-           many tool calls) take visible time to fetch. Showing the
-           brand mark spinning is a clearer signal than a blank pane
-           or the "No messages yet" copy that used to flash here. Only
-           fires when messages haven't been cached yet — re-selecting
-           a previously-loaded session shows its cached content
-           immediately and backfills silently. -->
-      <div
-        class="flex-1 flex items-center justify-center text-sky-400/80"
-        data-testid="conversation-initial-loading"
-      >
-        <BearingsMark size={72} spin label="Loading session" />
-      </div>
-    {:else if conversation.messages.length === 0 && !conversation.streamingActive && audits.length === 0}
+    {:else if conversation.messages.length === 0 && !conversation.streamingActive && audits.length === 0 && !conversation.loadingInitial}
       <p class="text-slate-500 text-sm">
         No messages yet. Send a prompt to start the conversation.
       </p>

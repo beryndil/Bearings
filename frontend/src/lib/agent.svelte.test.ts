@@ -34,6 +34,11 @@ vi.mock('$lib/stores/conversation.svelte', () => ({
     pushUserMessage: (...args: unknown[]) => pushUserMessage(...args),
     completedIdsFor: (sessionId: string) =>
       completedIds.get(sessionId) ?? new Set<string>(),
+    // Stub for the "paint the spinner before the hang" flip that
+    // agent.connect() now does before yielding a paint frame. No test
+    // asserts on the flag value, so a no-op keeps the mock stable
+    // without having to thread fake state through every assertion.
+    markLoadingInitial: (..._args: unknown[]) => {},
     error: null
   }
 }));
@@ -185,6 +190,12 @@ describe('AgentConnection reconnect race', () => {
       })
     );
     const connectPromise = agent.connect('A');
+    // connect() now suspends on `await waitForPaint()` BEFORE it calls
+    // conversation.load(). Flush that microtask so the load mock has
+    // actually been invoked and `resolveLoad` has been re-bound to the
+    // deferred-promise resolver — otherwise the test's resolveLoad()
+    // below is a no-op placeholder and the load never resolves.
+    await Promise.resolve();
     // s1 is the now-orphaned socket from the first connect. Its async
     // close lands mid-await with a retryable code.
     s1.fireClose(1006);

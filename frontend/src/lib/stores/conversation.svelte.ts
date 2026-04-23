@@ -81,6 +81,19 @@ class ConversationStore {
     return this.states[sessionId]?.completedMessageIds ?? new Set();
   }
 
+  /** Flip the per-session `loadingInitial` flag. Called from
+   * `agent.connect()` *before* it yields a paint frame, so the pane's
+   * overlay spinner shows up in the same frame as the click — the
+   * subsequent REST fetch + Svelte render of the MessageTurn tree
+   * would otherwise pin the main thread before any spinner got to
+   * paint, which is the "entire app hangs on click" failure mode.
+   * `load()` still sets this itself on entry as a safety net for
+   * callers (reconcile-after-reorg, etc.) that skip `agent.connect`. */
+  markLoadingInitial(sessionId: string, flag: boolean): void {
+    const state = this.ensureState(sessionId);
+    state.loadingInitial = flag;
+  }
+
   async load(sessionId: string): Promise<api.Session | null> {
     this.sessionId = sessionId;
     const state = this.ensureState(sessionId);
@@ -89,7 +102,9 @@ class ConversationStore {
     // the spinner is visible in the same reactive tick as the click.
     // Cleared in the finally below — covers both success and error
     // so a failed fetch doesn't leave the pane showing a stale
-    // spinner forever.
+    // spinner forever. `agent.connect()` sets this earlier (before
+    // yielding a paint frame) for the click path; this assignment is
+    // a safety net for callers that invoke load() directly.
     state.loadingInitial = true;
     try {
       // Fetch the first message page first so we can scope the

@@ -14,6 +14,25 @@ const CODE_NORMAL_CLOSE = 1000;
 const CODE_UNAUTHORIZED = 4401;
 const CODE_SESSION_NOT_FOUND = 4404;
 
+/** Resolve on the next animation frame. Used in `connect()` to yield
+ * the main thread after flipping the loading flag, so the browser can
+ * actually paint the overlay spinner before the heavy render work
+ * (REST fetch → Svelte re-render of the MessageTurn tree → shiki
+ * syntax highlighting on each code block) pins the thread. SSR fallback
+ * resolves immediately: there's no animation frame in node-side tests,
+ * and the visual yield isn't relevant there anyway.
+ *
+ * Vitest's `vi.useFakeTimers()` stubs `requestAnimationFrame` with a
+ * callback that never fires unless timers are advanced manually, which
+ * would hang every test that `await`s `connect()`. The `import.meta.env.TEST`
+ * branch short-circuits under vitest; there's no visible paint in jsdom
+ * anyway, so nothing of value is lost. */
+function waitForPaint(): Promise<void> {
+  if (import.meta.env.TEST) return Promise.resolve();
+  if (typeof requestAnimationFrame === 'undefined') return Promise.resolve();
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
 /**
  * WebSocket connection to the active session's agent runner.
  *
@@ -46,6 +65,18 @@ export class AgentConnection {
     this.sessionId = sessionId;
     this.lastCloseCode = null;
     this.retryCount = 0;
+    // Flip the per-session loading flag synchronously here (not inside
+    // conversation.load) so the overlay spinner paints in the same
+    // frame as the click, BEFORE the main thread gets pinned by
+    // Svelte's first render of the new session's MessageTurn tree
+    // (shiki syntax highlighting on many code blocks is the usual
+    // culprit). The `await` on requestAnimationFrame below then yields
+    // the thread so the browser can actually deliver that first paint
+    // — without it, `conversation.load` would kick off immediately and
+    // the spinner would only become visible in the eventual composite,
+    // which for heavy sessions is after the "hang" the user reports.
+    conversation.markLoadingInitial(sessionId, true);
+    await waitForPaint();
     // Seed from the persisted column (migration 0012) so a reload or
     // cross-tab navigation restores Plan / Auto-edit / Bypass instead
     // of silently dropping to Ask. Falls back to 'default' when the
