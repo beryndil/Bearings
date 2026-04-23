@@ -62,3 +62,20 @@ session_reorg_total = Counter(
     ["op"],
     registry=REGISTRY,
 )
+
+# Phase 7 of docs/context-menu-plan.md. Checkpoints are the primitive
+# behind "fork from here" — one counter for the anchor creation path
+# (POST /checkpoints) and one for the branch creation path (POST
+# /checkpoints/{id}/fork). A successful fork also bumps sessions_created
+# above so the session-creation tally remains complete across all paths.
+checkpoints_created = Counter(
+    "bearings_checkpoints_created_total",
+    "Number of checkpoints created via POST /checkpoints.",
+    registry=REGISTRY,
+)
+
+checkpoints_forked = Counter(
+    "bearings_checkpoints_forked_total",
+    "Number of session forks spawned from a checkpoint anchor.",
+    registry=REGISTRY,
+)
