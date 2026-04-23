@@ -4,10 +4,12 @@
   import AuthGate from '$lib/components/AuthGate.svelte';
   import CheatSheet from '$lib/components/CheatSheet.svelte';
   import ChecklistView from '$lib/components/ChecklistView.svelte';
+  import CommandPalette from '$lib/components/context-menu/CommandPalette.svelte';
   import ConfirmDialog from '$lib/components/context-menu/ConfirmDialog.svelte';
   import ContextMenu from '$lib/components/context-menu/ContextMenu.svelte';
   import StubToastHost from '$lib/components/context-menu/StubToastHost.svelte';
   import UndoToastHost from '$lib/components/context-menu/UndoToastHost.svelte';
+  import { palette } from '$lib/context-menu/palette.svelte';
   import Conversation from '$lib/components/Conversation.svelte';
   import Inspector from '$lib/components/Inspector.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
@@ -78,9 +80,21 @@
 
   // `?` toggles the cheat-sheet, but only when focus isn't in a form
   // field (so typing a literal "?" in the prompt still works). Esc
-  // closes whether or not focus is in a field.
+  // closes whether or not focus is in a field. Ctrl+Shift+P toggles
+  // the command palette — a power-user chord, so it fires from
+  // anywhere including textareas (unlike `?`, which would conflict
+  // with typing a literal `?` into the composer).
   $effect(() => {
     function onKey(e: KeyboardEvent) {
+      // Ctrl+Shift+P / Cmd+Shift+P — global, works in any field.
+      // `code === 'KeyP'` (not `key === 'P'`) because some keyboards
+      // surface shifted-P as a different `key` value; the `code`
+      // reflects the physical key the user pressed.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'KeyP') {
+        e.preventDefault();
+        palette.toggle();
+        return;
+      }
       const active = document.activeElement;
       const inField =
         active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT';
@@ -245,6 +259,7 @@
 <AuthGate />
 <CheatSheet bind:open={showCheatSheet} />
 <ContextMenu />
+<CommandPalette />
 <ConfirmDialog />
 <UndoToastHost />
 <StubToastHost />

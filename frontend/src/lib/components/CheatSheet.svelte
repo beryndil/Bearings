@@ -8,6 +8,10 @@
       group: 'Navigation',
       items: [
         { keys: ['⌘/Ctrl', 'K'], description: 'Focus the sidebar search' },
+        {
+          keys: ['⌘/Ctrl', 'Shift', 'P'],
+          description: 'Command palette — run any registry action'
+        },
         { keys: ['Esc'], description: 'Clear search / close the search' },
         { keys: ['?'], description: 'Show this cheat sheet' }
       ]
