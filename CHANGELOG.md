@@ -5,6 +5,94 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.2] - 2026-04-22
+
+Context-menu plan Phases 7 → 8 → 9 land together — the four remaining
+primitives behind disabled-with-tooltip entries in 0.9.1 are now live:
+checkpoint anchoring + forking, message pin + hide-from-context, bulk
+multi-select, and session templates. Frontend package bumps to v0.7.1
+alongside; uv.lock re-resolves.
+
+### Added
+
+- **Phase 7 checkpoint primitive (commits `86e18e1`, `4aa748c`,
+  `1f579fd`).** Migration 0024 adds the `checkpoints` table. A new
+  `CheckpointGutter` strip flanks `Conversation.svelte` with one chip
+  per anchor; right-click an anchor → Fork spawns a fresh session
+  branched from that message and pushes the row into the sidebar.
+  `POST|GET|DELETE /api/sessions/{id}/checkpoints` + `POST
+  /checkpoints/{id}/fork` land with their store helpers.
+  `session.fork.from_last_message` auto-creates an unlabelled anchor
+  and forks in one call — the stub predicate from 0.9.1 is gone.
+- **Phase 8 message flags (commit `d3dd151`).** Migration 0023 adds
+  `messages.pinned` + `messages.hidden_from_context` with partial
+  indexes. `PATCH /api/sessions/{id}/messages/{message_id}` flips
+  either column. Pinned messages always reach the agent regardless
+  of the context-trim window; hidden messages stay in the UI but are
+  excluded from the turn payload. Registry actions `message.pin`,
+  `message.unpin`, `message.hide_from_context`, and
+  `message.include_in_context` are live (the `requires` predicate
+  swaps the shown verb based on current state).
+- **Phase 9a multi-select + bulk ops (commit `1c8c3b5`).** Sidebar
+  rows gain Cmd/Ctrl-click toggle + Shift-click range semantics backed
+  by `sessionSelection` store. `POST /api/sessions/bulk` is a
+  one-dispatch best-effort endpoint over `delete` / `close` /
+  `reopen` / `pin` / `unpin` / `tag` / `untag`, returning
+  `{succeeded, failed}` per id so a stale ID in the list doesn't
+  400 the whole batch. The `multi_select` context-menu target
+  surfaces those ops on right-click.
+- **Phase 9b session templates (commit `ab4a13b`).** Migration 0025
+  adds `session_templates` (working_dir / model / session_instructions
+  / tag_ids_json / optional first-prompt body). `POST|GET|DELETE
+  /api/templates` plus `POST /api/sessions/from_template/{id}`.
+  Request fields override saved values; `working_dir` and `model`
+  must resolve to non-empty after the fold or the route 400s. Stale
+  tag ids (tag deleted after template was saved) are silently
+  skipped at attach time. Frontend adds `session.save_as_template`
+  to the session menu and a 📋 picker dropdown in the sidebar
+  header for one-click instantiation.
+
+### Changed
+
+- `SESSION_ACTIONS` frozen catalog grows to 17 entries (added
+  `session.save_as_template`).
+- `session.fork.from_last_message` is no longer a stub — the
+  disabled-with-tooltip predicate is gone; `requires` now gates on
+  the session row being present.
+
+### Database
+
+- Migrations 0023 (message flags), 0024 (checkpoints), 0025
+  (session_templates) all additive. Each ships with an index matched
+  to its primary read path.
+
+### Metrics
+
+- Added counters: `bearings_checkpoints_created_total`,
+  `bearings_checkpoints_forked_total`,
+  `bearings_sessions_bulk_total{op}`,
+  `bearings_templates_created_total`,
+  `bearings_templates_instantiated_total`.
+
+### Tests
+
+- `pytest`: 694 (up from ~620 at v0.9.1) — checkpoints store + routes,
+  message-flag round-trips, bulk dispatch per-op paths including
+  partial-failure, template store + route matrix including
+  override-precedence, stale-tag silent-drop, missing-working-dir /
+  missing-model 400s.
+- `vitest`: 460 (up from 413) — checkpoints store, message-flag
+  actions, `sessionSelection` store + multi-select frozen ID snapshot,
+  templates store + `session.save_as_template` liveness check.
+- svelte-check: 0 errors, 0 warnings across 515 files.
+
+### Notes
+
+- Context-menu plan open items still tracked in
+  `docs/context-menu-plan.md` §8 — `menus.toml` hot reload, richer
+  "instantiate template with overrides" modal, and the code_block /
+  link tempfile primitive remain on the Phase 10 list.
+
 ## [0.9.1] - 2026-04-22
 
 Registry-driven context menu system — the v0.9.1 "productive cut"
