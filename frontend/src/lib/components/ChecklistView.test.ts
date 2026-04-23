@@ -38,6 +38,7 @@ function session(overrides: Partial<Session> = {}): Session {
     last_completed_at: null,
     last_viewed_at: null,
     tag_ids: [],
+    pinned: false,
     ...overrides
   };
 }
@@ -195,7 +196,8 @@ const PAIRED_CHAT_SESSION: Session = {
   checklist_item_id: 7,
   last_completed_at: null,
   last_viewed_at: null,
-  tag_ids: []
+  tag_ids: [],
+  pinned: false
 };
 
 describe('ChecklistView paired-chat affordance', () => {

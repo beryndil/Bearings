@@ -60,6 +60,14 @@ export type Session = {
    * in-memory tags store — no per-row fetch. Empty on pre-0021
    * snapshots that slipped through without a severity backfill. */
   tag_ids: number[];
+  /** Migration 0022 / v0.9.1: the session-pinned flag the context-menu
+   * `session.pin` action flips. Defaults to false on rows created
+   * before the migration. Currently informational — the sidebar
+   * doesn't re-sort on pinned (that's a Phase 4a.3 polish pass); the
+   * flag exists so the menu can render "Unpin" on already-pinned rows
+   * and so the frontend round-trips the column through PATCH without
+   * silently dropping it. */
+  pinned: boolean;
 };
 
 export type SessionCreate = {
@@ -82,6 +90,16 @@ export type SessionUpdate = {
   description?: string | null;
   max_budget_usd?: number | null;
   session_instructions?: string | null;
+  /** v0.9.1 / migration 0022: flip the sidebar-pin flag. Pure UX — no
+   * runner drop. `null` is "don't touch"; to unpin an already-pinned
+   * session, POST `false`. */
+  pinned?: boolean | null;
+  /** v0.9.1: "Change model for continuation" (plan decision §2.1) —
+   * mutates in place so subsequent turns use the new model while past
+   * turns keep their original attribution. The backend drops the
+   * cached SDK subprocess on any model change so the next turn boots
+   * against the new model. Past cost rows are already per-turn. */
+  model?: string | null;
 };
 
 export type Message = {

@@ -4,6 +4,7 @@
   import { prefs } from '$lib/stores/prefs.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import { contextmenu } from '$lib/actions/contextmenu';
   import FolderPicker from './FolderPicker.svelte';
   import ModelSelect from './ModelSelect.svelte';
   import { parseBudget } from '$lib/utils/budget';
@@ -222,7 +223,12 @@
       {#if attachedTags.length > 0}
         <ul class="flex flex-wrap gap-1" aria-label="Attached tags">
           {#each attachedTags as tag (tag.id)}
-            <li class="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5">
+            <li
+              class="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5"
+              use:contextmenu={{
+                target: { type: 'tag_chip', tagId: tag.id, sessionId: null }
+              }}
+            >
               {#if tag.pinned}
                 <span class="text-amber-400" aria-label="pinned">★</span>
               {/if}

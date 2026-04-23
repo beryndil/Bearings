@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { getActions, resolveMenu } from './registry';
 import { SESSION_ACTIONS } from './actions/session';
 import { MESSAGE_ACTIONS } from './actions/message';
-import type { Action, ContextTarget } from './types';
+import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
+import type { Action, ContextTarget, RenderedMenu } from './types';
+
+/** Flatten a resolved menu's groups into a flat id array for
+ * set-membership assertions. */
+function flatIds(menu: RenderedMenu): string[] {
+  return menu.groups.flatMap((g) => g.actions.map((a) => a.id));
+}
 
 const SESSION: ContextTarget = { type: 'session', id: 'sess-1' };
 const MESSAGE: ContextTarget = {
@@ -11,6 +18,12 @@ const MESSAGE: ContextTarget = {
   id: 'msg-1',
   sessionId: 'sess-1',
   role: 'user'
+};
+const TAG: ContextTarget = { type: 'tag', id: 7 };
+const TAG_CHIP: ContextTarget = {
+  type: 'tag_chip',
+  tagId: 7,
+  sessionId: 'sess-1'
 };
 
 describe('registry', () => {
@@ -22,8 +35,21 @@ describe('registry', () => {
     expect(getActions('message')).toBe(MESSAGE_ACTIONS);
   });
 
+  it('exposes tag actions', () => {
+    expect(getActions('tag')).toBe(TAG_ACTIONS);
+  });
+
+  it('exposes tag_chip actions', () => {
+    expect(getActions('tag_chip')).toBe(TAG_CHIP_ACTIONS);
+  });
+
   it('every action ID is unique within its target', () => {
-    for (const list of [SESSION_ACTIONS, MESSAGE_ACTIONS]) {
+    for (const list of [
+      SESSION_ACTIONS,
+      MESSAGE_ACTIONS,
+      TAG_ACTIONS,
+      TAG_CHIP_ACTIONS
+    ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
     }
@@ -32,6 +58,8 @@ describe('registry', () => {
   it('action IDs follow <target>.<verb> naming', () => {
     for (const a of SESSION_ACTIONS) expect(a.id.startsWith('session.')).toBe(true);
     for (const a of MESSAGE_ACTIONS) expect(a.id.startsWith('message.')).toBe(true);
+    for (const a of TAG_ACTIONS) expect(a.id.startsWith('tag.')).toBe(true);
+    for (const a of TAG_CHIP_ACTIONS) expect(a.id.startsWith('tag_chip.')).toBe(true);
   });
 });
 
@@ -66,35 +94,35 @@ describe('resolveMenu', () => {
   });
 
   it('hides advanced-only actions when not in advanced mode', () => {
-    const advancedOnly: Action = {
-      id: 'session.test_advanced',
-      label: 'test',
-      section: 'view',
-      advanced: true,
-      handler: () => {}
-    };
-    // Build an ad-hoc target-agnostic menu via resolveMenu's filter
-    // logic. Since we can't inject at runtime in Phase 1, verify the
-    // filter indirectly by asserting Phase 1 ships no advanced items
-    // (so the menu shape is identical between modes).
-    const normal = resolveMenu(SESSION, false);
-    const adv = resolveMenu(SESSION, true);
-    expect(normal.groups).toEqual(adv.groups);
-    // And the ad-hoc action itself would be filtered: restate the
-    // predicate to keep the test honest.
-    const visibleNormal = [advancedOnly].filter(
-      (a) => !(a.advanced && !false)
-    );
-    const visibleAdvanced = [advancedOnly].filter(
-      (a) => !(a.advanced && !true)
-    );
-    expect(visibleNormal).toHaveLength(0);
-    expect(visibleAdvanced).toHaveLength(1);
+    // Phase 4a.2 ships real advanced items on the session menu —
+    // `session.copy_id`, `session.copy_share_link`, and
+    // `session.fork.from_last_message`. Advanced mode surfaces them;
+    // normal mode hides them. Drop the gating-dependent rows from
+    // both menus first so a missing sessions store doesn't shift the
+    // count out from under the assertion.
+    const normalIds = flatIds(resolveMenu(SESSION, false));
+    const advIds = flatIds(resolveMenu(SESSION, true));
+    expect(normalIds).not.toContain('session.copy_id');
+    expect(advIds).toContain('session.copy_id');
+    expect(normalIds).not.toContain('session.copy_share_link');
+    expect(advIds).toContain('session.copy_share_link');
   });
 
   it('resolves a message menu without error', () => {
     const menu = resolveMenu(MESSAGE, false);
     expect(menu.target).toEqual(MESSAGE);
+    expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a tag menu without error', () => {
+    const menu = resolveMenu(TAG, false);
+    expect(menu.target).toEqual(TAG);
+    expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a tag_chip menu without error', () => {
+    const menu = resolveMenu(TAG_CHIP, false);
+    expect(menu.target).toEqual(TAG_CHIP);
     expect(menu.groups.length).toBeGreaterThan(0);
   });
 

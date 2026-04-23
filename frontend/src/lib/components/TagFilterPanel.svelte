@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tags, SEVERITY_NONE_ID } from '$lib/stores/tags.svelte';
+  import { contextmenu } from '$lib/actions/contextmenu';
   import TagEdit from '$lib/components/TagEdit.svelte';
   import SeverityShield from '$lib/components/icons/SeverityShield.svelte';
   import TagIcon from '$lib/components/icons/TagIcon.svelte';
@@ -19,7 +20,10 @@
 
 {#snippet generalTagRow(tag: Tag, pinned: boolean)}
   {@const selected = tags.selected.includes(tag.id)}
-  <li class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}">
+  <li
+    class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}"
+    use:contextmenu={{ target: { type: 'tag', id: tag.id } }}
+  >
     <button
       type="button"
       class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs
@@ -93,7 +97,10 @@
 
 {#snippet severityTagRow(tag: Tag)}
   {@const selected = tags.selectedSeverity.includes(tag.id)}
-  <li class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}">
+  <li
+    class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}"
+    use:contextmenu={{ target: { type: 'tag', id: tag.id } }}
+  >
     <button
       type="button"
       class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs

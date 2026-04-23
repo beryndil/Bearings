@@ -23,7 +23,11 @@ export const SECTIONS = [
 ] as const;
 export type ActionSection = (typeof SECTIONS)[number];
 
-/** Sidebar row or conversation header for a session. */
+/** Sidebar row or conversation header for a session. The target
+ * deliberately carries only the id — `requires` / `disabled`
+ * predicates fetch fresh `closed_at` / `pinned` / `working_dir` from
+ * the sessions store so a menu opened seconds before a WS update
+ * doesn't render stale gating decisions. */
 export type SessionTarget = {
   type: 'session';
   id: string;
@@ -39,9 +43,32 @@ export type MessageTarget = {
   role: 'user' | 'assistant';
 };
 
+/** Sidebar-filter tag row (either general group or severity group).
+ * Only the id is needed — the handlers look the row up via the tags
+ * store so `pinned` + `name` always reflect latest state. */
+export type TagTarget = {
+  type: 'tag';
+  id: number;
+};
+
+/** A tag chip attached to a session. `sessionId` is nullable because
+ * the NewSessionForm's attached-tag list renders chips for a session
+ * that hasn't been persisted yet — `tag_chip.detach` gates on the
+ * presence of `sessionId`. Chips attached to existing sessions (in
+ * SessionEdit) always carry a real id. */
+export type TagChipTarget = {
+  type: 'tag_chip';
+  tagId: number;
+  sessionId: string | null;
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
-export type ContextTarget = SessionTarget | MessageTarget;
+export type ContextTarget =
+  | SessionTarget
+  | MessageTarget
+  | TagTarget
+  | TagChipTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired

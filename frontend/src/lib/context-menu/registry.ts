@@ -22,10 +22,13 @@ import type {
 import { SECTIONS } from './types';
 import { SESSION_ACTIONS } from './actions/session';
 import { MESSAGE_ACTIONS } from './actions/message';
+import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
 
 const REGISTRY: Record<TargetType, readonly Action[]> = {
   session: SESSION_ACTIONS,
-  message: MESSAGE_ACTIONS
+  message: MESSAGE_ACTIONS,
+  tag: TAG_ACTIONS,
+  tag_chip: TAG_CHIP_ACTIONS
 };
 
 /** Unfiltered actions for a target type. */

@@ -2,6 +2,7 @@
   import * as api from '$lib/api';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
+  import { contextmenu } from '$lib/actions/contextmenu';
 
   let {
     open = $bindable(false),
@@ -208,6 +209,13 @@
             {#each sessionTags as tag (tag.id)}
               <li
                 class="flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs"
+                use:contextmenu={{
+                  target: {
+                    type: 'tag_chip',
+                    tagId: tag.id,
+                    sessionId: current?.id ?? null
+                  }
+                }}
               >
                 {#if tag.pinned}
                   <span class="text-amber-400" aria-label="pinned">★</span>
