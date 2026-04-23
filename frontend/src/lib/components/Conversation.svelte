@@ -15,6 +15,7 @@
   import ReorgUndoToast from '$lib/components/ReorgUndoToast.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import SessionPickerModal from '$lib/components/SessionPickerModal.svelte';
+  import { reorgStore } from '$lib/context-menu/reorg.svelte';
   import ContextMeter from '$lib/components/ContextMeter.svelte';
   import LiveTodos from '$lib/components/LiveTodos.svelte';
   import TokenMeter from '$lib/components/TokenMeter.svelte';
@@ -224,6 +225,23 @@
     pickerBulkIds = [];
     pickerOpen = true;
   }
+
+  // Phase 5 bridge: `actions/message.ts` publishes move/split requests
+  // to `reorgStore`; this effect picks them up and opens the picker for
+  // the active session. Requests for other sessions are ignored — if
+  // the user right-clicks a message in a background tab (e.g. via the
+  // palette while on a different session), the Conversation mounted
+  // against that session handles it, not this one.
+  $effect(() => {
+    const req = reorgStore.pending;
+    if (!req) return;
+    if (req.sessionId !== sessions.selectedId) return;
+    const msg = conversation.messages.find((m) => m.id === req.messageId);
+    if (!msg) return;
+    reorgStore.clear();
+    if (req.kind === 'move') openMoveFor(msg);
+    else openSplitFor(msg);
+  });
 
   function onBulkMove() {
     if (selectedIds.size === 0) return;
@@ -1449,8 +1467,6 @@
             highlightQuery={conversation.highlightQuery}
             {copiedMsgId}
             {onCopyMessage}
-            onMoveMessage={openMoveFor}
-            onSplitAfter={openSplitFor}
             {bulkMode}
             {selectedIds}
             onToggleSelect={onBulkToggleSelect}

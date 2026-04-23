@@ -16,20 +16,27 @@
     highlightQuery: string;
     copiedMsgId: string | null;
     onCopyMessage: (msg: Message) => void;
-    /** Slice 3: per-message reorg menu. Optional so tests / older
-     * callers that don't care about reorg can omit them. */
-    onMoveMessage?: (msg: Message) => void;
-    onSplitAfter?: (msg: Message) => void;
-    /** Slice 4: bulk-select mode. When `bulkMode` is true, the `⋯`
-     * menu is hidden and a checkbox renders in the message header
-     * instead. `selectedIds` is the live set; toggling a row fires
-     * `onToggleSelect` with the message and whether Shift was held
-     * (for range selection, handled by the parent). */
+    /** Slice 4: bulk-select mode. When `bulkMode` is true the header
+     * renders a checkbox in place of the ordinary role tag and the
+     * context-menu action is still wired — right-click while in bulk
+     * mode lands on the message registry, same as normal. `selectedIds`
+     * is the live set; toggling a row fires `onToggleSelect` with the
+     * message and whether Shift was held (for range selection, handled
+     * by the parent). */
     bulkMode?: boolean;
     selectedIds?: ReadonlySet<string>;
     onToggleSelect?: (msg: Message, shiftKey: boolean) => void;
   };
 
+  /**
+   * Phase 5 removed the `⋯` header popover. Move-to-session and
+   * Split-here used to live inside it; those actions now fire from the
+   * right-click registry (`actions/message.ts`) and publish to the
+   * `reorgStore` bridge so `Conversation.svelte` opens its picker.
+   * Existing callers that used to pass `onMoveMessage` / `onSplitAfter`
+   * no longer need the prop — the actions reach Conversation through
+   * the store instead.
+   */
   const {
     user,
     assistant,
@@ -41,8 +48,6 @@
     highlightQuery,
     copiedMsgId,
     onCopyMessage,
-    onMoveMessage,
-    onSplitAfter,
     bulkMode = false,
     selectedIds,
     onToggleSelect
@@ -64,38 +69,6 @@
     if (ok === null) return { glyph: '●', cls: 'text-amber-400' };
     if (ok) return { glyph: '✓', cls: 'text-emerald-400' };
     return { glyph: '✗', cls: 'text-rose-400' };
-  }
-
-  // Slice 3: per-message menu. Track which message id currently has
-  // its popover open — only one at a time. A document-level click
-  // handler dismisses it on outside taps.
-  let openMenuId = $state<string | null>(null);
-
-  const reorgEnabled = $derived(Boolean(onMoveMessage || onSplitAfter));
-
-  $effect(() => {
-    if (openMenuId === null) return;
-    function onDocClick(e: MouseEvent) {
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && tgt.closest('[data-reorg-menu]')) return;
-      openMenuId = null;
-    }
-    document.addEventListener('click', onDocClick);
-    return () => document.removeEventListener('click', onDocClick);
-  });
-
-  function toggleMenu(id: string) {
-    openMenuId = openMenuId === id ? null : id;
-  }
-
-  function handleMove(msg: Message) {
-    openMenuId = null;
-    onMoveMessage?.(msg);
-  }
-
-  function handleSplit(msg: Message) {
-    openMenuId = null;
-    onSplitAfter?.(msg);
   }
 
   function isSelected(id: string): boolean {
@@ -146,59 +119,6 @@
         {/if}
         <span>user</span>
       </span>
-      {#if reorgEnabled && !bulkMode}
-        <div class="relative" data-reorg-menu>
-          <button
-            type="button"
-            class="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-400
-              hover:text-slate-200 px-1"
-            aria-label="Message actions"
-            aria-haspopup="menu"
-            aria-expanded={openMenuId === user.id}
-            onclick={(e) => {
-              e.stopPropagation();
-              toggleMenu(user!.id);
-            }}
-            data-testid="message-menu-trigger"
-            data-message-id={user.id}
-          >
-            ⋯
-          </button>
-          {#if openMenuId === user.id}
-            <div
-              class="absolute right-0 top-full mt-1 z-10 rounded border border-slate-700
-                bg-slate-900 shadow-lg py-1 min-w-[10rem]"
-              role="menu"
-              data-testid="message-menu"
-            >
-              {#if onMoveMessage}
-                <button
-                  type="button"
-                  class="block w-full text-left px-3 py-1 text-xs text-slate-200
-                    hover:bg-slate-800"
-                  role="menuitem"
-                  onclick={() => handleMove(user!)}
-                  data-testid="menu-move"
-                >
-                  Move to session…
-                </button>
-              {/if}
-              {#if onSplitAfter}
-                <button
-                  type="button"
-                  class="block w-full text-left px-3 py-1 text-xs text-slate-200
-                    hover:bg-slate-800"
-                  role="menuitem"
-                  onclick={() => handleSplit(user!)}
-                  data-testid="menu-split"
-                >
-                  Split here…
-                </button>
-              {/if}
-            </div>
-          {/if}
-        </div>
-      {/if}
     </header>
     <CollapsibleBody
       messageId={user.id}
@@ -239,7 +159,17 @@
       {#each toolCalls as call, i (call.id)}
         {@const mark = callMarker(call.ok)}
         <pre
-          class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"><span
+          class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"
+          data-testid="tool-call-row"
+          data-tool-call-id={call.id}
+          use:contextmenu={{
+            target: {
+              type: 'tool_call',
+              id: call.id,
+              sessionId: assistant?.session_id ?? user?.session_id ?? '',
+              messageId: call.messageId
+            }
+          }}><span
             class="text-emerald-400">$ {call.name}</span> <span
             class={mark.cls}>{mark.glyph}</span>{#if call.outputTruncated} <span
             class="text-amber-400">[truncated]</span>{/if}
@@ -290,59 +220,6 @@
         {/if}
         <span>assistant{isStreaming ? ' · streaming' : ''}</span>
       </span>
-      {#if assistant && reorgEnabled && !bulkMode}
-        <div class="relative" data-reorg-menu>
-          <button
-            type="button"
-            class="opacity-0 group-hover:opacity-100 focus:opacity-100 text-slate-400
-              hover:text-slate-200 px-1"
-            aria-label="Message actions"
-            aria-haspopup="menu"
-            aria-expanded={openMenuId === assistant.id}
-            onclick={(e) => {
-              e.stopPropagation();
-              toggleMenu(assistant!.id);
-            }}
-            data-testid="message-menu-trigger"
-            data-message-id={assistant.id}
-          >
-            ⋯
-          </button>
-          {#if openMenuId === assistant.id}
-            <div
-              class="absolute right-0 top-full mt-1 z-10 rounded border border-slate-700
-                bg-slate-900 shadow-lg py-1 min-w-[10rem]"
-              role="menu"
-              data-testid="message-menu"
-            >
-              {#if onMoveMessage}
-                <button
-                  type="button"
-                  class="block w-full text-left px-3 py-1 text-xs text-slate-200
-                    hover:bg-slate-800"
-                  role="menuitem"
-                  onclick={() => handleMove(assistant!)}
-                  data-testid="menu-move"
-                >
-                  Move to session…
-                </button>
-              {/if}
-              {#if onSplitAfter}
-                <button
-                  type="button"
-                  class="block w-full text-left px-3 py-1 text-xs text-slate-200
-                    hover:bg-slate-800"
-                  role="menuitem"
-                  onclick={() => handleSplit(assistant!)}
-                  data-testid="menu-split"
-                >
-                  Split here…
-                </button>
-              {/if}
-            </div>
-          {/if}
-        </div>
-      {/if}
     </header>
     {#if assistant}
       <CollapsibleBody

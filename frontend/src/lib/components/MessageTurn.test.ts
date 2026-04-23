@@ -37,30 +37,24 @@ function baseProps(overrides: Render = {}): Render {
 }
 
 describe('MessageTurn (bulk mode)', () => {
-  it('renders the ⋯ menu and no checkbox when bulkMode is off', () => {
-    const { queryAllByTestId } = render(
-      MessageTurn,
-      baseProps({
-        onMoveMessage: vi.fn(),
-        onSplitAfter: vi.fn()
-      })
-    );
-    expect(queryAllByTestId('message-menu-trigger').length).toBeGreaterThan(0);
+  it('renders no bulk checkbox when bulkMode is off', () => {
+    const { queryAllByTestId, getByTestId } = render(MessageTurn, baseProps());
     expect(queryAllByTestId('bulk-checkbox')).toHaveLength(0);
+    // Articles still carry their data-message-id tags so the registry
+    // menu and the Phase-5 scroll-into-view action can find them.
+    expect(getByTestId('user-article').getAttribute('data-message-id')).toBe('u-1');
+    expect(getByTestId('assistant-article').getAttribute('data-message-id')).toBe('a-1');
   });
 
-  it('hides the ⋯ menu and renders checkboxes when bulkMode is on', () => {
-    const { queryAllByTestId, getAllByTestId } = render(
+  it('renders checkboxes when bulkMode is on', () => {
+    const { getAllByTestId } = render(
       MessageTurn,
       baseProps({
-        onMoveMessage: vi.fn(),
-        onSplitAfter: vi.fn(),
         bulkMode: true,
         selectedIds: new Set<string>(),
         onToggleSelect: vi.fn()
       })
     );
-    expect(queryAllByTestId('message-menu-trigger')).toHaveLength(0);
     const boxes = getAllByTestId('bulk-checkbox');
     expect(boxes).toHaveLength(2);
     expect(boxes.map((b) => b.getAttribute('data-message-id'))).toEqual(['u-1', 'a-1']);
@@ -116,5 +110,35 @@ describe('MessageTurn (bulk mode)', () => {
     // u-1 unchecked, a-1 checked
     expect(boxes[0].checked).toBe(false);
     expect(boxes[1].checked).toBe(true);
+  });
+});
+
+describe('MessageTurn (tool-call rows)', () => {
+  function call(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      id: 'tc-1',
+      messageId: 'a-1',
+      name: 'Read',
+      input: { path: '/tmp/x' },
+      output: 'ok',
+      error: null,
+      ok: true,
+      startedAt: 0,
+      finishedAt: 1,
+      outputTruncated: false,
+      ...overrides
+    };
+  }
+
+  it('tags each tool-call row with its id so the registry can target it', () => {
+    const { getAllByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [call(), call({ id: 'tc-2', name: 'Grep' })]
+      })
+    );
+    const rows = getAllByTestId('tool-call-row');
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.getAttribute('data-tool-call-id'))).toEqual(['tc-1', 'tc-2']);
   });
 });

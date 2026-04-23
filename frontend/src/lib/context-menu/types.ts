@@ -62,13 +62,28 @@ export type TagChipTarget = {
   sessionId: string | null;
 };
 
+/** A tool-call row inside an assistant turn's tool-work drawer. Carries
+ * the live `LiveToolCall.id` so handlers can look up the latest
+ * input/output from the conversation store — the row streams, and a
+ * snapshot into the target would be stale by the time the handler
+ * fires. `messageId` is the assistant message the call belongs to when
+ * the reducer has stitched one (null during the first few streaming
+ * frames of a brand-new turn). */
+export type ToolCallTarget = {
+  type: 'tool_call';
+  id: string;
+  sessionId: string;
+  messageId: string | null;
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
 export type ContextTarget =
   | SessionTarget
   | MessageTarget
   | TagTarget
-  | TagChipTarget;
+  | TagChipTarget
+  | ToolCallTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired

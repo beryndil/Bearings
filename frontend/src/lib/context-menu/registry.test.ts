@@ -4,6 +4,7 @@ import { getActions, resolveMenu } from './registry';
 import { SESSION_ACTIONS } from './actions/session';
 import { MESSAGE_ACTIONS } from './actions/message';
 import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
+import { TOOL_CALL_ACTIONS } from './actions/tool_call';
 import type { Action, ContextTarget, RenderedMenu } from './types';
 
 /** Flatten a resolved menu's groups into a flat id array for
@@ -25,6 +26,12 @@ const TAG_CHIP: ContextTarget = {
   tagId: 7,
   sessionId: 'sess-1'
 };
+const TOOL_CALL: ContextTarget = {
+  type: 'tool_call',
+  id: 'tc-1',
+  sessionId: 'sess-1',
+  messageId: 'msg-1'
+};
 
 describe('registry', () => {
   it('exposes session actions', () => {
@@ -43,12 +50,17 @@ describe('registry', () => {
     expect(getActions('tag_chip')).toBe(TAG_CHIP_ACTIONS);
   });
 
+  it('exposes tool_call actions', () => {
+    expect(getActions('tool_call')).toBe(TOOL_CALL_ACTIONS);
+  });
+
   it('every action ID is unique within its target', () => {
     for (const list of [
       SESSION_ACTIONS,
       MESSAGE_ACTIONS,
       TAG_ACTIONS,
-      TAG_CHIP_ACTIONS
+      TAG_CHIP_ACTIONS,
+      TOOL_CALL_ACTIONS
     ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -60,6 +72,7 @@ describe('registry', () => {
     for (const a of MESSAGE_ACTIONS) expect(a.id.startsWith('message.')).toBe(true);
     for (const a of TAG_ACTIONS) expect(a.id.startsWith('tag.')).toBe(true);
     for (const a of TAG_CHIP_ACTIONS) expect(a.id.startsWith('tag_chip.')).toBe(true);
+    for (const a of TOOL_CALL_ACTIONS) expect(a.id.startsWith('tool_call.')).toBe(true);
   });
 });
 
@@ -123,6 +136,12 @@ describe('resolveMenu', () => {
   it('resolves a tag_chip menu without error', () => {
     const menu = resolveMenu(TAG_CHIP, false);
     expect(menu.target).toEqual(TAG_CHIP);
+    expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a tool_call menu without error', () => {
+    const menu = resolveMenu(TOOL_CALL, false);
+    expect(menu.target).toEqual(TOOL_CALL);
     expect(menu.groups.length).toBeGreaterThan(0);
   });
 
