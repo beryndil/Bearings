@@ -19,6 +19,16 @@ export { TOOL_OUTPUT_CAP_CHARS, capToolOutput, type ContextUsageState, type Live
 
 const PAGE_SIZE = 50;
 
+/** Minimum time (ms) the `loadingInitial` overlay stays visible once
+ * shown. Without this, a fast REST load (cached session, warm DB) can
+ * mount and unmount the overlay inside a single compositor tick and the
+ * user sees nothing — exactly the "it's selective about when it shows"
+ * symptom. 250ms is under the human flicker-perception threshold for a
+ * reappearing visual, so it always reads as "brief loading state" rather
+ * than "janky flash." Tests bypass via `import.meta.env.TEST` because
+ * fake timers don't advance the deferred clear. */
+const MIN_LOADING_VISIBLE_MS = 250;
+
 class ConversationStore {
   sessionId = $state<string | null>(null);
   totalCost = $state(0);
@@ -30,6 +40,13 @@ class ConversationStore {
   // continue streaming in the background. The active-session getters
   // below pull from this map.
   private states = $state<Record<string, SessionState>>({});
+
+  // Per-session bookkeeping for the `loadingInitial` minimum-display
+  // debounce. Kept outside the reactive state map so flipping the
+  // timestamp doesn't invalidate view subscribers — only `loadingInitial`
+  // on the state row is visible to templates.
+  private loadingInitialStartedAt: Record<string, number> = {};
+  private loadingInitialClearTimer: Record<string, ReturnType<typeof setTimeout>> = {};
 
   private ensureState(id: string): SessionState {
     if (!this.states[id]) this.states[id] = emptyState();
@@ -81,17 +98,60 @@ class ConversationStore {
     return this.states[sessionId]?.completedMessageIds ?? new Set();
   }
 
-  /** Flip the per-session `loadingInitial` flag. Called from
-   * `agent.connect()` *before* it yields a paint frame, so the pane's
-   * overlay spinner shows up in the same frame as the click — the
-   * subsequent REST fetch + Svelte render of the MessageTurn tree
-   * would otherwise pin the main thread before any spinner got to
-   * paint, which is the "entire app hangs on click" failure mode.
-   * `load()` still sets this itself on entry as a safety net for
-   * callers (reconcile-after-reorg, etc.) that skip `agent.connect`. */
+  /** Flip the per-session `loadingInitial` flag with a minimum-visible
+   * debounce on the false→true→false → false transition.
+   *
+   * The `true` branch is called from `agent.connect()` *before* it
+   * yields a paint frame, so the pane's overlay spinner shows up in
+   * the same frame as the click — the subsequent REST fetch + Svelte
+   * render of the MessageTurn tree would otherwise pin the main thread
+   * before any spinner got to paint, which is the "entire app hangs
+   * on click" failure mode. `load()` routes through here too as a
+   * safety net for callers (reconcile-after-reorg, etc.) that skip
+   * `agent.connect`.
+   *
+   * The `false` branch enforces `MIN_LOADING_VISIBLE_MS` so fast loads
+   * (cached session, warm REST) still hold the overlay up long enough
+   * for the compositor to commit at least one visible frame. Without
+   * this, the mount+unmount pair can land inside a single tick and the
+   * user sees nothing — the "indicator is selective about when it
+   * appears" symptom. If a pending clear is outstanding and a new
+   * `true` arrives (rapid re-click), we cancel it and reset the start
+   * so the next `false` gets a fresh 250ms window. */
   markLoadingInitial(sessionId: string, flag: boolean): void {
     const state = this.ensureState(sessionId);
-    state.loadingInitial = flag;
+    const pending = this.loadingInitialClearTimer[sessionId];
+    if (pending) {
+      clearTimeout(pending);
+      delete this.loadingInitialClearTimer[sessionId];
+    }
+    if (flag) {
+      state.loadingInitial = true;
+      this.loadingInitialStartedAt[sessionId] = performance.now();
+      return;
+    }
+    // Test bypass: vitest's fake timers stall the deferred clear, and
+    // the minimum-display is purely a paint-flicker concern with no
+    // semantic value in jsdom. Flip directly so tests stay deterministic.
+    if (import.meta.env.TEST) {
+      state.loadingInitial = false;
+      delete this.loadingInitialStartedAt[sessionId];
+      return;
+    }
+    const startedAt = this.loadingInitialStartedAt[sessionId];
+    const elapsed = startedAt != null ? performance.now() - startedAt : Infinity;
+    if (elapsed >= MIN_LOADING_VISIBLE_MS) {
+      state.loadingInitial = false;
+      delete this.loadingInitialStartedAt[sessionId];
+      return;
+    }
+    const remaining = MIN_LOADING_VISIBLE_MS - elapsed;
+    this.loadingInitialClearTimer[sessionId] = setTimeout(() => {
+      delete this.loadingInitialClearTimer[sessionId];
+      delete this.loadingInitialStartedAt[sessionId];
+      const s = this.states[sessionId];
+      if (s) s.loadingInitial = false;
+    }, remaining);
   }
 
   async load(sessionId: string): Promise<api.Session | null> {
@@ -103,9 +163,11 @@ class ConversationStore {
     // Cleared in the finally below — covers both success and error
     // so a failed fetch doesn't leave the pane showing a stale
     // spinner forever. `agent.connect()` sets this earlier (before
-    // yielding a paint frame) for the click path; this assignment is
-    // a safety net for callers that invoke load() directly.
-    state.loadingInitial = true;
+    // yielding a paint frame) for the click path; this call is a
+    // safety net for direct-load callers (reorg reconcile, etc.).
+    // Routed through markLoadingInitial so the debounce bookkeeping
+    // stays consistent regardless of entry point.
+    this.markLoadingInitial(sessionId, true);
     try {
       // Fetch the first message page first so we can scope the
       // tool_calls lookup to just those messages. Pre-v0.x.x we pulled
@@ -170,7 +232,7 @@ class ConversationStore {
       this.error = e instanceof Error ? e.message : String(e);
       return null;
     } finally {
-      state.loadingInitial = false;
+      this.markLoadingInitial(sessionId, false);
     }
   }
 
