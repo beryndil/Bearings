@@ -17,6 +17,101 @@ Scaffold reference (still useful for plans):
 
 ---
 
+## Session handoff — 2026-04-23 (context-full split)
+
+Previous Claude session ran long (context-menu plan phases 7–13 +
+post-ship packaging/hardening fixes, then diagnosed and fixed a live
+right-click outage). Split here so the next session starts with fresh
+context.
+
+### Where we ended
+
+- **v0.9.7 is the tip of main**, tagged and pushed. `bearings.service`
+  was restarted at 13:31:23 CDT and now reports the real version —
+  `/api/health` → `"version":"0.9.7"` (was lying as `0.6.0` for the
+  whole v0.7.x–v0.9.6 line).
+- **Right-click surface is live.** Context-menu plan phases 7 through
+  13 shipped across v0.9.0–v0.9.5. Plan marks end-of-13 as
+  "feature-complete per the shippable portion of the spec."
+- **Packaging fixed (v0.9.6).** Wheel previously shipped with no
+  frontend. `pyproject.toml` now has
+  `[tool.hatch.build.targets.wheel.force-include]` pinning
+  `src/bearings/web/dist/` into both wheel + sdist. Verified in a
+  fresh venv.
+- **Hardening landed (v0.9.7).** `menuConfig.hydrate` tolerates
+  `undefined` / `null` / malformed `context_menus` payloads (runtime
+  shape check, flags `.error = "stale backend"`, keeps registry
+  serving built-in ordering). `src/bearings/__init__.py` now derives
+  `__version__` from `importlib.metadata` so future bumps can't drift
+  the reported version out of sync.
+
+### Open tracks (pick one, or add your own)
+
+1. **Context-menu plan deferred phases 14–16 (v0.10.x+).** All three
+   have unresolved product questions the plan explicitly flagged
+   (`docs/context-menu-plan.md` §8) — won't yield good code until the
+   questions are answered by Dave:
+   - Phase 14 Attachments — entirely unspecified (file types,
+     storage model, whether they go into the model prompt, UX entry
+     surfaces).
+   - Phase 15 Retry tool call / regenerate — touches the
+     `claude-agent-sdk` session-resume model (`sdk_session_id` holds
+     hidden state); open question is whether retry forks the session
+     or rewrites history in place.
+   - Phase 16 Pending-ops panel — backend (`/api/pending`) already
+     lives from Phase-A. Plan flags the anchor decision as unresolved:
+     sidebar tab, Inspector tab, or floating card. Cheapest of the
+     three once anchor is picked.
+
+2. **Public-distribution / v1.0.0 readiness.** Prior session pivoted
+   here briefly under the "make the best decisions for public
+   distribution" prompt, then Dave course-corrected back to right-
+   click. The pivot identified several blockers that are still open:
+   - README Status/Features are 7 minor versions stale (still claims
+     "Alpha — 0.2.x development", zero mention of the context-menu
+     surface, palette, checkpoints, multi-select, etc.). First thing
+     a public user reads.
+   - No threat-model section in README (auth off by default +
+     localhost binding is fine as the default, but it should be named
+     explicitly so users who reverse-proxy don't get owned).
+   - Never run `uv publish` / `twine upload dist/*`. Nothing is on
+     PyPI yet — the wheel is *correct* now, but no one can
+     `pip install bearings` from the public index.
+   - Never tagged v1.0.0. Doing so promises a stable API surface.
+
+3. **Pre-existing sluggishness audit.** Dave ran an audit on
+   2026-04-23 that landed uncommitted edits in `TODO.md` — they are
+   currently held in `git stash` (kept out of this handoff commit so
+   the two tracks don't mix). Run `git stash list` to see them and
+   `git stash pop` to restore. Headline finding:
+   `frontend/src/lib/stores/conversation/reducer.ts` lines 229/256/
+   276 allocate a fresh `toolCalls` array per streaming delta
+   (`state.toolCalls = state.toolCalls.map(...)` /
+   `[...state.toolCalls, newOne]`), despite the file's "mutate in
+   place" header. This is the upstream cause of the 1:1 `buildTurns`
+   rebuilds — **prerequisite for any re-derivation refactor to
+   actually pay off**. Svelte 5 `$state` proxies propagate in-place
+   mutation; fix is to mutate `tc.output` directly and
+   `state.toolCalls.push()` for start.
+
+### Operational notes for the next session
+
+- **Don't trust `__version__` from a running service as the "what
+  code is actually loaded" signal** — Python caches imports per
+  process. Check `systemctl --user show bearings -p
+  ActiveEnterTimestamp,MainPID` and compare to the latest commit
+  time on main. If ActiveEnter predates the commit you care about,
+  the process is stale and needs `systemctl --user restart bearings`
+  to pick up new code.
+- **The running `bearings.service` hosts the Claude session that
+  operates on this repo.** Restarting it terminates the current
+  Claude session. Ask Dave before restarting, or do it at a handoff
+  boundary like this one.
+- **The stashed TODO.md changes are Dave's audit work, not prior-
+  session work.** Do not commit without checking with Dave.
+
+---
+
 ## File-size audit (CLAUDE.md: max 400 lines)
 
 Several files were split during v0.2/v0.3 work — see the archive's
