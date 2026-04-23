@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.6] - 2026-04-23
+
+Packaging fix — makes the right-click / context-menu work shipped
+through v0.9.x actually reachable via `pip install`. Prior wheels
+contained the Python server but no frontend assets; installing from a
+built wheel produced a server that 404'd on `/` because
+`src/bearings/web/dist/*` is gitignored (the SvelteKit bundle is a
+generated artifact) and hatch's VCS-aware file discovery skipped it.
+
+### Fixed
+
+- **`pyproject.toml` — `[tool.hatch.build.targets.wheel.force-include]`
+  and `[...sdist.force-include]` now pin `src/bearings/web/dist/` into
+  both wheel and sdist.** Verified: `uv build` → `pip install` in a
+  fresh venv lands `bearings/web/dist/index.html` plus 293 `_app/`
+  children under `site-packages/bearings/web/dist/`, which is exactly
+  where `server.py` mounts `StaticFiles` at runtime.
+
+### Release workflow note
+
+`npm run build` in `frontend/` must run before `uv build` so
+`src/bearings/web/dist/` is populated when hatch copies it into the
+wheel. `npm run build` already runs `scripts/sync-dist.mjs` as its
+post-step, so the local dev workflow is unchanged — this only matters
+for release builds.
+
 ## [0.9.5] - 2026-04-22
 
 Phase 13 of the context-menu plan — cheat-sheet discoverability. The `?`

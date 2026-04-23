@@ -1,6 +1,6 @@
 [project]
 name = "bearings"
-version = "0.9.5"
+version = "0.9.6"
 description = "Localhost web UI for Claude Code agent sessions."
 readme = "README.md"
 license = { text = "MIT" }
@@ -48,6 +48,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bearings"]
+
+# Force the built frontend bundle into the wheel. `src/bearings/web/dist/*`
+# is gitignored (the generated SvelteKit output is a build artifact), so
+# hatch's default VCS-aware file discovery skips it. Without this
+# directive, `pip install bearings` ships a server with no UI and the
+# root route 404s. `npm run build` in `frontend/` must run before
+# `uv build` so the directory is populated.
+[tool.hatch.build.targets.wheel.force-include]
+"src/bearings/web/dist" = "bearings/web/dist"
+
+# Mirror the same include into the sdist so `pip install` from source
+# (e.g. a GitHub tarball) produces a working install as long as the
+# frontend bundle was built before the sdist was packaged.
+[tool.hatch.build.targets.sdist.force-include]
+"src/bearings/web/dist" = "src/bearings/web/dist"
 
 [tool.ruff]
 line-length = 100
