@@ -25,6 +25,12 @@ from bearings.db._checklists import (
     update_checklist,
     update_item,
 )
+from bearings.db._checkpoints import (
+    create_checkpoint,
+    delete_checkpoint,
+    get_checkpoint,
+    list_checkpoints,
+)
 from bearings.db._common import MIGRATIONS_DIR, init_db
 from bearings.db._messages import (
     append_tool_output,
@@ -98,9 +104,11 @@ __all__ = [
     "attach_tool_calls_to_message",
     "close_session",
     "create_checklist",
+    "create_checkpoint",
     "create_item",
     "create_session",
     "create_tag",
+    "delete_checkpoint",
     "delete_item",
     "delete_session",
     "delete_reorg_audit",
@@ -112,6 +120,7 @@ __all__ = [
     "find_replayable_prompt",
     "finish_tool_call",
     "get_checklist",
+    "get_checkpoint",
     "get_default_severity_tag_id",
     "get_item",
     "get_item_by_chat_session",
@@ -128,6 +137,7 @@ __all__ = [
     "list_all_messages",
     "list_all_sessions",
     "list_all_tool_calls",
+    "list_checkpoints",
     "list_messages",
     "list_reorg_audits",
     "list_session_ids_for_tag",
