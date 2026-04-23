@@ -5,6 +5,8 @@ import { SESSION_ACTIONS } from './actions/session';
 import { MESSAGE_ACTIONS } from './actions/message';
 import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
 import { TOOL_CALL_ACTIONS } from './actions/tool_call';
+import { CODE_BLOCK_ACTIONS } from './actions/code_block';
+import { LINK_ACTIONS } from './actions/link';
 import type { Action, ContextTarget, RenderedMenu } from './types';
 
 /** Flatten a resolved menu's groups into a flat id array for
@@ -32,6 +34,20 @@ const TOOL_CALL: ContextTarget = {
   sessionId: 'sess-1',
   messageId: 'msg-1'
 };
+const CODE_BLOCK: ContextTarget = {
+  type: 'code_block',
+  text: 'print("hi")',
+  language: 'python',
+  sessionId: 'sess-1',
+  messageId: 'msg-1'
+};
+const LINK: ContextTarget = {
+  type: 'link',
+  href: 'https://example.com',
+  text: 'example',
+  sessionId: 'sess-1',
+  messageId: 'msg-1'
+};
 
 describe('registry', () => {
   it('exposes session actions', () => {
@@ -54,13 +70,23 @@ describe('registry', () => {
     expect(getActions('tool_call')).toBe(TOOL_CALL_ACTIONS);
   });
 
+  it('exposes code_block actions', () => {
+    expect(getActions('code_block')).toBe(CODE_BLOCK_ACTIONS);
+  });
+
+  it('exposes link actions', () => {
+    expect(getActions('link')).toBe(LINK_ACTIONS);
+  });
+
   it('every action ID is unique within its target', () => {
     for (const list of [
       SESSION_ACTIONS,
       MESSAGE_ACTIONS,
       TAG_ACTIONS,
       TAG_CHIP_ACTIONS,
-      TOOL_CALL_ACTIONS
+      TOOL_CALL_ACTIONS,
+      CODE_BLOCK_ACTIONS,
+      LINK_ACTIONS
     ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -73,6 +99,8 @@ describe('registry', () => {
     for (const a of TAG_ACTIONS) expect(a.id.startsWith('tag.')).toBe(true);
     for (const a of TAG_CHIP_ACTIONS) expect(a.id.startsWith('tag_chip.')).toBe(true);
     for (const a of TOOL_CALL_ACTIONS) expect(a.id.startsWith('tool_call.')).toBe(true);
+    for (const a of CODE_BLOCK_ACTIONS) expect(a.id.startsWith('code_block.')).toBe(true);
+    for (const a of LINK_ACTIONS) expect(a.id.startsWith('link.')).toBe(true);
   });
 });
 
@@ -142,6 +170,18 @@ describe('resolveMenu', () => {
   it('resolves a tool_call menu without error', () => {
     const menu = resolveMenu(TOOL_CALL, false);
     expect(menu.target).toEqual(TOOL_CALL);
+    expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a code_block menu without error', () => {
+    const menu = resolveMenu(CODE_BLOCK, false);
+    expect(menu.target).toEqual(CODE_BLOCK);
+    expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a link menu without error', () => {
+    const menu = resolveMenu(LINK, false);
+    expect(menu.target).toEqual(LINK);
     expect(menu.groups.length).toBeGreaterThan(0);
   });
 

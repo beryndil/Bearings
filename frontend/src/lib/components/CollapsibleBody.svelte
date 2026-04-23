@@ -16,6 +16,7 @@
   import { onMount } from 'svelte';
   import { renderMarkdown } from '$lib/render';
   import { highlight } from '$lib/actions/highlight';
+  import { contextmenuDelegate } from '$lib/actions/contextmenu-delegate';
 
   type Props = {
     /** Stable id used for the localStorage persistence key. Null for
@@ -28,6 +29,11 @@
     /** Disables fold entirely — used for the streaming assistant turn
      * so watchers see new tokens land, not a collapse. */
     disabled?: boolean;
+    /** Parent session id — plumbed through so the context-menu
+     * delegate can attribute code_block / link right-clicks back to
+     * the owning session. Null during the first streaming frames of a
+     * brand-new turn. */
+    sessionId?: string | null;
   };
 
   const {
@@ -35,7 +41,8 @@
     content,
     highlightQuery,
     thresholdPx = 480,
-    disabled = false
+    disabled = false,
+    sessionId = null
   }: Props = $props();
 
   const STORAGE_PREFIX = 'bearings:msg:expanded:';
@@ -96,6 +103,7 @@
     class:is-folded={hydrated && shouldFold}
     style="--collapsed-max: {thresholdPx}px;"
     use:highlight={highlightQuery}
+    use:contextmenuDelegate={{ sessionId, messageId }}
     data-testid="collapsible-inner"
     data-folded={hydrated && shouldFold ? 'true' : 'false'}
   >

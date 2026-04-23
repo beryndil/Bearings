@@ -122,6 +122,7 @@
     </header>
     <CollapsibleBody
       messageId={user.id}
+      sessionId={user.session_id}
       content={user.content}
       highlightQuery={highlightQuery}
     />
@@ -224,6 +225,7 @@
     {#if assistant}
       <CollapsibleBody
         messageId={assistant.id}
+        sessionId={assistant.session_id}
         content={assistant.content}
         highlightQuery={highlightQuery}
         disabled={isStreaming}
@@ -231,6 +233,7 @@
     {:else}
       <CollapsibleBody
         messageId={null}
+        sessionId={user?.session_id ?? null}
         content={streamingContent}
         highlightQuery={highlightQuery}
         disabled={true}

@@ -65,13 +65,29 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+/** Wrap a rendered code-block HTML string so the context-menu delegate
+ * (see `$lib/actions/contextmenu-delegate.ts`) can find it at
+ * right-click time. Tests and the delegate both key on
+ * `data-bearings-code-block` — changing the attr breaks both. The
+ * language attribute is optional (fenceless blocks omit it); the
+ * delegate treats a missing value as `null`. */
+function wrapCodeBlock(html: string, lang: string | null): string {
+  const attr = lang ? ` data-language="${escapeHtml(lang)}"` : '';
+  return `<div data-bearings-code-block${attr}>${html}</div>`;
+}
+
 marked.use({
   renderer: {
     code({ text, lang }): string {
+      // Carry the raw fence tag on the wrapper so `copy_with_fence`
+      // can reconstruct the original triple-backtick block, even when
+      // the lang isn't in our ALL_LANGS highlight set.
+      const wrapperLang = lang ? lang : null;
       if (highlighter && lang && ALL_LANGS.includes(lang)) {
         if (highlighter.getLoadedLanguages().includes(lang)) {
           try {
-            return highlighter.codeToHtml(text, { lang, theme: THEME });
+            const html = highlighter.codeToHtml(text, { lang, theme: THEME });
+            return wrapCodeBlock(html, wrapperLang);
           } catch {
             // Unknown lang edge case — fall through to plain <pre><code>.
           }
@@ -85,7 +101,8 @@ marked.use({
         // picks up the ready highlighter.
         void ensureHighlighter();
       }
-      return `<pre class="shiki-fallback"><code>${escapeHtml(text)}</code></pre>`;
+      const fallback = `<pre class="shiki-fallback"><code>${escapeHtml(text)}</code></pre>`;
+      return wrapCodeBlock(fallback, wrapperLang);
     }
   }
 });

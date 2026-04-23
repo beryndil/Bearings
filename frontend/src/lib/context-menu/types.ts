@@ -76,6 +76,35 @@ export type ToolCallTarget = {
   messageId: string | null;
 };
 
+/** A fenced code block rendered inside a message body. The payload is
+ * snapshotted at right-click time from the DOM (the delegate action
+ * reads `textContent` off the `<pre>` and the `data-language` off the
+ * wrapper `<div>`) — so handlers don't have to re-parse the Markdown
+ * source. `sessionId` / `messageId` are carried so future "run this
+ * snippet" actions can attribute the result, but both are nullable
+ * because the delegate fires on any message descendant (including the
+ * streaming assistant bubble, which has no settled message id yet). */
+export type CodeBlockTarget = {
+  type: 'code_block';
+  text: string;
+  language: string | null;
+  sessionId: string | null;
+  messageId: string | null;
+};
+
+/** A Markdown link (`<a href>`) rendered inside a message body.
+ * Delegate-captured the same way as code blocks — `text` is the
+ * anchor's visible label, `href` is whatever marked wrote. Callers
+ * MUST treat `href` as untrusted (the content comes from the user or
+ * their agent); `open_new_tab` wraps it with `rel="noopener"`. */
+export type LinkTarget = {
+  type: 'link';
+  href: string;
+  text: string;
+  sessionId: string | null;
+  messageId: string | null;
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
 export type ContextTarget =
@@ -83,7 +112,9 @@ export type ContextTarget =
   | MessageTarget
   | TagTarget
   | TagChipTarget
-  | ToolCallTarget;
+  | ToolCallTarget
+  | CodeBlockTarget
+  | LinkTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired
