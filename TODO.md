@@ -739,9 +739,26 @@ see. **Audit verdict: hot. Refactor is justified.**
 - Keying via `{#each timeline as item (item.key)}` already in place; just
   needs the underlying array to mutate-in-place rather than re-allocate.
 
-**Cleanup ticket:** remove the two `console.count` calls before merging
-the refactor (or sooner if the audit closes inconclusive — they're noise
-in DevTools either way).
+**Cleanup ticket:** ~~remove the two `console.count` calls before merging
+the refactor~~ — done 2026-04-23, both probes dropped when item 5 shipped.
+
+**Resolution 2026-04-23 (commit `82c0bfa`):** shipped as a narrower
+variant of the sketch rather than the full $state promotion. `turns.ts`
+split into `buildSettledTurns` (cheap, WeakMap-cached on assistant
+Message identity — returns reference-stable Turn objects when nothing
+about the settled portion changed) + `buildStreamingTail` (rebuilds
+only the live tail per token event). `Conversation.svelte` now has
+two stacked `$derived.by` blocks: `settledTurns` (invalidates only on
+messages/toolCalls array changes) and `turns` (cheap combine of
+settled + tail). Scope:benefit ratio beat the full reducer-owned-
+$state rewrite because it fixes the MessageTurn re-render storm
+without churning the reducer/state ownership model.
+
+Remaining headroom if this doesn't close the sluggishness entirely:
+the sketch's per-turn tail mutation would additionally prevent the
+streaming `turns` array from re-allocating per token, but the
+settled-turn cache already handles the dominant cost (MessageTurn
+reflow of every already-settled turn).
 
 ### 2026-04-21 — Profile event frequencies (wire + DB)
 
@@ -941,12 +958,14 @@ headline. Additional issues found, in priority order:
   subscribers — they reconnect with `since_seq`.
 
 **Recommended fix order** (by "ratio of impact to diff size"):
-1. Reducer in-place mutation (small diff, unblocks everything else).
-2. CollapsibleBody raw-text during streaming (trivial, huge win).
-3. Promote `turns` / `timeline` to `$state` (the 2026-04-21 sketch).
-4. Pre-encode WS frames once in `_emit_event`.
+1. Reducer in-place mutation. *(shipped 2026-04-23, `90a1bb7`)*
+2. CollapsibleBody rAF markdown coalesce. *(shipped 2026-04-23, `d7b1c3b`)*
+3. Split `buildTurns` + WeakMap-cache settled turns. *(shipped 2026-04-23,
+   `82c0bfa`)* — narrower variant of the original "$state promotion"
+   sketch; see the Resolution note in the 2026-04-21 audit section.
+4. Pre-encode WS frames once in `_emit_event`. *(shipped 2026-04-23, `90a1bb7`)*
 5. One-transaction-per-turn on the DB.
-6. Paginated `listToolCalls` for session load. *(shipped 2026-04-23)*
+6. Paginated `listToolCalls` for session load. *(shipped 2026-04-23, `aa54d0a`)*
 
 Items 1–3 are frontend-only and together address the majority of the
 streaming-CPU burn. 4–5 matter most when multiple tabs are attached
