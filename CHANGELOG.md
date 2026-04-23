@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.4] - 2026-04-22
+
+Phase 11 of the context-menu plan — touch + coarse-pointer support.
+The right-click menu now opens on a 500ms long-press when the viewport
+reports `pointer: coarse`, and renders as a bottom sheet with 44px
+touch targets instead of the cursor-anchored desktop popover. No API
+changes; the same registry, resolveMenu, and keyboard FSM drive both
+layouts.
+
+### Added
+
+- **`frontend/src/lib/context-menu/touch.ts` (new).** Pure long-press
+  FSM with unit tests plus a `longpress` Svelte action that wires the
+  reducer to pointer events. Contract: 500ms press, ≤8px movement
+  fires a synthetic "open menu" event at the press location. Movement
+  beyond the threshold cancels; so do `pointerup`, `pointercancel`,
+  and `pointerleave`. Coarse-pointer gating lives here — on a desktop
+  mouse the listener attaches but never schedules a timer, so the
+  desktop right-click path is untouched.
+- **Long-press wired into both menu entry points.**
+  `frontend/src/lib/actions/contextmenu.ts` arms a `longpress` binding
+  alongside its existing `contextmenu` listener. The delegating
+  `contextmenu-delegate.ts` stashes the pointerdown element so the
+  resolved payload (code block vs link) reflects the press location,
+  not wherever the finger drifted by the time the timer expires.
+- **Bottom-sheet rendering for coarse pointers.**
+  `ContextMenu.svelte` checks `isCoarsePointer()` when the menu opens
+  and, when true, renders as a full-width sheet anchored to the
+  viewport bottom with a 75vh scroll cap, a drag-handle affordance,
+  and an opaque backdrop that closes on tap. The cursor-anchored
+  placement math is bypassed in this mode. A scoped CSS rule bumps
+  every `role="menuitem"` row to 44px minimum height and `text-sm`
+  when the sheet is active, satisfying the spec §6.4 touch-target
+  requirement without affecting desktop density.
+
+### Version bumps
+
+- `pyproject.toml`: `0.9.3 → 0.9.4`
+- `frontend/package.json`: `0.7.2 → 0.7.3`
+- `uv.lock`: re-resolved.
+
 ## [0.9.3] - 2026-04-22
 
 Phase 10 of the context-menu plan — `menus.toml` customization. The
