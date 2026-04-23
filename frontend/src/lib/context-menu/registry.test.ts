@@ -7,6 +7,7 @@ import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
 import { TOOL_CALL_ACTIONS } from './actions/tool_call';
 import { CODE_BLOCK_ACTIONS } from './actions/code_block';
 import { LINK_ACTIONS } from './actions/link';
+import { CHECKPOINT_ACTIONS } from './actions/checkpoint';
 import type { Action, ContextTarget, RenderedMenu } from './types';
 
 /** Flatten a resolved menu's groups into a flat id array for
@@ -48,6 +49,13 @@ const LINK: ContextTarget = {
   sessionId: 'sess-1',
   messageId: 'msg-1'
 };
+const CHECKPOINT: ContextTarget = {
+  type: 'checkpoint',
+  id: 'cp-1',
+  sessionId: 'sess-1',
+  messageId: 'msg-1',
+  label: 'mid'
+};
 
 describe('registry', () => {
   it('exposes session actions', () => {
@@ -78,6 +86,10 @@ describe('registry', () => {
     expect(getActions('link')).toBe(LINK_ACTIONS);
   });
 
+  it('exposes checkpoint actions', () => {
+    expect(getActions('checkpoint')).toBe(CHECKPOINT_ACTIONS);
+  });
+
   it('every action ID is unique within its target', () => {
     for (const list of [
       SESSION_ACTIONS,
@@ -86,7 +98,8 @@ describe('registry', () => {
       TAG_CHIP_ACTIONS,
       TOOL_CALL_ACTIONS,
       CODE_BLOCK_ACTIONS,
-      LINK_ACTIONS
+      LINK_ACTIONS,
+      CHECKPOINT_ACTIONS
     ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -101,6 +114,7 @@ describe('registry', () => {
     for (const a of TOOL_CALL_ACTIONS) expect(a.id.startsWith('tool_call.')).toBe(true);
     for (const a of CODE_BLOCK_ACTIONS) expect(a.id.startsWith('code_block.')).toBe(true);
     for (const a of LINK_ACTIONS) expect(a.id.startsWith('link.')).toBe(true);
+    for (const a of CHECKPOINT_ACTIONS) expect(a.id.startsWith('checkpoint.')).toBe(true);
   });
 });
 
@@ -183,6 +197,13 @@ describe('resolveMenu', () => {
     const menu = resolveMenu(LINK, false);
     expect(menu.target).toEqual(LINK);
     expect(menu.groups.length).toBeGreaterThan(0);
+  });
+
+  it('resolves a checkpoint menu without error', () => {
+    const menu = resolveMenu(CHECKPOINT, false);
+    expect(menu.target).toEqual(CHECKPOINT);
+    expect(menu.groups.length).toBeGreaterThan(0);
+    expect(flatIds(menu)).toContain('checkpoint.fork');
   });
 
   it('applies the requires predicate', () => {

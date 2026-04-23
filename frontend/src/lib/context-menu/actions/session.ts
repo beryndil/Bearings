@@ -21,6 +21,8 @@
 import * as api from '$lib/api';
 import { agent } from '$lib/agent.svelte';
 import { KNOWN_MODELS } from '$lib/models';
+import { checkpoints } from '$lib/stores/checkpoints.svelte';
+import { conversation } from '$lib/stores/conversation.svelte';
 import { sessions } from '$lib/stores/sessions.svelte';
 import { writeClipboard } from '../clipboard';
 import { confirmStore } from '../confirm.svelte';
@@ -223,8 +225,44 @@ export const SESSION_ACTIONS: readonly Action[] = [
     label: 'Fork from last message',
     section: 'create',
     advanced: true,
-    handler: () => notYetImplemented('session.fork.from_last_message'),
-    disabled: () => 'Checkpoints land in v0.9.2'
+    handler: async ({ target }) => {
+      const t = asSession(target);
+      if (!t) return;
+      // The conversation store owns the message list for the currently-
+      // selected session. If the user right-clicks a sidebar row that
+      // isn't selected, `conversation.messages` belongs to a different
+      // session — bail rather than forking off an unrelated anchor.
+      if (conversation.sessionId !== t.id) {
+        stubStore.show({
+          actionId: 'session.fork.from_last_message',
+          reason: 'Open the session first so its last message is known'
+        });
+        return;
+      }
+      const msgs = conversation.messages;
+      const last = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      if (!last) {
+        stubStore.show({
+          actionId: 'session.fork.from_last_message',
+          reason: 'Session has no messages yet'
+        });
+        return;
+      }
+      // Auto-create an anchor checkpoint (null label — the UI renders
+      // these as unlabelled chips), then fork it. The checkpoint
+      // survives on the source session as a durable mark of the fork
+      // point; users can relabel via the gutter right-click.
+      const cp = await checkpoints.create(t.id, last.id, null);
+      if (!cp) return;
+      const forked = await checkpoints.fork(t.id, cp.id);
+      if (forked) sessions.select(forked.id);
+    },
+    requires: (target) => {
+      const t = asSession(target);
+      if (!t) return false;
+      const row = lookup(t.id);
+      return !!row;
+    }
   },
   {
     id: 'session.copy_id',

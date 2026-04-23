@@ -26,6 +26,7 @@ import { TAG_ACTIONS, TAG_CHIP_ACTIONS } from './actions/tag';
 import { TOOL_CALL_ACTIONS } from './actions/tool_call';
 import { CODE_BLOCK_ACTIONS } from './actions/code_block';
 import { LINK_ACTIONS } from './actions/link';
+import { CHECKPOINT_ACTIONS } from './actions/checkpoint';
 
 const REGISTRY: Record<TargetType, readonly Action[]> = {
   session: SESSION_ACTIONS,
@@ -34,7 +35,8 @@ const REGISTRY: Record<TargetType, readonly Action[]> = {
   tag_chip: TAG_CHIP_ACTIONS,
   tool_call: TOOL_CALL_ACTIONS,
   code_block: CODE_BLOCK_ACTIONS,
-  link: LINK_ACTIONS
+  link: LINK_ACTIONS,
+  checkpoint: CHECKPOINT_ACTIONS
 };
 
 /** Unfiltered actions for a target type. */

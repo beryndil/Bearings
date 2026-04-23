@@ -8,6 +8,7 @@
   import * as uploadsApi from '$lib/api/uploads';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
   import BulkActionBar from '$lib/components/BulkActionBar.svelte';
+  import CheckpointGutter from '$lib/components/CheckpointGutter.svelte';
   import CommandMenu from '$lib/components/CommandMenu.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
@@ -1431,6 +1432,10 @@
         ✕
       </button>
     </div>
+  {/if}
+
+  {#if sessions.selectedId}
+    <CheckpointGutter sessionId={sessions.selectedId} />
   {/if}
 
   <div

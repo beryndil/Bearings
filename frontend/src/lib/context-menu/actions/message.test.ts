@@ -50,16 +50,25 @@ describe('message.ts — action-ID stability', () => {
   it('disabled-with-tooltip items name their target milestone', () => {
     // plan §2.3: items without a backing primitive render disabled
     // with a tooltip pointing at the phase where they un-stub.
+    // Phase 7 (v0.9.2) un-stubbed `message.fork.from_here` — removed
+    // from this set. Pin/hide land in Phase 8; delete lands with the
+    // single-message DELETE primitive (same phase).
     const expectedDisabled = [
       'message.pin',
       'message.hide_from_context',
-      'message.fork.from_here',
       'message.delete'
     ];
     for (const id of expectedDisabled) {
       const action = MESSAGE_ACTIONS.find((a) => a.id === id);
       expect(action?.disabled?.(MESSAGE)).toBeTruthy();
     }
+  });
+
+  it('message.fork.from_here is no longer a stub', () => {
+    const fork = MESSAGE_ACTIONS.find((a) => a.id === 'message.fork.from_here');
+    expect(fork).toBeDefined();
+    expect(fork?.disabled).toBeUndefined();
+    expect(typeof fork?.handler).toBe('function');
   });
 
   it('message.delete is destructive and advanced', () => {

@@ -105,6 +105,20 @@ export type LinkTarget = {
   messageId: string | null;
 };
 
+/** A checkpoint chip rendered in the conversation gutter (Phase 7 of
+ * docs/context-menu-plan.md). Carries the full row snapshot so the
+ * handlers can stay synchronous against the store without refetching:
+ * `messageId` is null when the anchor message was dropped (FK SET NULL)
+ * — the `fork` action gates on that via `disabled`, the `copy_label`
+ * and `delete` actions remain available. */
+export type CheckpointTarget = {
+  type: 'checkpoint';
+  id: string;
+  sessionId: string;
+  messageId: string | null;
+  label: string | null;
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
 export type ContextTarget =
@@ -114,7 +128,8 @@ export type ContextTarget =
   | TagChipTarget
   | ToolCallTarget
   | CodeBlockTarget
-  | LinkTarget;
+  | LinkTarget
+  | CheckpointTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired

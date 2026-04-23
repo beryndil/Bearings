@@ -18,7 +18,9 @@
  * primitives arrive (v0.9.2+).
  */
 
+import { checkpoints } from '$lib/stores/checkpoints.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
+import { sessions } from '$lib/stores/sessions.svelte';
 import { writeClipboard } from '../clipboard';
 import { reorgStore } from '../reorg.svelte';
 import { notYetImplemented } from '../stub.svelte';
@@ -157,8 +159,17 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
     label: 'Fork from this message',
     section: 'create',
     advanced: true,
-    handler: () => notYetImplemented('message.fork.from_here'),
-    disabled: () => 'Checkpoints land in v0.9.2'
+    handler: async ({ target }) => {
+      const t = asMessage(target);
+      if (!t) return;
+      // Auto-checkpoint + fork at the target message. Mirrors the
+      // `session.fork.from_last_message` flow but anchors at the row
+      // the user right-clicked rather than the session's tail.
+      const cp = await checkpoints.create(t.sessionId, t.id, null);
+      if (!cp) return;
+      const forked = await checkpoints.fork(t.sessionId, cp.id);
+      if (forked) sessions.select(forked.id);
+    }
   },
   {
     id: 'message.delete',

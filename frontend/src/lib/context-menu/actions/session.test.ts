@@ -83,14 +83,27 @@ describe('session.ts — action-ID stability', () => {
   });
 
   it('disabled-with-tooltip items name their target milestone', () => {
+    // Phase 7 (v0.9.2) un-stubbed `session.fork.from_last_message` —
+    // it now fires a real checkpoint-auto-create + fork flow, so the
+    // disabled predicate is gone. Duplicate and share-link remain
+    // stubbed pending their own milestones.
     const duplicate = SESSION_ACTIONS.find((a) => a.id === 'session.duplicate');
-    const fork = SESSION_ACTIONS.find((a) => a.id === 'session.fork.from_last_message');
     const share = SESSION_ACTIONS.find((a) => a.id === 'session.copy_share_link');
     // The disabled predicate runs against any target; the target
     // shape doesn't matter because these items are always disabled.
     const bogus = { type: 'session', id: 'x' } as const;
     expect(duplicate?.disabled?.(bogus)).toBeTruthy();
-    expect(fork?.disabled?.(bogus)).toBeTruthy();
     expect(share?.disabled?.(bogus)).toBeTruthy();
+  });
+
+  it('session.fork.from_last_message is no longer a stub', () => {
+    const fork = SESSION_ACTIONS.find(
+      (a) => a.id === 'session.fork.from_last_message'
+    );
+    expect(fork).toBeDefined();
+    // `disabled` is absent (hard-stub removed); `requires` now gates
+    // on the session row existing in the store.
+    expect(fork?.disabled).toBeUndefined();
+    expect(fork?.requires).toBeDefined();
   });
 });
