@@ -1,10 +1,12 @@
 <script lang="ts">
   import { billing } from '$lib/stores/billing.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
+  import { sessionSelection } from '$lib/stores/session_selection.svelte';
   import { tags } from '$lib/stores/tags.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import { contextmenu } from '$lib/actions/contextmenu';
+  import type { ContextTarget } from '$lib/context-menu/types';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
@@ -183,7 +185,46 @@
     sessions.refresh(tags.filter);
   });
 
-  async function onSelect(id: string) {
+  /** Ordered ids of every session currently rendered in the sidebar —
+   * `openList` first, then `closedList`. Used as the range-selection
+   * axis for Shift-click so anchors span the visual order the user
+   * sees. Re-derived every tick so filter changes keep the range in
+   * sync. */
+  let orderedVisibleIds = $derived([
+    ...sessions.openList.map((s) => s.id),
+    ...sessions.closedList.map((s) => s.id)
+  ]);
+
+  /** Resolve the context-menu target for a right-clicked session row.
+   * If the row is part of the active multi-selection, dispatch the
+   * aggregate `multi_select` target — otherwise stay on the per-session
+   * menu. Rows right-clicked while a disjoint selection exists keep
+   * their single-session menu (the selection belongs to other rows). */
+  function rowTarget(id: string): ContextTarget {
+    if (sessionSelection.hasSelection && sessionSelection.ids.has(id)) {
+      return { type: 'multi_select', ids: [...sessionSelection.ids] };
+    }
+    return { type: 'session', id };
+  }
+
+  async function onSelect(id: string, e: MouseEvent) {
+    // Cmd/Ctrl+click toggles membership without touching the navigated
+    // session. The sidebar's focused session stays put so Daisy can
+    // keep reading while she composes a batch.
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      sessionSelection.toggle(id);
+      return;
+    }
+    // Shift+click grows the selection inclusively from the anchor.
+    // Fall back to `toggle` inside selectRange when no anchor is set.
+    if (e.shiftKey) {
+      e.preventDefault();
+      sessionSelection.selectRange(id, orderedVisibleIds);
+      return;
+    }
+    // Plain click: collapse any multi-selection, then navigate.
+    if (sessionSelection.hasSelection) sessionSelection.clear();
     sessions.select(id);
     // Clear the "finished but unviewed" amber dot for this session.
     // Fire-and-forget: the optimistic path in `markViewed` updates the
@@ -355,17 +396,19 @@
 
   {#snippet sessionRow(session: api.Session)}
     {@const medals = medallionData(session)}
+    {@const isBulkSelected = sessionSelection.ids.has(session.id)}
     <li
       class="group flex items-stretch gap-1 rounded hover:bg-slate-800 {sessions.selectedId ===
       session.id
         ? 'bg-slate-800'
-        : ''}"
-      use:contextmenu={{ target: { type: 'session', id: session.id } }}
+        : ''} {isBulkSelected ? 'ring-1 ring-emerald-500/60 bg-slate-800/80' : ''}"
+      use:contextmenu={{ target: rowTarget(session.id) }}
+      data-multi-selected={isBulkSelected ? 'true' : 'false'}
     >
       <button
         type="button"
         class="flex-1 min-w-0 text-left px-2 py-1 rounded-l"
-        onclick={() => onSelect(session.id)}
+        onclick={(e) => onSelect(session.id, e)}
         ondblclick={(e) => startRename(e, session)}
       >
         {#if rename.id === session.id}
@@ -484,6 +527,31 @@
       </ul>
     {:else}
       <p class="text-slate-500 text-sm">No open sessions.</p>
+    {/if}
+
+    {#if sessionSelection.hasSelection}
+      <!-- Selection footer: sticky reminder that bulk mode is active.
+           The real bulk ops fire from the right-click menu on any
+           selected row (dispatches the `multi_select` target). -->
+      <div
+        class="mt-2 border-t border-emerald-700/40 pt-2 flex items-center
+          justify-between gap-2 text-xs"
+        data-testid="session-bulk-bar"
+      >
+        <span class="text-emerald-300">
+          {sessionSelection.size} selected
+        </span>
+        <span class="text-slate-500">Right-click for actions</span>
+        <button
+          type="button"
+          class="rounded bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-[11px]
+            text-slate-300"
+          onclick={() => sessionSelection.clear()}
+          data-testid="session-bulk-clear"
+        >
+          Clear
+        </button>
+      </div>
     {/if}
 
     {#if sessions.closedList.length > 0}

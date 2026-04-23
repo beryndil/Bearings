@@ -91,3 +91,16 @@ message_flag_toggles = Counter(
     ["flag"],
     registry=REGISTRY,
 )
+
+# Phase 9a of docs/context-menu-plan.md. POST /sessions/bulk dispatches
+# one of five ops (tag/untag/close/delete/export); one label per op so
+# the operator can tell at a glance which of the bulk affordances the
+# UI actually drives. Bumped once per request — the per-id success /
+# failure split isn't sampled here, only the op volume. A 400 on bad
+# payload or unknown op does not bump.
+sessions_bulk_ops = Counter(
+    "bearings_sessions_bulk_ops_total",
+    "POST /sessions/bulk requests, by op type.",
+    ["op"],
+    registry=REGISTRY,
+)

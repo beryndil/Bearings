@@ -8,6 +8,7 @@ import { TOOL_CALL_ACTIONS } from './actions/tool_call';
 import { CODE_BLOCK_ACTIONS } from './actions/code_block';
 import { LINK_ACTIONS } from './actions/link';
 import { CHECKPOINT_ACTIONS } from './actions/checkpoint';
+import { MULTI_SELECT_ACTIONS } from './actions/multi_select';
 import type { Action, ContextTarget, RenderedMenu } from './types';
 
 /** Flatten a resolved menu's groups into a flat id array for
@@ -56,6 +57,10 @@ const CHECKPOINT: ContextTarget = {
   messageId: 'msg-1',
   label: 'mid'
 };
+const MULTI_SELECT: ContextTarget = {
+  type: 'multi_select',
+  ids: ['sess-1', 'sess-2']
+};
 
 describe('registry', () => {
   it('exposes session actions', () => {
@@ -90,6 +95,10 @@ describe('registry', () => {
     expect(getActions('checkpoint')).toBe(CHECKPOINT_ACTIONS);
   });
 
+  it('exposes multi_select actions', () => {
+    expect(getActions('multi_select')).toBe(MULTI_SELECT_ACTIONS);
+  });
+
   it('every action ID is unique within its target', () => {
     for (const list of [
       SESSION_ACTIONS,
@@ -99,7 +108,8 @@ describe('registry', () => {
       TOOL_CALL_ACTIONS,
       CODE_BLOCK_ACTIONS,
       LINK_ACTIONS,
-      CHECKPOINT_ACTIONS
+      CHECKPOINT_ACTIONS,
+      MULTI_SELECT_ACTIONS
     ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -115,6 +125,7 @@ describe('registry', () => {
     for (const a of CODE_BLOCK_ACTIONS) expect(a.id.startsWith('code_block.')).toBe(true);
     for (const a of LINK_ACTIONS) expect(a.id.startsWith('link.')).toBe(true);
     for (const a of CHECKPOINT_ACTIONS) expect(a.id.startsWith('checkpoint.')).toBe(true);
+    for (const a of MULTI_SELECT_ACTIONS) expect(a.id.startsWith('multi_select.')).toBe(true);
   });
 });
 
@@ -204,6 +215,14 @@ describe('resolveMenu', () => {
     expect(menu.target).toEqual(CHECKPOINT);
     expect(menu.groups.length).toBeGreaterThan(0);
     expect(flatIds(menu)).toContain('checkpoint.fork');
+  });
+
+  it('resolves a multi_select menu without error', () => {
+    const menu = resolveMenu(MULTI_SELECT, false);
+    expect(menu.target).toEqual(MULTI_SELECT);
+    expect(menu.groups.length).toBeGreaterThan(0);
+    expect(flatIds(menu)).toContain('multi_select.clear');
+    expect(flatIds(menu)).toContain('multi_select.delete');
   });
 
   it('applies the requires predicate', () => {

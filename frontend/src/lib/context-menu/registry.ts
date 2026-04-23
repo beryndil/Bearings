@@ -27,6 +27,7 @@ import { TOOL_CALL_ACTIONS } from './actions/tool_call';
 import { CODE_BLOCK_ACTIONS } from './actions/code_block';
 import { LINK_ACTIONS } from './actions/link';
 import { CHECKPOINT_ACTIONS } from './actions/checkpoint';
+import { MULTI_SELECT_ACTIONS } from './actions/multi_select';
 
 const REGISTRY: Record<TargetType, readonly Action[]> = {
   session: SESSION_ACTIONS,
@@ -36,7 +37,8 @@ const REGISTRY: Record<TargetType, readonly Action[]> = {
   tool_call: TOOL_CALL_ACTIONS,
   code_block: CODE_BLOCK_ACTIONS,
   link: LINK_ACTIONS,
-  checkpoint: CHECKPOINT_ACTIONS
+  checkpoint: CHECKPOINT_ACTIONS,
+  multi_select: MULTI_SELECT_ACTIONS
 };
 
 /** Unfiltered actions for a target type. */

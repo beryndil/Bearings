@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -137,6 +137,45 @@ class MessageOut(BaseModel):
     # rows serialize cleanly.
     pinned: bool = False
     hidden_from_context: bool = False
+
+
+class SessionBulkBody(BaseModel):
+    """Body for `POST /sessions/bulk` — Phase 9a of the context-menu
+    plan. One endpoint for every multi-session op the sidebar exposes:
+    `tag`/`untag` mutate tag attachments on each id, `close` sets
+    `closed_at`, `delete` sweeps the rows (cascade-dropped messages,
+    tool calls, etc.), `export` returns a combined JSON dump. `payload`
+    is typed as a loose dict because each op cares about different
+    fields (`tag_id` for tag/untag, nothing for close/delete/export);
+    the route validates per-op.
+    """
+
+    op: Literal["tag", "untag", "close", "delete", "export"]
+    ids: list[str]
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class SessionBulkResult(BaseModel):
+    """Response for non-export bulk ops. `succeeded` and `failed` are
+    disjoint — every input id appears in exactly one list. `failed`
+    carries per-id error detail so the UI can surface partial failure
+    without losing the ok path. Export returns a different shape (see
+    `SessionExportBundle`) so it's not shared here."""
+
+    op: str
+    succeeded: list[str]
+    failed: list[dict[str, str]] = Field(default_factory=list)
+
+
+class SessionExportBundle(BaseModel):
+    """Return shape for `op='export'`. `sessions` is the flat list of
+    per-session export blobs (same shape as `GET /sessions/{id}/export`)
+    in the order the caller requested. Failures are reported in the
+    sibling `failed` list; successful ids appear in `sessions` only."""
+
+    op: Literal["export"] = "export"
+    sessions: list[dict[str, Any]]
+    failed: list[dict[str, str]] = Field(default_factory=list)
 
 
 class MessagePatchBody(BaseModel):

@@ -119,6 +119,16 @@ export type CheckpointTarget = {
   label: string | null;
 };
 
+/** The aggregate "one or more sessions are selected" target — Phase 9a.
+ * Fired when the user right-clicks any row inside the sidebar while
+ * `sessionSelection.hasSelection` is true. `ids` is the selection
+ * snapshot at right-click time so the handler has a stable list even
+ * if a concurrent WS event mutates the store mid-menu. */
+export type MultiSelectTarget = {
+  type: 'multi_select';
+  ids: readonly string[];
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
 export type ContextTarget =
@@ -129,7 +139,8 @@ export type ContextTarget =
   | ToolCallTarget
   | CodeBlockTarget
   | LinkTarget
-  | CheckpointTarget;
+  | CheckpointTarget
+  | MultiSelectTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired

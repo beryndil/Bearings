@@ -23,6 +23,7 @@ from bearings.api import (
     routes_pending,
     routes_reorg,
     routes_sessions,
+    routes_sessions_bulk,
     routes_shell,
     routes_tags,
     routes_uploads,
@@ -89,6 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_health.router, prefix="/api")
     app.include_router(routes_config.router, prefix="/api")
     app.include_router(routes_sessions.router, prefix="/api")
+    app.include_router(routes_sessions_bulk.router, prefix="/api")
     app.include_router(routes_reorg.router, prefix="/api")
     app.include_router(routes_tags.router, prefix="/api")
     app.include_router(routes_checklists.router, prefix="/api")
