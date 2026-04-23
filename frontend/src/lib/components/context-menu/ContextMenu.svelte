@@ -2,6 +2,7 @@
   import { contextMenu } from '$lib/context-menu/store.svelte';
   import { placeAtCursor } from '$lib/context-menu/positioning';
   import { resolveMenu } from '$lib/context-menu/registry';
+  import { isCoarsePointer } from '$lib/context-menu/touch';
   import type { Action, ActionContext } from '$lib/context-menu/types';
   import {
     INITIAL_STATE,
@@ -22,6 +23,21 @@
 
   let menuEl: HTMLElement | undefined = $state();
   let kbState = $state<KeyboardState>({ ...INITIAL_STATE });
+
+  /** Bottom-sheet rendering for coarse pointers (spec §6.4). Latched
+   * when the menu opens rather than re-checked on every render so a
+   * late layout shift (virtual keyboard dismissing, etc.) doesn't
+   * flicker the menu between cursor-anchored and sheet layouts mid-
+   * session. Reset on close so a second open on a different device
+   * (e.g. attached keyboard arrives) picks up the new pointer class. */
+  let coarse = $state(false);
+  $effect(() => {
+    if (contextMenu.state.open) {
+      coarse = isCoarsePointer();
+    } else {
+      coarse = false;
+    }
+  });
 
   // Resolve the menu spec only while open. Calling resolveMenu on a
   // null target is pointless and would force defensive branches below.
@@ -60,6 +76,11 @@
   const placement = $derived.by(() => {
     const s = contextMenu.state;
     if (!s.open) return { left: 0, top: 0 };
+    // Bottom-sheet layout anchors to the viewport edges via CSS; the
+    // placement math only matters for cursor-anchored (mouse) menus.
+    // Returning zeros here keeps the inline style harmless when the
+    // coarse branch wins in the template below.
+    if (coarse) return { left: 0, top: 0 };
     return placeAtCursor({
       x: s.x,
       y: s.y,
@@ -207,7 +228,34 @@
   }
 </script>
 
+<style>
+  /* 44px minimum touch target per spec §6.4 / iOS HIG. Tailwind's
+     default row padding is `py-1.5` which clocks in around 28px with
+     the `text-xs` row label — too small for reliable thumb accuracy.
+     Scope the bump to bottom-sheet mode so the desktop menu keeps its
+     compact density. */
+  :global([data-testid='context-menu'][data-coarse='true'] button[role='menuitem']) {
+    min-height: 44px;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+    font-size: 0.875rem; /* Tailwind `text-sm` — easier to read at arm's length. */
+  }
+</style>
+
 {#if rendered}
+  {#if coarse}
+    <!-- Bottom-sheet backdrop — tapping outside the sheet closes the
+         menu (same contract as the mouse menu's document-mousedown
+         handler, but clearer on touch because the backdrop is opaque
+         enough to signal that it's interactive). -->
+    <button
+      type="button"
+      aria-label="Close menu"
+      class="fixed inset-0 z-40 bg-slate-950/60"
+      onclick={() => contextMenu.close()}
+      oncontextmenu={onOwnContextMenu}
+    ></button>
+  {/if}
   <div
     bind:this={menuEl}
     role="menu"
@@ -216,11 +264,22 @@
     data-testid="context-menu"
     data-target-type={rendered.target.type}
     data-advanced={rendered.advanced}
-    class="fixed z-50 min-w-[12rem] max-w-xs rounded border border-slate-700
-      bg-slate-900 shadow-xl py-1 text-slate-200"
-    style="left: {placement.left}px; top: {placement.top}px;"
+    data-coarse={coarse}
+    class={coarse
+      ? 'fixed inset-x-0 bottom-0 z-50 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 py-2 text-slate-200 shadow-2xl touch-manipulation'
+      : 'fixed z-50 min-w-[12rem] max-w-xs rounded border border-slate-700 bg-slate-900 shadow-xl py-1 text-slate-200'}
+    style={coarse ? '' : `left: ${placement.left}px; top: ${placement.top}px;`}
     oncontextmenu={onOwnContextMenu}
   >
+    {#if coarse}
+      <!-- Drag handle affordance — purely decorative, the backdrop
+           handles close. Keeps the sheet visually consistent with
+           Android / iOS conventions. -->
+      <div
+        aria-hidden="true"
+        class="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-600"
+      ></div>
+    {/if}
     {#each rendered.groups as group, gi (group.section)}
       {#if gi > 0}
         <div class="my-1 h-px bg-slate-800" role="separator"></div>

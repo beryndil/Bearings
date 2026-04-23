@@ -24,6 +24,7 @@
  */
 
 import { contextMenu } from '$lib/context-menu/store.svelte';
+import { longpress } from '$lib/context-menu/touch';
 import type { CodeBlockTarget, LinkTarget } from '$lib/context-menu/types';
 
 export type ContextMenuDelegateBinding = {
@@ -104,11 +105,33 @@ function readLink(
   };
 }
 
+/** Shared ancestor walk used by both right-click and long-press. The
+ * long-press path tracks the initial pointerdown target (not the
+ * element the finger released on, which would be wrong for the
+ * start-position semantics), so both code paths call this with the
+ * Element they want to resolve, NOT directly with the DOM event. */
+function resolvePayload(
+  startTarget: Element,
+  node: HTMLElement,
+  binding: ContextMenuDelegateBinding
+): CodeBlockTarget | LinkTarget | null {
+  const anchor = closestAnchor(startTarget, node);
+  if (anchor) return readLink(anchor, binding);
+  const wrapper = closestWithin(startTarget, node, 'data-bearings-code-block');
+  if (wrapper) return readCodeBlock(wrapper, binding);
+  return null;
+}
+
 export function contextmenuDelegate(
   node: HTMLElement,
   binding: ContextMenuDelegateBinding
 ): { update: (next: ContextMenuDelegateBinding) => void; destroy: () => void } {
   let current: ContextMenuDelegateBinding = binding;
+  // Element under the pointer at the last pointerdown — stashed here
+  // so the long-press callback can walk from the press location, not
+  // from wherever the finger happens to have drifted. Reset on every
+  // down so a cancelled gesture doesn't poison the next one.
+  let pressedOn: Element | null = null;
 
   function onContextMenu(e: MouseEvent): void {
     // Ctrl+Shift+right-click → let Chrome's native menu fire. Same
@@ -116,34 +139,38 @@ export function contextmenuDelegate(
     if (e.ctrlKey && e.shiftKey) return;
     const target = e.target instanceof Element ? e.target : null;
     if (!target) return;
-
-    // Anchors take precedence over code blocks: a link inside a code
-    // block (rare but possible in inline HTML) should offer link
-    // actions, not code-block actions.
-    const anchor = closestAnchor(target, node);
-    if (anchor) {
-      e.preventDefault();
-      e.stopPropagation();
-      const payload = readLink(anchor, current);
-      contextMenu.open(payload, e.clientX, e.clientY, e.shiftKey);
-      return;
-    }
-
-    const wrapper = closestWithin(target, node, 'data-bearings-code-block');
-    if (wrapper) {
-      const payload = readCodeBlock(wrapper, current);
-      if (payload) {
-        e.preventDefault();
-        e.stopPropagation();
-        contextMenu.open(payload, e.clientX, e.clientY, e.shiftKey);
-        return;
-      }
-    }
-    // No code-block / link ancestor — let the event bubble so the
-    // outer article's `use:contextmenu` opens the message menu.
+    const payload = resolvePayload(target, node, current);
+    if (!payload) return; // fall through — message menu takes over
+    e.preventDefault();
+    e.stopPropagation();
+    contextMenu.open(payload, e.clientX, e.clientY, e.shiftKey);
   }
 
+  function onPointerDown(e: PointerEvent): void {
+    // Only coarse-pointer presses are relevant — on desktop the
+    // contextmenu path already handled it and we don't want to steal
+    // primary-click behaviour. `longpress` below performs the same
+    // gating, but stashing `pressedOn` is cheap and makes the delegate
+    // robust against the user drifting onto a different child mid-press.
+    pressedOn = e.target instanceof Element ? e.target : null;
+  }
+
+  const longpressHandle = longpress(node, {
+    onLongPress: (x, y) => {
+      if (!pressedOn) return;
+      const payload = resolvePayload(pressedOn, node, current);
+      pressedOn = null;
+      if (!payload) return; // fall through to outer article menu
+      contextMenu.open(payload, x, y, false);
+    }
+  });
+
   node.addEventListener('contextmenu', onContextMenu);
+  // `capture: true` so we see the pointerdown before the long-press
+  // action's own listener — otherwise `pressedOn` would lag by one
+  // event and the first long-press after attach would resolve against
+  // a stale target.
+  node.addEventListener('pointerdown', onPointerDown, { capture: true });
 
   return {
     update(next: ContextMenuDelegateBinding): void {
@@ -151,6 +178,8 @@ export function contextmenuDelegate(
     },
     destroy(): void {
       node.removeEventListener('contextmenu', onContextMenu);
+      node.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      longpressHandle.destroy();
     }
   };
 }
