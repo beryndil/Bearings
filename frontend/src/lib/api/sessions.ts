@@ -102,6 +102,19 @@ export type SessionUpdate = {
   model?: string | null;
 };
 
+/** One file attachment riding alongside a user message (migration
+ * 0027). `n` is the 1-indexed token number the user sees in the
+ * composer and transcript (`[File 1]`); `path` is the absolute on-disk
+ * path under the configured upload dir that the runner substituted
+ * into the prompt before the SDK saw it. `filename` + `size_bytes`
+ * are the display metadata the transcript chip renders on hover. */
+export type MessageAttachment = {
+  n: number;
+  path: string;
+  filename: string;
+  size_bytes: number;
+};
+
 export type Message = {
   id: string;
   session_id: string;
@@ -127,6 +140,12 @@ export type Message = {
    * back. Both default false via the column default. */
   pinned?: boolean;
   hidden_from_context?: boolean;
+  /** Terminal-style file attachments (migration 0027). Present only on
+   * user rows whose composer text carried `[File N]` tokens. The
+   * transcript renders each token as a chip, pulling the display
+   * metadata from the matching entry here. Null/absent on every other
+   * row. Order by `n` ascending matches composer insertion order. */
+  attachments?: MessageAttachment[] | null;
 };
 
 /** Aggregate per-session token counts served by

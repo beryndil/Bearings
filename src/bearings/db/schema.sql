@@ -82,7 +82,16 @@ CREATE TABLE IF NOT EXISTS messages (
     -- in the DB and renders greyed in the conversation view). Both
     -- INTEGER 0/1, DEFAULT 0 so existing rows backfill correctly.
     pinned INTEGER NOT NULL DEFAULT 0,
-    hidden_from_context INTEGER NOT NULL DEFAULT 0
+    hidden_from_context INTEGER NOT NULL DEFAULT 0,
+    -- Token→path mapping for terminal-style `[File N]` attachments
+    -- (migration 0027). JSON array of
+    --   `[{"n": 1, "path": "/abs/...", "filename": "f.log", "size_bytes": 1234}]`.
+    -- NULL on any row without attachments (every assistant row and
+    -- most user rows). Keeping the mapping here — rather than
+    -- substituting paths into `content` — means the transcript can
+    -- render chips on reload and the runner-boot replay path can
+    -- re-substitute the same mapping when re-queueing an orphan turn.
+    attachments TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, created_at);

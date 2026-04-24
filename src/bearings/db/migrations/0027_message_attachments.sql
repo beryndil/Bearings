@@ -1,0 +1,21 @@
+-- Migration 0027: attachments metadata on user messages.
+--
+-- Terminal-style file attachment UX. The user drops a file, the composer
+-- shows `[File 1]` / `[File 2]` tokens in the textarea, and on send the
+-- runner substitutes each token with the absolute path before handing
+-- the prompt to the SDK. The tokenised text is what we persist in
+-- `content`; this column carries the token→path mapping so the
+-- transcript re-renders chips on reload AND the runner-boot replay path
+-- can re-substitute the same mapping when re-queueing an orphaned turn.
+--
+-- Shape: JSON array of
+--   `[{"n": 1, "path": "/abs/...", "filename": "f.log", "size_bytes": 1234}, ...]`
+-- where `n` is the 1-indexed token number the user sees in the bubble.
+-- Nullable — user rows without attachments stay NULL, assistant rows
+-- always stay NULL (the column only has meaning for role=user).
+--
+-- Additive column, no backfill needed. Every historical message row
+-- reads back as `attachments = NULL` which serialises to `None` on the
+-- wire; the frontend treats missing/null as "no attachments," which is
+-- what the old behaviour effectively was.
+ALTER TABLE messages ADD COLUMN attachments TEXT;

@@ -4,8 +4,14 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import type { MessageAttachment } from '$lib/api/sessions';
   import * as fsApi from '$lib/api/fs';
   import * as uploadsApi from '$lib/api/uploads';
+  import {
+    ATTACHMENT_TOKEN_REGEX,
+    formatAttachmentToken,
+    formatBytes
+  } from '$lib/attachments';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
   import BearingsMark from '$lib/components/icons/BearingsMark.svelte';
   import BulkActionBar from '$lib/components/BulkActionBar.svelte';
@@ -860,8 +866,21 @@
   function onSend() {
     const text = promptText.trim();
     if (!text) return;
-    if (!agent.send(text)) return;
+    // Filter the sidecar to attachments the user actually kept
+    // referenced in the prompt — if they deleted `[File 2]` after
+    // dropping it, we don't send its path along. The backend applies
+    // the same pruning rule (`referenced_ns` in
+    // `bearings/agent/_attachments.py`); we mirror it here so the
+    // optimistic user bubble matches what the server will persist.
+    const referenced = new Set<number>();
+    const re = new RegExp(ATTACHMENT_TOKEN_REGEX.source, 'g');
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(text)) !== null) referenced.add(Number(match[1]));
+    const activeAttachments = composerAttachments.filter((a) => referenced.has(a.n));
+    if (!agent.send(text, activeAttachments)) return;
     promptText = '';
+    composerAttachments = [];
+    nextAttachmentN = 1;
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -904,16 +923,15 @@
     queueMicrotask(autosizeTextarea);
   });
 
-  /** Insert a path-shaped token into the prompt at the cursor. Surrounds
-   * with spaces so it doesn't glue onto surrounding text, and quotes
-   * paths with spaces so slash-command arg parsers on the other side
-   * don't split the path into two arguments. */
-  function insertPathAtCursor(path: string) {
-    const needsQuote = /\s/.test(path);
-    const token = needsQuote ? `"${path}"` : path;
+  /** Insert a literal string at the cursor, with whitespace padding so
+   * the insertion doesn't glue onto surrounding text. Used by both the
+   * path-shaped fallback (`insertPathAtCursor`) and the terminal-style
+   * attachment flow (`attachFileAtCursor`). Moves the caret to just
+   * after the inserted text so typing continues naturally. */
+  function insertAtCursor(literal: string) {
     const el = textareaEl;
     if (!el) {
-      promptText = promptText ? `${promptText} ${token}` : token;
+      promptText = promptText ? `${promptText} ${literal}` : literal;
       return;
     }
     const start = el.selectionStart ?? promptText.length;
@@ -922,10 +940,8 @@
     const after = promptText.slice(end);
     const leftPad = before && !/\s$/.test(before) ? ' ' : '';
     const rightPad = after && !/^\s/.test(after) ? ' ' : '';
-    const insertion = `${leftPad}${token}${rightPad}`;
+    const insertion = `${leftPad}${literal}${rightPad}`;
     promptText = before + insertion + after;
-    // Move caret to just after the inserted token so the user can keep
-    // typing without fighting the cursor.
     queueMicrotask(() => {
       if (!textareaEl) return;
       const pos = before.length + insertion.length;
@@ -933,6 +949,73 @@
       textareaEl.focus();
     });
   }
+
+  /** Kept for compatibility with any future caller that wants a
+   * literal quoted path dropped into the prompt (slash commands, etc.).
+   * The drop / upload / picker flows all use `attachFileAtCursor`
+   * instead — that path inserts a `[File N]` token and tracks the
+   * real path in a sidecar so the transcript stays tidy. */
+  function insertPathAtCursor(path: string) {
+    const needsQuote = /\s/.test(path);
+    insertAtCursor(needsQuote ? `"${path}"` : path);
+  }
+
+  /** Composer sidecar for terminal-style `[File N]` attachments. The
+   * textarea carries only the token literals — the real path + display
+   * metadata live here until send, where we forward both to the agent
+   * so the SDK sees the path and the DB keeps the tokenised content.
+   *
+   * `nextAttachmentN` is monotonically increasing across the life of a
+   * single compose-and-send. Deleting a token from the text does NOT
+   * renumber the remaining ones; the send-time prune filters orphans
+   * by referenced-N instead. This matches the terminal Claude Code
+   * behaviour where `[File 1]` stays `[File 1]` even after edits. */
+  let composerAttachments = $state<MessageAttachment[]>([]);
+  let nextAttachmentN = $state(1);
+
+  /** Attach a file to the composer: push a sidecar entry with a fresh
+   * `n` and insert the matching `[File N]` token at the cursor.
+   *
+   * All three drop paths (URI, bytes-upload, native-picker) funnel
+   * through here. When the caller doesn't know `filename` or
+   * `sizeBytes` (URI / picker don't include them), we derive the
+   * filename from the path's basename and default size to 0; the
+   * chip renderer falls back to showing just the name in that case. */
+  function attachFileAtCursor(path: string, filename?: string, sizeBytes?: number): void {
+    const n = nextAttachmentN;
+    nextAttachmentN += 1;
+    const baseName = filename ?? path.split('/').filter(Boolean).pop() ?? 'file';
+    composerAttachments = [
+      ...composerAttachments,
+      { n, path, filename: baseName, size_bytes: sizeBytes ?? 0 }
+    ];
+    insertAtCursor(formatAttachmentToken(n));
+  }
+
+  /** Remove a composer attachment: drop the sidecar row AND strip every
+   * `[File N]` occurrence from the textarea. Called from the chip
+   * strip's `×` button. We don't renumber the surviving attachments —
+   * keeping `n` stable matches the terminal Claude Code behaviour, and
+   * the send-time prune already filters orphans so stray sidecar rows
+   * never leak to the server. */
+  function removeAttachment(n: number): void {
+    composerAttachments = composerAttachments.filter((a) => a.n !== n);
+    promptText = promptText.split(formatAttachmentToken(n)).join('');
+  }
+
+  /** Active sidecar chips — filter to attachments whose token is
+   * actually still present in the text, so the composer chip strip
+   * matches what the user can see above it. Kept as a derived value
+   * so deletes update the strip without needing a manual sync on
+   * every keystroke. */
+  const activeComposerAttachments = $derived.by(() => {
+    if (composerAttachments.length === 0) return [] as MessageAttachment[];
+    const referenced = new Set<number>();
+    const re = new RegExp(ATTACHMENT_TOKEN_REGEX.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(promptText)) !== null) referenced.add(Number(m[1]));
+    return composerAttachments.filter((a) => referenced.has(a.n));
+  });
 
   // Drag-and-drop file path injection. Linux file managers (Dolphin,
   // Nautilus, Thunar, the KDE dolphin-from-Hyprland combo Dave uses)
@@ -1088,7 +1171,7 @@
       for (const file of Array.from(files)) {
         try {
           const result = await uploadsApi.uploadFile(file);
-          insertPathAtCursor(result.path);
+          attachFileAtCursor(result.path, result.filename, result.size_bytes);
         } catch (e) {
           // Surface the specific reason (413 over-size, 415 blocked
           // extension, 500 disk full) so the user can act. The banner
@@ -1113,9 +1196,10 @@
     if (paths.length > 0) {
       // Happy path — the OS handed us URIs, no upload needed. Preserves
       // the original "all it has to do is give you the link" behavior
-      // from file managers that still expose text/uri-list.
+      // from file managers that still expose text/uri-list. URIs don't
+      // carry size; the chip falls back to showing just the basename.
       dropDiagnostic = null;
-      for (const p of paths) insertPathAtCursor(p);
+      for (const p of paths) attachFileAtCursor(p);
       return;
     }
     const files = e.dataTransfer.files;
@@ -1159,7 +1243,7 @@
         title: 'Attach a file to the prompt'
       });
       if (result.cancelled) return;
-      for (const p of result.paths) insertPathAtCursor(p);
+      for (const p of result.paths) attachFileAtCursor(p);
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -1621,6 +1705,32 @@
         Send
       </button>
     </div>
+    {#if activeComposerAttachments.length > 0}
+      <div class="flex flex-wrap gap-1.5" data-testid="composer-attachments">
+        {#each activeComposerAttachments as att (att.n)}
+          <span
+            class="inline-flex items-center gap-1.5 rounded border border-slate-700
+              bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300"
+            title={`${att.path}${att.size_bytes ? ' · ' + formatBytes(att.size_bytes) : ''}`}
+          >
+            <span class="text-slate-500">[File {att.n}]</span>
+            <span class="truncate max-w-[220px]">{att.filename}</span>
+            {#if att.size_bytes}
+              <span class="text-slate-500">·</span>
+              <span class="text-slate-500">{formatBytes(att.size_bytes)}</span>
+            {/if}
+            <button
+              type="button"
+              class="ml-0.5 text-slate-500 hover:text-slate-200"
+              aria-label={`Remove [File ${att.n}]`}
+              onclick={() => removeAttachment(att.n)}
+            >
+              ✕
+            </button>
+          </span>
+        {/each}
+      </div>
+    {/if}
     <div class="flex items-center gap-2">
       <button
         type="button"

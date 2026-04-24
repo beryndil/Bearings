@@ -29,13 +29,15 @@ async def insert_message(
     output_tokens: int | None = None,
     cache_read_tokens: int | None = None,
     cache_creation_tokens: int | None = None,
+    attachments: str | None = None,
 ) -> dict[str, Any]:
     message_id = id or _new_id()
     now = _now()
     await conn.execute(
         "INSERT INTO messages (id, session_id, role, content, thinking, created_at, "
-        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, "
+        "attachments) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             message_id,
             session_id,
@@ -47,6 +49,7 @@ async def insert_message(
             output_tokens,
             cache_read_tokens,
             cache_creation_tokens,
+            attachments,
         ),
     )
     # Bump the owning session's updated_at so active sessions sort to
@@ -73,13 +76,18 @@ async def insert_message(
         # a follow-up SELECT. Migration 0023.
         "pinned": 0,
         "hidden_from_context": 0,
+        # JSON string (or None) matching the on-disk shape; callers
+        # that need the parsed list hand this to json.loads. Keeping
+        # the wire representation opaque here avoids re-serialising in
+        # every SELECT path. Migration 0027.
+        "attachments": attachments,
     }
 
 
 _MESSAGE_COLS = (
     "id, session_id, role, content, thinking, created_at, "
     "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, "
-    "pinned, hidden_from_context"
+    "pinned, hidden_from_context, attachments"
 )
 
 
@@ -232,7 +240,8 @@ async def find_replayable_prompt(
     so a crash during replay can't trigger an infinite loop.
     """
     sql = (
-        "SELECT m.id, m.content, m.created_at, m.role, m.replay_attempted_at "
+        "SELECT m.id, m.content, m.created_at, m.role, m.replay_attempted_at, "
+        "m.attachments "
         "FROM messages m "
         "JOIN sessions s ON s.id = m.session_id "
         "WHERE m.session_id = ? AND s.closed_at IS NULL "
@@ -250,6 +259,10 @@ async def find_replayable_prompt(
         "id": row["id"],
         "content": row["content"],
         "created_at": row["created_at"],
+        # JSON string or None — replay path feeds this back through
+        # substitute_tokens to rebuild the exact prompt the SDK saw on
+        # the original (interrupted) turn. Migration 0027.
+        "attachments": row["attachments"],
     }
 
 
@@ -482,7 +495,7 @@ async def search_messages(
         "m.thinking, m.created_at, "
         "m.input_tokens, m.output_tokens, "
         "m.cache_read_tokens, m.cache_creation_tokens, "
-        "m.pinned, m.hidden_from_context, "
+        "m.pinned, m.hidden_from_context, m.attachments, "
         "s.title AS session_title, s.model "
         "FROM messages m JOIN sessions s ON s.id = m.session_id "
         "WHERE m.content LIKE ? OR m.thinking LIKE ? "

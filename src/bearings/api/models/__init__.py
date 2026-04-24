@@ -21,7 +21,7 @@ from .checklists import (
 from .checkpoints import CheckpointCreate, CheckpointForkRequest, CheckpointOut
 from .commands import CommandOut, CommandsListOut
 from .fs import FsEntryOut, FsListOut, FsPickOut, UploadOut
-from .messages import MessageOut, MessagePatchBody, TokenTotalsOut
+from .messages import Attachment, MessageOut, MessagePatchBody, TokenTotalsOut
 from .paired import PairedChatCreate
 from .prompts import SystemPromptLayerOut, SystemPromptOut
 from .reorg import (
@@ -56,6 +56,7 @@ from .vault import (
 )
 
 __all__ = [
+    "Attachment",
     "ChecklistOut",
     "ChecklistUpdate",
     "CheckpointCreate",

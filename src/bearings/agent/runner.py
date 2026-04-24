@@ -38,6 +38,7 @@ import aiosqlite
 import orjson
 
 from bearings import metrics
+from bearings.agent._attachments import prune_and_serialize, substitute_tokens
 from bearings.agent.approval_broker import ApprovalBroker
 from bearings.agent.events import (
     AgentEvent,
@@ -110,10 +111,31 @@ class _Replay:
     NOT insert it a second time or history will show the user's prompt
     twice after a restart-mid-turn event."""
 
-    __slots__ = ("prompt",)
+    __slots__ = ("prompt", "attachments")
 
-    def __init__(self, prompt: str) -> None:
+    def __init__(self, prompt: str, attachments: list[dict[str, Any]] | None) -> None:
         self.prompt = prompt
+        # Parsed list (or None) — the replay row carries the same
+        # token→path mapping so `_execute_turn` can re-substitute
+        # exactly what the SDK saw on the original interrupted turn.
+        self.attachments = attachments
+
+
+class _Submit:
+    """Queue marker for a freshly submitted prompt carrying terminal-
+    style `[File N]` attachments. Plain strings still work for
+    attachment-free prompts — the worker treats them identically — but
+    once a prompt has attachments we need to ride them through the
+    queue so `_execute_turn` can both persist the sidecar and build the
+    substituted SDK text. Kept separate from `_Replay` so the replay
+    path's "don't re-persist user row" rule stays untangled from
+    attachment handling."""
+
+    __slots__ = ("prompt", "attachments")
+
+    def __init__(self, prompt: str, attachments: list[dict[str, Any]]) -> None:
+        self.prompt = prompt
+        self.attachments = attachments
 
 
 class _ToolOutputBuffer:
@@ -184,7 +206,7 @@ class SessionRunner:
         # pass it through. The publish helpers no-op on None so the
         # turn loop stays oblivious.
         self._sessions_broker = sessions_broker
-        self._prompts: asyncio.Queue[str | _Replay | _Shutdown] = asyncio.Queue()
+        self._prompts: asyncio.Queue[str | _Submit | _Replay | _Shutdown] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
         self._subscribers: set[asyncio.Queue[_Envelope]] = set()
         self._event_log: deque[_Envelope] = deque(maxlen=RING_MAX)
@@ -285,9 +307,21 @@ class SessionRunner:
     def is_running(self) -> bool:
         return self._status == "running"
 
-    async def submit_prompt(self, prompt: str) -> None:
+    async def submit_prompt(
+        self,
+        prompt: str,
+        *,
+        attachments: list[dict[str, Any]] | None = None,
+    ) -> None:
         """Queue a prompt for this session. Prompts are processed
         sequentially — if a turn is already in flight, this one waits.
+
+        `attachments` is the sidecar list from the composer's
+        `[File N]` tokens (see `agent/_attachments.py`); None or empty
+        means a plain text prompt and is queued as a raw string so
+        attachment-free submits keep the historical queue shape. With
+        attachments, the prompt is wrapped in `_Submit` so the worker
+        can persist the sidecar and substitute paths for the SDK.
 
         If the session has `max_budget_usd` set and `total_cost_usd`
         has already met or exceeded it, the prompt is refused with a
@@ -312,7 +346,10 @@ class SessionRunner:
                     )
                 )
                 return
-        await self._prompts.put(prompt)
+        if attachments:
+            await self._prompts.put(_Submit(prompt, attachments))
+        else:
+            await self._prompts.put(prompt)
 
     async def set_permission_mode(self, mode: Any) -> None:
         """Update the SDK's permission mode AND retro-apply it to any
@@ -474,7 +511,27 @@ class SessionRunner:
             # "handled elsewhere" and do nothing.
             return
         await self._emit_event(TurnReplayed(session_id=self.session_id, message_id=orphan["id"]))
-        await self._prompts.put(_Replay(orphan["content"]))
+        # `attachments` is a JSON string (or None) from the DB column;
+        # parse eagerly so the worker can feed it straight into the
+        # substitute_tokens helper without a second decode path.
+        raw_attachments = orphan.get("attachments")
+        parsed_attachments: list[dict[str, Any]] | None = None
+        if raw_attachments:
+            try:
+                parsed = json.loads(raw_attachments)
+                if isinstance(parsed, list):
+                    parsed_attachments = parsed
+            except (json.JSONDecodeError, TypeError):
+                # A malformed JSON row is a surprise but not a
+                # show-stopper — fall through and replay without
+                # substitution (the text still carries `[File N]`
+                # tokens, which Claude will just see as literal).
+                log.warning(
+                    "runner %s: orphan %s has unparseable attachments JSON",
+                    self.session_id,
+                    orphan["id"],
+                )
+        await self._prompts.put(_Replay(orphan["content"], parsed_attachments))
         log.info(
             "runner %s: replayed orphaned user prompt id=%s",
             self.session_id,
@@ -491,11 +548,18 @@ class SessionRunner:
             item = await self._prompts.get()
             if isinstance(item, _Shutdown):
                 return
+            attachments: list[dict[str, Any]] | None
             if isinstance(item, _Replay):
                 prompt = item.prompt
+                attachments = item.attachments
                 persist_user = False
+            elif isinstance(item, _Submit):
+                prompt = item.prompt
+                attachments = item.attachments
+                persist_user = True
             else:
                 prompt = item
+                attachments = None
                 persist_user = True
             self._status = "running"
             # A turn is live — not quiet regardless of subscriber count.
@@ -523,7 +587,7 @@ class SessionRunner:
             await publish_session_upsert(self._sessions_broker, self.db, self.session_id)
             publish_runner_state(self._sessions_broker, self.session_id, is_running=True)
             try:
-                await self._execute_turn(prompt, persist_user=persist_user)
+                await self._execute_turn(prompt, persist_user=persist_user, attachments=attachments)
             except Exception as exc:
                 log.exception("runner %s: turn failed", self.session_id)
                 await self._emit_event(ErrorEvent(session_id=self.session_id, message=str(exc)))
@@ -540,7 +604,13 @@ class SessionRunner:
                 await publish_session_upsert(self._sessions_broker, self.db, self.session_id)
                 publish_runner_state(self._sessions_broker, self.session_id, is_running=False)
 
-    async def _execute_turn(self, prompt: str, *, persist_user: bool = True) -> None:  # noqa: C901
+    async def _execute_turn(
+        self,
+        prompt: str,
+        *,
+        persist_user: bool = True,
+        attachments: list[dict[str, Any]] | None = None,
+    ) -> None:  # noqa: C901
         """Run one agent turn end-to-end. Mirrors the pre-runner
         ws_agent loop: persist user message, stream agent events,
         persist assistant turn + tool calls as they complete. Events
@@ -550,10 +620,27 @@ class SessionRunner:
         when recovering an orphaned prompt: the user row is already in
         `messages` from the original (interrupted) turn, so inserting
         again would duplicate history.
+
+        `attachments` carries the composer's `[File N]` sidecar (parsed
+        list or None). When present, the SDK receives the same prompt
+        with tokens replaced by absolute paths; the persisted user row
+        keeps the tokenised form so the transcript renders chips on
+        reload. Replay path sends the same list through so the
+        recovered turn hits the SDK identically to its original.
         """
+        pruned_attachments, attachments_json = prune_and_serialize(prompt, attachments or [])
+        # The SDK only ever sees the substituted text; we don't
+        # substitute in-place on `prompt` because we want to persist
+        # the tokenised form (and we need `prompt` unchanged for the
+        # replay-row content column, which is already tokenised).
+        agent_prompt = substitute_tokens(prompt, pruned_attachments)
         if persist_user:
             await store.insert_message(
-                self.db, session_id=self.session_id, role="user", content=prompt
+                self.db,
+                session_id=self.session_id,
+                role="user",
+                content=prompt,
+                attachments=attachments_json,
             )
             metrics.messages_persisted.labels(role="user").inc()
         # Intentionally not emitting a `user_message` event here. The
@@ -570,7 +657,7 @@ class SessionRunner:
         stopped = False
 
         try:
-            async for event in self.agent.stream(prompt):
+            async for event in self.agent.stream(agent_prompt):
                 await self._emit_event(event)
                 if isinstance(event, MessageStart):
                     current_message_id = event.message_id

@@ -292,7 +292,29 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
             msg_type = payload.get("type")
             if msg_type == "prompt":
                 prompt = str(payload.get("content", ""))
-                await runner.submit_prompt(prompt)
+                # Optional sidecar from the composer's `[File N]`
+                # attachment flow. The client sends raw dicts — we
+                # filter to well-formed entries so a malformed payload
+                # can't crash the runner, and a missing key just means
+                # "plain-text prompt, no attachments."
+                raw_attachments = payload.get("attachments")
+                attachments: list[dict[str, Any]] = []
+                if isinstance(raw_attachments, list):
+                    for entry in raw_attachments:
+                        if (
+                            isinstance(entry, dict)
+                            and isinstance(entry.get("n"), int)
+                            and isinstance(entry.get("path"), str)
+                        ):
+                            attachments.append(
+                                {
+                                    "n": entry["n"],
+                                    "path": entry["path"],
+                                    "filename": str(entry.get("filename", "")),
+                                    "size_bytes": int(entry.get("size_bytes", 0)),
+                                }
+                            )
+                await runner.submit_prompt(prompt, attachments=attachments or None)
             elif msg_type == "stop":
                 await runner.request_stop()
             elif msg_type == "set_permission_mode":

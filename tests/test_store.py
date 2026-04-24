@@ -970,3 +970,49 @@ async def test_add_session_cost_returns_false_for_unknown(tmp_path: Path) -> Non
         assert await add_session_cost(conn, "deadbeef" * 4, 0.01) is False
     finally:
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_insert_message_round_trips_attachments(tmp_path: Path) -> None:
+    """A user message with `[File N]` attachments persists the JSON
+    sidecar in the `attachments` column (migration 0027) and
+    `list_messages` reads the same JSON back. The column is an opaque
+    string at the store layer; `MessageOut` does the parse."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        payload = '[{"n":1,"path":"/uploads/a/one.log","filename":"one.log","size_bytes":10}]'
+        inserted = await insert_message(
+            conn,
+            session_id=sess["id"],
+            role="user",
+            content="use [File 1] here",
+            attachments=payload,
+        )
+        assert inserted["attachments"] == payload
+        rows = await list_messages(conn, sess["id"])
+        assert len(rows) == 1
+        # list_messages preserves the raw JSON string — decoding to
+        # list[Attachment] happens at the MessageOut serialisation
+        # boundary, not in the store.
+        assert rows[0]["attachments"] == payload
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_insert_message_attachments_default_null(tmp_path: Path) -> None:
+    """A message with no attachments keeps the column NULL — crucial
+    for the 775+ historical rows that predate migration 0027 and for
+    every assistant row, where the concept doesn't apply."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        inserted = await insert_message(
+            conn, session_id=sess["id"], role="user", content="plain text"
+        )
+        assert inserted["attachments"] is None
+        rows = await list_messages(conn, sess["id"])
+        assert rows[0]["attachments"] is None
+    finally:
+        await conn.close()

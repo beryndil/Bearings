@@ -71,9 +71,6 @@ a tagged release — the FileHandler is cheap but unconditional.
 
 **Open follow-ups (not blocking):**
 
-- [ ] Attachment chip above the user bubble showing filename + size
-  (currently the injected path is the only affordance; a chip would
-  make it obvious to the user that the file is tracked server-side).
 - [ ] GC sweep of `~/.local/share/bearings/uploads/` — time-based
   (e.g. delete UUID subdirs > 30d old) or tied to session deletion.
   Deferred until disk-usage becomes a real concern.
@@ -91,6 +88,37 @@ a tagged release — the FileHandler is cheap but unconditional.
 or the `dropDiagnostic` amber banner. Those are the instrumentation
 that'll surface future compositor/browser regressions — even after
 the upload fallback works, we still need to see what breaks next.
+
+---
+
+## Terminal-style `[File N]` attachments — 2026-04-23
+
+**Shipped.** Mirrors the Claude Code terminal UX Dave called out
+("It displays to me as [File 1], [File 2] but you get the actual
+address"): the composer inserts token literals at the cursor, the
+real path + display metadata travel in a sidecar, and the agent SDK
+receives the fully substituted prompt.
+
+Pieces that landed:
+- Migration `0027_message_attachments.sql` adds `messages.attachments
+  TEXT` (JSON blob) — additive, nullable.
+- `src/bearings/agent/_attachments.py` — regex `\[File (\d+)\]`,
+  whitespace-aware path quoting, orphan-prune + JSON-serialize.
+- Runner orphan-replay path re-parses the stored sidecar so a socket
+  drop mid-turn still reaches the SDK with the substituted prompt.
+- Frontend: `lib/attachments.ts` + `MessageAttachment` wired through
+  `agent.send` → WS frame → optimistic user bubble.
+- Composer chip strip above the Attach-file row — shows `[File N]`,
+  filename, size; `×` removes both sidecar row AND text token.
+
+**Follow-ups (not blocking):**
+- [ ] Transcript chip rendering in `MessageTurn.svelte` — today the
+  user bubble renders stored `[File N]` text literally. `parseMessageBody`
+  from `lib/attachments.ts` is ready to walk the message; the user
+  bubble renderer just needs to iterate segments and emit styled chip
+  spans for `kind: 'token'`.
+- [ ] Renumber-on-delete policy: intentionally skipped (matches
+  terminal). Revisit only if Dave asks for it.
 
 ---
 

@@ -1,4 +1,5 @@
 import * as api from '$lib/api';
+import type { MessageAttachment } from '$lib/api/sessions';
 import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
 import { prefs } from '$lib/stores/prefs.svelte';
@@ -88,10 +89,21 @@ export class AgentConnection {
     this.openSocket(sessionId);
   }
 
-  send(prompt: string): boolean {
+  send(prompt: string, attachments: MessageAttachment[] = []): boolean {
     if (!this.socket || this.state !== 'open' || !this.sessionId) return false;
-    conversation.pushUserMessage(this.sessionId, prompt);
-    this.socket.send(JSON.stringify({ type: 'prompt', content: prompt }));
+    // Optimistic user message carries the same attachment sidecar the
+    // server is about to persist — the UI shows chips the instant the
+    // user hits send rather than waiting for the next `/messages`
+    // fetch. Empty array == plain text prompt; the server treats
+    // missing and empty identically.
+    conversation.pushUserMessage(this.sessionId, prompt, attachments);
+    const frame: {
+      type: 'prompt';
+      content: string;
+      attachments?: MessageAttachment[];
+    } = { type: 'prompt', content: prompt };
+    if (attachments.length > 0) frame.attachments = attachments;
+    this.socket.send(JSON.stringify(frame));
     return true;
   }
 

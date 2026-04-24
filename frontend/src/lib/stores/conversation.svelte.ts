@@ -1,4 +1,5 @@
 import * as api from '$lib/api';
+import type { MessageAttachment } from '$lib/api/sessions';
 import { sessions } from '$lib/stores/sessions.svelte';
 
 import {
@@ -294,7 +295,11 @@ class ConversationStore {
     state.pendingApproval = null;
   }
 
-  pushUserMessage(sessionId: string, content: string): void {
+  pushUserMessage(
+    sessionId: string,
+    content: string,
+    attachments: MessageAttachment[] = []
+  ): void {
     const state = this.ensureState(sessionId);
     state.messages = [
       ...state.messages,
@@ -304,7 +309,12 @@ class ConversationStore {
         role: 'user',
         content,
         thinking: null,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        // Null (not empty array) for attachment-free sends so the
+        // optimistic row matches the shape `GET /messages` returns
+        // for pre-0027 rows — keeps render-branch code that checks
+        // `msg.attachments?.length` honest.
+        attachments: attachments.length > 0 ? attachments : null
       }
     ];
     sessions.bumpMessageCount(sessionId, 1);
