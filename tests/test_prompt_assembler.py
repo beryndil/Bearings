@@ -67,14 +67,17 @@ def test_estimate_tokens_scales_with_length() -> None:
 
 
 @pytest.mark.asyncio
-async def test_only_base_when_no_tags_or_instructions(tmp_path: Path) -> None:
+async def test_base_plus_identity_when_no_tags_or_instructions(tmp_path: Path) -> None:
+    """Bare session: only base + session_identity. Identity is always
+    present when the session row exists so the agent always has a
+    title+id anchor to reason about "this session" references."""
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         sess = await create_session(conn, working_dir="/x", model="m", title=None)
         result = await assemble_prompt(conn, sess["id"])
     finally:
         await conn.close()
-    assert [layer.kind for layer in result.layers] == ["base"]
+    assert [layer.kind for layer in result.layers] == ["base", "session_identity"]
     assert result.layers[0].content == BASE_PROMPT
     assert "<!-- layer: base[base] -->" in result.text
     assert BASE_PROMPT in result.text
@@ -82,12 +85,75 @@ async def test_only_base_when_no_tags_or_instructions(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_missing_session_returns_base_only(tmp_path: Path) -> None:
+    """No row in `sessions` → no identity anchor → base-only prompt.
+    The degenerate case (agent wired to an orphan id) must not crash
+    and must not fabricate a title or id in the prompt."""
     conn = await init_db(tmp_path / "db.sqlite")
     try:
         result = await assemble_prompt(conn, "does-not-exist")
     finally:
         await conn.close()
     assert [layer.kind for layer in result.layers] == ["base"]
+
+
+@pytest.mark.asyncio
+async def test_session_identity_includes_title_and_id(tmp_path: Path) -> None:
+    """The identity layer renders both the sidebar title and the stable
+    id. These are the common reference points a user and the agent
+    need to agree on when the user says "rename this" or "tag this"."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(
+            conn, working_dir="/x", model="m", title="[Feature] picker modal"
+        )
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    identity = next(layer for layer in result.layers if layer.kind == "session_identity")
+    assert identity.name == "identity"
+    assert "[Feature] picker modal" in identity.content
+    assert sess["id"] in identity.content
+    assert "<!-- layer: session_identity[identity] -->" in result.text
+
+
+@pytest.mark.asyncio
+async def test_session_identity_falls_back_when_title_missing(tmp_path: Path) -> None:
+    """A freshly-created session with no title still gets an identity
+    layer carrying the id. The body explicitly flags "no title set"
+    rather than showing an empty string — the agent should recognise
+    the placeholder state and offer to name the session."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title=None)
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    identity = next(layer for layer in result.layers if layer.kind == "session_identity")
+    assert sess["id"] in identity.content
+    assert "no title set" in identity.content
+
+
+@pytest.mark.asyncio
+async def test_session_identity_precedes_description_and_tags(tmp_path: Path) -> None:
+    """Identity is the orientation anchor — must land right after base
+    and before any task-specific layer so a first-read agent knows
+    which session is "this session" before it reads the plug, tag
+    memories, or instructions."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir="/x", model="m", title="T")
+        tag = await create_tag(conn, name="t")
+        await _set_tag_memory(conn, tag["id"], "tm")
+        await attach_tag(conn, sess["id"], tag["id"])
+        await _set_session_description(conn, sess["id"], "plug")
+        await _set_session_instructions(conn, sess["id"], "overrides")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    kinds = [layer.kind for layer in result.layers]
+    assert kinds.index("session_identity") == 1
+    assert kinds.index("session_identity") < kinds.index("session_description")
+    assert kinds.index("session_identity") < kinds.index("tag_memory")
 
 
 @pytest.mark.asyncio
@@ -142,7 +208,12 @@ async def test_session_instructions_always_last(tmp_path: Path) -> None:
         result = await assemble_prompt(conn, sess["id"])
     finally:
         await conn.close()
-    assert [layer.kind for layer in result.layers] == ["base", "tag_memory", "session"]
+    assert [layer.kind for layer in result.layers] == [
+        "base",
+        "session_identity",
+        "tag_memory",
+        "session",
+    ]
     assert result.layers[-1].content == "Override everything above."
 
 
@@ -161,11 +232,12 @@ async def test_description_injected_between_base_and_tag_memory(tmp_path: Path) 
         await conn.close()
     assert [layer.kind for layer in result.layers] == [
         "base",
+        "session_identity",
         "session_description",
         "tag_memory",
         "session",
     ]
-    description_layer = result.layers[1]
+    description_layer = result.layers[2]
     assert description_layer.name == "description"
     assert description_layer.content == "Why this window exists."
     assert "<!-- layer: session_description[description] -->" in result.text

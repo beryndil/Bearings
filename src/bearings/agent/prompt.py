@@ -1,16 +1,27 @@
 """Layered system-prompt assembler.
 
-Order: base → session description (if non-null) → tag memories (one
-per attached tag with a `tag_memories` row, in the canonical
-pinned-first / sort_order / id order) → checklist context (if this
-session is paired to a checklist item) → checklist overview (if this
-session IS a checklist — v0.5.2) → session instructions (if non-null).
+Order: base → session identity (title + id, whenever the session row
+exists) → session description (if non-null) → tag memories (one per
+attached tag with a `tag_memories` row, in the canonical pinned-first
+/ sort_order / id order) → checklist context (if this session is
+paired to a checklist item) → checklist overview (if this session IS
+a checklist — v0.5.2) → session instructions (if non-null).
 
 The session description is the human-authored "why this window
 exists" blurb rendered under the title/tags in the Conversation
 header. Injecting it into the system prompt gives empty-context
 agents a first-person orientation hint without having to query the
 DB or UI out-of-band.
+
+The session identity layer (v0.10.3) closes the sidebar-vs-agent
+mismatch: every row in the Bearings sidebar has a `title` (what Dave
+sees) and an `id` (what the API keys on). Neither is in the base
+layer. Without this layer, an agent asked to "rename this session"
+had to `GET /api/sessions` and guess which row was current by
+plug-content match — a method that silently picks the wrong row when
+multiple sessions share topics (see 2026-04-24 mis-rename of
+1f95ccc3 when the active session was f20e5973). Injecting the title
++ id on every turn gives both sides a common reference.
 
 The checklist-context layer (v0.5.0, Slice 4 of nimble-checking-heron)
 is the "memory plug" for paired chats: when
@@ -35,6 +46,7 @@ from bearings.agent.base_prompt import BASE_PROMPT
 
 LayerKind = Literal[
     "base",
+    "session_identity",
     "session_description",
     "tag_memory",
     "checklist_context",
@@ -73,6 +85,27 @@ def estimate_tokens(text: str) -> int:
 def _finalize(layers: list[Layer]) -> AssembledPrompt:
     parts = [f"<!-- layer: {layer.kind}[{layer.name}] -->\n{layer.content}" for layer in layers]
     return AssembledPrompt(layers=layers, text="\n\n".join(parts))
+
+
+def _format_session_identity(session_id: str, title: str | None) -> str:
+    """Render the session_identity body. `title` is None / empty when
+    the sidebar shows the default placeholder — surface that fact
+    explicitly so the agent can offer to set a real title instead of
+    inventing one from conversation context. The id is always shown
+    because it's the stable handle for `PATCH /api/sessions/<id>`
+    when the user asks to rename, retag, or edit the plug."""
+    shown_title = (title or "").strip() or "(no title set — sidebar shows a placeholder)"
+    return (
+        f'You are in Bearings session "{shown_title}" (id: {session_id}).\n'
+        "\n"
+        "The title above is what the user sees in the Bearings sidebar at "
+        'http://127.0.0.1:8787. When the user refers to "this session," '
+        '"rename this," "update the plug," "tag this," or similar, they '
+        "mean this row — the one identified by the id above. Use that id "
+        "for API calls: `PATCH /api/sessions/<id>` to change the title, "
+        "description (plug), or session_instructions; "
+        "`POST /api/sessions/<id>/tags/<tag_id>` to attach a tag."
+    )
 
 
 def _format_checklist_context(
@@ -245,7 +278,7 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
     layers: list[Layer] = [Layer(name="base", kind="base", content=BASE_PROMPT)]
 
     async with conn.execute(
-        "SELECT description, session_instructions, checklist_item_id, kind "
+        "SELECT title, description, session_instructions, checklist_item_id, kind "
         "FROM sessions WHERE id = ?",
         (session_id,),
     ) as cursor:
@@ -253,10 +286,24 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
     if session_row is None:
         return _finalize(layers)
 
+    title = session_row["title"]
     description = session_row["description"]
     session_instructions = session_row["session_instructions"]
     checklist_item_id = session_row["checklist_item_id"]
     kind = session_row["kind"] if "kind" in session_row.keys() else "chat"
+
+    # Identity layer first — the agent needs the common reference
+    # (title + id) before any task-specific layer arrives so it can
+    # answer "rename this" questions without guessing which session
+    # row is current. Always present when the session row exists;
+    # only missing for the no-such-session degenerate path above.
+    layers.append(
+        Layer(
+            name="identity",
+            kind="session_identity",
+            content=_format_session_identity(session_id, title),
+        )
+    )
 
     if description:
         layers.append(Layer(name="description", kind="session_description", content=description))

@@ -197,7 +197,7 @@ def test_system_prompt_base_only(client: TestClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     kinds = [layer["kind"] for layer in body["layers"]]
-    assert kinds == ["base"]
+    assert kinds == ["base", "session_identity"]
     assert body["total_tokens"] == sum(layer["token_count"] for layer in body["layers"])
     assert body["layers"][0]["token_count"] >= 1
 
@@ -286,7 +286,7 @@ def test_system_prompt_full_stack(client: TestClient) -> None:
     )
     body = client.get(f"/api/sessions/{sess['id']}/system_prompt").json()
     kinds = [layer["kind"] for layer in body["layers"]]
-    assert kinds == ["base", "tag_memory", "session"]
+    assert kinds == ["base", "session_identity", "tag_memory", "session"]
     contents = [layer["content"] for layer in body["layers"]]
     assert "Prefer nftables." in contents
     assert "Be concise." in contents

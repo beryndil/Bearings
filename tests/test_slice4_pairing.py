@@ -393,6 +393,7 @@ async def test_assemble_prompt_layer_order_puts_checklist_before_session(tmp_pat
         await conn.close()
     assert [layer.kind for layer in result.layers] == [
         "base",
+        "session_identity",
         "session_description",
         "tag_memory",
         "checklist_context",
