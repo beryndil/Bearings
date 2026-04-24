@@ -458,9 +458,14 @@
                indicator so rows 2–3 indent cleanly under the title.
                Row 1: [indicator | title … severity shield].
                Row 2: [—        | general tag icons + working_dir].
-               Row 3: [—        | updated_at … cost]. -->
+               Row 3: [—        | updated_at … cost].
+               Col 1 is 1.25rem (20 px) so a 10 px dot has enough
+               whitespace on either side to read as a deliberate
+               indicator rather than a stray pixel. Sized up from
+               0.75rem × 6 px after the original pill was visually
+               swallowed by the selected-row slate highlight. -->
           <div
-            class="grid grid-cols-[0.75rem_1fr] gap-x-1 text-xs"
+            class="grid grid-cols-[1.25rem_1fr] gap-x-1 text-xs"
             title="Double-click to rename"
           >
             <!-- Row 1, Col 1: activity indicator slot. Width is
@@ -468,9 +473,12 @@
                  indicator is showing. -->
             <div class="row-start-1 col-start-1 flex items-center justify-center">
               {#if isRunning(session.id)}
-                <!-- Live-run indicator: emerald ping + solid dot. -->
+                <!-- Live-run indicator: emerald ping + solid dot.
+                     10 px dot — big enough to read at a glance on
+                     both selected (bg-slate-800) and unselected rows
+                     without crowding the title column. -->
                 <span
-                  class="relative inline-flex h-1.5 w-1.5 shrink-0"
+                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
                   aria-label="Agent is working"
                   title="Agent is working — you can switch away and come back"
                 >
@@ -479,19 +487,21 @@
                       bg-emerald-400 opacity-60 animate-ping"
                   ></span>
                   <span
-                    class="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500"
+                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
                   ></span>
                 </span>
               {:else if isUnviewed(session)}
-                <!-- Finished-but-unviewed indicator. -->
+                <!-- Finished-but-unviewed indicator. Same 10 px as
+                     the live-run dot so both states read with the
+                     same visual weight. -->
                 <span
-                  class="relative inline-flex h-1.5 w-1.5 shrink-0"
+                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
                   aria-label="Session finished — unread"
                   title="Session finished — unread since last view"
                   data-testid="unviewed-dot"
                 >
                   <span
-                    class="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-400"
+                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400"
                   ></span>
                 </span>
               {/if}
