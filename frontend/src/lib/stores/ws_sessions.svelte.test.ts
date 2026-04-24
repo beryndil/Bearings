@@ -7,13 +7,14 @@
  * explicitly for this reason.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { Session } from '$lib/api';
 import { sessions } from './sessions.svelte';
 import { SessionsWsConnection } from './ws_sessions.svelte';
 
 afterEach(() => {
+  vi.useRealTimers();
   sessions.list = [];
   sessions.selectedId = null;
   sessions.running = new Set();
@@ -79,5 +80,87 @@ describe('SessionsWsConnection.handleFrame', () => {
     expect(sessions.running.has('a')).toBe(true);
     conn.handleFrame({ kind: 'runner_state', session_id: 'a', is_running: false });
     expect(sessions.running.has('a')).toBe(false);
+  });
+});
+
+/** Minimal WebSocket stand-in that records listener registration and
+ * lets the test fire synthetic close events. Doesn't implement
+ * `send` / readyState — the reconnect path doesn't exercise them. */
+function makeFakeSocket() {
+  const listeners: Record<string, ((ev: unknown) => void)[]> = {};
+  return {
+    addEventListener(name: string, fn: (ev: unknown) => void) {
+      (listeners[name] ??= []).push(fn);
+    },
+    close() {},
+    fire(name: string, ev: unknown) {
+      for (const fn of listeners[name] ?? []) fn(ev);
+    }
+  } as unknown as WebSocket & { fire: (n: string, ev: unknown) => void };
+}
+
+describe('SessionsWsConnection reconnect policy', () => {
+  it('reconnects after a clean close (1000) when the client still wants the channel', () => {
+    vi.useFakeTimers();
+    const opened: ReturnType<typeof makeFakeSocket>[] = [];
+    const factory = () => {
+      const s = makeFakeSocket();
+      opened.push(s as unknown as ReturnType<typeof makeFakeSocket>);
+      return s;
+    };
+    const conn = new SessionsWsConnection(factory);
+    conn.connect();
+    expect(opened.length).toBe(1);
+
+    // Server (or a proxy) closes cleanly while the client still
+    // wants the channel. Prior behavior: guard against code 1000 made
+    // this a permanent teardown — sidebar fell back to poll-only for
+    // the rest of the tab's lifetime. Current behavior: reconnect.
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
+      'close',
+      { code: 1000 }
+    );
+
+    // Exponential backoff starts at BASE_RETRY_DELAY_MS=1000; advance
+    // past it to let the reconnect timer fire.
+    vi.advanceTimersByTime(1_100);
+    expect(opened.length).toBe(2);
+  });
+
+  it('does not reconnect after a close if close() was called first', () => {
+    vi.useFakeTimers();
+    const opened: ReturnType<typeof makeFakeSocket>[] = [];
+    const factory = () => {
+      const s = makeFakeSocket();
+      opened.push(s as unknown as ReturnType<typeof makeFakeSocket>);
+      return s;
+    };
+    const conn = new SessionsWsConnection(factory);
+    conn.connect();
+    conn.close(); // Client-initiated teardown → wantConnected=false.
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
+      'close',
+      { code: 1000 }
+    );
+    vi.advanceTimersByTime(5_000);
+    expect(opened.length).toBe(1);
+  });
+
+  it('does not reconnect after a 4401 unauthorized close', () => {
+    vi.useFakeTimers();
+    const opened: ReturnType<typeof makeFakeSocket>[] = [];
+    const factory = () => {
+      const s = makeFakeSocket();
+      opened.push(s as unknown as ReturnType<typeof makeFakeSocket>);
+      return s;
+    };
+    const conn = new SessionsWsConnection(factory);
+    conn.connect();
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
+      'close',
+      { code: 4401 }
+    );
+    vi.advanceTimersByTime(5_000);
+    expect(opened.length).toBe(1);
   });
 });

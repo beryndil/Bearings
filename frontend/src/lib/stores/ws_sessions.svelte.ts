@@ -27,7 +27,6 @@ export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error
 
 const MAX_RETRY_DELAY_MS = 30_000;
 const BASE_RETRY_DELAY_MS = 1_000;
-const CODE_NORMAL_CLOSE = 1000;
 const CODE_UNAUTHORIZED = 4401;
 
 type UpsertFrame = { kind: 'upsert'; session: api.Session };
@@ -135,9 +134,18 @@ class SessionsWsConnection {
   }
 
   private shouldReconnect(code: number): boolean {
-    return (
-      this.wantConnected && code !== CODE_UNAUTHORIZED && code !== CODE_NORMAL_CLOSE
-    );
+    // `wantConnected` is the single source of truth for client intent:
+    // `close()` clears it before initiating a client-side teardown, so a
+    // normal-close code (1000) that arrives while `wantConnected` is
+    // still true can only mean the *server* or an intermediate proxy
+    // dropped us — which is exactly the case we should reconnect from.
+    // The prior guard against 1000 silently stranded the broadcast
+    // channel for the rest of the tab's lifetime whenever a proxy idle
+    // timeout or server shutdown cycled the socket, degrading the
+    // sidebar to poll-only (3 s latency) without any surfaced error.
+    // Auth failures (4401) still opt out — re-dialing won't fix a bad
+    // token, and `auth.markInvalid()` is the recovery path there.
+    return this.wantConnected && code !== CODE_UNAUTHORIZED;
   }
 
   private scheduleReconnect(): void {
