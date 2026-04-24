@@ -219,6 +219,38 @@ describe('tags store', () => {
     expect(tags.selectedSeverity).toEqual([9]);
   });
 
+  it('selectAll fills both axes including the No-severity sentinel', () => {
+    // v0.8.0: the "All" header button has to cover BOTH axes because
+    // the server ANDs them — a session missing a severity tag would
+    // get filtered out if the severity axis wasn't populated too. The
+    // `-1` sentinel covers sessions with no severity tag at all.
+    tags.list = [
+      tag({ id: 1, tag_group: 'general' }),
+      tag({ id: 2, tag_group: 'general' }),
+      tag({ id: 8, tag_group: 'severity' }),
+      tag({ id: 9, tag_group: 'severity' })
+    ];
+    tags.selectAll();
+    expect(tags.selected).toEqual([1, 2]);
+    // Severity list is sort_order-sorted; the sentinel is appended
+    // after the real ids so the order is deterministic.
+    expect(tags.selectedSeverity).toEqual([8, 9, SEVERITY_NONE_ID]);
+  });
+
+  it('clearAll empties both axes at once', () => {
+    // v0.8.0: the "None" header button has to clear BOTH axes. Just
+    // clearing `selected` leaves severity chips stuck on, which gave
+    // the user a "nothing is selected but something is still
+    // filtering" footgun.
+    tags.selected = [1, 2];
+    tags.selectedSeverity = [8, 9];
+    tags.clearAll();
+    expect(tags.selected).toEqual([]);
+    expect(tags.selectedSeverity).toEqual([]);
+    expect(tags.hasFilter).toBe(false);
+    expect(tags.hasSeverityFilter).toBe(false);
+  });
+
   it('generalList and severityList partition by tag_group', () => {
     tags.list = [
       tag({ id: 1, name: 'infra', tag_group: 'general', sort_order: 0 }),

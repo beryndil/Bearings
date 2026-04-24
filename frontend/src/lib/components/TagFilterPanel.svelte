@@ -154,9 +154,9 @@
           type="button"
           class="px-1.5 py-0.5 rounded text-[11px] text-slate-300
             hover:text-slate-100 hover:bg-slate-800"
-          onclick={() => tags.selectAllGeneral()}
+          onclick={() => tags.selectAll()}
           data-testid="tag-panel-all"
-          title="Select every general tag (show every session)"
+          title="Select every tag across both axes (show every session)"
         >
           All
         </button>
@@ -164,9 +164,9 @@
           type="button"
           class="px-1.5 py-0.5 rounded text-[11px] text-slate-300
             hover:text-slate-100 hover:bg-slate-800"
-          onclick={() => tags.clearSelection()}
+          onclick={() => tags.clearAll()}
           data-testid="tag-panel-none"
-          title="Clear the general-tag selection (show nothing)"
+          title="Clear both general and severity selections (show nothing)"
         >
           None
         </button>

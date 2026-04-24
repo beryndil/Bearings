@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-04-24
+
+Follow-up bug fixes on the v0.10.0 sidebar overhaul (frontend v0.8.1).
+Two cases where the v0.10.0 contract ("empty selection = empty list",
+"All = every session") wasn't actually being enforced:
+
+- **Boot honored no tag filter.** `+page.svelte` kicked off
+  `sessions.refresh()` with no argument at boot, so the backend got
+  no `tags` param and returned every session regardless of the
+  sidebar's declared empty state. The SessionList `$effect` that
+  watches filter changes only fired on subsequent edits, so an
+  untouched empty selection lied to the user forever. Boot now
+  passes `tags.filter` explicitly; the derived filter resolves to
+  `{ tags: [] }` synchronously off store defaults and the backend
+  correctly returns zero sessions until the user picks tags or
+  clicks All.
+- **All / None now cover both axes.** The All button was calling
+  `selectAllGeneral()` — general tags only; the server ANDs the two
+  axes, so if the severity axis stayed empty nothing gated it and
+  the flow happened to work, but the visual state was asymmetric
+  ("selected everything" yet the severity rows showed no checkmarks).
+  Worse: the None button was calling `clearSelection()` — general
+  only — leaving any active severity selection stuck on. Dave hit
+  this: click None, sidebar still filters by the severity chip,
+  "nothing is selected but something is still filtering." New
+  `selectAll()` / `clearAll()` store methods touch both axes,
+  including the virtual `-1` "No severity" sentinel so sessions
+  orphaned by a deleted severity tag still match when All is on.
+
 ## [0.10.0] - 2026-04-23
 
 Tag-filter sidebar semantics + layout overhaul (frontend v0.8.0). Three

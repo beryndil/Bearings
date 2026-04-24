@@ -31,7 +31,20 @@
     // (subscription). Run alongside the other boot fetches — a
     // failure here leaves the PAYG default in place, it does not
     // block boot.
-    await Promise.all([billing.init(), sessions.refresh(), tags.refresh()]);
+    // v0.8.0: seed the session refresh with the current tag filter
+    // instead of an unfiltered call. At boot `tags.selected = []`, so
+    // the derived `tags.filter` is `{ tags: [] }` — the tri-state
+    // "empty" value that the backend maps to "match nothing." Without
+    // this, boot returned every session and only SUBSEQUENT filter
+    // changes (which fire through the SessionList $effect) were
+    // honored — the sidebar lied about its effective state until the
+    // user touched it. `tags.filter` is a synchronous $derived off
+    // store defaults; no await needed.
+    await Promise.all([
+      billing.init(),
+      sessions.refresh(tags.filter),
+      tags.refresh()
+    ]);
     // Start the background runner poll so session rows flag which
     // sessions are still working even when you're on a different one.
     sessions.startRunningPoll();

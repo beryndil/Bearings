@@ -146,6 +146,28 @@ class TagStore {
     this.selected = this.generalList.map((t) => t.id);
   }
 
+  /** Select every tag across both axes — general AND severity,
+   * including the virtual "No severity" sentinel so sessions orphaned
+   * by a deleted severity tag still show up. Wired to the "All"
+   * button (v0.8.0): Dave's rule is All = "show every session", and
+   * severity-AND-general are separate axes on the server, so both
+   * have to be fully populated for the backend to emit every row. */
+  selectAll(): void {
+    this.selected = this.generalList.map((t) => t.id);
+    this.selectedSeverity = [
+      ...this.severityList.map((t) => t.id),
+      SEVERITY_NONE_ID
+    ];
+  }
+
+  /** Clear both axes at once — general AND severity. Wired to the
+   * "None" button (v0.8.0): Dave's rule is None = "show nothing",
+   * which only works if both axes are empty (the server ANDs them). */
+  clearAll(): void {
+    this.selected = [];
+    this.selectedSeverity = [];
+  }
+
   /** Toggle the collapsed state of the whole panel and persist it. */
   togglePanel(): void {
     this.panelCollapsed = !this.panelCollapsed;
