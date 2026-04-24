@@ -17,6 +17,23 @@ Scaffold reference (still useful for plans):
 
 ---
 
+## Flaky test: `test_get_tool_calls_filters_by_message_ids` — 2026-04-24
+
+Observed once in a full `uv run pytest -q` run:
+`tests/test_routes_sessions.py::test_get_tool_calls_filters_by_message_ids`
+fails with `assert parent_msg_id is not None` at line 372. Does not
+reproduce in isolation (`pytest tests/test_routes_sessions.py::…`) and
+does not reproduce on a second full-suite run. Smells like test
+ordering — a prior test leaves WS-adjacent state (runner registry,
+broker, or stub agent) in a shape where the parent message_id on the
+WS-posted tool_call isn't backfilled. Not caused by anything in the
+softRefresh / applyUpsert lifecycle-merge fix I landed today — that
+change is frontend-only. Deferred: stabilize the test (likely by
+adding a teardown or scoping a fixture) or mark it with
+`pytest.mark.flaky` pending investigation.
+
+---
+
 ## TEMP probe — session-switch interrupt diagnostic — 2026-04-23
 
 **Active, remove after diagnosis.** Dave reported an intermittent bug:

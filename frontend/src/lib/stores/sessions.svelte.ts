@@ -235,6 +235,17 @@ class SessionStore {
    *     `touchSession` / `bumpCost` hasn't been persisted yet). Keeping
    *     local-newer avoids a flicker where the just-bumped row drops
    *     back down and then climbs again on the next poll.
+   *   - Lifecycle carve-out: `closed_at` transitions always take from
+   *     the server regardless of `updated_at`. A recent local
+   *     `bumpCost` / `touchSession` stamps `updated_at` from the
+   *     client clock (JS `new Date().toISOString()`), which can drift
+   *     past the server's close timestamp — especially since Python's
+   *     `+00:00` suffix sorts below JS's `Z` for identical instants.
+   *     Without this carve-out, a session closed on another tab stays
+   *     rendered in the "Open" group forever because every poll tick
+   *     re-loses the strict `updated_at >` tiebreak against its own
+   *     stale local copy. Lifecycle is authoritative state, not sort
+   *     metadata — the server wins it unconditionally.
    *   - Rows gone from server: dropped. If the selected session was
    *     deleted elsewhere, clear `selectedId` so callers don't keep
    *     pointing at a ghost.
@@ -256,7 +267,11 @@ class SessionStore {
     const localById = new Map(this.list.map((s) => [s.id, s]));
     const merged: api.Session[] = fresh.map((server) => {
       const local = localById.get(server.id);
-      if (local && local.updated_at > server.updated_at) return local;
+      if (!local) return server;
+      // Lifecycle transition → server wins; see `closed_at` carve-out
+      // above.
+      if (local.closed_at !== server.closed_at) return server;
+      if (local.updated_at > server.updated_at) return local;
       return server;
     });
     merged.sort((a, b) => {
@@ -292,7 +307,12 @@ class SessionStore {
    *
    * Previous behavior dropped *every* upsert frame under any tag filter,
    * which made close/reopen/cost-bump look stuck for up to one poll
-   * tick on tag-filtered views. */
+   * tick on tag-filtered views.
+   *
+   * Lifecycle carve-out mirrors `softRefresh`: `closed_at` transitions
+   * always take from the incoming frame regardless of `updated_at`, so
+   * a close / reopen broadcast lands even when the local row has a
+   * client-clock-stamped `updated_at` that sorts past the server's. */
   applyUpsert(session: api.Session): void {
     const tagFilter = this.filter.tags ?? [];
     if (tagFilter.length > 0) {
@@ -307,8 +327,11 @@ class SessionStore {
       }
     }
     const existing = this.list.find((s) => s.id === session.id);
-    const incoming =
-      existing && existing.updated_at > session.updated_at ? existing : session;
+    const keepLocal =
+      existing !== undefined &&
+      existing.closed_at === session.closed_at &&
+      existing.updated_at > session.updated_at;
+    const incoming = keepLocal ? existing : session;
     const rest = this.list.filter((s) => s.id !== session.id);
     const merged = [incoming, ...rest];
     merged.sort((a, b) => {

@@ -373,6 +373,69 @@ describe('sessions.softRefresh', () => {
     expect(sessions.error).toBeNull();
   });
 
+  it('applies a server close even when local updated_at is strictly newer', async () => {
+    // Regression for the "session closed but the sidebar still shows it
+    // open under a tag filter" bug (2026-04-24). A recent bumpCost /
+    // touchSession stamps updated_at from the client clock, which can
+    // drift past the server's close timestamp — especially since the
+    // Python `+00:00` suffix sorts below JS's `Z` for identical-instant
+    // values. Without the lifecycle carve-out, the strict `updated_at >`
+    // merge rule keeps the local (still-open) copy forever and the 3s
+    // poll never converges. Lifecycle transitions from the server must
+    // land regardless of which side's updated_at is newer.
+    sessions.filter = { tags: [2] };
+    sessions.list = [
+      sess({
+        id: 'stale-open',
+        tag_ids: [2],
+        updated_at: '2026-04-24T15:45:00.000+00:00',
+        closed_at: null,
+      }),
+    ];
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({
+            id: 'stale-open',
+            tag_ids: [2],
+            updated_at: '2026-04-24T15:40:16.000000+00:00',
+            closed_at: '2026-04-24T15:40:16.000000+00:00',
+          }),
+        ],
+      },
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list[0].closed_at).toBe('2026-04-24T15:40:16.000000+00:00');
+  });
+
+  it('applies a server reopen even when local updated_at is strictly newer', async () => {
+    // Symmetric reopen case — local thinks the session is closed, server
+    // was reopened by another tab. Lifecycle must flip regardless of
+    // updated_at comparison.
+    sessions.list = [
+      sess({
+        id: 'stale-closed',
+        updated_at: '2026-04-24T16:00:00.000+00:00',
+        closed_at: '2026-04-24T15:40:16.000000+00:00',
+      }),
+    ];
+    queueResponses([
+      {
+        ok: true,
+        body: [
+          sess({
+            id: 'stale-closed',
+            updated_at: '2026-04-24T15:55:00.000000+00:00',
+            closed_at: null,
+          }),
+        ],
+      },
+    ]);
+    await sessions.softRefresh();
+    expect(sessions.list[0].closed_at).toBeNull();
+  });
+
   it('forwards the active filter to the server fetch', async () => {
     // v0.7.4 dropped the `mode=all` wire tag along with the Any/All
     // toggle. The tag filter is OR-only on the server now, so the
@@ -431,6 +494,26 @@ describe('sessions.applyUpsert', () => {
     );
     // Local optimistic row survives the broadcast.
     expect(sessions.list[0].total_cost_usd).toBeCloseTo(0.42);
+  });
+
+  it('applies a server close even when local updated_at is strictly newer', () => {
+    // Same carve-out as softRefresh — the WS upsert frame delivering a
+    // close must flip lifecycle regardless of optimistic local bumps.
+    sessions.list = [
+      sess({
+        id: 'a',
+        updated_at: '2026-04-24T15:45:00.000+00:00',
+        closed_at: null,
+      }),
+    ];
+    sessions.applyUpsert(
+      sess({
+        id: 'a',
+        updated_at: '2026-04-24T15:40:16.000000+00:00',
+        closed_at: '2026-04-24T15:40:16.000000+00:00',
+      })
+    );
+    expect(sessions.list[0].closed_at).toBe('2026-04-24T15:40:16.000000+00:00');
   });
 
   it('preserves the final sort on a re-sort after an upsert that bumps a middle row', () => {
