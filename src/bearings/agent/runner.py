@@ -668,9 +668,7 @@ class SessionRunner:
                 # indicator doesn't light, which is a worse UX than
                 # the current (non-existent) state but not a data loss.
                 try:
-                    await store.set_session_error_pending(
-                        self.db, self.session_id, pending=True
-                    )
+                    await store.set_session_error_pending(self.db, self.session_id, pending=True)
                 except Exception:
                     log.exception(
                         "runner %s: failed to latch error_pending",

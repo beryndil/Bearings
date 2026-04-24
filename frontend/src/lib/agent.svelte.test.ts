@@ -16,6 +16,15 @@ const notifyMock = vi.fn();
 const prefsState = { notifyOnComplete: false };
 const sessionsList: Array<{ id: string; title: string | null }> = [];
 const completedIds = new Map<string, Set<string>>();
+// Captured undo-toast pushes from agent.stop(). Tests drive `inverse`
+// directly to simulate an Undo click, and inspect `windowMs` /
+// `message` to assert wiring.
+type UndoPushInput = {
+  message: string;
+  windowMs?: number;
+  inverse: () => void | Promise<void>;
+};
+const undoPushes: UndoPushInput[] = [];
 
 vi.mock('$lib/api', () => ({
   openAgentSocket: (sessionId: string, sinceSeq?: number) => openAgentSocket(sessionId, sinceSeq),
@@ -57,6 +66,15 @@ vi.mock('$lib/stores/sessions.svelte', () => ({
 
 vi.mock('$lib/utils/notify', () => ({
   notify: (...args: unknown[]) => notifyMock(...args)
+}));
+
+vi.mock('$lib/context-menu/undo.svelte', () => ({
+  undoStore: {
+    push: (input: UndoPushInput) => {
+      undoPushes.push(input);
+      return 1;
+    }
+  }
 }));
 
 type Listener = (ev: unknown) => void;
@@ -105,6 +123,7 @@ beforeEach(() => {
   prefsState.notifyOnComplete = false;
   sessionsList.length = 0;
   completedIds.clear();
+  undoPushes.length = 0;
   openAgentSocket.mockImplementation((sessionId: string) => {
     const s = new FakeSocket(sessionId);
     sockets.push(s);
@@ -119,10 +138,13 @@ afterEach(() => {
 
 type TestAgent = {
   connect: (sid: string) => Promise<void>;
+  close: () => void;
   setPermissionMode: (
     mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions'
   ) => boolean;
   permissionMode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
+  stop: () => boolean;
+  cancelPendingStop: () => void;
 };
 
 /** Minimal Session factory for seeding `conversation.load` mocks. Only
@@ -153,6 +175,7 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     last_viewed_at: null,
     tag_ids: [],
     pinned: false,
+    error_pending: false,
     ...overrides
   };
 }
@@ -414,5 +437,92 @@ describe('AgentConnection permission-mode persistence', () => {
     const s1 = sockets[0];
     s1.fireOpen();
     expect(s1.sent).toEqual([]);
+  });
+});
+
+describe('AgentConnection stop with undo grace window', () => {
+  // Guards the defensive wrapper added for the session-switch
+  // interrupt bug: a stray mouse click on the red Stop button was
+  // killing in-flight turns. Instead of sending the WS frame
+  // immediately, stop() now queues it behind a 3s window and pushes
+  // an undo toast. A real Undo click must cancel the send; an
+  // expired window must still send.
+
+  it('defers the stop frame behind a grace window and pushes an undo toast', async () => {
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue(null);
+    await agent.connect('S1');
+    const s = sockets[0];
+    s.fireOpen();
+
+    expect(agent.stop()).toBe(true);
+    // Nothing sent yet — the frame is queued.
+    expect(s.sent).toEqual([]);
+    // Toast was pushed so the user can see the stop is about to fire.
+    expect(undoPushes).toHaveLength(1);
+    expect(undoPushes[0].windowMs).toBe(3_000);
+    expect(undoPushes[0].message).toContain('Stopping');
+
+    // Let the grace window expire. The queued setTimeout fires and
+    // the stop frame actually leaves the browser.
+    await vi.advanceTimersByTimeAsync(3_100);
+    expect(s.sent).toHaveLength(1);
+    const payload = JSON.parse(s.sent[0]);
+    expect(payload.type).toBe('stop');
+  });
+
+  it('cancels the pending stop frame when the undo inverse runs', async () => {
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue(null);
+    await agent.connect('S2');
+    const s = sockets[0];
+    s.fireOpen();
+
+    agent.stop();
+    expect(undoPushes).toHaveLength(1);
+
+    // Simulate the user hitting Undo inside the grace window — the
+    // toast calls the inverse we pushed, which must drop the pending
+    // send so the WS frame never leaves.
+    await undoPushes[0].inverse();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(s.sent).toEqual([]);
+  });
+
+  it('does not stack a second stop while one is already pending', async () => {
+    // Double-click insurance: a flurry of clicks must not shorten
+    // the grace window or pile extra pending sends. The second
+    // stop() returns false (no-op) while the first is in flight.
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue(null);
+    await agent.connect('S3');
+    const s = sockets[0];
+    s.fireOpen();
+
+    expect(agent.stop()).toBe(true);
+    expect(agent.stop()).toBe(false);
+    expect(undoPushes).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(3_100);
+    expect(s.sent).toHaveLength(1);
+  });
+
+  it('drops a pending stop when the socket closes before the window expires', async () => {
+    // Session switch is the motivating case: the user hit Stop, then
+    // navigated away. close() cancels the pending send so the new
+    // socket's session doesn't inherit a ghost stop frame and the
+    // old socket doesn't receive one either.
+    const { agent } = await freshAgent();
+    conversationLoad.mockResolvedValue(null);
+    await agent.connect('S4');
+    const s = sockets[0];
+    s.fireOpen();
+
+    agent.stop();
+    agent.close();
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(s.sent).toEqual([]);
   });
 });

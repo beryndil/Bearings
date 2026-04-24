@@ -17,6 +17,68 @@ Scaffold reference (still useful for plans):
 
 ---
 
+## AskUserQuestion tool_result arrives empty — 2026-04-24
+
+**Symptom.** During plan mode, the AI calls the first-party
+`AskUserQuestion` tool, the picker dialog renders, Dave selects an
+answer. The tool result delivered back to the model is literally
+`User has answered your questions: .` — trailing period, empty body.
+Reproduced twice in one session for two independent picker
+invocations. Not a one-off dismissal; Dave confirmed he was
+interacting with the pickers.
+
+**Investigation (done 2026-04-24).** Audited the full event path
+through Bearings and confirmed it is a **pure relay** — zero mutation
+of tool_result content anywhere in Bearings:
+
+- `src/bearings/agent/session.py:349-352` — `ToolResultBlock` is
+  forwarded to `_tool_call_end`, which calls `_stringify` (lines
+  54-57). `_stringify` returns string content verbatim and JSON-dumps
+  list content. No trimming, no summarization.
+- `src/bearings/agent/runner.py:990-1009` — `_emit_event` pydantic-
+  dumps the event and orjson-encodes it. Pure serialization.
+- `src/bearings/api/ws_agent.py:171-205` — `_forward_events` sends
+  pre-encoded wire frames verbatim via `websocket.send_text`. No
+  inspection of payload.
+- `src/bearings/db/_messages.py` — `finish_tool_call` and
+  `append_tool_output` persist `output` untouched.
+- Grep for `AskUserQuestion` / `ask_user_question` across the repo
+  returns zero matches. No custom handling exists.
+
+**Conclusion: bug is upstream** — either in `claude-agent-sdk`
+(pinned at 0.1.63 per `uv.lock`) or in the bundled Claude CLI that
+renders the picker UI.
+
+**Likely fix.** The claude-agent-sdk 0.1.65 changelog entry for #836
+fixes a message-parser bug where content blocks were *silently
+dropped*, causing messages to arrive with empty content. Adjacent
+enough to the symptom here to be worth trying. 0.1.66 also bumped
+the bundled Claude CLI (where the picker UI lives) to 2.1.119.
+
+**Next actions (in order):**
+1. Bump `claude-agent-sdk` in `pyproject.toml` to `>=0.1.66,<0.2`
+   (or pin `==0.1.66`), `uv lock --upgrade-package claude-agent-sdk`,
+   retest AskUserQuestion in a Bearings plan-mode session.
+2. If still broken after the bump: bare-shell repro — run plain
+   `claude` outside Bearings, trigger plan mode, call
+   AskUserQuestion, confirm the empty-answer bug reproduces
+   upstream. If yes, file upstream against
+   `anthropics/claude-agent-sdk-python` (or `claude-code` if the
+   issue is in the CLI picker rather than the SDK parser) with the
+   exact wire payload.
+3. Do NOT patch around this in Bearings. Red line per the session
+   brief: upstream bugs get filed upstream, not hacked around here.
+
+**Files NOT to touch.** Nothing under `frontend/src/lib/components/`
+(picker is harness-rendered, not Bearings-rendered). Nothing in
+`frontend/src/lib/stores/sessions.svelte.ts` (lifecycle fix in
+979c1ba is orthogonal).
+
+**Not urgent.** Planning sessions are degraded but not broken —
+Dave can re-type answers as plain text for now.
+
+---
+
 ## Flaky test: `test_get_tool_calls_filters_by_message_ids` — 2026-04-24
 
 Observed once in a full `uv run pytest -q` run:
@@ -60,6 +122,30 @@ probe at:
 `_interrupt_probe.py`, remove the four call sites (each marked with
 `# TEMP 2026-04-23`), and delete this TODO entry. Don't ship this to
 a tagged release — the FileHandler is cheap but unconditional.
+
+**Defensive layer added 2026-04-24 while root cause still open.**
+`agent.stop()` no longer sends the WS frame synchronously — it queues
+the frame behind a 3s countdown and pushes an undo toast. The toast's
+`inverse` cancels the pending send. This serves two purposes:
+
+1. Every Stop click is now **visible** — the toast pops whether Dave
+   meant to click or not. Accidental stops become observable instead
+   of mysterious.
+2. Accidental stops are **recoverable** during the 3s window.
+
+Relevant code: `frontend/src/lib/agent.svelte.ts` (`STOP_DELAY_MS`
+const, `pendingStopTimer` field, `stop()` defers via `setTimeout` +
+`undoStore.push`, new `cancelPendingStop()` method also called from
+`close()` so a session switch drops the queued frame). Tests in
+`frontend/src/lib/agent.svelte.test.ts` cover deferral, undo-cancel,
+no-stack guard, and session-switch cancel (4 new, 546 total green).
+
+**Disposition when bug closes:** this is worth keeping as a feature
+— three-second undo on Stop is a generally nice affordance. But
+re-evaluate the window length (3s was chosen for diagnostic
+visibility; 1.5s might feel snappier once the bug is gone) and strip
+the probe instrumentation from the frame (`_trace` / `_isTrusted` /
+`_eventType` fields) at the same time.
 
 ---
 

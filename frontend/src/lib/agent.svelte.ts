@@ -1,5 +1,6 @@
 import * as api from '$lib/api';
 import type { MessageAttachment } from '$lib/api/sessions';
+import { undoStore } from '$lib/context-menu/undo.svelte';
 import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
 import { prefs } from '$lib/stores/prefs.svelte';
@@ -14,6 +15,16 @@ const BASE_RETRY_DELAY_MS = 1_000;
 const CODE_NORMAL_CLOSE = 1000;
 const CODE_UNAUTHORIZED = 4401;
 const CODE_SESSION_NOT_FOUND = 4404;
+/** Grace period between a Stop-button click and the actual WS stop
+ * frame leaving the browser. Long enough to react to an accidental
+ * click (the running interrupt-probe bug — a stray mouse click on the
+ * red header button kills an in-flight turn), short enough that a
+ * deliberate stop still feels responsive. Every Stop click pushes a
+ * visible undo toast for this window; if the user clicks Undo inside
+ * it, the frame never leaves the browser and the agent keeps
+ * streaming. See TODO.md "TEMP probe — session-switch interrupt
+ * diagnostic" for the underlying investigation. */
+const STOP_DELAY_MS = 3_000;
 
 /** Resolve on the next animation frame. Used in `connect()` to yield
  * the main thread after flipping the loading flag, so the browser can
@@ -59,6 +70,11 @@ export class AgentConnection {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private retryCount = 0;
   private wantConnected = false;
+  // Deferred stop frame: a pending Stop-button click waiting out its
+  // STOP_DELAY_MS grace period. Non-null means "a stop is queued,
+  // don't enqueue another." Cleared by timer fire, by Undo click, or
+  // by close() / session-switch.
+  private pendingStopTimer: ReturnType<typeof setTimeout> | null = null;
 
   async connect(sessionId: string): Promise<void> {
     this.close();
@@ -109,8 +125,65 @@ export class AgentConnection {
 
   stop(): boolean {
     if (!this.socket || this.state !== 'open') return false;
-    this.socket.send(JSON.stringify({ type: 'stop' }));
+    // Don't stack stops. If one is already queued behind its grace
+    // window, the toast is visible and the user can either wait it
+    // out or Undo — a second click is a no-op rather than shortening
+    // the window.
+    if (this.pendingStopTimer !== null) return false;
+    // TEMP 2026-04-23: session-switch interrupt probe — tag the frame
+    // so the server can identify what triggered the stop. `_trace`
+    // captures the JS call stack; `_isTrusted` reflects whether a real
+    // user-originated event is on the call stack (false = synthetic
+    // dispatch, null = no current event). See
+    // bearings.agent._interrupt_probe docstring.
+    //
+    // Capture event+stack NOW, while the click handler is still on
+    // the stack — by the time the STOP_DELAY_MS timer fires, window
+    // .event has moved on. The frame is built eagerly and closed
+    // over; only the actual WS send is deferred.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const evt = typeof window !== 'undefined' ? (window as any).event : undefined;
+    const frame: Record<string, unknown> = {
+      type: 'stop',
+      _trace: new Error('stop-probe').stack ?? null,
+      _isTrusted: evt instanceof Event ? evt.isTrusted : null,
+      _eventType: evt instanceof Event ? evt.type : null
+    };
+    const socket = this.socket;
+    this.pendingStopTimer = setTimeout(() => {
+      this.pendingStopTimer = null;
+      // Re-check the socket the timer fires against — close() /
+      // session-switch may have replaced it while the countdown ran.
+      // We send on the socket that was live at click time, not the
+      // current one, since the user clicked Stop on a specific
+      // session's stream. If that socket is gone, the stop is moot.
+      if (this.socket === socket && this.state === 'open') {
+        socket.send(JSON.stringify(frame));
+      }
+    }, STOP_DELAY_MS);
+    // The undo toast's `inverse` is what the user sees as "Undo". Its
+    // job is to cancel the pending send — the WS frame must not leave
+    // the browser. Natural expiry of the toast's own timer (also
+    // STOP_DELAY_MS) is the no-undo path; that branch never invokes
+    // `inverse`, so our setTimeout above runs and the stop goes
+    // through as requested.
+    undoStore.push({
+      message: 'Stopping agent…',
+      windowMs: STOP_DELAY_MS,
+      inverse: () => this.cancelPendingStop()
+    });
     return true;
+  }
+
+  /** Abort a Stop-button click before its grace period expires. Called
+   * from the undo toast's inverse, from `close()` on session switch,
+   * and from any future path that needs to un-queue a pending stop.
+   * Idempotent — safe to call when nothing is pending. */
+  cancelPendingStop(): void {
+    if (this.pendingStopTimer !== null) {
+      clearTimeout(this.pendingStopTimer);
+      this.pendingStopTimer = null;
+    }
   }
 
   setPermissionMode(mode: PermissionMode): boolean {
@@ -161,6 +234,11 @@ export class AgentConnection {
       this.reconnectTimer = null;
     }
     this.reconnectDelayMs = null;
+    // Drop any pending stop — we're tearing down the socket it would
+    // have targeted. The undo toast that was pushed alongside it
+    // times out on its own; we don't need to evict it since its
+    // inverse is now a harmless no-op (pendingStopTimer is null).
+    this.cancelPendingStop();
     if (this.socket) {
       this.socket.close();
       this.socket = null;
