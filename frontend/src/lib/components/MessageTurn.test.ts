@@ -141,4 +141,103 @@ describe('MessageTurn (tool-call rows)', () => {
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.getAttribute('data-tool-call-id'))).toEqual(['tc-1', 'tc-2']);
   });
+
+  it('finished calls render no pulse, no elapsed readout, no running flag', () => {
+    const { queryByTestId, getByTestId } = render(
+      MessageTurn,
+      baseProps({ toolCalls: [call()] })
+    );
+    expect(getByTestId('tool-call-row').getAttribute('data-running')).toBe('false');
+    expect(queryByTestId('tool-call-pulse')).toBeNull();
+    expect(queryByTestId('tool-call-elapsed')).toBeNull();
+    expect(queryByTestId('tool-call-subagent')).toBeNull();
+  });
+
+  it('running calls get the pulse + live elapsed readout', () => {
+    // startedAt 45s before a fixed "now" so the formatter produces
+    // a deterministic string without fake timers.
+    const fixedNow = 1_700_000_000_000;
+    vi.setSystemTime(new Date(fixedNow));
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({ id: 'tc-run', ok: null, finishedAt: null, startedAt: fixedNow - 45_000 })
+        ]
+      })
+    );
+    expect(getByTestId('tool-call-row').getAttribute('data-running')).toBe('true');
+    expect(getByTestId('tool-call-pulse')).not.toBeNull();
+    expect(getByTestId('tool-call-elapsed').textContent).toBe('45s');
+    vi.useRealTimers();
+  });
+
+  it('running sub-agent calls carry the "running sub-agent" subtitle with description', () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.setSystemTime(new Date(fixedNow));
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-sub',
+            name: 'Agent',
+            input: { description: 'research the codebase' },
+            ok: null,
+            finishedAt: null,
+            startedAt: fixedNow - 3_000
+          })
+        ]
+      })
+    );
+    const subtitle = getByTestId('tool-call-subagent');
+    expect(subtitle.textContent).toContain('running sub-agent');
+    expect(subtitle.textContent).toContain('research the codebase');
+    expect(getByTestId('tool-call-elapsed').textContent).toBe('3s');
+    vi.useRealTimers();
+  });
+
+  it('sub-agent subtitle is hidden on non-Agent tools even while running', () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.setSystemTime(new Date(fixedNow));
+    const { queryByTestId, getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-read',
+            name: 'Read',
+            ok: null,
+            finishedAt: null,
+            startedAt: fixedNow
+          })
+        ]
+      })
+    );
+    expect(getByTestId('tool-call-pulse')).not.toBeNull();
+    expect(queryByTestId('tool-call-subagent')).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('formats elapsed >=60s as m+ss', () => {
+    const fixedNow = 1_700_000_000_000;
+    vi.setSystemTime(new Date(fixedNow));
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-long',
+            name: 'Agent',
+            ok: null,
+            finishedAt: null,
+            // 82s — matches the transcript gap in the silence-gap entry.
+            startedAt: fixedNow - 82_000
+          })
+        ]
+      })
+    );
+    expect(getByTestId('tool-call-elapsed').textContent).toBe('1m22s');
+    vi.useRealTimers();
+  });
 });

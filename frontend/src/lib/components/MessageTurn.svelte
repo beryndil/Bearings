@@ -65,10 +65,54 @@
     )
   );
 
+  // Wall-clock "now" for the live-elapsed readout on running tool
+  // calls. Ticks once a second only while at least one call in this
+  // turn is still running — idle turns pay nothing. The effect tears
+  // its timer down when the last running call finishes so completed
+  // turns don't keep firing timers forever. Separate from the P1
+  // backend `tool_progress` keepalive: this is the local render
+  // clock that paints the elapsed number; the backend event keeps
+  // the wire warm and nudges the reactive graph when the tab is
+  // backgrounded (see P2 in TODO.md silence-gap entry).
+  let now = $state(Date.now());
+  $effect(() => {
+    const hasRunning = toolCalls.some((t) => t.finishedAt === null);
+    if (!hasRunning) return;
+    const id = setInterval(() => {
+      now = Date.now();
+    }, 1000);
+    return () => clearInterval(id);
+  });
+
+  function formatElapsed(startedAt: number, nowMs: number): string {
+    const s = Math.max(0, Math.floor((nowMs - startedAt) / 1000));
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}m${rem.toString().padStart(2, '0')}s`;
+  }
+
   function callMarker(ok: boolean | null): { glyph: string; cls: string } {
     if (ok === null) return { glyph: '●', cls: 'text-amber-400' };
     if (ok) return { glyph: '✓', cls: 'text-emerald-400' };
     return { glyph: '✗', cls: 'text-rose-400' };
+  }
+
+  /** Tools that spawn an out-of-band sub-agent. The SDK emits nothing
+   * between the outer-turn `tool_use` and the eventual `tool_result`
+   * (see TODO.md silence-gap entry), so the UI carries the full
+   * liveness burden during the wait. `Agent` is Claude Code's name
+   * for the sub-agent tool; `Task` is the legacy alias that still
+   * shows up in older transcripts. Matched on the wire `name` so
+   * stragglers from either generation light up correctly. */
+  function isSubAgent(name: string): boolean {
+    return name === 'Agent' || name === 'Task';
+  }
+
+  function subAgentSubtitle(input: Record<string, unknown>): string {
+    const desc = input['description'];
+    if (typeof desc === 'string' && desc.length > 0) return desc;
+    return 'running…';
   }
 
   function isSelected(id: string): boolean {
@@ -153,14 +197,28 @@
 {/if}
 
 {#if toolCalls.length > 0}
-  <details class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1">
+  <!-- Open by default when any call is still running so the pulse +
+       elapsed readout inside the pre block is visible without a click
+       — the collapsed summary alone used to read as a dead spinner
+       during an 80s sub-agent wait (see TODO.md silence-gap entry).
+       `open` is an initial-attribute hint only; the user can still
+       collapse the block manually and it stays collapsed. -->
+  <details
+    class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1"
+    open={runningCount > 0}
+  >
     <summary
       class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500
         flex items-center gap-2"
     >
       <span>tool work · {toolCalls.length}</span>
       {#if runningCount > 0}
-        <span class="bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded text-[9px] uppercase">
+        <span
+          class="bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded text-[9px] uppercase
+            animate-pulse flex items-center gap-1"
+          data-testid="tool-work-running-badge"
+        >
+          <span aria-hidden="true">●</span>
           {runningCount} running
         </span>
       {/if}
@@ -172,10 +230,12 @@
     >
       {#each toolCalls as call, i (call.id)}
         {@const mark = callMarker(call.ok)}
+        {@const running = call.finishedAt === null}
         <pre
           class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"
           data-testid="tool-call-row"
           data-tool-call-id={call.id}
+          data-running={running ? 'true' : 'false'}
           use:contextmenu={{
             target: {
               type: 'tool_call',
@@ -185,7 +245,14 @@
             }
           }}><span
             class="text-emerald-400">$ {call.name}</span> <span
-            class={mark.cls}>{mark.glyph}</span>{#if call.outputTruncated} <span
+            class={mark.cls}>{mark.glyph}</span>{#if running} <span
+            class="inline-block animate-pulse text-amber-400"
+            data-testid="tool-call-pulse"
+            aria-hidden="true">●</span> <span
+            class="text-amber-300"
+            data-testid="tool-call-elapsed">{formatElapsed(call.startedAt, now)}</span>{#if isSubAgent(call.name)} <span
+            class="text-amber-200"
+            data-testid="tool-call-subagent">— running sub-agent: {subAgentSubtitle(call.input)}</span>{/if}{/if}{#if call.outputTruncated} <span
             class="text-amber-400">[truncated]</span>{/if}
 {JSON.stringify(call.input, null, 2)}{#if call.output !== null}
 {call.output}{/if}{#if call.error}
