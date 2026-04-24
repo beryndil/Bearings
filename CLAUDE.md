@@ -8,7 +8,9 @@
   local SQLite database
 - **License**: MIT (deliberate deviation from the Unlicense used elsewhere —
   per spec)
-- **Status**: Pre-release (0.x.x development). v0.1.0 is scaffold-only.
+- **Status**: Pre-release (0.x.x development). Current: v0.10.0 — feature
+  development in progress (sessions, reorg, checklists, checkpoints,
+  templates, vault, paired chats all landed).
 - **Repository**: `Beryndil/Bearings` (decided 2026-04-22)
 
 ## Tech Stack

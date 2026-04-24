@@ -115,19 +115,61 @@ context.
 ## File-size audit (CLAUDE.md: max 400 lines)
 
 Several files were split during v0.2/v0.3 work — see the archive's
-`## Open follow-ups` § "File-size audit" for the full record. One
-regression remains:
+`## Open follow-ups` § "File-size audit" for the full record.
 
-- [ ] `src/bearings/agent/runner.py` regressed to 657 lines after
-  tool-output coalescer landed (was 379 after the prior split).
-  Extract the `_ToolOutputBuffer` + `_buffer_tool_output` /
-  `_delayed_flush` / `_flush_tool_buffer` / `_flush_all_tool_buffers`
-  / `_drop_tool_buffer` cluster into `agent/tool_output_coalescer.py`
-  with a tiny `ToolOutputCoalescer` class that holds the buffers
-  dict and takes `db` + `session_id` via constructor. Runner keeps
-  one reference and calls `await coalescer.buffer(id, chunk)` /
-  `coalescer.drop(id)` / `await coalescer.flush_all()`. Should land
-  runner.py back under 400.
+**Closed 2026-04-23**: `src/bearings/api/models.py` (762 lines) split
+into `src/bearings/api/models/` package across 14 domain submodules
+(sessions, messages, tools, search, tags, prompts, fs, commands,
+reorg, checklists, checkpoints, templates, vault, paired). All
+submodules ≤171 lines. Public surface preserved via re-export shim
+in `models/__init__.py`; no call-site changes. ruff + mypy strict +
+761 pytests green.
+
+Two violations remain:
+
+- [ ] `src/bearings/agent/runner.py` — **823 lines** (2× cap). Prior
+  entry said 657; it grew further. The earlier plan still applies
+  and is still the right first move:
+  - Extract the `_ToolOutputBuffer` + `_buffer_tool_output` /
+    `_delayed_flush` / `_flush_tool_buffer` /
+    `_flush_all_tool_buffers` / `_drop_tool_buffer` cluster into
+    `agent/tool_output_coalescer.py` with a tiny
+    `ToolOutputCoalescer` class (buffers dict, `db` + `session_id`
+    via constructor). Runner keeps one reference and calls
+    `await coalescer.buffer(id, chunk)` / `coalescer.drop(id)` /
+    `await coalescer.flush_all()`.
+  - May also need to peel the `_Shutdown` / `_Replay` / `_Envelope`
+    helper classes (lines 88–154, ~67 lines) into
+    `agent/runner_types.py` and the module-level
+    `_persist_assistant_turn` function (line 787, standalone) into
+    `agent/persist.py` to close the gap to ≤400 lines.
+  - Verify: `uv run pytest tests/test_runner.py tests/test_agent_session.py tests/test_ws_agent.py`.
+
+- [ ] `frontend/src/lib/components/Conversation.svelte` — **1,631
+  lines** (4× cap). Highest-risk of the three: Svelte script +
+  markup + style are interdependent, and CLAUDE.md requires browser
+  verification for UI changes. Natural extraction candidates from
+  the script block:
+  - Reorg picker state + handlers (lines ~222–640: `openMoveFor` /
+    `openSplitFor` / `onBulkMove` / `onBulkSplit` / `openMerge` /
+    `closePicker` / `pickerTitle` / `pickerConfirmLabel` plus the
+    `PickerOp` type) → `ReorgPicker.svelte` subcomponent + a
+    `reorg-picker.ts` state helper.
+  - Drag/drop cluster (lines ~958–1152: `hasFiles` / `parseUriList`
+    / `onDragEnter` / `onDragOver` / `onDragLeave` / `extractPaths`
+    / `onDrop` / swallow-handler setup) → `composer-dragdrop.ts`
+    utility module.
+  - Bulk-mode controls (lines ~193–220: `toggleBulkMode` /
+    `onBulkToggleSelect`) → either a thin `BulkModeBar.svelte` or
+    inline props on an existing subcomponent.
+  - Textarea autosize + send + keydown (lines ~841–911) — small
+    enough to stay, but watch it doesn't push a post-extraction
+    Conversation.svelte back over cap.
+  - After each extraction: `npm run check` (svelte-check) + run
+    `uv run bearings serve` and exercise:
+    conversation scroll, send, keyboard shortcut, reorg (move /
+    split / merge with undo), bulk mode select + apply, drag-drop
+    file upload, drag-drop text URI.
 
 ## Browser verification — deferred to pre-1.0.0
 
