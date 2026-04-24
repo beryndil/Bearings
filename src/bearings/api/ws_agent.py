@@ -288,6 +288,17 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     except Exception:
         log.exception("ws %s: unexpected error in receive loop", session_id)
     finally:
+        # TEMP 2026-04-23: session-switch interrupt probe — capture WS
+        # disconnect timing so it can be correlated with any interrupt
+        # that fires around it. See bearings.agent._interrupt_probe.
+        from bearings.agent._interrupt_probe import probe
+
+        probe(
+            "ws_agent.disconnect",
+            session_id,
+            running=runner.is_running,
+            status=runner.status,
+        )
         forwarder.cancel()
         try:
             await forwarder
