@@ -3,8 +3,13 @@
 The endpoint is the bytes-side counterpart to `/api/fs/pick`: the
 browser drag-and-drop path hands us bytes without a filesystem path
 (Chrome/Wayland strips the URI metadata), so the server persists the
-bytes to a UUID-named file under the configured upload directory and
-hands the absolute path back for prompt injection.
+bytes under the configured upload directory and hands the absolute
+path back for prompt injection.
+
+Layout: `<upload_dir>/<uuid>/<sanitized-original-name.ext>`. Each
+upload gets a fresh UUID subdirectory (collision + traversal boundary)
+and keeps the original filename inside it so the injected path reads
+as something recognizable.
 
 These tests use the `client` + `tmp_settings` fixtures from conftest,
 which re-point the upload dir at a tmp_path so the real
@@ -33,7 +38,8 @@ def test_upload_small_text_file_persists_and_returns_path(
 ) -> None:
     """Happy path. A small text file uploads cleanly; the response
     carries the absolute on-disk path and metadata, and the bytes
-    are readable at that path. Extension is preserved.
+    are readable at that path. The injected path now ends with the
+    original filename inside a UUID subdirectory.
     """
     body = b"hello from the drop handler\n"
     resp = client.post(
@@ -46,7 +52,9 @@ def test_upload_small_text_file_persists_and_returns_path(
     assert payload["size_bytes"] == len(body)
     assert payload["mime_type"] == "text/plain"
     dest = Path(payload["path"])
-    assert dest.parent == _uploads_dir(tmp_settings)
+    assert dest.name == "note.txt"
+    # Parent is the UUID subdir, grandparent is the configured root.
+    assert dest.parent.parent == _uploads_dir(tmp_settings)
     assert dest.suffix == ".txt"
     assert dest.read_bytes() == body
 
@@ -55,8 +63,9 @@ def test_upload_two_files_generates_unique_names(
     client: TestClient, tmp_settings: Settings
 ) -> None:
     """Two uploads of the same original filename must not collide —
-    the on-disk name is a UUID, so a second drop of `screenshot.png`
-    gets its own row without clobbering the first."""
+    each upload gets its own UUID subdir, so two drops of
+    `screenshot.png` land in distinct directories and the original
+    filename is preserved in both."""
     first = client.post(
         "/api/uploads",
         files={"file": ("screenshot.png", b"aaaa", "image/png")},
@@ -66,6 +75,9 @@ def test_upload_two_files_generates_unique_names(
         files={"file": ("screenshot.png", b"bbbb", "image/png")},
     ).json()
     assert first["path"] != second["path"]
+    # Same basename inside different UUID parents.
+    assert Path(first["path"]).name == Path(second["path"]).name == "screenshot.png"
+    assert Path(first["path"]).parent != Path(second["path"]).parent
     assert Path(first["path"]).read_bytes() == b"aaaa"
     assert Path(second["path"]).read_bytes() == b"bbbb"
 
@@ -106,8 +118,10 @@ def test_upload_rejects_over_size_limit(
     )
     assert resp.status_code == 413
     assert "1 MB" in resp.json()["detail"]
-    # And nothing was left on disk for the reject.
-    leftovers = list(_uploads_dir(app.state.settings).glob("*"))  # type: ignore[attr-defined]
+    # And nothing — neither the partial file nor the empty UUID dir —
+    # was left on disk for the reject.
+    root = _uploads_dir(app.state.settings)  # type: ignore[attr-defined]
+    leftovers = list(root.rglob("*")) if root.exists() else []
     assert leftovers == [], f"reject should clean up, found: {leftovers}"
     # Silence unused-import warning for the module we patched through.
     assert routes_uploads is not None
@@ -149,17 +163,19 @@ def test_upload_file_without_extension_works(client: TestClient, tmp_settings: S
     assert resp.status_code == 200, resp.text
     dest = Path(resp.json()["path"])
     assert dest.suffix == ""
-    assert dest.parent == _uploads_dir(tmp_settings)
+    assert dest.name == "Makefile"
+    assert dest.parent.parent == _uploads_dir(tmp_settings)
 
 
 def test_upload_strips_path_components_from_filename(
     client: TestClient, tmp_settings: Settings
 ) -> None:
     """Traversal-style filenames (`../../etc/passwd`) must not escape
-    the upload dir. The route only consults the suffix for the on-disk
-    name (a UUID), and the returned `filename` is the basename only.
-    Asserting both: the file lands in the configured dir, and the
-    displayable name has no slashes."""
+    the upload dir. `Path.name` strips the path components to
+    `passwd.txt` before the sanitizer ever runs, and the UUID subdir
+    is server-generated so there's no user-controlled segment above
+    the basename. Asserting both: the file lands under the configured
+    root, and the displayable name has no slashes."""
     resp = client.post(
         "/api/uploads",
         files={"file": ("../../etc/passwd.txt", b"nope", "text/plain")},
@@ -167,9 +183,10 @@ def test_upload_strips_path_components_from_filename(
     assert resp.status_code == 200, resp.text
     body = resp.json()
     dest = Path(body["path"])
-    assert dest.parent == _uploads_dir(tmp_settings)
+    assert dest.parent.parent == _uploads_dir(tmp_settings)
     assert "/" not in body["filename"]
     assert body["filename"] == "passwd.txt"
+    assert dest.name == "passwd.txt"
 
 
 def test_upload_preserves_safe_extension_case_insensitively(
@@ -196,3 +213,45 @@ def test_upload_rejects_uppercase_blocked_extension(client: TestClient) -> None:
         files={"file": ("owned.SH", b"#!/bin/sh\n", "text/plain")},
     )
     assert resp.status_code == 415
+
+
+def test_upload_sanitizes_control_chars_and_whitespace(
+    client: TestClient, tmp_settings: Settings
+) -> None:
+    """Filenames with control characters, embedded newlines, or runs
+    of whitespace round-trip to a tidy on-disk name. The UUID subdir
+    is the real traversal boundary; the sanitizer's job is just to
+    keep the injected path copy-pasteable."""
+    # NUL byte, tab, and a literal newline in the filename stem.
+    # The extension is valid (`.log`) so we keep it.
+    weird = "noi\x00sy\tname\nwith   spaces.log"
+    resp = client.post(
+        "/api/uploads",
+        files={"file": (weird, b"payload", "text/plain")},
+    )
+    assert resp.status_code == 200, resp.text
+    dest = Path(resp.json()["path"])
+    # Control chars replaced, whitespace collapsed, extension intact.
+    assert "\x00" not in dest.name
+    assert "\n" not in dest.name
+    assert "\t" not in dest.name
+    assert "   " not in dest.name
+    assert dest.suffix == ".log"
+    # Grandparent is the configured upload root.
+    assert dest.parent.parent == _uploads_dir(tmp_settings)
+
+
+def test_upload_caps_absurdly_long_filename(client: TestClient, tmp_settings: Settings) -> None:
+    """A 5000-character filename shouldn't blow past ext4's 255-byte
+    basename limit. The sanitizer caps the stem at 200 chars and the
+    extension is short, so the on-disk name stays well under the
+    filesystem ceiling."""
+    long_stem = "a" * 5000
+    resp = client.post(
+        "/api/uploads",
+        files={"file": (f"{long_stem}.txt", b"ok", "text/plain")},
+    )
+    assert resp.status_code == 200, resp.text
+    dest = Path(resp.json()["path"])
+    assert len(dest.name) <= 255
+    assert dest.suffix == ".txt"

@@ -954,9 +954,28 @@
   // the user misses the section (or, on some compositors, always). The
   // listeners only preventDefault — the section's own `ondrop` still
   // does the real work.
+  //
+  // Scoping note: only suppress when the event target is OUTSIDE the
+  // section. Inside-section events go through the section's own
+  // ondragover/ondrop; suppressing at the document level too was
+  // plausibly the reason Chrome+Wayland stopped delivering drop events
+  // to our handlers on some DOM trees (the double-preventDefault
+  // confused the drop-target chain). SessionList.svelte — the working
+  // reference in this same codebase — has NO document-level listeners
+  // and its drop zone works reliably. Matching that pattern.
+  let sectionEl: HTMLElement | null = $state(null);
   $effect(() => {
     function swallow(e: DragEvent) {
-      e.preventDefault();
+      // Only suppress when the event target is OUTSIDE the section —
+      // inside-section events go through the section's own handlers,
+      // and double-preventDefault at both document and section level
+      // was observed to confuse Chrome+Wayland's drop-target chain
+      // during the v0.10.0 DnD debug. Keep the outside-of-section
+      // swallow because without it a misplaced drop navigates the
+      // tab to `file://…`.
+      const inside =
+        !!sectionEl && e.target instanceof Node && sectionEl.contains(e.target);
+      if (!inside) e.preventDefault();
     }
     document.addEventListener('dragover', swallow);
     document.addEventListener('drop', swallow);
@@ -994,12 +1013,14 @@
   }
 
   function onDragOver(e: DragEvent) {
-    // preventDefault UNCONDITIONALLY. Chrome on Wayland sometimes
-    // exposes an empty types list during dragover (types only arrive
-    // reliably on dragenter/drop), so gating this on hasFiles(e) would
-    // skip preventDefault and the browser would then refuse the drop.
-    // Once dragenter has set dragging=true we already know a file drag
-    // is in flight, so it's safe to always accept.
+    // preventDefault UNCONDITIONALLY whenever a drag is in flight.
+    // Chrome on Wayland exposes an EMPTY `types` list during dragover
+    // (types only arrive reliably on dragenter/drop), so gating this
+    // on hasFiles(e) would fall through without preventDefault and
+    // Chrome would then refuse to dispatch `drop` to this target —
+    // verified live against the server access log during the v0.10.0
+    // DnD shakeout. Firefox accepts unconditional preventDefault
+    // fine; Chrome (on supported compositors) needs it.
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'link';
   }
@@ -1073,9 +1094,8 @@
           // extension, 500 disk full) so the user can act. The banner
           // replaces any prior diagnostic — a mid-batch reject is the
           // most relevant thing to see.
-          dropDiagnostic =
-            `Upload failed for "${file.name}": ` +
-            (e instanceof Error ? e.message : String(e));
+          const msg = e instanceof Error ? e.message : String(e);
+          dropDiagnostic = `Upload failed for "${file.name}": ${msg}`;
           return;
         }
       }
@@ -1211,6 +1231,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
+  bind:this={sectionEl}
   class="relative bg-slate-900 overflow-hidden flex flex-col min-w-0
     {dragging ? 'ring-2 ring-emerald-500/60 ring-inset' : ''}"
   ondragenter={onDragEnter}

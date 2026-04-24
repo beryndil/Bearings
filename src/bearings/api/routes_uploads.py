@@ -3,21 +3,29 @@
 Chrome on Wayland strips the `text/uri-list` path metadata from file
 drops even though `DataTransfer.files` still carries the bytes. The
 frontend reads those bytes, POSTs them here, and the server persists
-them to a UUID-named file under the configured upload directory. The
-resulting absolute path is injected into the prompt — Claude reads
-the file from disk exactly as if the user had typed the path by hand.
+them under the configured upload directory. The resulting absolute
+path is injected into the prompt — Claude reads the file from disk
+exactly as if the user had typed the path by hand.
+
+Layout: `<upload_dir>/<uuid>/<sanitized-original-name.ext>`. Each
+upload gets a fresh UUID subdirectory and keeps the original filename
+inside it. This gives us three things at once:
+
+  1. **Traversal safety.** The UUID directory is server-generated, so
+     the only user-controlled path segment is the innermost filename,
+     and we scrub it to a single path component (no separators, no
+     control chars, capped length).
+  2. **Collision resistance.** Two drops of `screenshot.png` land in
+     different UUID dirs, so neither overwrites the other.
+  3. **Legible paths.** The prompt-injected path ends with the real
+     filename, so Claude (and the user reading the transcript) can
+     tell at a glance what was dropped — instead of a 32-char UUID.
 
 Security posture: Bearings is localhost/single-user. The endpoint
 accepts any file up to the configured size cap; a short extension
 blocklist rejects shell scripts and binaries as defense-in-depth
 (Claude has no business being handed those via a drag gesture, and
 the rare legitimate case can go through the native picker instead).
-
-Original filenames are treated as untrusted input: only the extension
-is preserved, and only if it matches a safe shape — alphanumerics
-with length ≤16. The on-disk name is always a UUID so a malicious
-filename like `../../etc/passwd` can't escape the upload directory
-and two drops of `screenshot.png` don't collide.
 
 No transcript persistence in v1 — the uploaded file's path is the
 whole UX. GC is deferred; see TODO.md.
@@ -54,6 +62,29 @@ _DEFAULT_MIME = "application/octet-stream"
 # enforced as bytes arrive so a client that lies about Content-Length
 # still hits the limit in bounded memory.
 _CHUNK_SIZE = 1 << 20
+
+# Cap on the sanitized filename stem (before extension). Long enough
+# to preserve ordinary filenames, short enough that a pathological
+# input can't blow up path buffers downstream. 200 chars matches the
+# practical basename limit on ext4/btrfs once the UUID dir and the
+# extension are accounted for.
+_FILENAME_STEM_MAX = 200
+
+
+def _sanitize_stem(stem: str) -> str:
+    """Scrub a filename stem for use as the innermost path segment.
+
+    Replaces path separators and non-printable characters with `_`,
+    collapses whitespace runs, strips leading/trailing whitespace,
+    caps length, and falls back to `upload` on empty input. The UUID
+    subdirectory above it is the real traversal boundary; this
+    function's job is just to keep the on-disk name tidy and the
+    injected path copy-pasteable.
+    """
+    cleaned = "".join(c if c.isprintable() and c not in "/\\" else "_" for c in stem)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = cleaned[:_FILENAME_STEM_MAX]
+    return cleaned or "upload"
 
 
 def _safe_extension(filename: str, blocked: set[str]) -> str:
@@ -109,11 +140,22 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
             detail=f"extension not allowed: {requested_suffix}",
         )
 
-    upload_dir = Path(cfg.upload_dir)
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Build the on-disk filename: sanitized stem + normalized ext.
+    # `Path.name` strips any path components from the user-supplied
+    # name (so `../../etc/passwd.txt` becomes `passwd.txt` before we
+    # even sanitize), and `_sanitize_stem` handles the rest.
+    basename = Path(original_name).name or "upload"
+    stem = Path(basename).stem or "upload"
+    safe_name = f"{_sanitize_stem(stem)}{ext}"
 
-    dest_name = f"{uuid.uuid4().hex}{ext}"
-    dest = upload_dir / dest_name
+    # UUID subdirectory under the upload root. Fresh per call so two
+    # drops of the same filename don't collide, and server-generated
+    # so the traversal surface is limited to `safe_name` — which can
+    # only be a single path component by construction.
+    upload_dir = Path(cfg.upload_dir)
+    dest_dir = upload_dir / uuid.uuid4().hex
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / safe_name
 
     size = 0
     try:
@@ -131,18 +173,20 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
                 out.write(chunk)
     except HTTPException:
         # Don't leave half-written rejects on disk — the caller sees
-        # an error and will not retry with the server path.
+        # an error and will not retry with the server path. Remove
+        # the UUID dir too so a stream of over-size rejects doesn't
+        # litter the upload root with empty directories.
         dest.unlink(missing_ok=True)
+        dest_dir.rmdir() if dest_dir.exists() and not any(dest_dir.iterdir()) else None
         raise
     except OSError as exc:
         dest.unlink(missing_ok=True)
+        dest_dir.rmdir() if dest_dir.exists() and not any(dest_dir.iterdir()) else None
         raise HTTPException(status_code=500, detail="failed to persist upload") from exc
 
     return UploadOut(
         path=str(dest),
-        # Strip any path components from the display name — the on-disk
-        # name is a UUID anyway, this is just what the UI shows.
-        filename=Path(original_name).name,
+        filename=safe_name,
         size_bytes=size,
         mime_type=file.content_type or _DEFAULT_MIME,
     )

@@ -46,6 +46,54 @@ a tagged release — the FileHandler is cheap but unconditional.
 
 ---
 
+## Drag-and-drop browser compatibility — 2026-04-23
+
+**Findings after shipping the bytes-upload fallback (commits `fac7382`
+→ filename-preservation follow-up):**
+
+- **Firefox on Hyprland+Wayland: works.** Full path: file drop →
+  DataTransfer.files readable → POST `/api/uploads` → server writes
+  `<upload_dir>/<uuid>/<original-name.ext>` → absolute path injected
+  at cursor. Confirmed by Dave with a real `.log` drop.
+- **Chrome on Hyprland+Wayland: drop events never dispatch.**
+  `dragenter`/`dragover`/`dragleave` all fire correctly (journal
+  confirmed this before the probe was stripped), but Chrome never
+  dispatches `drop` to ANY target — not the section, not the
+  document-level swallow handler. This is an upstream Chromium
+  `wl_data_device` integration bug with wlroots-based compositors,
+  not something Bearings can fix client-side. The native Attach-file
+  button (zenity/kdialog via `/api/fs/pick`) remains the Chrome
+  workaround.
+- **Red-line fallback honored**: when Chrome fails, users switch to
+  Firefox OR use the Attach-file button. No browser-sniffing in the
+  code; the UI just degrades to "use the button" via the
+  `dropDiagnostic` banner.
+
+**Open follow-ups (not blocking):**
+
+- [ ] Attachment chip above the user bubble showing filename + size
+  (currently the injected path is the only affordance; a chip would
+  make it obvious to the user that the file is tracked server-side).
+- [ ] GC sweep of `~/.local/share/bearings/uploads/` — time-based
+  (e.g. delete UUID subdirs > 30d old) or tied to session deletion.
+  Deferred until disk-usage becomes a real concern.
+- [ ] XHR progress events so the "Uploading N file(s)…" pill shows
+  actual bytes/sec instead of just a spinner. Irrelevant for small
+  text drops; matters once a user drops a multi-MB image or PDF.
+- [ ] Batch-POST endpoint for multi-file drops — current code serial-
+  awaits per file to keep injection order deterministic. A single
+  multipart POST with ordered parts would cut localhost latency.
+- [ ] Retest Chrome with `--enable-features=FileSystemAccessDragAndDrop`
+  at some point — if/when Chromium fixes the Wayland drop dispatch,
+  we'd prefer not to tell users they need Firefox.
+
+**Do NOT remove:** the drop receiver, `parseUriList`, `extractPaths`,
+or the `dropDiagnostic` amber banner. Those are the instrumentation
+that'll surface future compositor/browser regressions — even after
+the upload fallback works, we still need to see what breaks next.
+
+---
+
 ## Per-message glass refraction — 2026-04-23
 
 **Deferred.** First pass of Midnight Glass applied
