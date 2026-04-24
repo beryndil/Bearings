@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 import orjson
@@ -151,15 +152,51 @@ async def _send_frame(websocket: WebSocket, frame: dict[str, Any]) -> None:
     await websocket.send_text(orjson.dumps(frame).decode())
 
 
+# Idle ping cadence. When no envelope arrives for this long, the
+# forwarder emits a `{type:"ping"}` frame. Two jobs: (1) surface TCP
+# corpse sockets that `WebSocketDisconnect` missed — a dead half-open
+# connection accepts a few queued writes before the kernel raises, so
+# a failed send here breaks us out of the subscription and the finally
+# block cleans up. (2) Complement `tool_progress`: progress ticks only
+# fire while a tool call is live, so a completely idle session (no
+# running turn, no tool work) would otherwise hold the socket silent
+# forever. 15s is chosen to be well under the 60s Nginx default
+# `proxy_read_timeout` so a reverse-proxy deployment won't drop the
+# socket mid-idle; anyone fronting Bearings with a stricter proxy can
+# still lose the socket but at least the diagnostic will appear in
+# server logs rather than as a "why did my tab die" mystery.
+WS_IDLE_PING_INTERVAL_S = 15.0
+
+
 async def _forward_events(websocket: WebSocket, queue: asyncio.Queue[_Envelope]) -> None:
     """Pull envelopes off the runner's subscriber queue and write them
     to the socket. Each frame carries `_seq` so the client can advance
     its replay cursor. The envelope arrives with its wire form already
     encoded (see `_Envelope.__init__`), so the fan-out cost is a single
     `send_text` per subscriber — no per-send JSON serialization. Exits
-    on send failure (disconnect)."""
+    on send failure (disconnect).
+
+    On idle (no envelope for `WS_IDLE_PING_INTERVAL_S`), emits a ping
+    frame — see the constant's docstring for the two jobs it does.
+    Pings carry no `_seq` (not in the ring buffer, not persisted) so a
+    reconnecting client's replay cursor stays on real events only; the
+    frontend reducer's `_seq` guard reads `typeof event._seq ===
+    'number'` and skips the bump when absent."""
     while True:
-        env = await queue.get()
+        try:
+            env = await asyncio.wait_for(queue.get(), timeout=WS_IDLE_PING_INTERVAL_S)
+        except TimeoutError:
+            try:
+                # `ts` is server wall-clock in ms. Frontend doesn't need
+                # it for anything structural — the reducer skips unknown
+                # types — but logging / debugging a latency issue is
+                # easier with a timestamp already on the frame.
+                await websocket.send_text(
+                    orjson.dumps({"type": "ping", "ts": int(time.time() * 1000)}).decode()
+                )
+            except (WebSocketDisconnect, RuntimeError):
+                return
+            continue
         try:
             await websocket.send_text(env.wire)
         except (WebSocketDisconnect, RuntimeError):

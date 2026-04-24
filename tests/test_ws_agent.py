@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 from pathlib import Path
@@ -368,3 +369,119 @@ def test_ws_runner_status_reports_running_when_turn_in_flight(
     assert frame["type"] == "runner_status"
     assert frame["session_id"] == sid
     assert isinstance(frame["is_running"], bool)
+
+
+# ---------------------------------------------------------------------------
+# Idle-ping unit tests — exercise _forward_events directly with a fake
+# WebSocket + asyncio.Queue. Running the TestClient path would either
+# take the full 15s interval (too slow) or require monkeypatching that
+# interferes with other tests; this is tighter and closer to the
+# contract we care about.
+# ---------------------------------------------------------------------------
+
+
+class _FakeWebSocket:
+    """Minimal websocket stand-in for `_forward_events`. Records every
+    `send_text` so the test can assert the ping frame's shape. The
+    `fail_after` hook flips `send_text` to raise on the Nth send, which
+    lets us test corpse-socket cleanup without a real TCP FIN."""
+
+    def __init__(self, fail_after: int | None = None) -> None:
+        self.sent: list[str] = []
+        self.fail_after = fail_after
+
+    async def send_text(self, frame: str) -> None:
+        if self.fail_after is not None and len(self.sent) >= self.fail_after:
+            raise RuntimeError("fake corpse socket")
+        self.sent.append(frame)
+
+
+@pytest.mark.asyncio
+async def test_forward_events_emits_ping_on_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A silent queue for longer than `WS_IDLE_PING_INTERVAL_S` must
+    produce a ping frame on the wire. This is the P3 "keep the socket
+    warm while the session is completely idle (no in-flight turn, no
+    tool work)" check — progress ticks only cover the tool-call path."""
+    from bearings.agent.runner import _Envelope
+    from bearings.api import ws_agent
+
+    monkeypatch.setattr(ws_agent, "WS_IDLE_PING_INTERVAL_S", 0.02)
+
+    queue: asyncio.Queue[_Envelope] = asyncio.Queue()
+    ws = _FakeWebSocket()
+
+    task = asyncio.create_task(ws_agent._forward_events(ws, queue))  # type: ignore[arg-type]
+    # Wait long enough for two ping intervals to elapse, then cancel.
+    await asyncio.sleep(0.06)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    pings = [json.loads(f) for f in ws.sent]
+    assert len(pings) >= 2, f"expected ≥2 pings, got {pings}"
+    first = pings[0]
+    assert first["type"] == "ping"
+    assert isinstance(first["ts"], int) and first["ts"] > 0
+    # Pings must not carry _seq — a reconnecting client's replay cursor
+    # advances only on ring-buffer events.
+    assert "_seq" not in first
+
+
+@pytest.mark.asyncio
+async def test_forward_events_still_flushes_queued_envelopes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The idle-ping timeout must not starve real events. A quick
+    enqueue followed by an idle gap should land the envelope first and
+    only then produce a ping."""
+    from bearings.agent.runner import _Envelope
+    from bearings.api import ws_agent
+
+    monkeypatch.setattr(ws_agent, "WS_IDLE_PING_INTERVAL_S", 0.03)
+
+    queue: asyncio.Queue[_Envelope] = asyncio.Queue()
+    ws = _FakeWebSocket()
+
+    # Seed a real envelope before starting the forwarder.
+    env = _Envelope(seq=1, payload={"type": "token", "session_id": "s", "text": "hi"})
+    await queue.put(env)
+
+    task = asyncio.create_task(ws_agent._forward_events(ws, queue))  # type: ignore[arg-type]
+    await asyncio.sleep(0.08)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    decoded = [json.loads(f) for f in ws.sent]
+    assert decoded, "forwarder produced no frames"
+    assert decoded[0]["type"] == "token"
+    assert decoded[0]["text"] == "hi"
+    assert any(f["type"] == "ping" for f in decoded[1:])
+
+
+@pytest.mark.asyncio
+async def test_forward_events_exits_on_ping_send_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ping that raises (dead half-open TCP) must break out of the
+    forwarder so the outer handler's finally block can unsubscribe.
+    This is the reason P3 exists — `WebSocketDisconnect` alone misses
+    corpses whose FIN was lost; the periodic send flushes them out."""
+    from bearings.agent.runner import _Envelope
+    from bearings.api import ws_agent
+
+    monkeypatch.setattr(ws_agent, "WS_IDLE_PING_INTERVAL_S", 0.01)
+
+    queue: asyncio.Queue[_Envelope] = asyncio.Queue()
+    ws = _FakeWebSocket(fail_after=0)  # first send (the ping) raises
+
+    task = asyncio.create_task(ws_agent._forward_events(ws, queue))  # type: ignore[arg-type]
+    # The forwarder should exit on its own without needing cancel.
+    await asyncio.wait_for(task, timeout=0.5)
+    assert task.done()
+    assert not task.cancelled()
+    assert ws.sent == []  # fail_after=0 rejects the first send outright
