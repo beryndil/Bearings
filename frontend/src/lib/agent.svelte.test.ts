@@ -16,15 +16,6 @@ const notifyMock = vi.fn();
 const prefsState = { notifyOnComplete: false };
 const sessionsList: Array<{ id: string; title: string | null }> = [];
 const completedIds = new Map<string, Set<string>>();
-// Captured undo-toast pushes from agent.stop(). Tests drive `inverse`
-// directly to simulate an Undo click, and inspect `windowMs` /
-// `message` to assert wiring.
-type UndoPushInput = {
-  message: string;
-  windowMs?: number;
-  inverse: () => void | Promise<void>;
-};
-const undoPushes: UndoPushInput[] = [];
 
 vi.mock('$lib/api', () => ({
   openAgentSocket: (sessionId: string, sinceSeq?: number) => openAgentSocket(sessionId, sinceSeq),
@@ -68,14 +59,6 @@ vi.mock('$lib/utils/notify', () => ({
   notify: (...args: unknown[]) => notifyMock(...args)
 }));
 
-vi.mock('$lib/context-menu/undo.svelte', () => ({
-  undoStore: {
-    push: (input: UndoPushInput) => {
-      undoPushes.push(input);
-      return 1;
-    }
-  }
-}));
 
 type Listener = (ev: unknown) => void;
 
@@ -123,7 +106,6 @@ beforeEach(() => {
   prefsState.notifyOnComplete = false;
   sessionsList.length = 0;
   completedIds.clear();
-  undoPushes.length = 0;
   openAgentSocket.mockImplementation((sessionId: string) => {
     const s = new FakeSocket(sessionId);
     sockets.push(s);
@@ -145,6 +127,7 @@ type TestAgent = {
   permissionMode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
   stop: () => boolean;
   cancelPendingStop: () => void;
+  stopPendingStartedAt: number | null;
 };
 
 /** Minimal Session factory for seeding `conversation.load` mocks. Only
@@ -444,24 +427,26 @@ describe('AgentConnection stop with undo grace window', () => {
   // Guards the defensive wrapper added for the session-switch
   // interrupt bug: a stray mouse click on the red Stop button was
   // killing in-flight turns. Instead of sending the WS frame
-  // immediately, stop() now queues it behind a 3s window and pushes
-  // an undo toast. A real Undo click must cancel the send; an
-  // expired window must still send.
+  // immediately, stop() now sets `stopPendingStartedAt` (so the
+  // header renders the inline countdown next to where the user's
+  // cursor was) and queues the frame behind a 3s window. A real
+  // Undo click must cancel the send; an expired window must still
+  // send.
 
-  it('defers the stop frame behind a grace window and pushes an undo toast', async () => {
+  it('defers the stop frame and flags stopPending for the inline UI', async () => {
     const { agent } = await freshAgent();
     conversationLoad.mockResolvedValue(null);
     await agent.connect('S1');
     const s = sockets[0];
     s.fireOpen();
 
+    expect(agent.stopPendingStartedAt).toBeNull();
     expect(agent.stop()).toBe(true);
     // Nothing sent yet — the frame is queued.
     expect(s.sent).toEqual([]);
-    // Toast was pushed so the user can see the stop is about to fire.
-    expect(undoPushes).toHaveLength(1);
-    expect(undoPushes[0].windowMs).toBe(3_000);
-    expect(undoPushes[0].message).toContain('Stopping');
+    // The state flag is set so the Conversation / ChecklistChat
+    // headers can swap the Stop button for the inline countdown.
+    expect(agent.stopPendingStartedAt).not.toBeNull();
 
     // Let the grace window expire. The queued setTimeout fires and
     // the stop frame actually leaves the browser.
@@ -469,9 +454,11 @@ describe('AgentConnection stop with undo grace window', () => {
     expect(s.sent).toHaveLength(1);
     const payload = JSON.parse(s.sent[0]);
     expect(payload.type).toBe('stop');
+    // Flag clears so the Stop button reappears (until streaming ends).
+    expect(agent.stopPendingStartedAt).toBeNull();
   });
 
-  it('cancels the pending stop frame when the undo inverse runs', async () => {
+  it('cancels the pending stop frame when cancelPendingStop runs', async () => {
     const { agent } = await freshAgent();
     conversationLoad.mockResolvedValue(null);
     await agent.connect('S2');
@@ -479,12 +466,13 @@ describe('AgentConnection stop with undo grace window', () => {
     s.fireOpen();
 
     agent.stop();
-    expect(undoPushes).toHaveLength(1);
+    expect(agent.stopPendingStartedAt).not.toBeNull();
 
-    // Simulate the user hitting Undo inside the grace window — the
-    // toast calls the inverse we pushed, which must drop the pending
-    // send so the WS frame never leaves.
-    await undoPushes[0].inverse();
+    // The inline Undo button calls agent.cancelPendingStop(); it must
+    // drop both the queued send and the flag so the Stop button comes
+    // back without sending anything to the server.
+    agent.cancelPendingStop();
+    expect(agent.stopPendingStartedAt).toBeNull();
 
     await vi.advanceTimersByTimeAsync(5_000);
     expect(s.sent).toEqual([]);
@@ -502,7 +490,6 @@ describe('AgentConnection stop with undo grace window', () => {
 
     expect(agent.stop()).toBe(true);
     expect(agent.stop()).toBe(false);
-    expect(undoPushes).toHaveLength(1);
 
     await vi.advanceTimersByTimeAsync(3_100);
     expect(s.sent).toHaveLength(1);
@@ -521,6 +508,7 @@ describe('AgentConnection stop with undo grace window', () => {
 
     agent.stop();
     agent.close();
+    expect(agent.stopPendingStartedAt).toBeNull();
 
     await vi.advanceTimersByTimeAsync(5_000);
     expect(s.sent).toEqual([]);

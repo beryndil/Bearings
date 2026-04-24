@@ -30,6 +30,7 @@
   import CommandMenu from '$lib/components/CommandMenu.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import PermissionModeSelector from '$lib/components/PermissionModeSelector.svelte';
+  import StopUndoInline from '$lib/components/StopUndoInline.svelte';
   import ReorgAuditDivider from '$lib/components/ReorgAuditDivider.svelte';
   import ReorgUndoToast from '$lib/components/ReorgUndoToast.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
@@ -1741,15 +1742,19 @@
     <div class="flex items-center gap-2">
       <PermissionModeSelector />
       {#if conversation.streamingActive}
-        <button
-          type="button"
-          class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
-            bg-rose-900 text-rose-200 hover:bg-rose-800"
-          onclick={() => agent.stop()}
-          title="Stop the in-flight stream"
-        >
-          Stop
-        </button>
+        {#if agent.stopPendingStartedAt === null}
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
+              bg-rose-900 text-rose-200 hover:bg-rose-800"
+            onclick={() => agent.stop()}
+            title="Stop the in-flight stream"
+          >
+            Stop
+          </button>
+        {:else}
+          <StopUndoInline />
+        {/if}
       {/if}
       <span
         class="text-[10px] uppercase tracking-wider px-2 py-1 rounded

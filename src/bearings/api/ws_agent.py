@@ -326,6 +326,19 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
 
                 headers = websocket.headers
                 client = websocket.client
+                # TEMP 2026-04-24: compute the click-to-receive gap from
+                # the frontend's `_clickedAt` stamp. ~3000ms ⇒ the
+                # STOP_DELAY_MS deferred setTimeout ran; ~0ms ⇒ it
+                # didn't and we sent instantly. Helps disambiguate
+                # "toast never rendered" from "defer path never
+                # executed" when diagnosing why the undo toast doesn't
+                # show up for Dave.
+                clicked_at = payload.get("_clickedAt")
+                gap_ms: int | None = None
+                if isinstance(clicked_at, (int, float)):
+                    import time
+
+                    gap_ms = int(time.time() * 1000 - clicked_at)
                 _probe(
                     "ws_agent.stop_frame",
                     session_id,
@@ -335,6 +348,8 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
                     client_port=client.port if client else "?",
                     fe_isTrusted=payload.get("_isTrusted"),
                     fe_eventType=payload.get("_eventType"),
+                    fe_undoPushed=payload.get("_undoPushed"),
+                    fe_clickToRecv_ms=gap_ms,
                     fe_trace_head=(payload.get("_trace") or "").split("\n", 4)[0:4],
                 )
                 await runner.request_stop()

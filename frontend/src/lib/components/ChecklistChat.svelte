@@ -21,6 +21,7 @@
 
   import { onDestroy } from 'svelte';
   import { agent } from '$lib/agent.svelte';
+  import StopUndoInline from '$lib/components/StopUndoInline.svelte';
   import { conversation } from '$lib/stores/conversation.svelte';
   import { drafts } from '$lib/stores/drafts.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
@@ -307,14 +308,18 @@
       data-testid="checklist-chat-input"
     ></textarea>
     {#if streamingActive}
-      <button
-        type="button"
-        class="self-stretch rounded bg-rose-700 px-3 text-xs font-medium text-white hover:bg-rose-600"
-        onclick={stop}
-        data-testid="checklist-chat-stop"
-      >
-        Stop
-      </button>
+      {#if agent.stopPendingStartedAt === null}
+        <button
+          type="button"
+          class="self-stretch rounded bg-rose-700 px-3 text-xs font-medium text-white hover:bg-rose-600"
+          onclick={stop}
+          data-testid="checklist-chat-stop"
+        >
+          Stop
+        </button>
+      {:else}
+        <StopUndoInline />
+      {/if}
     {:else}
       <button
         type="submit"

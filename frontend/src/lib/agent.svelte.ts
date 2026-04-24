@@ -1,6 +1,5 @@
 import * as api from '$lib/api';
 import type { MessageAttachment } from '$lib/api/sessions';
-import { undoStore } from '$lib/context-menu/undo.svelte';
 import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
 import { prefs } from '$lib/stores/prefs.svelte';
@@ -65,6 +64,15 @@ export class AgentConnection {
   lastCloseCode = $state<number | null>(null);
   reconnectDelayMs = $state<number | null>(null);
   permissionMode = $state<PermissionMode>('default');
+  /** Epoch-ms the Stop button was clicked; null when no stop is
+   * pending. Drives the inline "Stopping in Xs — Undo" indicator
+   * that replaces the Stop button during the STOP_DELAY_MS grace
+   * window. Kept reactive so Conversation / ChecklistChat headers
+   * can render the countdown next to where the user's cursor is. */
+  stopPendingStartedAt = $state<number | null>(null);
+  /** Grace window length in ms, exposed so the inline indicator can
+   * compute its countdown without duplicating the constant. */
+  readonly stopPendingWindowMs = STOP_DELAY_MS;
 
   private socket: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -147,11 +155,28 @@ export class AgentConnection {
       type: 'stop',
       _trace: new Error('stop-probe').stack ?? null,
       _isTrusted: evt instanceof Event ? evt.isTrusted : null,
-      _eventType: evt instanceof Event ? evt.type : null
+      _eventType: evt instanceof Event ? evt.type : null,
+      // TEMP 2026-04-24: click-epoch (ms). Server subtracts from its
+      // receive time to prove whether the STOP_DELAY_MS setTimeout is
+      // actually deferring the send. If the gap is ~3s the defer path
+      // is live; if ~0ms the code fell back to immediate send.
+      _clickedAt: Date.now(),
+      // TEMP 2026-04-24: echo whether undoStore.push ran for this
+      // frame. If `undo_pushed=false` the toast wiring is short-
+      // circuited before render; if `true` but Dave sees nothing the
+      // host isn't painting the items.
+      _undoPushed: false
     };
     const socket = this.socket;
+    // Flip the reactive "stop is pending" flag BEFORE scheduling the
+    // timer so the Conversation / ChecklistChat headers swap their
+    // Stop button for the inline countdown in the same tick. Paired
+    // with the clear inside the timer below and in cancelPendingStop.
+    this.stopPendingStartedAt = Date.now();
+    frame._undoPushed = true;
     this.pendingStopTimer = setTimeout(() => {
       this.pendingStopTimer = null;
+      this.stopPendingStartedAt = null;
       // Re-check the socket the timer fires against — close() /
       // session-switch may have replaced it while the countdown ran.
       // We send on the socket that was live at click time, not the
@@ -161,29 +186,19 @@ export class AgentConnection {
         socket.send(JSON.stringify(frame));
       }
     }, STOP_DELAY_MS);
-    // The undo toast's `inverse` is what the user sees as "Undo". Its
-    // job is to cancel the pending send — the WS frame must not leave
-    // the browser. Natural expiry of the toast's own timer (also
-    // STOP_DELAY_MS) is the no-undo path; that branch never invokes
-    // `inverse`, so our setTimeout above runs and the stop goes
-    // through as requested.
-    undoStore.push({
-      message: 'Stopping agent…',
-      windowMs: STOP_DELAY_MS,
-      inverse: () => this.cancelPendingStop()
-    });
     return true;
   }
 
   /** Abort a Stop-button click before its grace period expires. Called
-   * from the undo toast's inverse, from `close()` on session switch,
-   * and from any future path that needs to un-queue a pending stop.
+   * from the inline Undo button, from `close()` on session switch, and
+   * from any future path that needs to un-queue a pending stop.
    * Idempotent — safe to call when nothing is pending. */
   cancelPendingStop(): void {
     if (this.pendingStopTimer !== null) {
       clearTimeout(this.pendingStopTimer);
       this.pendingStopTimer = null;
     }
+    this.stopPendingStartedAt = null;
   }
 
   setPermissionMode(mode: PermissionMode): boolean {
