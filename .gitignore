@@ -35,6 +35,12 @@ src/bearings/web/dist/*
 # Playwright MCP snapshots (transient)
 .playwright-mcp/
 
+# Ad-hoc debug screenshots that accumulate in the repo root during
+# UI investigations (DnD probe, activity-row tuning, bearings-top
+# layout). Root-level `*.png` only — intentional graphics (icons,
+# favicons) live under specific subdirs and stay tracked.
+/*.png
+
 # Editors / OS
 .idea/
 .vscode/

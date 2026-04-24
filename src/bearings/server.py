@@ -168,8 +168,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ws_sessions.router)
 
     if STATIC_DIR.exists() and any(STATIC_DIR.iterdir()):
-        app.mount(
-            "/", _BundleStaticFiles(directory=STATIC_DIR, html=True), name="frontend"
-        )
+        app.mount("/", _BundleStaticFiles(directory=STATIC_DIR, html=True), name="frontend")
 
     return app

@@ -33,16 +33,12 @@ def static_app(tmp_path: Path):
     # immutable chunk, and a non-hashed sibling (manifest.webmanifest)
     # to exercise both branches of the Cache-Control split.
     (tmp_path / "_app" / "immutable" / "nodes").mkdir(parents=True)
-    (tmp_path / "_app" / "immutable" / "nodes" / "0.abcdef.js").write_text(
-        "console.log('hashed');"
-    )
+    (tmp_path / "_app" / "immutable" / "nodes" / "0.abcdef.js").write_text("console.log('hashed');")
     (tmp_path / "index.html").write_text("<html><body>fake bundle</body></html>")
     (tmp_path / "manifest.webmanifest").write_text('{"name":"test"}')
 
     app = FastAPI()
-    app.mount(
-        "/", _BundleStaticFiles(directory=tmp_path, html=True), name="frontend"
-    )
+    app.mount("/", _BundleStaticFiles(directory=tmp_path, html=True), name="frontend")
     return TestClient(app)
 
 
