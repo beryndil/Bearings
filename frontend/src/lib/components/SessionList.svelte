@@ -269,7 +269,7 @@
     await sessions.remove(id);
   }
 
-  /** Resolve the three-state sidebar indicator for a session row.
+  /** Resolve the four-state sidebar indicator for a session row.
    *
    *   'red'    — look at it now. Runner is parked on a user decision
    *              (tool-use approval OR AskUserQuestion) OR the last
@@ -280,21 +280,35 @@
    *   'orange' — the agent is actively working a turn that isn't
    *              currently parked on a decision. Clears when the turn
    *              ends.
-   *   null     — nothing to signal. Covers idle, closed, and the
-   *              previously-shown "finished but unviewed" state,
-   *              which was dropped in the v0.10 redesign (row order
-   *              + timestamp already signal recency).
+   *   'green'  — a turn finished while the user was elsewhere and
+   *              hasn't been viewed yet. Drives the "new output
+   *              waiting for you" signal (re-added per Dave's call
+   *              after watching the three-state version run —
+   *              recency-by-sort-order wasn't enough to spot freshly-
+   *              finished sessions at a glance). Clears the moment
+   *              the user focuses the row (`markViewed` bumps
+   *              `last_viewed_at`).
+   *   null     — nothing to signal. Session is idle and caught up,
+   *              or closed.
    *
-   * Priority (red > orange > null): if a turn is in flight AND the
-   * runner is parked on a decision, the park wins (it's the thing
-   * blocking progress). The amber "unviewed output" state is gone —
-   * intentionally — so sessions that finished while the user was
-   * elsewhere blend into the same "no dot" bucket as truly idle rows.
+   * Priority (red > orange > green > null): the "look at this now"
+   * signal pre-empts everything; running pre-empts unviewed because
+   * an in-flight turn is about to produce new unviewed output anyway
+   * and the orange ping already tells Dave a turn is landing.
    */
-  function indicatorState(session: api.Session): 'red' | 'orange' | null {
+  function indicatorState(
+    session: api.Session
+  ): 'red' | 'orange' | 'green' | null {
     if (sessions.awaiting.has(session.id)) return 'red';
     if (session.error_pending) return 'red';
     if (sessions.running.has(session.id)) return 'orange';
+    // Green = finished, waiting to be viewed. Needs both a completion
+    // timestamp (the session ever finished a turn) AND either no view
+    // stamp or a view stamp that precedes the completion.
+    if (session.last_completed_at) {
+      if (!session.last_viewed_at) return 'green';
+      if (session.last_completed_at > session.last_viewed_at) return 'green';
+    }
     return null;
   }
 
@@ -524,6 +538,22 @@
                   ></span>
                   <span
                     class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"
+                  ></span>
+                </span>
+              {:else if indicator === 'green'}
+                <!-- Green solid: turn finished while the user was
+                     elsewhere, output waiting to be read. Solid, not
+                     flashing — it's a passive "new here" signal, not
+                     a call to action like red. Cleared when the user
+                     focuses the row (markViewed bumps last_viewed_at). -->
+                <span
+                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
+                  aria-label="Finished — new output waiting"
+                  title="Finished — new output waiting to be viewed"
+                  data-testid="indicator-green"
+                >
+                  <span
+                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
                   ></span>
                 </span>
               {/if}
