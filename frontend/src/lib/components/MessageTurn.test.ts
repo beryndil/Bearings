@@ -220,6 +220,97 @@ describe('MessageTurn (tool-call rows)', () => {
     vi.useRealTimers();
   });
 
+  // The summary row surfaces a running sub-agent's description so
+  // users with the tool-work `<details>` collapsed still see *what*
+  // a long-running Agent/Task call is doing. The in-pre `tool-call-
+  // subagent` subtitle only renders when the block is expanded;
+  // `tool-work-subagent-subtitle` is the always-visible mirror.
+  it('summary row surfaces the first running sub-agent description', () => {
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-sub',
+            name: 'Agent',
+            input: { description: 'research the codebase' },
+            ok: null,
+            finishedAt: null
+          })
+        ]
+      })
+    );
+    const subtitle = getByTestId('tool-work-subagent-subtitle');
+    expect(subtitle.textContent).toContain('research the codebase');
+    expect(subtitle.getAttribute('title')).toBe('research the codebase');
+  });
+
+  it('summary subtitle prefers the first running sub-agent when several are in flight', () => {
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-sub-1',
+            name: 'Agent',
+            input: { description: 'first job' },
+            ok: null,
+            finishedAt: null
+          }),
+          call({
+            id: 'tc-sub-2',
+            name: 'Task',
+            input: { description: 'second job' },
+            ok: null,
+            finishedAt: null
+          })
+        ]
+      })
+    );
+    const subtitle = getByTestId('tool-work-subagent-subtitle');
+    expect(subtitle.textContent).toContain('first job');
+    expect(subtitle.textContent).not.toContain('second job');
+  });
+
+  it('summary subtitle skips finished sub-agents and hides when none are running', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-sub-done',
+            name: 'Agent',
+            input: { description: 'already finished' },
+            ok: true,
+            finishedAt: 2000,
+            startedAt: 1000
+          })
+        ]
+      })
+    );
+    expect(queryByTestId('tool-work-subagent-subtitle')).toBeNull();
+  });
+
+  it('summary subtitle is absent when only non-Agent tools are running', () => {
+    const { queryByTestId, getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        toolCalls: [
+          call({
+            id: 'tc-read',
+            name: 'Read',
+            ok: null,
+            finishedAt: null
+          })
+        ]
+      })
+    );
+    // Running badge is still present (there's a running tool), but
+    // there's no sub-agent to describe.
+    expect(getByTestId('tool-work-running-badge')).not.toBeNull();
+    expect(queryByTestId('tool-work-subagent-subtitle')).toBeNull();
+  });
+
   it('lastProgressMs floors the readout when the local clock is stale', () => {
     // Simulates a backgrounded tab: the local `now` is only 2s past
     // startedAt (setInterval was throttled), but the server's

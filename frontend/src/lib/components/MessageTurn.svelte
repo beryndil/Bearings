@@ -54,6 +54,15 @@
   }: Props = $props();
 
   const runningCount = $derived(toolCalls.filter((t) => t.ok === null).length);
+  // First still-running sub-agent call, if any. Its description is
+  // surfaced into the summary row so users who leave the tool-work
+  // `<details>` collapsed still see *what* the long-running
+  // `Agent`/`Task` call is doing during an 80s+ wait (see TODO.md
+  // silence-gap entry). Function-declaration hoisting makes
+  // `isSubAgent` safe to reference here despite appearing below.
+  const firstRunningSubAgent = $derived(
+    toolCalls.find((t) => t.finishedAt === null && isSubAgent(t.name)) ?? null
+  );
   const thinkingCombined = $derived(thinking + streamingThinking);
 
   // Aggregate signal for the stick-to-bottom action: grows whenever a
@@ -210,15 +219,13 @@
 {/if}
 
 {#if toolCalls.length > 0}
-  <!-- Open by default when any call is still running so the pulse +
-       elapsed readout inside the pre block is visible without a click
-       — the collapsed summary alone used to read as a dead spinner
-       during an 80s sub-agent wait (see TODO.md silence-gap entry).
-       `open` is an initial-attribute hint only; the user can still
-       collapse the block manually and it stays collapsed. -->
+  <!-- Open state is purely user-controlled. The summary row already
+       carries liveness (count + pulsing "N running" badge), so we no
+       longer force-open when tools start — that produced an
+       expand/collapse flash on every tool call. User clicks to peek;
+       state changes leave `open` alone. -->
   <details
     class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1"
-    open={runningCount > 0}
   >
     <summary
       class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500
@@ -233,6 +240,15 @@
         >
           <span aria-hidden="true">●</span>
           {runningCount} running
+        </span>
+      {/if}
+      {#if firstRunningSubAgent}
+        <span
+          class="normal-case tracking-normal text-amber-200 truncate max-w-sm min-w-0"
+          data-testid="tool-work-subagent-subtitle"
+          title={subAgentSubtitle(firstRunningSubAgent.input)}
+        >
+          — {subAgentSubtitle(firstRunningSubAgent.input)}
         </span>
       {/if}
     </summary>
