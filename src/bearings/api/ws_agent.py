@@ -26,7 +26,7 @@ from starlette.websockets import WebSocketDisconnect
 from bearings import metrics
 from bearings.agent.runner import SessionRunner, _Envelope
 from bearings.agent.session import AgentSession
-from bearings.api.auth import check_ws_auth, check_ws_origin
+from bearings.api.auth import check_ws_auth, check_ws_origin, ws_accept_subprotocol
 from bearings.config import ThinkingMode
 from bearings.db import store
 
@@ -170,7 +170,12 @@ async def _forward_events(websocket: WebSocket, queue: asyncio.Queue[_Envelope])
 
 @router.websocket("/ws/sessions/{session_id}")
 async def agent_ws(websocket: WebSocket, session_id: str) -> None:
-    await websocket.accept()
+    # Echo the bearer-subprotocol marker when the client offered it so
+    # browsers can deliver the token off-URL. `None` keeps today's
+    # behavior for CLI (`bearings send`, query-string token) and for
+    # clients that don't opt in. Never echoes `bearer.<tok>`; see
+    # `ws_accept_subprotocol` in `bearings.api.auth`.
+    await websocket.accept(subprotocol=ws_accept_subprotocol(websocket))
     # Origin check runs before auth so a cross-origin attacker can't
     # probe the auth error to distinguish configured-vs-unconfigured
     # servers. Both close before any subscription is registered.

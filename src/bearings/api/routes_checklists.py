@@ -231,6 +231,11 @@ async def spawn_paired_chat(
     working_dir = body.working_dir or parent_session["working_dir"]
     model = body.model or parent_session["model"]
     title = body.title if body.title is not None else f"{item['label']}"
+    # Apply the global default cap when the caller didn't specify —
+    # same fallback as `/api/sessions` POST (security audit §7).
+    budget = body.max_budget_usd
+    if budget is None:
+        budget = request.app.state.settings.agent.default_max_budget_usd
 
     chat_row = await store.create_session(
         conn,
@@ -238,7 +243,7 @@ async def spawn_paired_chat(
         model=model,
         title=title,
         description=body.description,
-        max_budget_usd=body.max_budget_usd,
+        max_budget_usd=budget,
         kind="chat",
         checklist_item_id=item_id,
     )

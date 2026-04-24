@@ -64,6 +64,50 @@ def test_post_create_persists_budget(client: TestClient) -> None:
     assert roundtrip["max_budget_usd"] == 1.25
 
 
+def test_post_create_applies_global_default_budget_when_unset(tmp_path) -> None:
+    """2026-04-21 security audit §7: when `agent.default_max_budget_usd`
+    is set in config and the caller didn't pass one, the new session
+    inherits the default — no uncapped loop by accident."""
+    from fastapi.testclient import TestClient
+
+    from bearings.config import AgentCfg, ServerCfg, Settings, StorageCfg
+    from bearings.server import create_app
+
+    from .conftest import TEST_ORIGIN
+
+    cfg = Settings(
+        server=ServerCfg(allowed_origins=[TEST_ORIGIN]),
+        storage=StorageCfg(db_path=tmp_path / "db.sqlite"),
+        agent=AgentCfg(default_max_budget_usd=3.0),
+    )
+    cfg.config_file = tmp_path / "config.toml"
+    with TestClient(create_app(cfg)) as c:
+        c.headers["origin"] = TEST_ORIGIN
+        tag_id = c.post("/api/tags", json={"name": "t"}).json()["id"]
+        row = c.post(
+            "/api/sessions",
+            json={
+                "working_dir": "/tmp",
+                "model": "m",
+                "title": None,
+                "tag_ids": [tag_id],
+            },
+        ).json()
+        assert row["max_budget_usd"] == 3.0
+        # Explicit override still wins.
+        row2 = c.post(
+            "/api/sessions",
+            json={
+                "working_dir": "/tmp",
+                "model": "m",
+                "title": None,
+                "tag_ids": [tag_id],
+                "max_budget_usd": 9.0,
+            },
+        ).json()
+        assert row2["max_budget_usd"] == 9.0
+
+
 def test_get_list_includes_created(client: TestClient) -> None:
     created = _create(client)
     resp = client.get("/api/sessions")

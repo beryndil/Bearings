@@ -50,13 +50,22 @@ async def create_session(body: SessionCreate, request: Request) -> SessionOut:
     for tag_id in body.tag_ids:
         if await store.get_tag(conn, tag_id) is None:
             raise HTTPException(status_code=400, detail=f"tag_id {tag_id} does not exist")
+    # Fill in the global per-session cap from config when the caller
+    # didn't pass one. Explicit `0` or any other value is honored
+    # verbatim — operator knows best for that specific session.
+    # `None` + config default `None` keeps today's uncapped behavior.
+    # 2026-04-21 security audit §7.
+    settings = request.app.state.settings
+    budget = body.max_budget_usd
+    if budget is None:
+        budget = settings.agent.default_max_budget_usd
     row = await store.create_session(
         conn,
         working_dir=body.working_dir,
         model=body.model,
         title=body.title,
         description=body.description,
-        max_budget_usd=body.max_budget_usd,
+        max_budget_usd=budget,
         kind=body.kind,
     )
     for tag_id in body.tag_ids:

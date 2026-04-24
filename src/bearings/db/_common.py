@@ -50,7 +50,34 @@ async def init_db(path: Path) -> aiosqlite.Connection:
     await conn.execute("PRAGMA foreign_keys = ON")
     await _apply_migrations(conn)
     await conn.commit()
+    # Tighten permissions to owner-only *after* WAL has materialized so
+    # the sidecar files (`-wal`, `-shm`) exist and can be chmod'd too.
+    # SQLite creates them at default umask — on multi-user hosts that
+    # leaves session contents readable by other local accounts.
+    # 2026-04-21 security audit §2 (2026-04-23 fix). Idempotent: runs
+    # on every boot, so a DB created before this fix gets clamped on
+    # next startup. `os.chmod` swallowed on OSError — some filesystems
+    # (tmpfs subsets, network mounts) reject chmod even with owner
+    # perms; the data still belongs to the right uid, refusing to
+    # start would hurt more than leaving the bit set.
+    _clamp_db_permissions(path)
     return conn
+
+
+def _clamp_db_permissions(path: Path) -> None:
+    """Force `0o600` on the SQLite DB and its WAL/SHM sidecars.
+
+    Called from `init_db` after the connection is open. Failures are
+    logged-silent (see init_db comment) because the function is
+    best-effort defense-in-depth; the real gate is the `0600` umask
+    on the process itself where it can be controlled."""
+    import os
+    from contextlib import suppress
+
+    for candidate in (path, path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")):
+        if candidate.exists():
+            with suppress(OSError):
+                os.chmod(candidate, 0o600)
 
 
 def _checksum(content: bytes) -> str:

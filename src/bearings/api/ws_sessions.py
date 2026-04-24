@@ -30,7 +30,7 @@ from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from bearings import metrics
-from bearings.api.auth import check_ws_auth, check_ws_origin
+from bearings.api.auth import check_ws_auth, check_ws_origin, ws_accept_subprotocol
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +45,11 @@ CODE_FORBIDDEN_ORIGIN = 4403
 
 @router.websocket("/ws/sessions")
 async def sessions_ws(websocket: WebSocket) -> None:
-    await websocket.accept()
+    # Echo the bearer-subprotocol marker (never the `bearer.<tok>` entry)
+    # when the client offers it, so browser clients can carry the token
+    # off-URL. `None` when the client didn't opt in — same behavior as
+    # before. See `ws_accept_subprotocol` in `bearings.api.auth`.
+    await websocket.accept(subprotocol=ws_accept_subprotocol(websocket))
     if not check_ws_origin(websocket):
         await websocket.close(code=CODE_FORBIDDEN_ORIGIN, reason="origin not allowed")
         return

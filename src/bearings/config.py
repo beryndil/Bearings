@@ -8,6 +8,19 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# `commands.scope` controls how far the `/api/commands` palette walks:
+#   - "all" (default): project `.claude/` + user `~/.claude/` + every
+#     installed plugin under `~/.claude/plugins/marketplaces/*`. Today's
+#     behavior, useful for power users.
+#   - "user": project + user, but skip plugins. Middle ground for when
+#     the user has trusted commands under `~/.claude/` but doesn't want
+#     to trust everything a marketplace ever installed.
+#   - "project": project `.claude/` only. `safe`-profile default per
+#     the 2026-04-21 security audit §5 — a session running in one
+#     project shouldn't pick up commands from another project or from
+#     plugins the user forgot they ever added.
+CommandsScope = Literal["all", "user", "project"]
+
 # Shorthand for the two knobs we expose for extended thinking:
 #   - "adaptive": model decides how much to think (recommended default).
 #   - "disabled": never emit thinking blocks.
@@ -66,6 +79,18 @@ class AgentCfg(BaseModel):
     # renders the resulting thinking blocks in a collapsed `<details>`
     # next to each assistant turn.
     thinking: ThinkingMode | None = "adaptive"
+    # Default per-session spend cap applied when `SessionCreate` doesn't
+    # carry an explicit `max_budget_usd`. `None` (today's behavior)
+    # leaves new sessions uncapped and relies on the user to set one
+    # manually — fine for Dave, dangerous for a shared box where a
+    # runaway loop can rack up real-dollar cost before the turn
+    # finishes. The `safe` profile flips this to a small positive
+    # number. Enforced at session-create in `routes_sessions.py`;
+    # the cap itself lives on `sessions.max_budget_usd` once written.
+    # Per-session overrides remain authoritative — setting this only
+    # fills in the default when the caller didn't specify.
+    # 2026-04-21 security audit §7 (2026-04-23 fix).
+    default_max_budget_usd: float | None = None
 
 
 class StorageCfg(BaseModel):
@@ -166,6 +191,30 @@ class ShellCfg(BaseModel):
     claude_cli_command: list[str] | None = None
 
 
+class CommandsCfg(BaseModel):
+    """Scope policy for `/api/commands` — the slash-command palette.
+
+    The scanner walks three sources: project `.claude/`, user
+    `~/.claude/`, and every installed plugin under
+    `~/.claude/plugins/marketplaces/*`. `scope` narrows which of those
+    are surfaced to the palette:
+
+      - "all" (default)  — today's behavior; power-user friendly.
+      - "user"           — project + user; skip plugins.
+      - "project"        — project only; `safe`-profile default.
+
+    The server never *executes* these commands — they're rendered as
+    completions in the composer and sent verbatim to the agent — so
+    this knob controls visibility, not privilege. Narrowing still
+    matters: a session running in project A shouldn't autocomplete
+    to commands that only make sense in project B, and plugin slash-
+    commands can carry prompts the user doesn't remember installing.
+    Added 2026-04-21 security audit §5 (2026-04-23 fix).
+    """
+
+    scope: CommandsScope = "all"
+
+
 class VaultCfg(BaseModel):
     """Read-only on-disk markdown surface exposed under `/api/vault/*`.
 
@@ -180,9 +229,7 @@ class VaultCfg(BaseModel):
     removing patterns is equivalent to granting/revoking read exposure
     — treat like `fs.allow_root`."""
 
-    plan_roots: list[Path] = Field(
-        default_factory=lambda: [Path.home() / ".claude" / "plans"]
-    )
+    plan_roots: list[Path] = Field(default_factory=lambda: [Path.home() / ".claude" / "plans"])
     todo_globs: list[str] = Field(
         default_factory=lambda: [
             str(Path.home() / "Projects" / "**" / "TODO.md"),
@@ -217,6 +264,7 @@ class Settings(BaseSettings):
     uploads: UploadsCfg = Field(default_factory=UploadsCfg)
     shell: ShellCfg = Field(default_factory=ShellCfg)
     fs: FsCfg = Field(default_factory=FsCfg)
+    commands: CommandsCfg = Field(default_factory=CommandsCfg)
     vault: VaultCfg = Field(default_factory=VaultCfg)
 
     config_file: Path = Field(default_factory=lambda: CONFIG_HOME / "config.toml")

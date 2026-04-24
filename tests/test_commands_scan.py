@@ -107,3 +107,41 @@ def test_collect_results_are_sorted_case_insensitive(tmp_path: Path) -> None:
     _write(home / ".claude/commands/Beta.md", "body")
     entries = commands_scan.collect(home=home, project_cwd=None)
     assert [e.slug for e in entries] == ["alpha", "Beta", "Zeta"]
+
+
+# ---- scope config (2026-04-21 security audit §5) --------------------
+
+
+def _populate_all_scopes(tmp_path: Path) -> tuple[Path, Path]:
+    """Lay down one command at each scope: project `proj-cmd`, user
+    `user-cmd`, plugin `plug:cmd`. Returns (home, project)."""
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    _write(project / ".claude/commands/proj-cmd.md", "body")
+    _write(home / ".claude/commands/user-cmd.md", "body")
+    plugin = home / ".claude/plugins/marketplaces/mkt/plugins/plug"
+    _write(plugin / "commands/cmd.md", "body")
+    return home, project
+
+
+def test_collect_scope_all_is_default_and_walks_every_source(tmp_path: Path) -> None:
+    home, project = _populate_all_scopes(tmp_path)
+    entries = commands_scan.collect(home=home, project_cwd=project)
+    slugs = {e.slug for e in entries}
+    assert {"proj-cmd", "user-cmd", "plug:cmd"} <= slugs
+
+
+def test_collect_scope_user_skips_plugins(tmp_path: Path) -> None:
+    home, project = _populate_all_scopes(tmp_path)
+    entries = commands_scan.collect(home=home, project_cwd=project, scope="user")
+    slugs = {e.slug for e in entries}
+    assert "proj-cmd" in slugs
+    assert "user-cmd" in slugs
+    assert "plug:cmd" not in slugs
+
+
+def test_collect_scope_project_skips_user_and_plugins(tmp_path: Path) -> None:
+    home, project = _populate_all_scopes(tmp_path)
+    entries = commands_scan.collect(home=home, project_cwd=project, scope="project")
+    slugs = {e.slug for e in entries}
+    assert slugs == {"proj-cmd"}

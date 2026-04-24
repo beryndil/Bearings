@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from bearings.api import commands_scan
 from bearings.api.auth import require_auth
@@ -26,13 +26,16 @@ router = APIRouter(
 
 
 @router.get("", response_model=CommandsListOut)
-async def list_commands(cwd: str | None = None) -> CommandsListOut:
+async def list_commands(request: Request, cwd: str | None = None) -> CommandsListOut:
     """List available slash commands and skills.
 
     `cwd` (optional) — absolute path to the session's working directory.
     When present, its `.claude/commands` and `.claude/skills` trees are
     scanned at project scope with highest precedence over colliding
     slugs from user/plugin scope.
+
+    `commands.scope` config narrows the walk beyond the project tree
+    — see `CommandsCfg` in `bearings.config`.
     """
     project_cwd: Path | None = None
     if cwd is not None:
@@ -45,5 +48,10 @@ async def list_commands(cwd: str | None = None) -> CommandsListOut:
         if candidate.is_dir():
             project_cwd = candidate
 
-    entries = commands_scan.collect(home=Path.home(), project_cwd=project_cwd)
+    scope = request.app.state.settings.commands.scope
+    entries = commands_scan.collect(
+        home=Path.home(),
+        project_cwd=project_cwd,
+        scope=scope,
+    )
     return CommandsListOut(entries=entries)

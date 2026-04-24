@@ -212,3 +212,40 @@ async def test_apply_migrations_can_be_called_on_open_connection(tmp_path: Path)
         assert row is not None and row[0] == len(list(MIGRATIONS_DIR.glob("*.sql")))
     finally:
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_init_db_clamps_db_and_sidecars_to_0600(tmp_path: Path) -> None:
+    """2026-04-21 security audit §2: the SQLite file and its WAL/SHM
+    sidecars must not be world- or group-readable after init. Skips
+    when the test filesystem doesn't honor unix perms (Windows, some
+    tmpfs configs) — the check returns `0o666` or similar and chmod
+    can't narrow it."""
+    import stat
+    import sys
+
+    if sys.platform.startswith("win"):
+        pytest.skip("POSIX-only permission check")
+
+    db_path = tmp_path / "perms.sqlite"
+    conn = await init_db(db_path)
+    try:
+        # Force a WAL/SHM pair to exist by issuing a write.
+        await conn.execute(
+            "CREATE TABLE IF NOT EXISTS _probe(x INTEGER PRIMARY KEY)",
+        )
+        await conn.commit()
+    finally:
+        await conn.close()
+
+    # Re-run init_db to exercise the idempotent re-clamp path and to
+    # catch sidecars the second connect creates.
+    conn = await init_db(db_path)
+    await conn.close()
+
+    for name in (db_path.name, db_path.name + "-wal", db_path.name + "-shm"):
+        p = tmp_path / name
+        if not p.exists():
+            continue
+        mode = stat.S_IMODE(p.stat().st_mode)
+        assert mode == 0o600, f"{name} is {oct(mode)}, expected 0o600"

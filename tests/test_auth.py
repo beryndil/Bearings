@@ -158,6 +158,90 @@ def test_ws_good_token_accepts_and_streams(
     ]
 
 
+def test_ws_good_token_via_subprotocol(auth_client: TestClient, mock_agent_stream: None) -> None:
+    """Bearer token delivered via `Sec-WebSocket-Protocol`, keeping
+    the secret out of the URL. Added with 2026-04-21 security audit §1
+    follow-up — browsers should use this instead of `?token=`."""
+    tag = auth_client.post(
+        "/api/tags",
+        json={"name": "default"},
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()
+    sid = auth_client.post(
+        "/api/sessions",
+        json={
+            "working_dir": "/tmp",
+            "model": "m",
+            "title": None,
+            "tag_ids": [tag["id"]],
+        },
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()["id"]
+
+    with auth_client.websocket_connect(
+        f"/ws/sessions/{sid}",
+        subprotocols=["bearings.bearer.v1", "bearer.s3cret"],
+    ) as ws:
+        status = json.loads(ws.receive_text())
+        assert status["type"] == "runner_status"
+
+
+def test_ws_subprotocol_bad_token_closes_4401(auth_client: TestClient) -> None:
+    tag = auth_client.post(
+        "/api/tags",
+        json={"name": "default"},
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()
+    sid = auth_client.post(
+        "/api/sessions",
+        json={
+            "working_dir": "/tmp",
+            "model": "m",
+            "title": None,
+            "tag_ids": [tag["id"]],
+        },
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()["id"]
+
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with auth_client.websocket_connect(
+            f"/ws/sessions/{sid}",
+            subprotocols=["bearings.bearer.v1", "bearer.wrong"],
+        ) as ws:
+            ws.receive_text()
+    assert excinfo.value.code == 4401
+
+
+def test_ws_subprotocol_marker_without_bearer_entry_closes_4401(
+    auth_client: TestClient,
+) -> None:
+    """Marker present but no `bearer.*` entry: the extraction falls to
+    query-string, which is empty, which fails the constant-time compare."""
+    tag = auth_client.post(
+        "/api/tags",
+        json={"name": "default"},
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()
+    sid = auth_client.post(
+        "/api/sessions",
+        json={
+            "working_dir": "/tmp",
+            "model": "m",
+            "title": None,
+            "tag_ids": [tag["id"]],
+        },
+        headers={"Authorization": "Bearer s3cret"},
+    ).json()["id"]
+
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with auth_client.websocket_connect(
+            f"/ws/sessions/{sid}",
+            subprotocols=["bearings.bearer.v1"],
+        ) as ws:
+            ws.receive_text()
+    assert excinfo.value.code == 4401
+
+
 def test_enabled_without_token_returns_500(tmp_path) -> None:
     cfg = Settings(
         storage=StorageCfg(db_path=tmp_path / "db.sqlite"),

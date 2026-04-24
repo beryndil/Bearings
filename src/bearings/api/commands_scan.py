@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 from bearings.api.models import CommandOut
+from bearings.config import CommandsScope
 
 Kind = Literal["command", "skill"]
 Scope = Literal["user", "project", "plugin"]
@@ -143,6 +144,7 @@ def collect(
     *,
     home: Path,
     project_cwd: Path | None,
+    scope: CommandsScope = "all",
 ) -> list[CommandOut]:
     """Scan every source and return a flat, dedup'd list.
 
@@ -150,8 +152,17 @@ def collect(
     production and a tmp dir in tests. `project_cwd` (when provided) adds
     its own `.claude/commands` and `.claude/skills` at project scope.
 
+    `scope` narrows which sources are walked (`commands.scope` in
+    config, 2026-04-21 security audit §5):
+      - "all"     — project + user + plugins (default, today's behavior)
+      - "user"    — project + user; skip plugins
+      - "project" — project only; skip user + plugins
+
     Precedence: project > user > plugin. First wins on slug collision.
     """
+    include_user = scope in ("all", "user")
+    include_plugins = scope == "all"
+
     entries: list[CommandOut] = []
 
     if project_cwd is not None:
@@ -170,39 +181,41 @@ def collect(
             )
         )
 
-    entries.extend(
-        _entries_from(
-            _walk_commands(home / ".claude" / "commands"),
-            kind="command",
-            scope="user",
-        )
-    )
-    entries.extend(
-        _entries_from(
-            _walk_skills(home / ".claude" / "skills"),
-            kind="skill",
-            scope="user",
-        )
-    )
-
-    for plugin in _plugin_roots(home):
-        prefix = f"{plugin.name}:"
+    if include_user:
         entries.extend(
             _entries_from(
-                _walk_commands(plugin / "commands"),
+                _walk_commands(home / ".claude" / "commands"),
                 kind="command",
-                scope="plugin",
-                prefix=prefix,
+                scope="user",
             )
         )
         entries.extend(
             _entries_from(
-                _walk_skills(plugin / "skills"),
+                _walk_skills(home / ".claude" / "skills"),
                 kind="skill",
-                scope="plugin",
-                prefix=prefix,
+                scope="user",
             )
         )
+
+    if include_plugins:
+        for plugin in _plugin_roots(home):
+            prefix = f"{plugin.name}:"
+            entries.extend(
+                _entries_from(
+                    _walk_commands(plugin / "commands"),
+                    kind="command",
+                    scope="plugin",
+                    prefix=prefix,
+                )
+            )
+            entries.extend(
+                _entries_from(
+                    _walk_skills(plugin / "skills"),
+                    kind="skill",
+                    scope="plugin",
+                    prefix=prefix,
+                )
+            )
 
     seen: set[str] = set()
     deduped: list[CommandOut] = []

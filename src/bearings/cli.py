@@ -17,7 +17,16 @@ from bearings.bearings_dir import pending as pending_ops
 from bearings.bearings_dir.check import run_check
 from bearings.bearings_dir.init_dir import init_directory
 from bearings.bearings_dir.onboard import render_brief
-from bearings.config import load_settings
+from bearings.config import Settings, load_settings
+
+# Hostnames / IPs that the interlock treats as loopback-only. Anything
+# else (wildcard binds like `0.0.0.0` / `::`, a LAN address, an
+# externally-routable IP) has to be paired with `auth.enabled = true`
+# or the server refuses to start. `::` covers both "all IPv6" and
+# "any IPv6 loopback" ambiguity the same way `0.0.0.0` does for v4 —
+# we treat the wildcard forms as non-loopback because they'll pick up
+# a real interface too. 2026-04-21 security audit §6 (2026-04-23 fix).
+_LOOPBACK_BINDS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1", "::ffff:127.0.0.1"})
 
 # Ordered by popularity on Linux so the first hit on PATH is likely
 # the one the user actually uses. All of these accept --app=URL to
@@ -207,6 +216,29 @@ def launch_app_window(browser: str, url: str) -> subprocess.Popen[bytes]:
     )
 
 
+def _check_bind_auth_interlock(cfg: Settings) -> str | None:
+    """Return an error message when `server.host` exposes Bearings
+    beyond loopback with no auth token, otherwise `None`.
+
+    Callable from `main()` and from tests without starting uvicorn.
+    Scoped to what Bearings itself can verify at boot — a reverse
+    proxy terminating TLS + auth upstream is a legitimate pattern
+    but requires the operator to flip `auth.enabled = true` so the
+    process-local gate matches reality.
+    """
+    host = cfg.server.host.strip()
+    if host in _LOOPBACK_BINDS:
+        return None
+    if cfg.auth.enabled and cfg.auth.token:
+        return None
+    return (
+        f"bearings serve: refusing to bind {host!r} without auth. "
+        'Set `auth.enabled = true` and `auth.token = "..."` in config.toml, '
+        "or bind a loopback address (127.0.0.1 / ::1 / localhost). "
+        "Security audit §6 (2026-04-21)."
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -214,6 +246,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         import uvicorn
 
         cfg = load_settings()
+        # 2026-04-21 security audit §6: refuse to expose Bearings on a
+        # non-loopback interface with no auth gate. Bearings has no
+        # TLS of its own (yet — reverse-proxy users terminate upstream),
+        # so "public interface + no token" is equivalent to handing
+        # every LAN device a shell on this account. Fail at startup
+        # rather than discover it from access logs later.
+        interlock_error = _check_bind_auth_interlock(cfg)
+        if interlock_error is not None:
+            print(interlock_error, file=sys.stderr)
+            return 2
         uvicorn.run(
             "bearings.server:create_app",
             factory=True,
