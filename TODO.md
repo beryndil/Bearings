@@ -59,15 +59,24 @@ a tagged release — the FileHandler is cheap but unconditional.
   `dragenter`/`dragover`/`dragleave` all fire correctly (journal
   confirmed this before the probe was stripped), but Chrome never
   dispatches `drop` to ANY target — not the section, not the
-  document-level swallow handler. This is an upstream Chromium
-  `wl_data_device` integration bug with wlroots-based compositors,
-  not something Bearings can fix client-side. The native Attach-file
-  button (zenity/kdialog via `/api/fs/pick`) remains the Chrome
-  workaround.
-- **Red-line fallback honored**: when Chrome fails, users switch to
-  Firefox OR use the Attach-file button. No browser-sniffing in the
-  code; the UI just degrades to "use the button" via the
-  `dropDiagnostic` banner.
+  document-level swallow handler. Also verified under
+  `--ozone-platform=x11` (XWayland): still silent, so it's not
+  strictly a `wl_data_device` issue — Hyprland's XDND bridge and
+  Chromium's Wayland path both fail to deliver. Not fixable
+  client-side.
+- **Chrome workaround shipped (commit `d7a0913`):** paste and a
+  browser-native file picker as DnD-equivalent input paths, both
+  feeding the existing `/api/uploads` pipeline.
+  - `Ctrl+V` in the textarea picks up `ClipboardEvent.clipboardData.files`
+    — clipboard is a different Wayland protocol than DnD and fires
+    reliably. Dave confirmed this works end-to-end in his Chrome
+    instance.
+  - 📁 Browse button triggers a hidden `<input type="file" multiple>`;
+    no compositor deps at all.
+  - 📎 zenity Attach-file button still present — it's the only path
+    that honors the session's `working_dir`.
+- **Red-line fallback still honored**: if paste also fails on some
+  future compositor, zenity is always there. No browser-sniffing.
 
 **Open follow-ups (not blocking):**
 
