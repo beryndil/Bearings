@@ -6,6 +6,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from bearings import __version__
 from bearings.agent.registry import RunnerRegistry
@@ -43,6 +45,50 @@ STATIC_DIR = Path(__file__).parent / "web" / "dist"
 # WebSocket close code for "server shutdown" — clients interpret this as
 # a clean disconnect and reconnect on their own backoff schedule.
 CODE_GOING_AWAY = 1001
+
+
+class _BundleStaticFiles(StaticFiles):
+    """StaticFiles that distinguishes content-addressed bundle chunks
+    from the entry-point HTML and tells the browser to cache each
+    appropriately.
+
+    Default `StaticFiles` ships no `Cache-Control` header at all, so
+    Chromium / Firefox apply heuristic caching — which works fine for
+    hashed chunks (their filenames carry a content hash, so a stale
+    cache entry is by definition still correct) but breaks `index.html`,
+    which is NOT hashed and references the *current* bundle's chunk
+    filenames. After a `npm run build`, the chunks land at fresh
+    hashes; if the browser's cached `index.html` still points at the
+    previous build's chunks, the user runs old code until they Ctrl+
+    Shift+R. That's exactly the "I have to force-reload to see your
+    fixes" complaint.
+
+    Headers we set:
+      - `_app/immutable/*` — `public, max-age=31536000, immutable`.
+        Hashed filenames mean a byte change always changes the path,
+        so a cached entry can never be stale. `immutable` tells modern
+        browsers to skip revalidation entirely.
+      - everything else (`index.html`, `manifest.webmanifest`,
+        `favicon.png`, etc.) — `no-cache`. Counter-intuitively this
+        does NOT mean "don't cache"; it means "always revalidate
+        before serving from cache." Combined with the ETag/Last-
+        Modified that StaticFiles already emits, the revalidation is
+        a cheap 304 when nothing changed and a fresh 200 when we've
+        rebuilt — so a new bundle reaches Daisy on her next page
+        load without a forced reload, but unchanged bytes don't
+        re-download.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if path.startswith("_app/immutable/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            # `must-revalidate` belt-and-suspenders for proxies that
+            # honor it differently from raw `no-cache`. Both ensure
+            # the browser checks back with us before reusing.
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
 
 
 @asynccontextmanager
@@ -122,6 +168,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ws_sessions.router)
 
     if STATIC_DIR.exists() and any(STATIC_DIR.iterdir()):
-        app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+        app.mount(
+            "/", _BundleStaticFiles(directory=STATIC_DIR, html=True), name="frontend"
+        )
 
     return app
