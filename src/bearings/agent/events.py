@@ -56,6 +56,35 @@ class ToolOutputDelta(BaseModel):
     delta: str
 
 
+class ToolProgress(BaseModel):
+    """Ephemeral keepalive fired every few seconds while a tool call
+    is still running. Exists so the UI has a steady wire signal during
+    long out-of-band tool calls that the SDK surfaces nothing for —
+    the prototypical case is a `Task`/`Agent` sub-agent that runs for
+    tens of seconds between its outer-turn `tool_use` and the eventual
+    `tool_result`. Without this, a tab backgrounded mid-sub-agent has
+    no reactivity nudge to keep the elapsed readout alive, and a
+    foreground tab looks indistinguishable from a hung session for the
+    duration of the wait.
+
+    Delivered fan-out only — the runner does NOT append this to the
+    ring buffer or persist it to SQLite. A reconnecting client's own
+    clock takes over on the next live tick (within
+    `TOOL_PROGRESS_INTERVAL_S`), so replay adds nothing. Skipping the
+    ring buffer also prevents a long turn from filling the 5000-entry
+    window with throwaway keepalives.
+
+    `elapsed_ms` is the monotonic wall-clock since `ToolCallStart` for
+    this `tool_call_id`, rounded to the nearest millisecond. Frontend
+    is free to prefer its own clock for the rendered readout; the
+    server number is a sanity check and a reconnection hint."""
+
+    type: Literal["tool_progress"] = "tool_progress"
+    session_id: str
+    tool_call_id: str
+    elapsed_ms: int
+
+
 class MessageStart(BaseModel):
     type: Literal["message_start"] = "message_start"
     session_id: str
@@ -209,6 +238,7 @@ AgentEvent = (
     | ToolCallStart
     | ToolCallEnd
     | ToolOutputDelta
+    | ToolProgress
     | MessageStart
     | MessageComplete
     | ContextUsage

@@ -51,6 +51,7 @@ from bearings.agent.events import (
     ToolCallEnd,
     ToolCallStart,
     ToolOutputDelta,
+    ToolProgress,
     TurnReplayed,
 )
 from bearings.agent.session import AgentSession
@@ -81,6 +82,16 @@ RING_MAX = 5000
 # every delta in real time; only the DB write is batched.
 TOOL_OUTPUT_FLUSH_INTERVAL_S = 0.075
 TOOL_OUTPUT_FLUSH_CHUNK_COUNT = 32
+
+# Cadence for `ToolProgress` keepalive events emitted while a tool call
+# is still running. Covers the "SDK surfaces nothing for tens of
+# seconds during a Task/Agent sub-agent" class of silence that would
+# otherwise read as a dead spinner. At 3s per tick per in-flight tool,
+# a turn with up to ~3 concurrent tools stays under 1 msg/sec fan-out
+# — comfortably below anything the WS + reducer have to worry about.
+# Events are fan-out only (never persisted to the ring buffer), so
+# this cadence does not eat the 5000-entry replay window either.
+TOOL_PROGRESS_INTERVAL_S = 3.0
 
 
 # Sentinel queued into `_prompts` by `shutdown()` so the worker exits
@@ -199,6 +210,19 @@ class SessionRunner:
         # dropped buffered chunks are irrelevant by then). Managed
         # only by the worker task — no locking needed.
         self._tool_buffers: dict[str, _ToolOutputBuffer] = {}
+        # Per-tool-call keepalive tickers. One task per in-flight
+        # tool call; each fires a `ToolProgress` event every
+        # `TOOL_PROGRESS_INTERVAL_S` for fan-out only (no ring buffer
+        # append, no DB write). Started from the `ToolCallStart` arm
+        # of `_execute_turn`, cancelled from the `ToolCallEnd` arm and
+        # from the turn's `finally` block so an interrupted or
+        # exception-exited turn doesn't strand timers. `_progress_started`
+        # records the monotonic start so the event's `elapsed_ms` is
+        # self-contained — the UI doesn't need the original start
+        # timestamp to render the readout. Managed only by the worker
+        # task (tickers are spawned on the runner's loop); no locking.
+        self._progress_tickers: dict[str, asyncio.Task[None]] = {}
+        self._progress_started: dict[str, float] = {}
         # Monotonic timestamp of the moment the runner most recently
         # became "quiet" — idle AND zero subscribers. The registry's
         # reaper uses `now - _quiet_since` vs. the configured TTL to
@@ -564,6 +588,11 @@ class SessionRunner:
                     )
                     tool_call_ids.append(event.tool_call_id)
                     metrics.tool_calls_started.inc()
+                    # Start the keepalive ticker for this call. See
+                    # `_progress_ticker` for the fan-out contract; the
+                    # ticker is torn down in the `ToolCallEnd` arm or
+                    # by `_stop_all_progress_tickers` on turn teardown.
+                    self._start_progress_ticker(event.tool_call_id)
                     # TodoWrite is a first-class UI signal, not just a
                     # generic tool call: fire a higher-level
                     # `TodoWriteUpdate` so the frontend sticky widget
@@ -583,6 +612,9 @@ class SessionRunner:
                     # so a dropped flush can't leave a permanent gap.
                     await self._buffer_tool_output(event.tool_call_id, event.delta)
                 elif isinstance(event, ToolCallEnd):
+                    # Stop the keepalive ticker first so a stray tick
+                    # can't race the canonical end frame onto the wire.
+                    self._stop_progress_ticker(event.tool_call_id)
                     # Drop any buffered deltas before writing the
                     # canonical output — `finish_tool_call` fully
                     # overwrites `output` so the buffered chunks
@@ -654,6 +686,11 @@ class SessionRunner:
             # canonical output still overwrites; this just keeps
             # mid-stream progress visible for the interrupted case.
             await self._flush_all_tool_buffers()
+            # Cancel any in-flight progress tickers. Normal completion
+            # cancels each one in the `ToolCallEnd` arm; this guards
+            # the stop / exception paths where tools were still
+            # running when the turn exited.
+            await self._stop_all_progress_tickers()
 
         if stopped and not persisted:
             msg_id = current_message_id or uuid4().hex
@@ -760,6 +797,87 @@ class SessionRunner:
         if buf is not None and buf.flush_task is not None:
             buf.flush_task.cancel()
 
+    # ---- tool-progress keepalive ----------------------------------
+
+    def _start_progress_ticker(self, tool_call_id: str) -> None:
+        """Spawn a per-call keepalive task on the runner's loop.
+
+        Idempotent: a duplicate `ToolCallStart` for the same id (which
+        the turn loop already treats as a no-op) keeps the original
+        ticker rather than leaking a second one. Records the monotonic
+        start so each tick's `elapsed_ms` can be self-contained."""
+        if tool_call_id in self._progress_tickers:
+            return
+        self._progress_started[tool_call_id] = time.monotonic()
+        self._progress_tickers[tool_call_id] = asyncio.create_task(
+            self._progress_ticker(tool_call_id),
+            name=f"tool-progress:{self.session_id}:{tool_call_id}",
+        )
+
+    def _stop_progress_ticker(self, tool_call_id: str) -> None:
+        """Cancel the ticker for one call. Safe to call for an id that
+        has no ticker (never started, or already stopped)."""
+        task = self._progress_tickers.pop(tool_call_id, None)
+        self._progress_started.pop(tool_call_id, None)
+        if task is not None:
+            task.cancel()
+
+    async def _stop_all_progress_tickers(self) -> None:
+        """Cancel every ticker and wait for the cancellations to take
+        effect before returning. Called from the turn's `finally` so
+        an interrupted or exception-exited turn doesn't strand timers.
+
+        Awaiting the gather ensures we don't leave tasks half-cancelled
+        when `_run_forever` flips `_status` back to idle — a dangling
+        `Task` could still try to `put_nowait` onto a subscriber queue
+        after the runner's subscribers set has been mutated elsewhere.
+        `return_exceptions=True` swallows the expected
+        `CancelledError`s from each task."""
+        tasks = list(self._progress_tickers.values())
+        self._progress_tickers.clear()
+        self._progress_started.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _progress_ticker(self, tool_call_id: str) -> None:
+        """Emit a `ToolProgress` event every `TOOL_PROGRESS_INTERVAL_S`
+        until cancelled.
+
+        Intentionally robust against late cancellation: if the ticker
+        is cancelled while blocked in `asyncio.sleep`, the raise
+        propagates out cleanly; if the start time was cleared under
+        us (e.g. `_stop_all_progress_tickers` ran first), the loop
+        exits without emitting anything.
+
+        Errors during `_emit_ephemeral` are logged and swallowed — the
+        keepalive is advisory, and a broken fan-out must never kill
+        the user's turn."""
+        while True:
+            try:
+                await asyncio.sleep(TOOL_PROGRESS_INTERVAL_S)
+            except asyncio.CancelledError:
+                return
+            started = self._progress_started.get(tool_call_id)
+            if started is None:
+                return
+            elapsed_ms = int((time.monotonic() - started) * 1000)
+            try:
+                await self._emit_ephemeral(
+                    ToolProgress(
+                        session_id=self.session_id,
+                        tool_call_id=tool_call_id,
+                        elapsed_ms=elapsed_ms,
+                    )
+                )
+            except Exception:
+                log.exception(
+                    "runner %s: tool_progress emit failed for %s",
+                    self.session_id,
+                    tool_call_id,
+                )
+
     async def _emit_todo_write_update(self, tool_input: dict[str, Any]) -> None:
         """Translate a raw `TodoWrite` tool input into a
         `TodoWriteUpdate` event and fan it out through `_emit_event`.
@@ -801,6 +919,29 @@ class SessionRunner:
                 # somehow misbehaves we drop it rather than block the
                 # runner. The WS handler will notice its queue is dead
                 # and clean up.
+                self._subscribers.discard(queue)
+
+    async def _emit_ephemeral(self, event: AgentEvent) -> None:
+        """Fan an event out to live subscribers WITHOUT appending to
+        the ring buffer.
+
+        Used for keepalives (`ToolProgress`) that need to arrive at
+        connected clients in real time but have no value on replay —
+        a reconnecting client's own clock takes over on the next live
+        tick, and skipping the ring buffer prevents a long turn from
+        chewing through the 5000-entry replay window with throwaway
+        ticks. Seq advances so `_seq` stays monotonic for currently-
+        connected clients; the skipped seqs simply aren't deliverable
+        on future reconnects, which is what makes the event
+        ephemeral."""
+        payload = event.model_dump()
+        env = _Envelope(self._next_seq, payload)
+        self._next_seq += 1
+        metrics.ws_events_sent.labels(type=event.type).inc()
+        for queue in list(self._subscribers):
+            try:
+                queue.put_nowait(env)
+            except Exception:
                 self._subscribers.discard(queue)
 
 
