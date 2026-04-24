@@ -1,0 +1,367 @@
+/*
+ * Midnight Glass — depth, gradient, and polish layer
+ * --------------------------------------------------
+ * The color remap lives in `tokens.css` (via Tailwind's color scale). This
+ * file adds the *visual treatment* that makes the theme feel different on
+ * top of the color swap — body gradient, panel elevation, active-row
+ * accent strip, primary-button gradient, focus ring glow, code-block
+ * inner glow, message-card separation.
+ *
+ * Everything is scoped under `[data-theme='midnight-glass']` so the saved
+ * `default` theme stays pixel-accurate to the pre-theme look.
+ *
+ * 2026-04-23 rev: Dave reported the first pass of these effects was too
+ * subtle to distinguish from the flat default. Alphas and shadow radii
+ * have been pushed enough to read as a real visual difference, while
+ * still staying within "professional dev tool" rather than "consumer
+ * app." Rule of thumb applied: any effect you'd miss at arm's length
+ * has been strengthened or dropped.
+ *
+ * Design notes:
+ * - No global `backdrop-filter: blur(...)`. Bearings panels are opaque
+ *   so blur would do nothing useful; depth comes from shadow + gradient
+ *   + inner-highlight hairlines instead.
+ * - Selectors use existing Tailwind utility classes on components
+ *   (`bg-slate-800`, `bg-emerald-600`, etc.) as targeting hooks, so no
+ *   component-level rewrite is needed.
+ */
+
+/* ----- Base surface: slate gradient + ambient color blobs -----
+ * This is what makes the panels above feel like real glass rather than
+ * tinted plastic. Without colored light behind them, translucent
+ * surfaces just show grey-on-grey and the blur effect is invisible.
+ *
+ * Three soft radial auroras (violet top-left, indigo top-right,
+ * emerald bottom-right) wash the viewport. They sit on top of the
+ * slate top-to-bottom gradient. Because `background-attachment: fixed`
+ * locks them to the viewport, they don't scroll with content — so the
+ * aurora positions are stable and the glass panels always have
+ * something to refract.
+ *
+ * Alphas are tuned low (8–14%) so the ambient light is felt, not seen
+ * directly — the effect should register as "the dark room has windows
+ * somewhere" rather than "someone painted purple on my UI." */
+[data-theme='midnight-glass'] body {
+  background-image:
+    radial-gradient(
+      900px 700px at 12% 8%,
+      rgb(var(--bearings-sky-500) / 0.45) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      800px 600px at 92% 6%,
+      rgb(var(--bearings-indigo-300) / 0.30) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 700px at 88% 90%,
+      rgb(var(--bearings-emerald-500) / 0.28) 0%,
+      transparent 60%
+    ),
+    linear-gradient(
+      180deg,
+      rgb(var(--bearings-slate-800)) 0%,
+      rgb(var(--bearings-slate-900)) 30%,
+      rgb(var(--bearings-slate-950)) 100%
+    );
+  background-attachment: fixed;
+}
+
+/* ----- Elevated panels: sidebar + inspector as real glass -----
+ * Both sides of the layout are `<aside>` elements. Under Midnight
+ * Glass they become translucent (slate-900 at 55% alpha) with a
+ * `backdrop-filter` that blurs + saturates whatever is behind them.
+ * Against the aurora-washed body, this produces visibly shifting
+ * color through the glass — violet tint on the top of the left
+ * sidebar, emerald smudge at the bottom of the right inspector, etc.
+ *
+ * Why the Tailwind `bg-slate-900` override needs `!important`:
+ * components apply `bg-slate-900` as a utility class, which sets an
+ * opaque `background-color`. An opaque background-color paints ON TOP
+ * of the filtered backdrop, hiding it entirely. We drop the color to
+ * 55% alpha so the blur actually shows. !important is surgical here
+ * — scoped to a single type selector under a single theme attribute —
+ * so the blast radius is bounded.
+ *
+ * `backdrop-filter: blur(18px) saturate(160%)` is the standard
+ * "macOS / Linear / Raycast" glass recipe: enough blur that
+ * individual colors behind soften into a gradient, saturation boost
+ * so the softened colors read as light rather than grey. The
+ * `-webkit-` prefix is a no-op on current Chromium but kept for Safari
+ * parity since the cost is zero. */
+[data-theme='midnight-glass'] aside {
+  background-color: rgb(var(--bearings-slate-900) / 0.55) !important;
+  background-image: linear-gradient(
+    180deg,
+    rgb(var(--bearings-slate-700) / 0.30) 0%,
+    rgb(var(--bearings-slate-900) / 0.20) 100%
+  );
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04),
+    inset 1px 0 0 rgb(var(--bearings-sky-500) / 0.10),
+    0 16px 40px -10px rgba(0, 0, 0, 0.65);
+}
+
+/* ----- Conversation panel: let the aurora glow through -----
+ * The Conversation component's outermost `<section>` carries
+ * `bg-slate-900` as a Tailwind utility — a solid opaque slate wall in
+ * the middle column between the two glass asides. Without an override
+ * it paints over the body's violet/emerald auroras and makes Midnight
+ * Glass indistinguishable from the flat default (this is exactly what
+ * Dave saw 2026-04-23 — "it all still looks exactly the same" —
+ * because the diagnostic log confirmed asides were translucent but
+ * the opaque middle panel was eating the visual difference).
+ *
+ * We drop the section's background-color to 40% alpha so the aurora
+ * glows through, keep a subtle vertical gradient for panel shape, and
+ * add `backdrop-filter` for real glass. Unlike per-message blur (see
+ * the `article` note below), a single blur layer on the section root
+ * doesn't create the multi-compositing-layer regression that broke
+ * the composer textarea — it's one element, not N.
+ *
+ * The selector is narrow: only a `<section>` that carries a
+ * `bg-slate-900` class matches. Dragzones and overlays inside the
+ * section that use `bg-slate-950/60` etc. are unaffected. */
+[data-theme='midnight-glass'] section[class*='bg-slate-900'] {
+  background-color: rgb(var(--bearings-slate-900) / 0.40) !important;
+  background-image: linear-gradient(
+    180deg,
+    rgb(var(--bearings-slate-800) / 0.25) 0%,
+    rgb(var(--bearings-slate-950) / 0.15) 100%
+  );
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 0 0 1px rgb(255 255 255 / 0.03);
+}
+
+/* ----- Sidebar: active-row accent strip -----
+ * Per the original Midnight Glass spec ("active glow strip instead of
+ * just highlight"). The SessionList component applies `bg-slate-800` to
+ * the selected `<li>`; we build the active row as a proper accented
+ * surface instead of a flat violet tint.
+ *
+ * Design: horizontal gradient that's hot at the leading edge and fades
+ * out toward the trailing edge (reads like light catching the row from
+ * the left), a 2px solid violet spine with an adjacent glow so the
+ * spine looks lit rather than drawn, a subtle top-edge highlight to
+ * give the row a ridge, and a soft outer glow so the row feels lifted
+ * off the sidebar surface rather than painted on it. The selector is
+ * scoped to `<aside> li` so the rule only fires in the sidebar, not
+ * on other slate-800 surfaces.
+ *
+ * 2026-04-23 rev: Dave noted the first pass of this (flat 12% violet
+ * tint + 3px bar + single inner shadow) looked "stuck on" next to the
+ * now-polished glass asides. This version replaces the flat fill with
+ * a left-weighted gradient and stacks two outward glows so the active
+ * row reads as a real selection state. */
+[data-theme='midnight-glass'] aside li[class*='bg-slate-800'] {
+  position: relative;
+  border-left: 2px solid rgb(var(--bearings-sky-500));
+  background-color: transparent !important;
+  background-image: linear-gradient(
+    90deg,
+    rgb(var(--bearings-sky-500) / 0.32) 0%,
+    rgb(var(--bearings-sky-500) / 0.14) 45%,
+    rgb(var(--bearings-sky-500) / 0.04) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    inset 2px 0 8px -2px rgb(var(--bearings-sky-500) / 0.55),
+    inset 0 0 28px -10px rgb(var(--bearings-sky-500) / 0.40),
+    0 6px 18px -8px rgb(var(--bearings-sky-500) / 0.45);
+}
+
+/* ----- Active session row: text contrast -----
+ * The violet gradient on the selected row washes out the default
+ * slate-100 body text, so we lift every text node inside the active
+ * row to near-white and pair it with a thin dark text-shadow. Bold
+ * the primary label via `font-weight` so the title reads as
+ * unambiguously selected at a glance. Muted variants (timestamps,
+ * kind markers) get explicitly brightened too — without this, classes
+ * like `text-slate-500` still apply and those elements disappear
+ * into the violet.
+ *
+ * The body rule uses high specificity (type + attr + descendant) so
+ * utility text colors on nested spans lose the cascade without us
+ * having to !important every selector. */
+[data-theme='midnight-glass'] aside li[class*='bg-slate-800'] {
+  color: rgb(248 250 252);
+  font-weight: 500;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='midnight-glass'] aside li[class*='bg-slate-800'] [class*='text-slate-4'],
+[data-theme='midnight-glass'] aside li[class*='bg-slate-800'] [class*='text-slate-5'],
+[data-theme='midnight-glass'] aside li[class*='bg-slate-800'] [class*='text-slate-6'] {
+  color: rgb(226 232 240);
+}
+
+/* ----- Headings: slightly brighter + tighter tracking -----
+ * Kept deliberately mild so dense lists/tables don't feel stretched. */
+[data-theme='midnight-glass'] h1,
+[data-theme='midnight-glass'] h2 {
+  letter-spacing: 0.01em;
+}
+
+/* ----- Message cards: shadow + hairline, no backdrop filter -----
+ * An earlier revision of this rule applied `backdrop-filter: blur(8px)`
+ * to `<article>` for card-level glass. Dave reported 2026-04-23 that
+ * the composer textarea was rendering partly below the viewport until
+ * you typed into it, at which point `autosizeTextarea()` (see
+ * Conversation.svelte) forced a reflow and the layout corrected.
+ *
+ * Root cause: each `backdrop-filter` element becomes its own
+ * compositing layer in Chromium. A conversation with many `<article>`
+ * turns inside a `flex-1 overflow-y-auto` messages column produces
+ * enough layers that the initial layout settles before the composer's
+ * flex sibling gets its final position — the form's bottom edge ends
+ * up off-screen until the next reflow. Asides are safe (there are
+ * only two per page) but per-message glass is not.
+ *
+ * Fix: keep the visible-card effect (inner highlight ridge, violet
+ * hairline, drop shadow) but drop the translucency + blur. Cards
+ * still read as discrete surfaces against the aurora-washed body,
+ * just without the glass refraction the asides have.
+ *
+ * If we want real glass on messages later, the right move is to
+ * restructure the composer so its position doesn't depend on flex
+ * sibling height settling synchronously — or to virtualize the
+ * message list so only visible articles are composited. Neither is
+ * in scope for a theme pass. */
+[data-theme='midnight-glass'] article {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 0 0 1px rgb(var(--bearings-sky-500) / 0.05),
+    0 6px 20px -8px rgba(0, 0, 0, 0.55);
+}
+
+/* ----- Code blocks: inner violet glow -----
+ * Stronger than before (was 6%, now 12%) so the glow is actually
+ * visible under the new warm-navy base. Applies to Shiki-rendered
+ * wrappers and hand-authored `<pre>`. */
+[data-theme='midnight-glass'] div[data-bearings-code-block],
+[data-theme='midnight-glass'] pre {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--bearings-sky-500) / 0.08),
+    inset 0 0 24px rgb(var(--bearings-sky-500) / 0.12);
+}
+
+/* ----- Buttons: transition baseline ----- */
+[data-theme='midnight-glass'] button {
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    filter 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* ----- Primary action buttons: real gradient + lift -----
+ * Action buttons in the codebase use `bg-emerald-{600,700}` (confirm /
+ * submit flavors), `bg-sky-6` (fewer but present), and `bg-rose-{600,
+ * 700}` (destructive). Rather than painting every button, we target
+ * those three families specifically so Midnight Glass lights up the
+ * "real" CTA surface — send buttons, save buttons, delete buttons —
+ * while leaving icon/chip controls alone.
+ *
+ * The `background-image` overlay blends with Tailwind's
+ * `background-color`, so hover-class changes (`hover:bg-emerald-500`)
+ * still flip the base color; we just stack a brighter gradient on top. */
+[data-theme='midnight-glass'] button[class*='bg-emerald-6'],
+[data-theme='midnight-glass'] button[class*='bg-emerald-7'],
+[data-theme='midnight-glass'] button[class*='bg-sky-6'],
+[data-theme='midnight-glass'] button[class*='bg-rose-6'],
+[data-theme='midnight-glass'] button[class*='bg-rose-7'] {
+  background-image: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.12) 0%,
+    rgb(255 255 255 / 0) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 2px 6px -2px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme='midnight-glass'] button[class*='bg-emerald-6']:hover:not(:disabled),
+[data-theme='midnight-glass'] button[class*='bg-emerald-7']:hover:not(:disabled),
+[data-theme='midnight-glass'] button[class*='bg-sky-6']:hover:not(:disabled),
+[data-theme='midnight-glass'] button[class*='bg-rose-6']:hover:not(:disabled),
+[data-theme='midnight-glass'] button[class*='bg-rose-7']:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.16),
+    0 8px 20px -4px rgba(0, 0, 0, 0.55);
+}
+
+[data-theme='midnight-glass'] button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ----- Slate button lift (secondary actions) -----
+ * Tiny controls that use `bg-slate-{700,800}` (the "ghost" button
+ * style) keep their base color but pick up a subtle hover lift so the
+ * whole UI feels uniformly responsive, not "primary buttons animate,
+ * everything else is dead." */
+[data-theme='midnight-glass'] button[class*='bg-slate-7']:hover:not(:disabled),
+[data-theme='midnight-glass'] button[class*='bg-slate-8']:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.5);
+}
+
+/* ----- Focus ring: violet glow to match the primary accent -----
+ * `focus:ring-sky-500` across the codebase now resolves to the new
+ * violet; we add a soft 3px outer glow on focus-visible so keyboard
+ * navigation reads clearly. */
+[data-theme='midnight-glass'] :focus-visible {
+  outline-color: rgb(var(--bearings-sky-500));
+}
+
+[data-theme='midnight-glass'] button:focus-visible,
+[data-theme='midnight-glass'] a:focus-visible,
+[data-theme='midnight-glass'] [role='button']:focus-visible,
+[data-theme='midnight-glass'] input:focus-visible,
+[data-theme='midnight-glass'] textarea:focus-visible,
+[data-theme='midnight-glass'] select:focus-visible {
+  box-shadow: 0 0 0 3px rgb(var(--bearings-sky-500) / 0.3);
+}
+
+/* ----- Status-dot helpers (opt-in utility classes) -----
+ * Unchanged from the first pass. Available for components to adopt
+ * when they render a live/idle/error dot. */
+[data-theme='midnight-glass'] .status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+[data-theme='midnight-glass'] .status-dot--green {
+  background-color: rgb(var(--bearings-emerald-500));
+  box-shadow: 0 0 8px rgb(var(--bearings-emerald-500) / 0.75);
+}
+
+[data-theme='midnight-glass'] .status-dot--amber {
+  background-color: rgb(var(--bearings-amber-500));
+  box-shadow: 0 0 8px rgb(var(--bearings-amber-500) / 0.75);
+}
+
+[data-theme='midnight-glass'] .status-dot--rose {
+  background-color: rgb(var(--bearings-rose-500));
+  box-shadow: 0 0 8px rgb(var(--bearings-rose-500) / 0.75);
+}
+
+[data-theme='midnight-glass'] .status-dot--sky {
+  background-color: rgb(var(--bearings-sky-500));
+  box-shadow: 0 0 8px rgb(var(--bearings-sky-500) / 0.75);
+}
+
+/* ----- Micro-interactions ----- */
+[data-theme='midnight-glass'] html {
+  scroll-behavior: smooth;
+}

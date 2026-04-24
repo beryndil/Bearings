@@ -1,3 +1,22 @@
+/* Theme tokens + active theme treatment.
+ *
+ * `tokens.css` declares the palette CSS variables for every bundled
+ * theme (`:root`/`midnight-glass` + saved `default`). The Tailwind color
+ * scale in `tailwind.config.js` references these variables, so every
+ * `bg-slate-900` / `text-emerald-400` etc. in components follows the
+ * active theme without a rewrite.
+ *
+ * `midnight-glass.css` adds the non-color visual treatment — body
+ * gradient, panel depth, button lift, focus glow — scoped under
+ * `[data-theme='midnight-glass']`. Loading it here is harmless for the
+ * `default` theme because the selector short-circuits.
+ *
+ * CSS `@import` rules must precede every other rule, including the
+ * Tailwind directives below. Vite resolves the relative paths at build
+ * time. */
+@import './lib/themes/tokens.css';
+@import './lib/themes/midnight-glass.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

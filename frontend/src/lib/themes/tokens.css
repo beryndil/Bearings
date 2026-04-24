@@ -1,0 +1,188 @@
+/*
+ * Bearings theme tokens
+ * ---------------------
+ * Each palette is declared as RGB channel triples (no commas, no alpha) so
+ * they can be composed with Tailwind's `<alpha-value>` mechanism. See
+ * `tailwind.config.js`, where every used Tailwind color scale (`slate`,
+ * `emerald`, `amber`, `rose`, `sky`, `orange`, `red`, `teal`, `indigo`) is
+ * redefined to reference one of these variables. That means existing
+ * `bg-slate-900`, `text-emerald-400/80`, etc. keep working unchanged — the
+ * underlying channel values just flip when `[data-theme]` changes on <html>.
+ *
+ * Two themes are bundled in v0.x:
+ *   - `midnight-glass`  (active default; set on <html> in app.html)
+ *   - `default`         (saved snapshot of the pre-Midnight-Glass palette)
+ *
+ * `:root` carries the midnight-glass values so an element without an
+ * explicit `data-theme` attribute still renders correctly (safe fallback).
+ * A future theme switcher only needs to toggle the attribute value.
+ */
+
+/* ----- Active default: Midnight Glass ----- */
+:root,
+[data-theme='midnight-glass'] {
+  /* Slate — warmer navy base so the UI reads as clearly different from
+     Tailwind's cool-gray default slate. The blue channel is pushed well
+     above the green channel across the whole scale; at darker shades
+     the hue is a deep ink-navy, at lighter shades it's a dusty
+     periwinkle. Dave's feedback 2026-04-23: the original Midnight Glass
+     palette swap was imperceptible side-by-side against Tailwind's
+     default; this rev intentionally puts real distance between them. */
+  --bearings-slate-50: 249 251 254;
+  --bearings-slate-100: 242 246 252;
+  --bearings-slate-200: 230 237 248;
+  --bearings-slate-300: 197 210 234;
+  --bearings-slate-400: 159 176 208;
+  --bearings-slate-500: 120 138 175;
+  --bearings-slate-600: 58 71 114;
+  --bearings-slate-700: 42 53 86;
+  --bearings-slate-800: 28 37 64;
+  --bearings-slate-900: 20 26 46;
+  --bearings-slate-950: 10 14 28;
+
+  /* Sky — remapped to violet (#8B7CFF family). This is the biggest
+     deviation from the Tailwind default: `bg-sky-*` is used throughout
+     the codebase for primary interactive states, so remapping it here
+     shifts every focus ring, link, and primary action button from
+     cyan-blue to a clearly-non-blue violet. Dev-tool-appropriate
+     (Linear/Raycast lean on a similar violet) without looking
+     consumer-y. */
+  --bearings-sky-200: 216 205 255;
+  --bearings-sky-300: 185 168 255;
+  --bearings-sky-400: 154 133 255;
+  --bearings-sky-500: 139 124 255;
+  --bearings-sky-600: 113 98 219;
+  --bearings-sky-800: 61 52 128;
+  --bearings-sky-900: 31 26 80;
+
+  /* Emerald — grass-green (#3FB960), warmer and brighter than the
+     Tailwind default's teal-leaning #10B981. Enough yellow in the hue
+     that "success" buttons read as distinctly not-mint. */
+  --bearings-emerald-200: 180 240 196;
+  --bearings-emerald-300: 126 231 154;
+  --bearings-emerald-400: 86 201 119;
+  --bearings-emerald-500: 63 185 96;
+  --bearings-emerald-600: 52 160 81;
+  --bearings-emerald-700: 35 120 60;
+  --bearings-emerald-900: 15 65 32;
+
+  /* Amber — warning (#D29922 / amber-500). 200/800/950 are
+     interpolated so deep warning backgrounds and pale warning text
+     still read as amber against Midnight Glass surfaces. */
+  --bearings-amber-100: 247 225 176;
+  --bearings-amber-200: 245 208 130;
+  --bearings-amber-300: 242 192 90;
+  --bearings-amber-400: 227 171 56;
+  --bearings-amber-500: 210 153 34;
+  --bearings-amber-800: 130 90 20;
+  --bearings-amber-900: 77 54 10;
+  --bearings-amber-950: 45 30 8;
+
+  /* Rose — error (#F85149 / rose-500). Dimmer shades tuned for
+     destructive buttons and error outlines against dark panels. */
+  --bearings-rose-200: 255 180 175;
+  --bearings-rose-300: 255 145 138;
+  --bearings-rose-400: 255 110 102;
+  --bearings-rose-500: 248 81 73;
+  --bearings-rose-600: 220 65 57;
+  --bearings-rose-700: 185 50 45;
+  --bearings-rose-800: 150 35 30;
+  --bearings-rose-900: 90 20 18;
+  --bearings-rose-950: 55 13 12;
+
+  /* Red — ContextMeter flash band. Keep saturated so the pulse reads
+     as a clear "danger" even against the dark base. red-600 mirrors
+     rose-600 since the Midnight Glass error hue is unified. */
+  --bearings-red-100: 255 200 195;
+  --bearings-red-500: 248 81 73;
+  --bearings-red-600: 220 65 57;
+  --bearings-red-900: 100 25 22;
+
+  /* Orange — intermediate pressure band (ContextMeter 75–89%).
+     600 interpolated for button/accent use. */
+  --bearings-orange-100: 252 225 192;
+  --bearings-orange-600: 210 120 50;
+  --bearings-orange-900: 120 55 20;
+
+  /* Teal — tag_memory layer badge. Cooled toward cyan to match the
+     glass aesthetic without colliding with the primary blue. */
+  --bearings-teal-300: 95 210 200;
+  --bearings-teal-900: 15 65 65;
+
+  /* Indigo — session_description badge. Violet-leaning so tag/session
+     badges remain visually distinct. 500 interpolated between 300/900
+     for mid-weight accent uses. */
+  --bearings-indigo-300: 160 170 245;
+  --bearings-indigo-500: 95 100 215;
+  --bearings-indigo-900: 40 40 115;
+}
+
+/* ----- Saved: pre-Midnight-Glass palette -----
+ * Exact Tailwind v3 default RGB values, captured as a named theme so a
+ * future switcher can restore the original look. Do not edit these unless
+ * the goal is to resurrect the legacy look — they are meant to be stable.
+ */
+[data-theme='default'] {
+  --bearings-slate-50: 248 250 252;
+  --bearings-slate-100: 241 245 249;
+  --bearings-slate-200: 226 232 240;
+  --bearings-slate-300: 203 213 225;
+  --bearings-slate-400: 148 163 184;
+  --bearings-slate-500: 100 116 139;
+  --bearings-slate-600: 71 85 105;
+  --bearings-slate-700: 51 65 85;
+  --bearings-slate-800: 30 41 59;
+  --bearings-slate-900: 15 23 42;
+  --bearings-slate-950: 2 6 23;
+
+  --bearings-sky-200: 186 230 253;
+  --bearings-sky-300: 125 211 252;
+  --bearings-sky-400: 56 189 248;
+  --bearings-sky-500: 14 165 233;
+  --bearings-sky-600: 2 132 199;
+  --bearings-sky-800: 7 89 133;
+  --bearings-sky-900: 12 74 110;
+
+  --bearings-emerald-200: 167 243 208;
+  --bearings-emerald-300: 110 231 183;
+  --bearings-emerald-400: 52 211 153;
+  --bearings-emerald-500: 16 185 129;
+  --bearings-emerald-600: 5 150 105;
+  --bearings-emerald-700: 4 120 87;
+  --bearings-emerald-900: 6 78 59;
+
+  --bearings-amber-100: 254 243 199;
+  --bearings-amber-200: 253 230 138;
+  --bearings-amber-300: 252 211 77;
+  --bearings-amber-400: 251 191 36;
+  --bearings-amber-500: 245 158 11;
+  --bearings-amber-800: 146 64 14;
+  --bearings-amber-900: 120 53 15;
+  --bearings-amber-950: 69 26 3;
+
+  --bearings-rose-200: 254 205 211;
+  --bearings-rose-300: 253 164 175;
+  --bearings-rose-400: 251 113 133;
+  --bearings-rose-500: 244 63 94;
+  --bearings-rose-600: 225 29 72;
+  --bearings-rose-700: 190 18 60;
+  --bearings-rose-800: 159 18 57;
+  --bearings-rose-900: 136 19 55;
+  --bearings-rose-950: 76 5 25;
+
+  --bearings-red-100: 254 226 226;
+  --bearings-red-500: 239 68 68;
+  --bearings-red-600: 220 38 38;
+  --bearings-red-900: 127 29 29;
+
+  --bearings-orange-100: 255 237 213;
+  --bearings-orange-600: 234 88 12;
+  --bearings-orange-900: 124 45 18;
+
+  --bearings-teal-300: 94 234 212;
+  --bearings-teal-900: 19 78 74;
+
+  --bearings-indigo-300: 165 180 252;
+  --bearings-indigo-500: 99 102 241;
+  --bearings-indigo-900: 49 46 129;
+}
