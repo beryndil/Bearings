@@ -514,6 +514,17 @@ it then. Do not exercise the historical checklists as-is.
   - P0 ✅ shipped 8a5a9d4 — pulse + elapsed seconds + sub-agent subtitle
     on running `LiveToolCall`s in `MessageTurn.svelte`. Open-by-default
     `<details>` while any call runs.
+    - ⚠️ **Partially reverted 2026-04-24 (94bc22b).** The open-by-default
+      piece produced visible expand/collapse churn on every tool call
+      (block flashed open when the first tool ran, slammed shut when the
+      last finished). `open={runningCount > 0}` removed — `<details>`
+      state is now purely user-controlled. To keep liveness visible when
+      the user leaves the block collapsed during a long sub-agent wait,
+      the sub-agent description is mirrored into the summary row
+      (`data-testid="tool-work-subagent-subtitle"`) next to the pulsing
+      running-count badge. Pulse, elapsed-seconds, and in-pre subtitle
+      from the original P0 ship remain intact; only the auto-open
+      behavior was rolled back.
   - P1 ✅ shipped 95bb9c2 — `ToolProgress` event in `events.py` and a
     3s asyncio ticker in `runner.py` per in-flight `tool_call_id`.
     Fan-out only (ephemeral via `_emit_ephemeral`), not in the ring
