@@ -400,6 +400,45 @@ class Driver:
             self._failed_item_id = item_id
             self._failure_reason = reason
         log.warning("autonomous driver failure on item %s: %s", item_id, reason)
+        # Persist the reason into the item's `notes` column so the
+        # ChecklistView can render it beside the item without any new
+        # UI wiring — existing notes rendering already surfaces
+        # whatever's here. Prepend with a `[auto-run]` marker so a
+        # re-run can find and replace the prior failure entry
+        # without clobbering user-authored notes above it.
+        await self._persist_failure_note(item_id, reason)
+
+    async def _persist_failure_note(self, item_id: int, reason: str) -> None:
+        """Write the failure reason into `checklist_items.notes`.
+
+        If the item already carries user-authored notes, the failure
+        line is appended after a blank line so the agent's original
+        instruction stays at the top. If a prior `[auto-run]` line
+        exists (from an earlier run), it's stripped before the new
+        one is added — we only keep the most recent failure to avoid
+        notes growing unbounded across retries.
+
+        Best-effort: persistence failures are logged and swallowed.
+        The driver's in-memory `failure_reason` is the source of truth
+        for the HTTP status endpoint; the note is a UI convenience."""
+        try:
+            item = await store.get_item(self._conn, item_id)
+            if item is None:
+                return
+            existing = item.get("notes") or ""
+            # Strip any prior auto-run line (from a previous halted
+            # run on the same item).
+            cleaned = "\n".join(
+                line for line in existing.splitlines() if not line.startswith("[auto-run]")
+            ).rstrip()
+            note_line = f"[auto-run] {reason}"
+            new_notes = f"{cleaned}\n\n{note_line}" if cleaned else note_line
+            await store.update_item(self._conn, item_id, fields={"notes": new_notes})
+        except Exception:
+            log.exception(
+                "autonomous driver: failed to persist failure note for item %s",
+                item_id,
+            )
 
     async def _request_handoff_nudge(self, leg_session_id: str) -> str:
         """Submit one extra turn on the current leg asking the agent

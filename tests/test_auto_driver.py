@@ -457,6 +457,94 @@ async def test_followup_depth_cap_halts_failure(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_failure_reason_persists_to_item_notes(tmp_path: Path) -> None:
+    """When the driver halts an item with failure, the reason is
+    written to `checklist_items.notes` so the existing ChecklistView
+    surfaces it without any new UI. Item had no prior notes — the
+    note is just the `[auto-run]` line."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        item = await create_item(conn, checklist_id, label="silent-fail")
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={item["id"]: ["just prose, no sentinel"]},
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver.drive()
+        refreshed = await get_item(conn, item["id"])
+        assert refreshed is not None
+        notes = refreshed.get("notes") or ""
+        assert notes.startswith("[auto-run]")
+        assert "completion sentinel" in notes
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_failure_note_preserves_user_authored_notes(tmp_path: Path) -> None:
+    """Pre-existing user notes on the item stay at the top; the
+    auto-run failure line is appended after a blank line."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        item = await create_item(
+            conn,
+            checklist_id,
+            label="work-item",
+            notes="user's original instructions: do X carefully.",
+        )
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={item["id"]: ["silent"]},
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver.drive()
+        refreshed = await get_item(conn, item["id"])
+        assert refreshed is not None
+        notes = refreshed["notes"] or ""
+        assert notes.startswith("user's original instructions")
+        assert "[auto-run]" in notes
+        # Separating blank line between the two.
+        assert "\n\n[auto-run]" in notes
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_failure_note_replaces_prior_autorun_line(tmp_path: Path) -> None:
+    """A second failure run on the same item replaces the first
+    `[auto-run]` line rather than stacking. Prevents unbounded
+    growth across retries."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        item = await create_item(conn, checklist_id, label="retry-target")
+        runtime = StubRuntime(
+            conn=conn,
+            # Both runs go silent. Fresh run = fresh driver instance
+            # each time (the safety-cap handling resets state).
+            turns_by_item={item["id"]: ["silent run 1", "silent run 2"]},
+        )
+        driver1 = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver1.drive()
+        first = await get_item(conn, item["id"])
+        assert first is not None
+        assert (first["notes"] or "").count("[auto-run]") == 1
+
+        # Reset the checked_at (first run didn't check it, but make
+        # sure it's unchecked for round 2) and re-run.
+        driver2 = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver2.drive()
+        second = await get_item(conn, item["id"])
+        assert second is not None
+        notes = second["notes"] or ""
+        assert notes.count("[auto-run]") == 1  # still one, not two
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_silent_agent_exit_halts_failure(tmp_path: Path) -> None:
     conn = await init_db(tmp_path / "db.sqlite")
     try:
