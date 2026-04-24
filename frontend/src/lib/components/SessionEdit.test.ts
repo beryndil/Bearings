@@ -35,6 +35,7 @@ function session(overrides: Partial<Session> = {}): Session {
     last_viewed_at: null,
     tag_ids: [],
     pinned: false,
+    error_pending: false,
     ...overrides
   };
 }

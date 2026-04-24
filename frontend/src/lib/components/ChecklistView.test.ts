@@ -39,6 +39,7 @@ function session(overrides: Partial<Session> = {}): Session {
     last_viewed_at: null,
     tag_ids: [],
     pinned: false,
+    error_pending: false,
     ...overrides
   };
 }
@@ -197,7 +198,8 @@ const PAIRED_CHAT_SESSION: Session = {
   last_completed_at: null,
   last_viewed_at: null,
   tag_ids: [],
-  pinned: false
+  pinned: false,
+  error_pending: false
 };
 
 describe('ChecklistView paired-chat affordance', () => {

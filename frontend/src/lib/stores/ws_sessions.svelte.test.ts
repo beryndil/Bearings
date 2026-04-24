@@ -18,6 +18,7 @@ afterEach(() => {
   sessions.list = [];
   sessions.selectedId = null;
   sessions.running = new Set();
+  sessions.awaiting = new Set();
   sessions.filter = {};
 });
 
@@ -45,6 +46,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     last_viewed_at: null,
     tag_ids: [],
     pinned: false,
+    error_pending: false,
     ...overrides
   };
 }
@@ -80,6 +82,36 @@ describe('SessionsWsConnection.handleFrame', () => {
     expect(sessions.running.has('a')).toBe(true);
     conn.handleFrame({ kind: 'runner_state', session_id: 'a', is_running: false });
     expect(sessions.running.has('a')).toBe(false);
+  });
+
+  it('runner_state frame carries awaiting_user to the store', () => {
+    sessions.running = new Set();
+    sessions.awaiting = new Set();
+    const conn = new SessionsWsConnection(fakeSocketFactory);
+    conn.handleFrame({
+      kind: 'runner_state',
+      session_id: 'a',
+      is_running: true,
+      is_awaiting_user: true
+    });
+    expect(sessions.running.has('a')).toBe(true);
+    expect(sessions.awaiting.has('a')).toBe(true);
+    conn.handleFrame({
+      kind: 'runner_state',
+      session_id: 'a',
+      is_running: true,
+      is_awaiting_user: false
+    });
+    expect(sessions.awaiting.has('a')).toBe(false);
+  });
+
+  it('runner_state frame without is_awaiting_user defaults to not awaiting', () => {
+    // Pre-0.10 broadcaster omits the field; reducer must not crash and
+    // must clear any stale awaiting entry for this session.
+    sessions.awaiting = new Set(['a']);
+    const conn = new SessionsWsConnection(fakeSocketFactory);
+    conn.handleFrame({ kind: 'runner_state', session_id: 'a', is_running: true });
+    expect(sessions.awaiting.has('a')).toBe(false);
   });
 });
 

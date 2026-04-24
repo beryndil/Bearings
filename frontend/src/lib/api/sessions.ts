@@ -68,6 +68,13 @@ export type Session = {
    * and so the frontend round-trips the column through PATCH without
    * silently dropping it. */
   pinned: boolean;
+  /** Latched on an `ErrorEvent` fire server-side, cleared on the next
+   * successful `MessageComplete` (migration 0029). Feeds the red-
+   * flashing "look at this now" sidebar indicator alongside the
+   * runner's `is_awaiting_user` signal. Survives page reload so a
+   * crashed turn stays visible without the user having to open the
+   * conversation. Defaults to `false` on any pre-0029 row. */
+  error_pending: boolean;
 };
 
 export type SessionCreate = {
@@ -197,6 +204,17 @@ export function listRunningSessions(
   fetchImpl: typeof fetch = fetch
 ): Promise<string[]> {
   return jsonFetch<string[]>(fetchImpl, '/api/sessions/running');
+}
+
+/** Session ids whose runner is currently parked on a `can_use_tool`
+ * decision (tool-use approval OR AskUserQuestion). Drives the red-
+ * flashing "look at this now" indicator as the poll fallback when the
+ * `/ws/sessions` broadcast is down; the live path carries this state
+ * on each `runner_state` frame's `is_awaiting_user` field. */
+export function listAwaitingSessions(
+  fetchImpl: typeof fetch = fetch
+): Promise<string[]> {
+  return jsonFetch<string[]>(fetchImpl, '/api/sessions/awaiting');
 }
 
 export function listSessions(

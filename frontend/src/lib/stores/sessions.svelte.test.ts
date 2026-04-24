@@ -23,6 +23,7 @@ afterEach(() => {
   sessions.loading = false;
   sessions.error = null;
   sessions.running = new Set();
+  sessions.awaiting = new Set();
   sessions.filter = {};
 });
 
@@ -50,6 +51,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     last_viewed_at: null,
     tag_ids: [],
     pinned: false,
+    error_pending: false,
     ...overrides
   };
 }
@@ -659,6 +661,29 @@ describe('sessions.applyRunnerState', () => {
     sessions.running = new Set();
     sessions.applyRunnerState('a', true);
     expect(sessions.running.has('a')).toBe(true);
+  });
+
+  it('populates the awaiting set when is_awaiting_user is true', () => {
+    sessions.running = new Set();
+    sessions.awaiting = new Set();
+    sessions.applyRunnerState('a', true, true);
+    expect(sessions.running.has('a')).toBe(true);
+    expect(sessions.awaiting.has('a')).toBe(true);
+  });
+
+  it('clears awaiting when a later frame reports the decision resolved', () => {
+    sessions.running = new Set();
+    sessions.awaiting = new Set(['a']);
+    sessions.applyRunnerState('a', true, false);
+    expect(sessions.awaiting.has('a')).toBe(false);
+    expect(sessions.running.has('a')).toBe(true);
+  });
+
+  it('defaults awaiting to false when the field is omitted (pre-0.10 frame)', () => {
+    sessions.running = new Set();
+    sessions.awaiting = new Set(['a']);
+    sessions.applyRunnerState('a', true);
+    expect(sessions.awaiting.has('a')).toBe(false);
   });
 
   it('removes an id from the running set when is_running is false', () => {

@@ -41,6 +41,7 @@ function session(overrides: Partial<Session> = {}): Session {
     message_count: 0,
     total_cost_usd: 0,
     pinned: false,
+    error_pending: false,
     tag_ids: [],
     checklist_item_id: null,
     ...overrides

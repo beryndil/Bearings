@@ -269,22 +269,33 @@
     await sessions.remove(id);
   }
 
-  /** True when the server-side runner for this session has a turn in
-   * flight. The sidebar badge uses this so Daisy can see at a glance
-   * which sessions are still working after she's walked away. */
-  function isRunning(id: string): boolean {
-    return sessions.running.has(id);
-  }
-
-  /** True when the session has produced output since the user last
-   * looked at it — drives the amber "finished but unviewed" dot.
-   * Suppressed while the session is actively running so the green
-   * ping owns the slot during live work. */
-  function isUnviewed(session: api.Session): boolean {
-    if (isRunning(session.id)) return false;
-    if (!session.last_completed_at) return false;
-    if (!session.last_viewed_at) return true;
-    return session.last_completed_at > session.last_viewed_at;
+  /** Resolve the three-state sidebar indicator for a session row.
+   *
+   *   'red'    — look at it now. Runner is parked on a user decision
+   *              (tool-use approval OR AskUserQuestion) OR the last
+   *              turn errored and hasn't been cleared by a subsequent
+   *              successful turn (server-side `error_pending` latch).
+   *              Clears the moment the user submits the pending
+   *              answer or a later turn completes without crashing.
+   *   'orange' — the agent is actively working a turn that isn't
+   *              currently parked on a decision. Clears when the turn
+   *              ends.
+   *   null     — nothing to signal. Covers idle, closed, and the
+   *              previously-shown "finished but unviewed" state,
+   *              which was dropped in the v0.10 redesign (row order
+   *              + timestamp already signal recency).
+   *
+   * Priority (red > orange > null): if a turn is in flight AND the
+   * runner is parked on a decision, the park wins (it's the thing
+   * blocking progress). The amber "unviewed output" state is gone —
+   * intentionally — so sessions that finished while the user was
+   * elsewhere blend into the same "no dot" bucket as truly idle rows.
+   */
+  function indicatorState(session: api.Session): 'red' | 'orange' | null {
+    if (sessions.awaiting.has(session.id)) return 'red';
+    if (session.error_pending) return 'red';
+    if (sessions.running.has(session.id)) return 'orange';
+    return null;
   }
 
   function formatTimestamp(ts: string): string {
@@ -426,6 +437,7 @@
   {#snippet sessionRow(session: api.Session)}
     {@const medals = medallionData(session)}
     {@const isBulkSelected = sessionSelection.ids.has(session.id)}
+    {@const indicator = indicatorState(session)}
     <li
       class="group flex items-stretch gap-1 rounded hover:bg-slate-800 {sessions.selectedId ===
       session.id
@@ -470,38 +482,48 @@
           >
             <!-- Row 1, Col 1: activity indicator slot. Width is
                  always reserved so titles align whether or not an
-                 indicator is showing. -->
+                 indicator is showing. Two states share the same ping
+                 geometry — only the color differs — so the animation
+                 rhythm reads identically for "working" and "look at
+                 this now"; color carries the meaning. -->
             <div class="row-start-1 col-start-1 flex items-center justify-center">
-              {#if isRunning(session.id)}
-                <!-- Live-run indicator: emerald ping + solid dot.
-                     10 px dot — big enough to read at a glance on
-                     both selected (bg-slate-800) and unselected rows
-                     without crowding the title column. -->
+              {#if indicator === 'red'}
+                <!-- Red flashing: needs attention now. Covers both
+                     "runner parked on approval/AskUserQuestion" (live
+                     axis from sessions.awaiting) and "last turn
+                     errored" (latched server-side on error_pending).
+                     Clears only when the real problem resolves — user
+                     submits the pending answer, or a subsequent turn
+                     completes without crashing. -->
+                <span
+                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
+                  aria-label="Needs attention now"
+                  title="Needs attention — agent is waiting on you, or the last turn errored"
+                  data-testid="indicator-red"
+                >
+                  <span
+                    class="absolute inline-flex h-full w-full rounded-full
+                      bg-red-400 opacity-60 animate-ping"
+                  ></span>
+                  <span
+                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
+                  ></span>
+                </span>
+              {:else if indicator === 'orange'}
+                <!-- Orange flashing: agent is actively working a turn
+                     and not parked on a user decision. -->
                 <span
                   class="relative inline-flex h-2.5 w-2.5 shrink-0"
                   aria-label="Agent is working"
                   title="Agent is working — you can switch away and come back"
+                  data-testid="indicator-orange"
                 >
                   <span
                     class="absolute inline-flex h-full w-full rounded-full
-                      bg-emerald-400 opacity-60 animate-ping"
+                      bg-orange-400 opacity-60 animate-ping"
                   ></span>
                   <span
-                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
-                  ></span>
-                </span>
-              {:else if isUnviewed(session)}
-                <!-- Finished-but-unviewed indicator. Same 10 px as
-                     the live-run dot so both states read with the
-                     same visual weight. -->
-                <span
-                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
-                  aria-label="Session finished — unread"
-                  title="Session finished — unread since last view"
-                  data-testid="unviewed-dot"
-                >
-                  <span
-                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400"
+                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"
                   ></span>
                 </span>
               {/if}

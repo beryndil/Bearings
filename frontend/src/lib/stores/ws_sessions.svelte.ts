@@ -31,7 +31,15 @@ const CODE_UNAUTHORIZED = 4401;
 
 type UpsertFrame = { kind: 'upsert'; session: api.Session };
 type DeleteFrame = { kind: 'delete'; session_id: string };
-type RunnerStateFrame = { kind: 'runner_state'; session_id: string; is_running: boolean };
+type RunnerStateFrame = {
+  kind: 'runner_state';
+  session_id: string;
+  is_running: boolean;
+  /** v0.10+ red-flashing axis. Optional because pre-0.10 broadcasters
+   * omit the field; the reducer defaults it to false when absent so
+   * rolling-deploy clients degrade gracefully. */
+  is_awaiting_user?: boolean;
+};
 type SessionsWsFrame = UpsertFrame | DeleteFrame | RunnerStateFrame;
 
 class SessionsWsConnection {
@@ -77,7 +85,11 @@ class SessionsWsConnection {
     } else if (frame.kind === 'delete') {
       sessions.applyDelete(frame.session_id);
     } else if (frame.kind === 'runner_state') {
-      sessions.applyRunnerState(frame.session_id, frame.is_running);
+      sessions.applyRunnerState(
+        frame.session_id,
+        frame.is_running,
+        frame.is_awaiting_user ?? false
+      );
     }
   }
 

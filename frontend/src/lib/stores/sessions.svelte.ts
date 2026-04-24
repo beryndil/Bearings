@@ -37,9 +37,20 @@ class SessionStore {
   filter = $state<api.SessionFilter>({});
 
   /** Session ids whose server-side runner has a turn in flight right
-   * now. Polled from `/api/sessions/running`; the UI lights up a
-   * badge on each so the user can see background work at a glance. */
+   * now. Polled from `/api/sessions/running`; the UI lights up the
+   * orange-flashing "working" indicator on each. A session appearing
+   * in BOTH `running` and `awaiting` is red-flashing (the agent is
+   * running but parked on a user decision). */
   running = $state<Set<string>>(new Set());
+
+  /** Session ids whose runner is currently parked on a `can_use_tool`
+   * decision — tool-use approval OR AskUserQuestion. Polled from
+   * `/api/sessions/awaiting` in parallel with `running` as the
+   * fallback path when the `/ws/sessions` broadcast is down; live
+   * updates arrive via `applyRunnerState` from the broadcast's
+   * per-frame `is_awaiting_user` field. Drives the red-flashing
+   * "look at this now" indicator. */
+  awaiting = $state<Set<string>>(new Set());
 
   /** Monotonically increasing counter that ticks every time the
    * currently-selected session is bumped to the top of the list
@@ -356,16 +367,29 @@ class SessionStore {
   }
 
   /** Apply a runner_state frame from the `/ws/sessions` broadcast
-   * channel. The `running` set isn't view-scoped so we always apply
-   * regardless of filter. Reassigns the Set so Svelte 5 consumers
-   * re-read — the runes proxy does track in-place mutation, but matching
-   * the pattern used elsewhere in this store keeps the reactive
-   * behavior obvious. */
-  applyRunnerState(sessionId: string, isRunning: boolean): void {
-    const next = new Set(this.running);
-    if (isRunning) next.add(sessionId);
-    else next.delete(sessionId);
-    this.running = next;
+   * channel. The `running` / `awaiting` sets aren't view-scoped so we
+   * always apply regardless of filter. Reassigns each Set so Svelte 5
+   * consumers re-read — the runes proxy does track in-place mutation,
+   * but matching the pattern used elsewhere in this store keeps the
+   * reactive behavior obvious.
+   *
+   * `isAwaitingUser` is optional so pre-0.10 broadcast frames (which
+   * omit the field) degrade to "not awaiting" without blowing up the
+   * reducer. Once the whole fleet is on 0.10+ this default can go. */
+  applyRunnerState(
+    sessionId: string,
+    isRunning: boolean,
+    isAwaitingUser: boolean = false
+  ): void {
+    const nextRunning = new Set(this.running);
+    if (isRunning) nextRunning.add(sessionId);
+    else nextRunning.delete(sessionId);
+    this.running = nextRunning;
+
+    const nextAwaiting = new Set(this.awaiting);
+    if (isAwaitingUser) nextAwaiting.add(sessionId);
+    else nextAwaiting.delete(sessionId);
+    this.awaiting = nextAwaiting;
   }
 
   /** Bumps the sidebar's cached message_count. Called on user-push
@@ -420,7 +444,18 @@ class SessionStore {
           console.warn('sessions.running poll failed; keeping last snapshot', err);
         }
       })();
-      await Promise.all([runningCall, this.softRefresh()]);
+      // Same pattern for the red-flashing axis. Parallel fetch, same
+      // preserve-on-error discipline so a blip doesn't flash every
+      // "needs attention" indicator off for a poll window.
+      const awaitingCall = (async () => {
+        try {
+          const ids = await api.listAwaitingSessions();
+          this.awaiting = new Set(ids);
+        } catch (err) {
+          console.warn('sessions.awaiting poll failed; keeping last snapshot', err);
+        }
+      })();
+      await Promise.all([runningCall, awaitingCall, this.softRefresh()]);
     };
     tick();
     this.runningTimer = setInterval(tick, RUNNING_POLL_MS);
