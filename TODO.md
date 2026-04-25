@@ -1242,7 +1242,21 @@ it then. Do not exercise the historical checklists as-is.
 - Versioning of bearings files; git covers history when the
   directory is a repo.
 
-## Intra-call tool output streaming (flagged, scoped)
+## Intra-call tool output streaming (✅ shipped 2026-04-25)
+
+**Status:** Path C pipe landed in `1359531` (2026-04-20); Path B emitter
+landed in `134d30a` (2026-04-25, v0.17.0). Long-running `mcp__bearings__bash`
+calls now stream stdout/stderr line-by-line into the terminal pane while
+the command is still running. Built-in `Bash` is denied via
+`disallowed_tools`; the model is steered at the new MCP tool by a base-
+prompt one-liner. Researcher subagent's `AgentDefinition` swapped
+`Bash` → `mcp__bearings__bash`. 13 dedicated tests in
+`tests/test_bash_tool.py` cover line-by-line emission, SDK final-shape
+contract, UTF-8 multibyte safety, and subprocess cancellation on
+interrupt. The original design notes below are kept for the
+archaeological record.
+
+---
 
 Goal: in the terminal-style tool-work pane, have each call's stdout land
 line-by-line as it's produced — not dumped whole at `tool_call_end`.
