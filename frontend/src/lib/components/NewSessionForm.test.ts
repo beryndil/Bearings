@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Tag } from '$lib/api';
 import { sessions } from '$lib/stores/sessions.svelte';
 import { tags } from '$lib/stores/tags.svelte';
-import { prefs } from '$lib/stores/prefs.svelte';
+import { preferences } from '$lib/stores/preferences.svelte';
 import { agent } from '$lib/agent.svelte';
 import NewSessionForm from './NewSessionForm.svelte';
 
@@ -59,8 +59,13 @@ function queueResponses(queue: Fake[]): ReturnType<typeof vi.fn> {
 beforeEach(() => {
   tags.list = [tag({ id: 1, name: 'infra' })];
   tags.selected = [1];
-  prefs.defaultWorkingDir = '/tmp';
-  prefs.defaultModel = 'claude-opus-4-7';
+  // Seed the server-backed preferences row directly. The store
+  // normally hydrates via `init()` against `/api/preferences`; tests
+  // bypass that and write the in-memory row so the form's defaults
+  // pick up the values without a fake-fetch round-trip.
+  const row = (preferences as unknown as { row: Record<string, unknown> }).row;
+  row.default_working_dir = '/tmp';
+  row.default_model = 'claude-opus-4-7';
 });
 
 describe('NewSessionForm kind toggle', () => {

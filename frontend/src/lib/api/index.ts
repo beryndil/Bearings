@@ -13,3 +13,4 @@ export * from './uploads';
 export * from './commands';
 export * from './shell';
 export * from './vault';
+export * from './preferences';

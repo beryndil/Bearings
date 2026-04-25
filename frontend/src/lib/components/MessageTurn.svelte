@@ -3,6 +3,7 @@
   import type { LiveToolCall } from '$lib/stores/conversation.svelte';
   import { stickToBottom } from '$lib/actions/autoscroll';
   import { contextmenu } from '$lib/actions/contextmenu';
+  import { preferences } from '$lib/stores/preferences.svelte';
   import CollapsibleBody from './CollapsibleBody.svelte';
 
   type Props = {
@@ -199,7 +200,7 @@
             data-message-id={user.id}
           />
         {/if}
-        <span>user</span>
+        <span>{preferences.displayName ?? 'user'}</span>
         {#if user.pinned}
           <span class="text-amber-400 normal-case" title="Pinned">📌</span>
         {/if}

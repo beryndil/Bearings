@@ -2,7 +2,7 @@ import * as api from '$lib/api';
 import type { MessageAttachment } from '$lib/api/sessions';
 import { auth } from '$lib/stores/auth.svelte';
 import { conversation } from '$lib/stores/conversation.svelte';
-import { prefs } from '$lib/stores/prefs.svelte';
+import { preferences } from '$lib/stores/preferences.svelte';
 import { sessions } from '$lib/stores/sessions.svelte';
 import { notify } from '$lib/utils/notify';
 
@@ -389,7 +389,7 @@ export const agent = new AgentConnection();
  * frames — the `fresh` snapshot at the WS listener handles that by
  * checking `completedIdsFor` BEFORE the reducer records the id. */
 function maybeNotifyTurnComplete(event: api.MessageCompleteEvent): void {
-  if (!prefs.notifyOnComplete) return;
+  if (!preferences.notifyOnComplete) return;
   if (typeof document !== 'undefined') {
     const hidden = document.visibilityState === 'hidden';
     const unfocused =

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { sessions } from '$lib/stores/sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
-  import { prefs } from '$lib/stores/prefs.svelte';
+  import { preferences } from '$lib/stores/preferences.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import { contextmenu } from '$lib/actions/contextmenu';
@@ -70,8 +70,8 @@
     tagDraft = '';
     tagError = null;
     const td = attachedTagDefaults();
-    workingDir = td.workingDir || prefs.defaultWorkingDir || workingDir;
-    model = td.model || prefs.defaultModel || model;
+    workingDir = td.workingDir || preferences.defaultWorkingDir || workingDir;
+    model = td.model || preferences.defaultModel || model;
   });
 
   function attachTag(tag: api.Tag) {
@@ -124,8 +124,8 @@
     const ids = [...tagIds];
     const createdKind = kind;
     const created = await sessions.create({
-      working_dir: workingDir.trim() || prefs.defaultWorkingDir || '/tmp',
-      model: model.trim() || prefs.defaultModel || 'claude-opus-4-7',
+      working_dir: workingDir.trim() || preferences.defaultWorkingDir || '/tmp',
+      model: model.trim() || preferences.defaultModel || 'claude-opus-4-7',
       title: title.trim() || null,
       max_budget_usd: parseBudget(budget),
       tag_ids: ids,

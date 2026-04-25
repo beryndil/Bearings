@@ -13,7 +13,7 @@ const handleEvent = vi.fn();
 const conversationLoad = vi.fn<(sessionId: string) => Promise<Session | null>>();
 const pushUserMessage = vi.fn();
 const notifyMock = vi.fn();
-const prefsState = { notifyOnComplete: false };
+const preferencesState = { notifyOnComplete: false };
 const sessionsList: Array<{ id: string; title: string | null }> = [];
 const completedIds = new Map<string, Set<string>>();
 
@@ -43,8 +43,8 @@ vi.mock('$lib/stores/conversation.svelte', () => ({
   }
 }));
 
-vi.mock('$lib/stores/prefs.svelte', () => ({
-  prefs: prefsState
+vi.mock('$lib/stores/preferences.svelte', () => ({
+  preferences: preferencesState
 }));
 
 vi.mock('$lib/stores/sessions.svelte', () => ({
@@ -103,7 +103,7 @@ beforeEach(() => {
   conversationLoad.mockReset();
   pushUserMessage.mockReset();
   notifyMock.mockReset();
-  prefsState.notifyOnComplete = false;
+  preferencesState.notifyOnComplete = false;
   sessionsList.length = 0;
   completedIds.clear();
   openAgentSocket.mockImplementation((sessionId: string) => {
@@ -259,7 +259,7 @@ describe('AgentConnection turn-complete notifications', () => {
     const s = sockets[0];
     s.fireOpen();
 
-    prefsState.notifyOnComplete = true;
+    preferencesState.notifyOnComplete = true;
     sessionsList.push({ id: 'N', title: 'Bearings dev' });
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
@@ -308,7 +308,7 @@ describe('AgentConnection turn-complete notifications', () => {
     const s = sockets[0];
     s.fireOpen();
 
-    prefsState.notifyOnComplete = true;
+    preferencesState.notifyOnComplete = true;
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => 'hidden'

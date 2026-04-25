@@ -16,6 +16,7 @@
   import { agent } from '$lib/agent.svelte';
   import { auth } from '$lib/stores/auth.svelte';
   import { billing } from '$lib/stores/billing.svelte';
+  import { preferences } from '$lib/stores/preferences.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { sessionsWs } from '$lib/stores/ws_sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
@@ -41,6 +42,11 @@
     // then sessions with the now-populated filter. billing still runs
     // in parallel since it touches neither.
     const billingInit = billing.init();
+    // Preferences fetch runs alongside billing — failure leaves the
+    // localStorage cache (or empty defaults) in place; the UI still
+    // boots. Server response replaces in-memory state and writes the
+    // cache so the next reload renders the live values immediately.
+    const prefsInit = preferences.init();
     await tags.refresh();
     // Fresh boot: start with every tag selected so the session list
     // shows everything by default. Dave's ask on 2026-04-24 — the
@@ -50,7 +56,7 @@
     // the "No severity" sentinel, so sessions without a severity tag
     // still appear. No persistence yet; every reload resets to All.
     tags.selectAll();
-    await Promise.all([billingInit, sessions.refresh(tags.filter)]);
+    await Promise.all([billingInit, prefsInit, sessions.refresh(tags.filter)]);
     // Start the background runner poll so session rows flag which
     // sessions are still working even when you're on a different one.
     sessions.startRunningPoll();
