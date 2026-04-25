@@ -114,6 +114,15 @@ class DriverConfig:
     # itself + a couple of look-up tool calls; matches Dave's manual
     # handoff discipline (hand off early, not at the cliff).
     handoff_threshold_percent: float = 60.0
+    # PermissionMode for leg sessions. The whole point of autonomous
+    # mode is unattended execution, so the default is `bypassPermissions`
+    # — every tool call auto-approves. Without this, the SDK's
+    # `can_use_tool` hook parks on every Edit/Bash, and a leg trying to
+    # land its work waits forever for a UI click that will never come.
+    # Override to "acceptEdits" if you want file edits auto-approved
+    # but other tools still gated (interactive mid-ground), or to
+    # "default" if the leg is supposed to be supervised after all.
+    leg_permission_mode: str = "bypassPermissions"
 
 
 class DriverRuntime(Protocol):

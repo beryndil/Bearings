@@ -245,6 +245,62 @@ def test_run_on_chat_session_returns_400(client: TestClient) -> None:
     assert r.status_code == 400
 
 
+def test_run_default_persists_bypass_permissions_on_each_leg(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The autonomous driver's whole point is unattended execution —
+    leg sessions must not park on `can_use_tool`. Verify the spawned
+    leg's `permission_mode` column is `bypassPermissions` after a
+    default-config run."""
+    _install_sentinel_stream(monkeypatch, "CHECKLIST_ITEM_DONE")
+    checklist = _create_checklist(client)
+    item = _add_item(client, checklist["id"], "permcheck")
+    resp = client.post(f"/api/sessions/{checklist['id']}/checklist/run")
+    assert resp.status_code == 202
+    _wait_for_run_state(client, checklist["id"], state="finished")
+    refreshed = client.get(f"/api/sessions/{checklist['id']}/checklist").json()
+    items = {row["id"]: row for row in refreshed["items"]}
+    leg_id = items[item["id"]]["chat_session_id"]
+    assert leg_id is not None
+    leg_session = client.get(f"/api/sessions/{leg_id}").json()
+    assert leg_session["permission_mode"] == "bypassPermissions"
+
+
+def test_run_with_accept_edits_permission_mode_override(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-run override flips the persisted permission_mode to the
+    requested value. Used by users who want a human in the loop on
+    sudo / network calls but auto-approve file edits."""
+    _install_sentinel_stream(monkeypatch, "CHECKLIST_ITEM_DONE")
+    checklist = _create_checklist(client)
+    item = _add_item(client, checklist["id"], "halfway")
+    resp = client.post(
+        f"/api/sessions/{checklist['id']}/checklist/run",
+        json={"leg_permission_mode": "acceptEdits"},
+    )
+    assert resp.status_code == 202
+    _wait_for_run_state(client, checklist["id"], state="finished")
+    refreshed = client.get(f"/api/sessions/{checklist['id']}/checklist").json()
+    items = {row["id"]: row for row in refreshed["items"]}
+    leg_session = client.get(f"/api/sessions/{items[item['id']]['chat_session_id']}").json()
+    assert leg_session["permission_mode"] == "acceptEdits"
+
+
+def test_run_rejects_invalid_permission_mode(client: TestClient) -> None:
+    """plan-mode and unknown strings are rejected with 400 — plan
+    mode would prevent legs from editing files at all, and an
+    unknown string would land an unrunnable column value."""
+    checklist = _create_checklist(client)
+    _add_item(client, checklist["id"], "x")
+    for bad in ["plan", "yolo", "Bypass"]:
+        resp = client.post(
+            f"/api/sessions/{checklist['id']}/checklist/run",
+            json={"leg_permission_mode": bad},
+        )
+        assert resp.status_code == 400, f"expected 400 for mode={bad!r}, got {resp.status_code}"
+
+
 def test_run_with_custom_config_overrides_defaults(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

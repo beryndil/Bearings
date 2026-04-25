@@ -267,17 +267,34 @@ async def spawn_paired_chat(
 # --- autonomous driver (slice 3 of nimble-checking-heron) ------------
 
 
+_AUTO_RUN_PERMISSION_MODES = frozenset({"default", "acceptEdits", "bypassPermissions"})
+
+
 def _build_driver_config(body: AutoRunStart | None) -> DriverConfig | None:
     """Translate optional API overrides to a `DriverConfig`.
 
     `None` body / all-None fields → return `None` so the driver falls
     back to its hard-coded defaults. Per-invocation scope: callers
-    override on a per-run basis, not globally."""
+    override on a per-run basis, not globally.
+
+    `leg_permission_mode` is validated against the SDK's PermissionMode
+    enum, minus `plan` — autonomous legs need to actually edit files,
+    and plan-mode prevents that, so accepting it here would silently
+    break every run."""
     if body is None:
         return None
     provided = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
     if not provided:
         return None
+    pm = provided.get("leg_permission_mode")
+    if pm is not None and pm not in _AUTO_RUN_PERMISSION_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"leg_permission_mode must be one of "
+                f"{sorted(_AUTO_RUN_PERMISSION_MODES)!r}; got {pm!r}"
+            ),
+        )
     return DriverConfig(**provided)
 
 

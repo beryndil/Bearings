@@ -95,11 +95,21 @@ class AutoRunStart(BaseModel):
     Per-invocation overrides (not settings) because Dave may want to
     dial caps per checklist — a cleanup list wants a high item cap and
     low leg cap, an exploratory investigation wants the opposite.
+
+    `leg_permission_mode` controls the SDK's `can_use_tool` gating on
+    each leg. The driver default is `bypassPermissions` (auto-approve
+    every tool — required for genuinely unattended runs). Override to
+    `acceptEdits` for "auto-approve file edits, ask for everything
+    else" — useful when running the agent against a real working
+    tree where you'd like a human in the loop for sudo/network calls.
+    `default` re-enables full prompting and effectively turns off
+    autonomy; `plan` is rejected (legs need to actually edit files).
     """
 
     max_items_per_run: int | None = None
     max_legs_per_item: int | None = None
     max_followup_depth: int | None = None
+    leg_permission_mode: str | None = None
 
 
 class AutoRunStatus(BaseModel):

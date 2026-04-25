@@ -48,8 +48,15 @@ class AgentRunnerDriverRuntime:
     setting as it spawns legs.
     """
 
-    def __init__(self, *, app: FastAPI) -> None:
+    def __init__(self, *, app: FastAPI, config: DriverConfig | None = None) -> None:
         self._app = app
+        # Driver config — accessed for the per-leg permission_mode so
+        # spawn_leg can persist `bypassPermissions` (default for
+        # autonomous mode) onto the new chat session BEFORE the runner
+        # is built. The runner reads `permission_mode` off the row at
+        # construction time (see `ws_agent._build_runner`), so this
+        # has to happen before the first `run_turn` call.
+        self._config = config or DriverConfig()
         # Per-session last-observed ContextUsage percentage. Populated
         # as `run_turn` drains the runner's event stream after the
         # turn's MessageComplete arrives (ContextUsage fires right
@@ -117,6 +124,17 @@ class AgentRunnerDriverRuntime:
                 leg_row["id"],
                 fields={"session_instructions": plug},
             )
+        # Set the leg's PermissionMode BEFORE the runner is built so
+        # the SDK's can_use_tool hook doesn't park on every Edit/Bash.
+        # `bypassPermissions` (the DriverConfig default) means the
+        # autonomous run truly runs unattended; `acceptEdits` is a
+        # mid-ground for cautious users; `default` is "still
+        # supervised" and effectively breaks autonomy. Persisted via
+        # store helper so a later WS reconnect or runner rebuild
+        # picks up the same mode.
+        await store.set_session_permission_mode(
+            conn, leg_row["id"], self._config.leg_permission_mode
+        )
         # Advance the current-leg pointer on the item.
         await store.set_item_chat_session(conn, int(item["id"]), leg_row["id"])
         metrics.sessions_created.inc()
@@ -274,12 +292,18 @@ class AutoDriverRegistry:
                 raise ValueError(
                     f"autonomous driver already running for checklist {checklist_session_id!r}"
                 )
-            runtime = AgentRunnerDriverRuntime(app=app)
+            # Resolve the effective config once and feed BOTH the
+            # runtime (needs leg_permission_mode for spawn_leg) and
+            # the driver (needs the safety caps + handoff threshold).
+            # Two callers must agree on the same instance, hence the
+            # explicit fallback to a fresh DriverConfig() here.
+            effective_config = config or DriverConfig()
+            runtime = AgentRunnerDriverRuntime(app=app, config=effective_config)
             driver = Driver(
                 conn=app.state.db,
                 runtime=runtime,
                 checklist_session_id=checklist_session_id,
-                config=config,
+                config=effective_config,
             )
             task: asyncio.Task[DriverResult] = asyncio.create_task(
                 driver.drive(),
