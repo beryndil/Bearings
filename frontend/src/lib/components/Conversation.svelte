@@ -742,15 +742,27 @@
   // viewport above the conversation — we collapse to 3 lines with a
   // "show more" toggle and re-measure whenever the session or its
   // description changes.
+  //
+  // Snap-back guard (2026-04-25): the effect tracks the sessions.selected
+  // proxy, which the WS layer replaces on every routine session update
+  // (message_count bumps, token totals, paired-crumb refreshes). An
+  // unconditional `descriptionExpanded = false` on every run meant any
+  // user click of "show more" got reverted within a tick by the next
+  // routine update. We snapshot id+description into a plain string and
+  // only reset expanded when the snapshot actually changes.
   let descriptionEl: HTMLParagraphElement | undefined = $state();
   let descriptionExpanded = $state(false);
   let descriptionOverflows = $state(false);
+  let descriptionSnapshot = '';
 
   $effect(() => {
-    // Re-run when the selected session or its description text flips.
-    const sid = sessions.selected?.id ?? null;
+    const sid = sessions.selected?.id ?? '';
     const text = sessions.selected?.description ?? '';
-    descriptionExpanded = false;
+    const snapshot = sid + '::' + text;
+    if (snapshot !== descriptionSnapshot) {
+      descriptionExpanded = false;
+      descriptionSnapshot = snapshot;
+    }
     if (!sid || !text || !descriptionEl) {
       descriptionOverflows = false;
       return;
