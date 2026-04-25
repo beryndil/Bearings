@@ -176,6 +176,45 @@ class AgentCfg(BaseModel):
     # not yet register its own hooks; this knob will gain a positive
     # use-case alongside that.
     inherit_hooks: bool = True
+    # Character threshold past which the PostToolUse hook emits an
+    # advisory note telling the model the full output is persisted in
+    # Bearings' DB and retrievable via `bearings__get_tool_output`.
+    # Native tool outputs (Read/Bash/Grep) cannot be rewritten on the
+    # wire — the model sees the raw output this turn — but the
+    # advisory primes it to summarize aggressively in its reply and to
+    # use the retrieval tool on later turns instead of asking the SDK
+    # to replay the raw bytes. 8k chars ≈ 2k tokens; a single grep
+    # that previously dominated a turn now leaves a short capsule in
+    # the model's running summary. Set to 0 to disable the advisory
+    # entirely (regression path if the hook ever causes trouble).
+    # See plan `~/.claude/plans/enumerated-inventing-ullman.md` Option 6.
+    tool_output_cap_chars: int = 8000
+    # Whether Bearings registers its own in-process MCP server on
+    # every SDK client. The server currently exposes
+    # `bearings__get_tool_output` (paired with `tool_output_cap_chars`
+    # above) and will gain checkpoint/reset helpers in a later wave.
+    # `True` is the default because every Bearings feature in the
+    # token-cost plan depends on the server being present. Flip off
+    # only if a diagnostic run needs a "vanilla" SDK client without
+    # Bearings tools polluting the tool list.
+    enable_bearings_mcp: bool = True
+    # Whether PreCompact hook steering is wired. The hook hands the
+    # CLI's compactor a `custom_instructions` block telling it which
+    # turns to preserve verbatim (most recent research-dense turn,
+    # unanswered user questions) and which to drop (duplicate Read
+    # calls, failed Bash retries). No effect when auto-compact is off
+    # on the model. Flip off only for A/B-testing raw compaction
+    # against steered compaction.
+    enable_precompact_steering: bool = True
+    # Whether the `researcher` sub-agent is registered via
+    # `ClaudeAgentOptions.agents`. When True, the main turn can
+    # delegate heavy codebase exploration via the `Task` tool so the
+    # raw tool-call output lives in an isolated sub-agent context and
+    # only a summary returns to the parent. Keeps the parent's
+    # context small on research-heavy turns. Disabled by default
+    # until the researcher prompt has a few real-world turns of
+    # iteration under it.
+    enable_researcher_subagent: bool = False
 
 
 class StorageCfg(BaseModel):

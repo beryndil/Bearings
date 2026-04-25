@@ -118,6 +118,16 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
         else None,
         inherit_mcp_servers=agent_cfg.inherit_mcp_servers,
         inherit_hooks=agent_cfg.inherit_hooks,
+        # Token-cost plan Waves 2–3 (plan
+        # `~/.claude/plans/enumerated-inventing-ullman.md`): tool-output
+        # cap advisory, Bearings MCP server, PreCompact steering, and
+        # opt-in researcher sub-agent. All four defaults in
+        # `AgentCfg` reproduce the plan's recommended shipping state;
+        # flip individual knobs in config.toml to experiment.
+        tool_output_cap_chars=agent_cfg.tool_output_cap_chars,
+        enable_bearings_mcp=agent_cfg.enable_bearings_mcp,
+        enable_precompact_steering=agent_cfg.enable_precompact_steering,
+        enable_researcher_subagent=agent_cfg.enable_researcher_subagent,
     )
     runner = SessionRunner(
         session_id,

@@ -7,10 +7,12 @@ from uuid import uuid4
 
 import aiosqlite
 from claude_agent_sdk import (
+    AgentDefinition,
     AssistantMessage,
     CanUseTool,
     ClaudeAgentOptions,
     ClaudeSDKClient,
+    HookMatcher,
     PermissionMode,
     ResultMessage,
     StreamEvent,
@@ -33,7 +35,13 @@ from bearings.agent.events import (
     ToolCallEnd,
     ToolCallStart,
 )
+from bearings.agent.mcp_tools import (
+    BEARINGS_MCP_SERVER_NAME,
+    build_bearings_mcp_server,
+    tool_output_char_len,
+)
 from bearings.agent.prompt import assemble_prompt
+from bearings.agent.researcher_prompt import RESEARCHER_PROMPT
 from bearings.db._messages import list_messages
 
 # Upper bound on the number of recent DB messages pulled into the
@@ -49,6 +57,72 @@ _HISTORY_PRIME_MAX_MESSAGES = 10
 # than this are truncated with a visible "…[truncated]" marker so the
 # model knows it's seeing a partial.
 _HISTORY_PRIME_MAX_CHARS = 2000
+
+# Context-pressure percentage at which the user-turn injection fires.
+# Below this we stay silent — the meter already renders in the UI and
+# nagging the model on every cheap turn burns its own attention budget.
+# 50% is where `get_context_usage()` reports "yellow" band color; at
+# that point a single research-heavy turn can tip us over the
+# auto-compact threshold, so the advisory is worth the prompt real
+# estate.
+_PRESSURE_INJECT_THRESHOLD_PCT = 50.0
+
+# Default per-turn tool-output cap used when `AgentSession` is built
+# without one (tests, callers that don't care). Matches the default
+# on `AgentCfg.tool_output_cap_chars`. A dedicated module constant so
+# the two places that have to agree can't drift.
+_DEFAULT_TOOL_OUTPUT_CAP_CHARS = 8000
+
+# Custom instructions handed to the CLI's compactor via the PreCompact
+# hook. Goal: preserve the tool-dense research turns that today get
+# lossy-summarized and force the user to re-run the research. The exact
+# verbiage is important — the compactor is itself an LLM, so we speak
+# to it plainly. Paired with the researcher sub-agent (Option 4 in
+# the plan), this should make most research survive auto-compact.
+_PRECOMPACT_CUSTOM_INSTRUCTIONS = (
+    "Preserve VERBATIM on compaction: (1) the most recent assistant "
+    "turn that issued more than ~5 tool calls and its tool outputs "
+    "— these are research turns whose findings the user has not yet "
+    "consumed; (2) any unanswered user question (a user turn followed "
+    "by an assistant turn that did not address it); (3) any tool "
+    "output whose findings have not yet been summarized in a "
+    "subsequent assistant message. Drop aggressively: repeated Read() "
+    "of the same path, failed Bash retries, tool outputs older than "
+    "the most recent checkpoint, redundant reconnaissance of files "
+    "that were then edited. Keep the user's original ask verbatim. "
+    "When in doubt, preserve tool outputs over assistant prose — "
+    "Bearings can always re-summarize prose, it cannot re-derive raw "
+    "tool output without another API round-trip."
+)
+
+
+def _pressure_hint_for(pct: float) -> str:
+    """Band-specific steering text for the context-pressure block. At
+    lower pressure we only nudge toward delegation; at higher pressure
+    we add an explicit "consider checkpoint/fork" prompt so the model
+    can raise it to the user without waiting for compaction to kick.
+    Kept here (not in researcher_prompt.py) because the text is
+    parent-side guidance and has nothing to do with the sub-agent's
+    self-prompt."""
+    if pct >= 85.0:
+        return (
+            "CRITICAL: auto-compact is close. Summarize current findings "
+            "now, recommend the user fork from a recent checkpoint, and "
+            "avoid any further broad codebase scans in this turn."
+        )
+    if pct >= 70.0:
+        return (
+            "High pressure. Prefer the `researcher` sub-agent via the "
+            "Task tool for any further codebase survey work — its tool "
+            "calls stay out of this context. Consider suggesting a "
+            "checkpoint to the user before a large next turn."
+        )
+    return (
+        "Elevated pressure. Prefer the `researcher` sub-agent via the "
+        "Task tool for heavy tool work so its calls stay out of this "
+        "context. Avoid re-reading files you have already read this "
+        "session."
+    )
 
 
 def _stringify(content: str | list[dict[str, object]] | None) -> str | None:
@@ -116,6 +190,10 @@ class AgentSession:
         setting_sources: list[str] | None = None,
         inherit_mcp_servers: bool = True,
         inherit_hooks: bool = True,
+        tool_output_cap_chars: int = _DEFAULT_TOOL_OUTPUT_CAP_CHARS,
+        enable_bearings_mcp: bool = True,
+        enable_precompact_steering: bool = True,
+        enable_researcher_subagent: bool = False,
     ) -> None:
         self.session_id = session_id
         self.working_dir = working_dir
@@ -175,9 +253,29 @@ class AgentSession:
         # session resume fails silently (stale session file, cwd
         # mismatch, system_prompt divergence). See `_build_history_prefix`.
         self._primed: bool = False
+        # Per-turn tool-output cap. When a tool output is larger than
+        # this (in chars) the PostToolUse hook appends a short
+        # advisory to the model's context telling it the full text is
+        # persisted in the Bearings DB and retrievable via the
+        # `bearings__get_tool_output` MCP tool. See plan Option 6.
+        self.tool_output_cap_chars = tool_output_cap_chars
+        # Feature toggles — all four default to the values that
+        # reproduce the token-cost plan's recommended shipping state.
+        # Tests that want to lock a specific subset of these on/off
+        # can pass them explicitly.
+        self.enable_bearings_mcp = enable_bearings_mcp
+        self.enable_precompact_steering = enable_precompact_steering
+        self.enable_researcher_subagent = enable_researcher_subagent
 
     def set_permission_mode(self, mode: PermissionMode | None) -> None:
         self.permission_mode = mode
+
+    def _current_db(self) -> aiosqlite.Connection | None:
+        """DB-getter closure handed to the Bearings MCP server so its
+        tool handlers always see the session's current connection even
+        if it swaps under us. Kept as a bound method so subclassing
+        stays straightforward."""
+        return self.db
 
     async def _build_history_prefix(self, prompt: str) -> str | None:
         """Render the last few DB-persisted turns into a preamble the
@@ -280,6 +378,121 @@ class AgentSession:
         except Exception:
             return None
 
+    async def _build_context_pressure_block(self) -> str | None:
+        """Render a `<context-pressure>` block for injection ahead of
+        the user's prompt when the last persisted pct crossed the
+        threshold.
+
+        Reads directly from the session row (populated by the runner
+        on every ContextUsage event). Returns None on no-data or
+        low-pressure — we only nag the model when there's real reason
+        to, otherwise the advisory just eats tokens it's trying to
+        save. Swallows DB errors: if the read fails the injection is
+        silently skipped; the meter is advisory and the next turn
+        still works."""
+        if self.db is None:
+            return None
+        try:
+            async with self.db.execute(
+                "SELECT last_context_pct, last_context_tokens, last_context_max "
+                "FROM sessions WHERE id = ?",
+                (self.session_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        except Exception:
+            return None
+        if row is None or row["last_context_pct"] is None:
+            return None
+        pct = float(row["last_context_pct"])
+        if pct < _PRESSURE_INJECT_THRESHOLD_PCT:
+            return None
+        tokens = row["last_context_tokens"]
+        max_tokens = row["last_context_max"]
+        hint = _pressure_hint_for(pct)
+        return (
+            f'<context-pressure pct="{pct:.1f}" tokens="{tokens}" '
+            f'max="{max_tokens}">\n'
+            f"{hint}\n"
+            "</context-pressure>\n\n"
+        )
+
+    def _build_post_tool_use_hook(self) -> Any:
+        """Return an async hook callback that attaches a tool-output
+        retrieval advisory when a tool produced more than
+        `tool_output_cap_chars` of content.
+
+        The advisory is the best we can do for native (Read / Bash /
+        Grep / Edit) tools: the SDK's hook output schema only allows
+        rewriting MCP tool output (`updatedMCPToolOutput`), not native
+        tool output. So we leave the raw output in context for this
+        turn but tell the model "this is big — when it gets dropped
+        from context on compaction, retrieve via
+        `bearings__get_tool_output` instead of asking me to re-run
+        the tool." That steers the model toward summarizing
+        aggressively in its reply and relying on retrieval later.
+
+        Returns a no-op callback (`None` output) when the cap is
+        non-positive — lets operators disable the advisory without
+        unwiring the hook machinery."""
+        cap = int(self.tool_output_cap_chars or 0)
+
+        async def hook(
+            input_data: Any,
+            tool_use_id: str | None,
+            _context: Any,
+        ) -> dict[str, Any]:
+            if cap <= 0:
+                return {}
+            response = input_data.get("tool_response") if isinstance(input_data, dict) else None
+            body: Any
+            if isinstance(response, dict):
+                body = response.get("content")
+            else:
+                body = response
+            try:
+                length = await tool_output_char_len(body)
+            except Exception:
+                length = 0
+            if length <= cap:
+                return {}
+            tool_name = input_data.get("tool_name") if isinstance(input_data, dict) else None
+            advisory = (
+                f"[bearings: this {tool_name or 'tool'} call produced "
+                f"{length} chars of output — above the {cap}-char "
+                "context-cost cap. Summarize now; on future turns, if "
+                "the raw text has fallen out of context, retrieve via "
+                "`bearings__get_tool_output` with "
+                f'tool_use_id="{tool_use_id or "<id>"}" rather than '
+                "re-running the tool.]"
+            )
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": advisory,
+                }
+            }
+
+        return hook
+
+    def _build_precompact_hook(self) -> Any:
+        """Return an async hook callback that hands the CLI's
+        compactor explicit preservation instructions. See
+        `_PRECOMPACT_CUSTOM_INSTRUCTIONS` for the policy text."""
+
+        async def hook(
+            _input_data: Any,
+            _tool_use_id: str | None,
+            _context: Any,
+        ) -> dict[str, Any]:
+            return {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreCompact",
+                    "customInstructions": _PRECOMPACT_CUSTOM_INSTRUCTIONS,
+                }
+            }
+
+        return hook
+
     async def stream(self, prompt: str) -> AsyncIterator[AgentEvent]:
         options_kwargs: dict[str, Any] = {
             "cwd": self.working_dir,
@@ -304,13 +517,52 @@ class AgentSession:
         # before this knob landed.
         if self.setting_sources is not None:
             options_kwargs["setting_sources"] = self.setting_sources
+        mcp_servers: dict[str, Any] = {}
         if not self.inherit_mcp_servers:
             # Empty dict tells the SDK "no MCP servers" rather than
             # "use defaults". The dict is required-typed in the SDK
             # so we can't pass `None`.
-            options_kwargs["mcp_servers"] = {}
+            options_kwargs["mcp_servers"] = mcp_servers
+        # Bearings' own in-process MCP server. Gated by the
+        # `enable_bearings_mcp` knob AND the presence of a DB (the
+        # `get_tool_output` tool reads from it). Composed with the
+        # `inherit_mcp_servers` behavior above — whatever the inherit
+        # policy, the Bearings server is added on top.
+        if self.enable_bearings_mcp and self.db is not None:
+            mcp_servers[BEARINGS_MCP_SERVER_NAME] = build_bearings_mcp_server(
+                self.session_id, self._current_db
+            )
+            options_kwargs["mcp_servers"] = mcp_servers
+        hooks_map: dict[str, list[HookMatcher]] = {}
         if not self.inherit_hooks:
-            options_kwargs["hooks"] = {}
+            options_kwargs["hooks"] = hooks_map
+        # PostToolUse advisory hook (Option 6). Cheap to register even
+        # on turns that don't produce big outputs — the hook short-
+        # circuits on length.
+        hooks_map.setdefault("PostToolUse", []).append(
+            HookMatcher(hooks=[self._build_post_tool_use_hook()])
+        )
+        if self.enable_precompact_steering:
+            hooks_map.setdefault("PreCompact", []).append(
+                HookMatcher(hooks=[self._build_precompact_hook()])
+            )
+        if hooks_map:
+            options_kwargs["hooks"] = hooks_map
+        if self.enable_researcher_subagent:
+            options_kwargs["agents"] = {
+                "researcher": AgentDefinition(
+                    description=(
+                        "Read-only codebase survey sub-agent. Runs tool "
+                        "calls in isolated context and returns only a "
+                        "compact summary — use it via the Task tool for "
+                        "heavy exploration so raw outputs do not enter "
+                        "this turn's context."
+                    ),
+                    prompt=RESEARCHER_PROMPT,
+                    tools=["Read", "Grep", "Glob", "Bash"],
+                    model="inherit",
+                )
+            }
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called
@@ -330,6 +582,16 @@ class AgentSession:
             prefix = await self._build_history_prefix(prompt)
             if prefix is not None:
                 prompt = prefix + prompt
+        # Context-pressure injection (Option 1 finish). Runs on every
+        # turn (not gated by `_primed`) because pressure accumulates
+        # over the life of the session and we want the nudge every
+        # turn above threshold, not just the first. The block is
+        # prepended after the history prefix so the prompt reads:
+        # [transcript] [pressure] [user message] — the model sees
+        # "here's where we are, here's the warning, here's the ask."
+        pressure_block = await self._build_context_pressure_block()
+        if pressure_block is not None:
+            prompt = pressure_block + prompt
         message_id = uuid4().hex
         cost_usd: float | None = None
         usage: dict[str, Any] | None = None

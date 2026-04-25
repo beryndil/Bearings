@@ -379,6 +379,27 @@ async def attach_tool_calls_to_message(
     return cursor.rowcount
 
 
+async def get_tool_call(conn: aiosqlite.Connection, tool_call_id: str) -> dict[str, Any] | None:
+    """Fetch a single tool_call row by id.
+
+    Used by the Bearings MCP server's `get_tool_output` tool so the
+    model can pull the full output of a tool call that was truncated
+    by the PostToolUse cap (`agent.tool_output_cap_chars`). Returns
+    `None` for an unknown id so the tool handler can surface a clean
+    "no such tool call" message instead of crashing on a dict access.
+    Scoped to id alone rather than (session_id, id) because the caller
+    (the MCP tool handler) only trusts the id the SDK handed back to
+    the model — session-scoping is enforced one layer up by refusing
+    to build the MCP server for sessions without a DB."""
+    sql = (
+        "SELECT id, session_id, message_id, name, input, output, error, "
+        "started_at, finished_at FROM tool_calls WHERE id = ?"
+    )
+    async with conn.execute(sql, (tool_call_id,)) as cursor:
+        row = await cursor.fetchone()
+    return dict(row) if row is not None else None
+
+
 async def list_tool_calls(
     conn: aiosqlite.Connection,
     session_id: str,

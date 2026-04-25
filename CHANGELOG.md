@@ -5,6 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-04-24
+
+### Added
+
+Token-cost-mitigation Waves 2–3 (plan
+`~/.claude/plans/enumerated-inventing-ullman.md`). Wave 1 shipped the
+visibility primitive and a pre-submit budget gate; this ships the
+structural savings and delegation layers on top.
+
+- **Tool-output cap advisory** (Option 6). A PostToolUse hook fires
+  on every tool call and — when the output crosses
+  `agent.tool_output_cap_chars` (default 8000 chars) — attaches an
+  `additionalContext` advisory to the model's turn carrying the
+  `tool_use_id` and a retrieval hint. Native tools (Read/Bash/Grep)
+  cannot have their raw output rewritten on the wire, so the advisory
+  steers the model toward summarizing aggressively in its reply and
+  using `bearings__get_tool_output` on later turns instead of asking
+  the SDK to replay 200 KB of bytes.
+- **Bearings in-process MCP server**
+  (`src/bearings/agent/mcp_tools.py`). Registered on every SDK client
+  when a DB is attached and `agent.enable_bearings_mcp` is on.
+  Currently exposes `bearings__get_tool_output(tool_use_id)` — pulls
+  the full persisted output of any prior tool call in the current
+  session out of SQLite, with a 200 KB return cap and distinct error
+  shapes for unknown id / wrong session / still running / empty body.
+  Session-scoped: the closure refuses cross-session reads even if
+  the CLI somehow routes one.
+- **PreCompact steering** (Option 2). Hook hands the CLI's compactor
+  a `customInstructions` block telling it to preserve research-dense
+  turns and unanswered questions verbatim while dropping duplicate
+  Reads and failed Bash retries. Addresses the research-context-loss
+  failure where a 73-tool-call survey got lossy-summarized and the
+  user had to re-run the research. Toggleable via
+  `agent.enable_precompact_steering`.
+- **Researcher sub-agent** (Option 4). Opt-in via
+  `agent.enable_researcher_subagent` — registers a read-only
+  `researcher` sub-agent on `ClaudeAgentOptions.agents` with a
+  Read/Grep/Glob/Bash allowlist (no Write/Edit). Its tool calls run
+  in isolated context and only its summary reaches the parent turn,
+  so a parent at 60% context pressure can delegate a 20-file survey
+  without blowing its own window. Default off until the researcher
+  prompt has a few real-world turns of iteration under it.
+- **Context-pressure injection** (Option 1 finish). When the last
+  persisted `last_context_pct` ≥ 50%, `AgentSession.stream()`
+  prepends a `<context-pressure pct=... tokens=... max=...>` block
+  to the user's prompt with band-specific steering (elevate → prefer
+  researcher; ≥70% → recommend checkpoint; ≥85% → surface to user
+  and recommend fork-from-checkpoint). Reads the cached percentage
+  directly from the session row so no extra SDK round-trip is
+  needed.
+
+### Config
+
+New `[agent]` knobs: `tool_output_cap_chars` (default 8000),
+`enable_bearings_mcp` (True), `enable_precompact_steering` (True),
+`enable_researcher_subagent` (False).
+
+### Notes
+
+- 24 new backend tests (929 → 953). Ruff + ruff-format + mypy strict
+  green. All previous suites still pass.
+- Wave 4 (checkpoint/fork) was already shipped as the Phase 7
+  context-menu plan: `/api/sessions/{id}/checkpoints`,
+  `.../checkpoints/{cid}/fork`, the CheckpointGutter + right-click
+  menu. No new work needed there.
+- The safe-profile test was updated: Bearings' own hooks
+  (PostToolUse advisory, PreCompact steering) now land regardless
+  of `inherit_hooks`; the knob still blocks inherited user-settings
+  hooks. This is the intended behavior — the token-cost mitigations
+  are harness-level features, not user policy.
+
 ## [0.10.2] - 2026-04-24
 
 Boot default: "All selected" instead of "empty" (frontend v0.8.2).
