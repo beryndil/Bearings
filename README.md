@@ -4,13 +4,48 @@ Localhost web UI for Claude Code agent sessions. FastAPI backend streams
 session events over WebSocket to a SvelteKit frontend; SQLite persists
 history across restarts.
 
+## Permission profiles
+
+Bearings exposes Claude Code's full agent surface — file system access,
+tool use, MCP servers, hooks. That posture is appropriate for a
+single-operator workstation and dangerous on a shared box. Pick a
+profile at install time so the gates start in the right position:
+
+```bash
+bearings init --profile safe          # locked-down public default
+bearings init --profile workstation   # auth on, $HOME working_dir
+bearings init --profile power-user    # today's permissive defaults
+```
+
+| gate                          | `safe`                        | `workstation`            | `power-user`           |
+|-------------------------------|-------------------------------|--------------------------|------------------------|
+| auth token                    | required, auto-generated      | required, auto-generated | off (loopback only)    |
+| default `working_dir`         | `~/.local/share/bearings/workspaces/<id>` (sandbox) | `$HOME` | `$HOME` |
+| `~/.claude/` settings inherit | none                          | full                     | full                   |
+| MCP servers inherit           | no                            | yes                      | yes                    |
+| hook scripts inherit          | no                            | yes                      | yes                    |
+| `bypassPermissions` mode      | blocked                       | allowed (ephemeral)      | allowed                |
+| fs picker root                | workspace sandbox             | `$HOME`                  | `$HOME`                |
+| commands palette              | project `.claude/` only       | + user `~/.claude/`      | + plugin marketplaces  |
+| per-session budget cap        | $5 default                    | uncapped                 | uncapped               |
+| runner idle TTL               | 60 s                          | 15 min                   | 15 min                 |
+
+Every gate is also an independent config knob — pick a profile, then
+edit individual lines in `~/.config/bearings/config.toml` for
+mix-and-match. The active profile name + every gate state are printed
+on every `bearings serve` startup so the operator sees their posture
+at a glance. `profile.show_banner = false` opts out for
+systemd-user operators who already read the journal.
+
 ## Status
 
-Alpha — `0.2.x` development. v0.1 is feature-complete and closed out
-at v0.1.40. v0.2 adds tags as the single organizational primitive
-with per-tag markdown memories injected into the system prompt, per-
-tag defaults for `working_dir` / `model`, and a mandatory ≥1-tag
-rule on every new session. Spec: `V0.2.0_SPEC.md`.
+Alpha — `0.3.x` development. Permission-profile preset layer landed
+in v0.4 (sibling to the 2026-04-21 security-audit ship-blockers).
+v0.1 is feature-complete and closed out at v0.1.40. v0.2 adds tags
+as the single organizational primitive with per-tag markdown memories
+injected into the system prompt, per-tag defaults for `working_dir`
+/ `model`, and a mandatory ≥1-tag rule on every new session.
+Spec: `V0.2.0_SPEC.md`.
 
 ## Features
 
@@ -60,9 +95,11 @@ last-wins layer.
   frontend AuthGate modal; 401/4401 flips the store back to `invalid`.
 - Prometheus `/metrics` (sessions, messages, tool calls, WS events,
   active connections) + JSON history export/daily/search routes.
-- CLI subcommands: `bearings serve | init | send`. `send` supports
-  `--format=pretty` for human-readable output and `--token` for
-  authenticated servers.
+- CLI subcommands: `bearings serve | init [--profile NAME] | send`.
+  `init --profile {safe|workstation|power-user}` materializes the
+  preset into `config.toml` and prints the active gate audit. `send`
+  supports `--format=pretty` for human-readable output and `--token`
+  for authenticated servers.
 
 ## Upgrading from v0.1
 
@@ -121,16 +158,27 @@ systemctl --user enable --now bearings.service
 `~/.config/bearings/config.toml`. Defaults are baked in; override only the
 keys you need.
 
-| Section    | Key                  | Default                          | Purpose                          |
-|------------|----------------------|----------------------------------|----------------------------------|
-| `server`   | `host`               | `127.0.0.1`                      | Bind address                     |
-| `server`   | `port`               | `8787`                           | Bind port                        |
-| `auth`     | `enabled`            | `false`                          | Gate REST + WS behind bearer     |
-| `auth`     | `token`              | *(unset)*                        | Shared secret when `enabled`     |
-| `agent`    | `working_dir`        | `~/`                             | CWD for agent sessions           |
-| `agent`    | `model`              | `claude-opus-4-7`                | Default model                    |
-| `storage`  | `db_path`            | `~/.local/share/bearings/db.sqlite` | Persistence                 |
-| `metrics`  | `enabled`            | `false`                          | Prometheus `/metrics` endpoint   |
+| Section    | Key                          | Default                          | Purpose                                              |
+|------------|------------------------------|----------------------------------|------------------------------------------------------|
+| `profile`  | `name`                       | *(unset)*                        | Active permission profile (info only — set by `init`)|
+| `profile`  | `show_banner`                | `true`                           | Print gate audit on `serve` startup                  |
+| `server`   | `host`                       | `127.0.0.1`                      | Bind address                                         |
+| `server`   | `port`                       | `8787`                           | Bind port                                            |
+| `auth`     | `enabled`                    | `false`                          | Gate REST + WS behind bearer                         |
+| `auth`     | `token`                      | *(unset)*                        | Shared secret when `enabled`                         |
+| `agent`    | `working_dir`                | `~/`                             | Legacy default cwd when `workspace_root` unset       |
+| `agent`    | `workspace_root`             | *(unset)*                        | Per-session sandbox parent (sets `safe` posture)     |
+| `agent`    | `model`                      | `claude-opus-4-7`                | Default model                                        |
+| `agent`    | `default_max_budget_usd`     | *(unset)*                        | Per-session spend cap when caller doesn't pass one   |
+| `agent`    | `allow_bypass_permissions`   | `true`                           | Allow header selector to escalate to `bypassPermissions` |
+| `agent`    | `setting_sources`            | *(unset)*                        | SDK settings inheritance — `[]` = none, `null` = SDK default |
+| `agent`    | `inherit_mcp_servers`        | `true`                           | Pass through `~/.claude/` MCP server registrations   |
+| `agent`    | `inherit_hooks`              | `true`                           | Pass through `~/.claude/` hook scripts               |
+| `commands` | `scope`                      | `"all"`                          | Slash-command palette scope (`all` / `user` / `project`) |
+| `fs`       | `allow_root`                 | `~/`                             | `/api/fs/list` clamp                                 |
+| `runner`   | `idle_ttl_seconds`           | `900`                            | Idle runner reaper threshold                         |
+| `storage`  | `db_path`                    | `~/.local/share/bearings/db.sqlite` | Persistence                                       |
+| `metrics`  | `enabled`                    | `false`                          | Prometheus `/metrics` endpoint                       |
 
 ## License
 

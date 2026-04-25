@@ -113,6 +113,9 @@ class AgentSession:
         sdk_session_id: str | None = None,
         permission_mode: PermissionMode | None = None,
         thinking: ThinkingConfig | None = None,
+        setting_sources: list[str] | None = None,
+        inherit_mcp_servers: bool = True,
+        inherit_hooks: bool = True,
     ) -> None:
         self.session_id = session_id
         self.working_dir = working_dir
@@ -141,6 +144,16 @@ class AgentSession:
         # stream() call's options. Flipping this (via
         # set_permission_mode) is how `/plan` engages plan mode.
         self.permission_mode = permission_mode
+        # Permission-profile gates wired through to the SDK. `None` /
+        # `True` reproduce today's behavior — the SDK applies its own
+        # defaults (inherit user `~/.claude` settings, MCP servers,
+        # hooks). The `safe` profile flips these so a session under
+        # Bearings starts from a clean slate without leaking the
+        # operator's global config into the session run. See
+        # `bearings.config.AgentCfg` for the per-knob rationale.
+        self.setting_sources = setting_sources
+        self.inherit_mcp_servers = inherit_mcp_servers
+        self.inherit_hooks = inherit_hooks
         # Optional `can_use_tool` callback passed to `ClaudeAgentOptions`.
         # When set (by the runner, post-construction), the SDK invokes
         # it whenever a tool call needs permission — the runner parks
@@ -285,6 +298,19 @@ class AgentSession:
             options_kwargs["thinking"] = self.thinking
         if self.can_use_tool is not None:
             options_kwargs["can_use_tool"] = self.can_use_tool
+        # Permission-profile gates. We pass each only when it diverges
+        # from the SDK default so a power-user run (today's behavior)
+        # still produces the exact same `ClaudeAgentOptions` payload as
+        # before this knob landed.
+        if self.setting_sources is not None:
+            options_kwargs["setting_sources"] = self.setting_sources
+        if not self.inherit_mcp_servers:
+            # Empty dict tells the SDK "no MCP servers" rather than
+            # "use defaults". The dict is required-typed in the SDK
+            # so we can't pass `None`.
+            options_kwargs["mcp_servers"] = {}
+        if not self.inherit_hooks:
+            options_kwargs["hooks"] = {}
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called

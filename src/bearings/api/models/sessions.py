@@ -9,7 +9,15 @@ from pydantic import BaseModel, Field
 
 
 class SessionCreate(BaseModel):
-    working_dir: str
+    # `working_dir` is now optional so a `safe`-profile install can
+    # default new sessions into a per-session sandbox subdir under
+    # `agent.workspace_root` instead of forcing every caller to pass a
+    # path. When omitted (None or empty string), the route resolves it
+    # to `<workspace_root>/<session_id>` if a workspace_root is
+    # configured, else falls back to `settings.agent.working_dir`.
+    # Existing callers that pass a real path are unaffected — they
+    # win unconditionally.
+    working_dir: str | None = None
     model: str
     title: str | None = None
     description: str | None = None

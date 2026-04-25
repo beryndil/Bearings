@@ -171,6 +171,78 @@ async def test_stream_passes_sdk_session_id_as_resume(
 
 
 @pytest.mark.asyncio
+async def test_stream_safe_profile_strips_inherits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`safe`-profile gates wired through to the SDK options. The
+    `setting_sources=[]` tells the SDK to ignore every external
+    settings file; `mcp_servers={}` blocks MCP-server inheritance;
+    `hooks={}` blocks PreToolUse/PostToolUse/etc. hook inheritance.
+    Regression here is the whole point of the safe profile silently
+    not applying — every gate has to actually land on the SDK call."""
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession(
+        "s",
+        working_dir="/tmp",
+        model="m",
+        setting_sources=[],
+        inherit_mcp_servers=False,
+        inherit_hooks=False,
+    )
+    _ = [ev async for ev in session.stream("hi")]
+    opts = captured["options"]
+    assert opts.setting_sources == []
+    assert opts.mcp_servers == {}
+    assert opts.hooks == {}
+
+
+@pytest.mark.asyncio
+async def test_stream_power_user_defaults_pass_no_inherit_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`power-user` profile (today's defaults) must produce a SDK
+    options payload byte-identical to pre-toggle-layer behavior. We
+    don't pass `setting_sources`, `mcp_servers={}`, or `hooks={}`
+    when the inherit knobs are at their defaults — passing those
+    would change SDK behavior even on operators who never picked a
+    profile. This locks the no-pass branch."""
+    captured: dict[str, Any] = {}
+
+    class CapturingClient(FakeClient):
+        def __init__(self, messages: list[Any], options: Any = None) -> None:
+            super().__init__(messages, options)
+            captured["options"] = options
+
+    def factory(options: Any = None) -> CapturingClient:
+        return CapturingClient([_result()], options)
+
+    monkeypatch.setattr("bearings.agent.session.ClaudeSDKClient", factory)
+    session = AgentSession("s", working_dir="/tmp", model="m")
+    _ = [ev async for ev in session.stream("hi")]
+    opts = captured["options"]
+    # SDK defaults: setting_sources=None, mcp_servers={} and hooks=None
+    # are SDK-internal defaults. The bug-prone case is when WE
+    # explicitly pass empty values — confirm our code didn't take that
+    # branch when the inherit knobs were at their power-user defaults.
+    assert opts.setting_sources is None
+    # The SDK's own default for mcp_servers is the empty dict — it's
+    # required-typed. We verify our code didn't independently force it.
+    # The power-user check is "we didn't override" so we read the
+    # captured options' value; the SDK's internal default is fine.
+    assert opts.hooks is None
+
+
+@pytest.mark.asyncio
 async def test_stream_passes_thinking_config_to_options(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

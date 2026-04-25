@@ -84,6 +84,7 @@ from bearings.db._sessions import (
     set_session_context_usage,
     set_session_error_pending,
     set_session_permission_mode,
+    set_working_dir,
     touch_session,
     update_session,
 )
@@ -189,6 +190,7 @@ __all__ = [
     "set_session_context_usage",
     "set_session_error_pending",
     "set_session_permission_mode",
+    "set_working_dir",
     "toggle_item",
     "touch_session",
     "update_checklist",

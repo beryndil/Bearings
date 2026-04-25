@@ -1136,7 +1136,17 @@ it then. Do not exercise the historical checklists as-is.
   Also a sibling bug Dave flagged in the same turn: plan-mode
   dropdown behavior needs its own investigation (tracked separately
   once reproduced). Workaround: drop out of plan mode, hand off to a
-  fresh session, replan there.
+  fresh session, replan there. **Filed upstream 2026-04-24:**
+  https://github.com/anthropics/claude-code/issues/53046 (refile of
+  canonical stale-closed #21131 per its auto-close invitation; Adam
+  Goyer's and SeanHollen's comments on #21131 cited as evidence of
+  the deadlock). **Workaround codified 2026-04-24:**
+  `~/.claude/rules/plan-mode-stale-pin-workaround.md` — experiment in
+  this session showed plan-mode lockdown is soft (system-reminder
+  only, emitted only at first entry), so `ExitPlanMode` →
+  `EnterPlanMode` round-trip clears the constraint without needing
+  to clobber, archive, or hand off to a fresh session. Retire rule
+  when #53046 ships a proper fix.
 
 - [ ] **Feature: Session Reorg — message triage across sessions.**
   Plan: `~/.claude/plans/sparkling-triaging-otter.md`. Session:
@@ -1307,22 +1317,53 @@ Bearings shortcoming.
   and `SuccessExitStatus=143` so a clean TERM still counts toward the
   burst budget. Backup at `bearings.service.bak`. Reloaded, restarted,
   verified `/api/health` 200.
-- **Still to do:**
-  - [ ] Identify the TERM sender next time it happens. Add an `ExecStopPost`
-        hook that dumps `/proc/self/status` + `last` + `loginctl` state,
-        or enable audit rule `-a always,exit -F arch=b64 -S kill -F
-        a1=15 -k bearings_term` so the sender is captured.
-  - [ ] Consider `MemoryMax=4G` (soft guard; current peak 2.2G leaves
-        headroom, but Slice-5+ reorg work could grow the footprint).
+- **Follow-ups shipped 2026-04-24** (Bearings session
+  `d44baee13ad844f9b150364f4bab5078`):
+  - [x] **Sender attribution.** Both halves landed:
+    - System-wide audit rule at `/etc/audit/rules.d/bearings.rules`:
+      `-a always,exit -F arch=b64 -S kill -F a1=15 -k bearings_term`.
+      `auditd.service` enabled + active. Verified end-to-end with a
+      test SIGTERM — capture records sender `comm`/`exe`/`pid`/`auid`
+      and target `opid`/`ocomm`. Post-mortem retrieval:
+      `sudo ausearch -k bearings_term --start <timestamp>`.
+    - `ExecStopPost=%h/.local/bin/bearings-sigterm-forensic` writes
+      forensic context (exit code/status, recent journal, `loginctl`
+      sessions, `last`, listeners on :8787, top user procs by CPU)
+      to `~/.local/share/bearings/sigterm-forensic.log` on every
+      stop. Self-trims when log exceeds 1500 lines. Verified
+      populated on restart of 2026-04-24 18:02.
+  - [x] **Memory backstop.** `MemoryMax=4G` set on the unit. Peak
+        observed 2.0–2.2G; 4G gives ~2× headroom for Slice-5+ reorg
+        work. `MemoryHigh` left unset (kernel-killed backstop only,
+        no throttling).
+  - **Backups:** original pre-Apr-21 unit at `bearings.service.bak`;
+    pre-forensic-hook unit at `bearings.service.pre-forensic.bak`.
+  - **Not done (deferred to Security-audit § Systemd hardening):**
+    `ProtectHome` / `PrivateTmp` / `NoNewPrivileges`. `ProtectHome`
+    cannot be `yes` or `read-only` — the SQLite DB lives in
+    `~/.local/share/bearings/`. `PrivateTmp=yes` and
+    `NoNewPrivileges=yes` are safe additions and should ride with
+    the Security-audit pass.
 
-### 2026-04-21 — slice 5 frontend shipping a request the backend doesn't serve
+### 2026-04-21 — slice 5 frontend shipping a request the backend doesn't serve — resolved
 
 - `GET /api/sessions/{id}/reorg/audits` returned 404 in the logs right
   before the outage (unrelated to the shutdown — process was healthy
   after). The `ReorgAuditDivider.svelte` component expects that route.
-- Needs: register the audits route in `src/bearings/api/routes_reorg.py`
-  and back it with the `0014_reorg_audits.sql` table, or feature-gate
-  the frontend fetch until the route lands.
+- **Resolved 2026-04-24 (verification only — no code change).** The 404
+  was logged on 2026-04-21; the missing pieces actually landed the same
+  day in `7eb5558` (`feat(reorg): merge route + persistent audit
+  divider (Slice 5, v0.3.21)`). All four layers are wired:
+  - migration `0014_reorg_audits.sql` + `schema.sql:163` table.
+  - store helpers `record_reorg_audit` / `list_reorg_audits` /
+    `delete_reorg_audit` in `db/_reorg.py`.
+  - `GET /sessions/{id}/reorg/audits` + `DELETE …/{audit_id}` in
+    `api/routes_reorg.py:361-402`, mounted via
+    `server.py:164` under `/api`.
+  - frontend client `listReorgAudits()` at
+    `frontend/src/lib/api/sessions.ts:536`.
+  Live probe `curl http://127.0.0.1:8787/api/sessions/<id>/reorg/audits`
+  returns 200 against the running service. Nothing to ship.
 
 ## Performance optimization
 
@@ -1767,12 +1808,62 @@ shown in UI header.
 
 Implementation order:
 
-- [ ] Land all ship-blockers above (they're not behind a toggle).
-- [ ] Add config schema for every togglable gate (see findings list).
-- [ ] Build the three preset profiles.
-- [ ] Add startup banner that prints active profile + which gates are
-  open.
-- [ ] Rewrite README intro around the profile model.
+- [x] Land all ship-blockers above (they're not behind a toggle).
+- [x] Add config schema for every togglable gate. **Shipped v0.11.0
+  (2026-04-24).** New knobs: `agent.workspace_root`,
+  `agent.allow_bypass_permissions`, `agent.setting_sources`,
+  `agent.inherit_mcp_servers`, `agent.inherit_hooks`,
+  `agent.default_permission_mode`, top-level `[profile]` section
+  (`name`, `show_banner`). Existing knobs (`commands.scope`,
+  `agent.default_max_budget_usd`, `fs.allow_root`,
+  `runner.idle_ttl_seconds`, `auth.enabled`/`token`) cover the
+  remaining audit gates. Wired through to actual behavior:
+  - `setting_sources` / `inherit_mcp_servers` / `inherit_hooks` →
+    `AgentSession.stream` adds them to `ClaudeAgentOptions` only when
+    they diverge from SDK defaults so power-user profile produces a
+    byte-identical SDK call to pre-toggle-layer behavior.
+  - `allow_bypass_permissions` → `ws_agent.py` `set_permission_mode`
+    handler refuses `bypassPermissions` escalation when False, returns
+    an `error` wire frame instead of silently ignoring.
+  - `workspace_root` → `routes_sessions.py` POST `/api/sessions`
+    materializes a per-session sandbox subdir at
+    `<workspace_root>/<session_id>` when the caller omits
+    `working_dir`. Caller-supplied path still wins. New
+    `store.set_working_dir` helper supports the post-create resolution.
+  - `default_permission_mode` → `_build_runner` uses it as fallback
+    when the persisted `permission_mode` is NULL.
+- [x] Build the three preset profiles. **Shipped v0.11.0.** New
+  `bearings.profiles` module: `apply_profile(name) → nested dict` of
+  config overrides, `merge_profile_into_toml(existing, profile_data)`
+  for section-shallow overlay (preserves operator-edited keys the
+  profile doesn't touch). `safe`/`workstation`/`power-user` literals
+  in `ProfileName`. Auth tokens auto-generated via
+  `secrets.token_urlsafe(32)`; re-running rotates.
+- [x] Add startup banner that prints active profile + which gates are
+  open. **Shipped v0.11.0.** New `_print_profile_banner` +
+  `_format_gate_state` helpers in `cli.py`. Visible by default on
+  every `bearings serve`; `profile.show_banner = false` opts out.
+  Same banner runs at end of `bearings init --profile X` so the
+  operator sees their posture immediately.
+- [x] Rewrite README intro around the profile model. **Shipped
+  v0.11.0.** New top-level §"Permission profiles" section with the
+  three-profile gate matrix, before the §Status block. Config table
+  extended with every new gate knob.
+
+Test coverage added:
+- `tests/test_profiles.py` (12 cases): preset gate values, token
+  rotation, merge semantics, round-trip via `_write_profile` →
+  `load_settings`, banner format axes, banner with/without active
+  profile.
+- `tests/test_routes_sessions.py` +2: workspace sandbox materialized
+  on POST when working_dir absent; explicit caller path wins.
+- `tests/test_agent_session.py` +2: `safe`-profile knobs land on
+  `ClaudeAgentOptions`; `power-user` defaults don't add empty
+  override values.
+- `tests/test_ws_agent.py` +2: `bypassPermissions` refused when gate
+  closed; allowed under default config.
+
+929 backend tests pass; ruff + mypy strict + format clean.
 
 ### High but not ship-blocker (fold into toggle layer)
 

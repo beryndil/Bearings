@@ -5,8 +5,25 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
+from claude_agent_sdk import PermissionMode
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Permission-profile presets selected at first-run / `bearings init`.
+# The names map to the Bearings 2026-04-21 security audit findings:
+#   - "safe": public-default. Auth on (token auto-generated), per-
+#     session sandbox working_dir, no `~/.claude` inherit, no MCP, no
+#     hooks, bypassPermissions mode forbidden, fs picker clamped to
+#     workspace root, commands palette scoped to project, default
+#     budget ceiling.
+#   - "workstation": laptop default. Auth on, $HOME working_dir, MCP
+#     and hooks inherit allowed, bypassPermissions allowed but
+#     ephemeral, Edit/Write still gates on per-call approval.
+#   - "power-user": today's defaults restored. Banner names every gate
+#     that's open so the operator sees exactly what they're running.
+# `None` means "no profile applied" — the user opted out and is
+# running raw config defaults (today's behavior pre-toggle-layer).
+ProfileName = Literal["safe", "workstation", "power-user"]
 
 # `commands.scope` controls how far the `/api/commands` palette walks:
 #   - "all" (default): project `.claude/` + user `~/.claude/` + every
@@ -28,6 +45,15 @@ CommandsScope = Literal["all", "user", "project"]
 # own default (currently: thinking off unless the model is configured for
 # it). We default to "adaptive" so sessions show reasoning in the UI.
 ThinkingMode = Literal["adaptive", "disabled"]
+
+# SDK setting-source values accepted by `ClaudeAgentOptions.setting_sources`.
+# `user`  — `~/.claude/settings.json` (global Claude Code config).
+# `project` — `<cwd>/.claude/settings.json` (per-project overrides).
+# `local` — `<cwd>/.claude/settings.local.json` (per-checkout overrides,
+#            usually gitignored).
+# An empty list means the SDK ignores all of those and runs with
+# Bearings' explicit options only — that's the `safe` profile default.
+SettingSource = Literal["user", "project", "local"]
 
 # Billing mode toggles what the UI shows as the "spend" metric.
 #   - "payg": dollars from ResultMessage.total_cost_usd (the SDK's
@@ -91,6 +117,65 @@ class AgentCfg(BaseModel):
     # fills in the default when the caller didn't specify.
     # 2026-04-21 security audit §7 (2026-04-23 fix).
     default_max_budget_usd: float | None = None
+    # When set, new sessions whose `working_dir` is unspecified land in
+    # `<workspace_root>/<session_id>` — a per-session sandbox subdir —
+    # rather than the legacy `agent.working_dir` (which today defaults to
+    # `$HOME` for laptop convenience). The `safe` profile points this at
+    # `~/.local/share/bearings/workspaces` so a shared-box install
+    # doesn't accidentally let a session walk the operator's home tree.
+    # `None` keeps the legacy behavior and is what `power-user` /
+    # `workstation` profiles run with.
+    workspace_root: Path | None = None
+    # Default permission mode applied to fresh sessions before any
+    # client opts into a different one. `None` lets the SDK pick
+    # (currently: ask-on-every-tool, the "default" mode the SDK exposes
+    # as `PermissionMode.default` when nothing is specified). Profiles
+    # don't currently override this — kept here so a future profile
+    # that wants e.g. "always plan" has a clean knob to flip without
+    # touching session-create code.
+    default_permission_mode: PermissionMode | None = None
+    # Whether the `set_permission_mode` WS frame is allowed to escalate
+    # to `bypassPermissions`. `True` (today's behavior) lets the user
+    # waive every prompt for the rest of a turn from the header
+    # selector — fine for a single-operator workstation, unsafe on a
+    # shared box where a stray click silently grants Edit/Write/Bash.
+    # `False` (the `safe` profile default) makes the WS handler refuse
+    # the escalation; the selector still offers default / plan /
+    # acceptEdits. The 4-mode set in the UI is intentionally untouched
+    # — the handler-side refusal is what matters; the UI display will
+    # later read this flag to gray the option out.
+    allow_bypass_permissions: bool = True
+    # SDK `setting_sources`. `None` (today's behavior) lets the SDK
+    # apply its own defaults — which today inherit `~/.claude/`
+    # settings.json, project `.claude/settings.json`, and the gitignored
+    # `.claude/settings.local.json`. `[]` (`safe` profile default) tells
+    # the SDK to ignore every external settings file so a session run
+    # under Bearings starts from a clean slate. `["user"]` /
+    # `["project"]` / `["user", "project"]` etc. are explicit narrowings
+    # — passed through to the SDK verbatim. Mostly relevant when
+    # Bearings is running on a multi-user box or a shared dev VM where
+    # the operator's `~/.claude` settings.json shouldn't leak into a
+    # session another person is driving.
+    setting_sources: list[SettingSource] | None = None
+    # Whether the SDK should inherit MCP server registrations from the
+    # operator's `~/.claude/` settings (the SDK's default behavior).
+    # `True` (today's behavior, `power-user` / `workstation` default)
+    # means the agent has access to whatever MCP servers the operator
+    # has configured globally — useful Patina/Sentinel/Fortress glue
+    # for Dave, dangerous on a shared box. `False` (`safe` profile
+    # default) passes an empty `mcp_servers={}` dict to the SDK so a
+    # session can only call MCP servers Bearings explicitly registers
+    # for it (currently: none).
+    inherit_mcp_servers: bool = True
+    # Whether the SDK should inherit hook scripts from the operator's
+    # `~/.claude/settings.json`. `True` (today's behavior) means
+    # PreToolUse/PostToolUse/Stop/etc. hooks defined globally fire for
+    # Bearings sessions too. `False` (`safe` profile default) passes
+    # `hooks={}` so no inherited hook script runs — a hardening guard
+    # against a malicious or stale hook leaking through. Bearings does
+    # not yet register its own hooks; this knob will gain a positive
+    # use-case alongside that.
+    inherit_hooks: bool = True
 
 
 class StorageCfg(BaseModel):
@@ -271,6 +356,28 @@ class VaultCfg(BaseModel):
     )
 
 
+class ProfileCfg(BaseModel):
+    """Permission-profile metadata.
+
+    `name` is informational — it records which preset the user picked
+    at `bearings init` time so the startup banner and UI header can
+    display "running profile: safe" etc. The actual gates that make a
+    profile a profile live in their own `[agent]` / `[commands]` /
+    `[fs]` / `[auth]` knobs; this field is what surfaces the choice to
+    the operator and to anything that wants to display it. `None`
+    means no profile was applied (raw defaults / mix-and-match).
+
+    `show_banner` controls whether `bearings serve` prints the gate
+    audit on startup. Default `True` because the whole point of the
+    banner is to make the security posture visible — but a systemd-
+    user service operator who reads journald has another path to that
+    info and can opt out if the duplication is noisy.
+    """
+
+    name: ProfileName | None = None
+    show_banner: bool = True
+
+
 class BillingCfg(BaseModel):
     # Defaults to "payg" so nothing changes for developer-API users who
     # were using Bearings before this knob existed. Max/Pro subscribers
@@ -299,6 +406,7 @@ class Settings(BaseSettings):
     fs: FsCfg = Field(default_factory=FsCfg)
     commands: CommandsCfg = Field(default_factory=CommandsCfg)
     vault: VaultCfg = Field(default_factory=VaultCfg)
+    profile: ProfileCfg = Field(default_factory=ProfileCfg)
 
     config_file: Path = Field(default_factory=lambda: CONFIG_HOME / "config.toml")
     # `menus.toml` is the Phase 10 customization file: pinned / hidden

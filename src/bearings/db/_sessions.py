@@ -369,6 +369,26 @@ async def set_sdk_session_id(
     await conn.commit()
 
 
+async def set_working_dir(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    working_dir: str,
+) -> None:
+    """Update a session's working_dir post-creation. Used by the route's
+    sandbox-resolution path: when the caller omits `working_dir` and a
+    profile sets `agent.workspace_root`, the route mints the session
+    (which auto-generates the id), then materializes the per-session
+    sandbox subdir at `<workspace_root>/<session_id>` and writes the
+    resolved path back via this helper. Does not bump `updated_at` —
+    initial creation already set it; this is part of the same logical
+    create operation."""
+    await conn.execute(
+        "UPDATE sessions SET working_dir = ? WHERE id = ?",
+        (working_dir, session_id),
+    )
+    await conn.commit()
+
+
 async def set_session_permission_mode(
     conn: aiosqlite.Connection,
     session_id: str,

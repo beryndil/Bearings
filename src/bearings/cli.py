@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import IO, Any
 
+import tomli_w
 from websockets.asyncio.client import connect as ws_connect
 
 from bearings import __version__
@@ -17,7 +18,12 @@ from bearings.bearings_dir import pending as pending_ops
 from bearings.bearings_dir.check import run_check
 from bearings.bearings_dir.init_dir import init_directory
 from bearings.bearings_dir.onboard import render_brief
-from bearings.config import DATA_HOME, Settings, load_settings
+from bearings.config import DATA_HOME, ProfileName, Settings, load_settings
+from bearings.profiles import (
+    apply_profile,
+    available_profiles,
+    merge_profile_into_toml,
+)
 
 # Hostnames / IPs that the interlock treats as loopback-only. Anything
 # else (wildcard binds like `0.0.0.0` / `::`, a LAN address, an
@@ -128,7 +134,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("serve", help="Run the FastAPI server")
-    sub.add_parser("init", help="Initialize config + database on disk")
+    init = sub.add_parser("init", help="Initialize config + database on disk")
+    init.add_argument(
+        "--profile",
+        choices=available_profiles(),
+        default=None,
+        help=(
+            "Permission profile to materialize into config.toml. "
+            "`safe` (public default): auth on, sandbox working_dir, no "
+            "~/.claude inherit, no MCP/hooks, bypassPermissions blocked. "
+            "`workstation`: auth on, $HOME working_dir, MCP/hooks "
+            "allowed, bypassPermissions allowed but ephemeral. "
+            "`power-user`: today's defaults restored. "
+            "Omit to leave config.toml untouched."
+        ),
+    )
 
     window = sub.add_parser(
         "window",
@@ -331,6 +351,79 @@ def launch_app_window(browser: str, url: str) -> subprocess.Popen[bytes]:
     )
 
 
+def _write_profile(config_path: Path, profile: ProfileName) -> None:
+    """Materialize a profile preset into config.toml.
+
+    Reads the existing TOML (if any), overlays the profile's keys via
+    `merge_profile_into_toml`, and writes back. Operator-edited keys
+    that the profile doesn't touch survive untouched. The merge is
+    section-shallow, not deeply recursive — every config section in
+    Bearings is currently a flat key/value table.
+    """
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict[str, Any] = {}
+    if config_path.exists():
+        import tomllib
+
+        existing = tomllib.loads(config_path.read_text())
+    merged = merge_profile_into_toml(existing, apply_profile(profile))
+    with config_path.open("wb") as fh:
+        tomli_w.dump(merged, fh)
+
+
+def _format_gate_state(cfg: Settings) -> list[str]:
+    """Render a one-line-per-gate audit of the active configuration.
+
+    Each line follows `<key> <state>` so a quick scan tells the
+    operator which security knobs are open vs. closed. Used by both
+    the post-init success message and the `serve` startup banner so
+    the same audit text lands in both contexts.
+    """
+    lines: list[str] = []
+    auth = cfg.auth
+    lines.append(f"  auth                       {'on' if auth.enabled else 'OFF'}")
+    agent = cfg.agent
+    lines.append(
+        f"  bypassPermissions allowed  {'yes' if agent.allow_bypass_permissions else 'no'}"
+    )
+    lines.append(
+        f"  ~/.claude settings inherit "
+        f"{'default' if agent.setting_sources is None else (agent.setting_sources or 'none')}"
+    )
+    lines.append(f"  MCP servers inherited      {'yes' if agent.inherit_mcp_servers else 'no'}")
+    lines.append(f"  hooks inherited            {'yes' if agent.inherit_hooks else 'no'}")
+    if agent.workspace_root is not None:
+        lines.append(f"  workspace_root             {agent.workspace_root}")
+    else:
+        lines.append(f"  default working_dir        {agent.working_dir}")
+    if agent.default_max_budget_usd is not None:
+        lines.append(f"  per-session budget cap     ${agent.default_max_budget_usd:.2f}")
+    else:
+        lines.append("  per-session budget cap     uncapped")
+    lines.append(f"  fs picker root             {cfg.fs.allow_root}")
+    lines.append(f"  commands palette scope     {cfg.commands.scope}")
+    lines.append(f"  runner idle TTL            {cfg.runner.idle_ttl_seconds:.0f}s")
+    lines.append(f"  bind                       {cfg.server.host}:{cfg.server.port}")
+    return lines
+
+
+def _print_profile_banner(cfg: Settings, *, fh: Any) -> None:
+    """Print the active permission profile + a per-gate audit.
+
+    Visible-by-default on `bearings serve` so the operator sees their
+    posture every restart. Suppressible via `profile.show_banner =
+    false` for systemd-user operators who already read the journal.
+    """
+    name = cfg.profile.name or "(none — raw defaults)"
+    bar = "─" * 60
+    print(bar, file=fh)
+    print(f"Bearings permission profile: {name}", file=fh)
+    print(bar, file=fh)
+    for line in _format_gate_state(cfg):
+        print(line, file=fh)
+    print(bar, file=fh)
+
+
 def _check_bind_auth_interlock(cfg: Settings) -> str | None:
     """Return an error message when `server.host` exposes Bearings
     beyond loopback with no auth token, otherwise `None`.
@@ -371,6 +464,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if interlock_error is not None:
             print(interlock_error, file=sys.stderr)
             return 2
+        if cfg.profile.show_banner:
+            _print_profile_banner(cfg, fh=sys.stdout)
         uvicorn.run(
             "bearings.server:create_app",
             factory=True,
@@ -383,8 +478,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "init":
         cfg = load_settings()
         cfg.ensure_paths()
+        if args.profile is not None:
+            _write_profile(cfg.config_file, args.profile)
+            print(f"profile '{args.profile}' written to {cfg.config_file}")
+            cfg = load_settings()  # reload so the printed summary reflects the write
         print(f"config ready at {cfg.config_file}")
         print(f"database path {cfg.storage.db_path}")
+        if args.profile is not None:
+            # Surface the auto-generated token so the operator can wire
+            # it into their browser bookmark / shell alias before the
+            # banner-on-serve reveals it again.
+            if cfg.auth.enabled and cfg.auth.token:
+                print(f"auth token: {cfg.auth.token}")
+            print()
+            _print_profile_banner(cfg, fh=sys.stdout)
         return 0
 
     if args.command == "window":

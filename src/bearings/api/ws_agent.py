@@ -88,6 +88,15 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
             f"cannot build runner for session kind={row.get('kind')!r}; "
             f"runnable kinds: {sorted(_RUNNABLE_KINDS)!r}"
         )
+    agent_cfg = app.state.settings.agent
+    # Restore the user's last PermissionMode (migration 0012) so a
+    # browser reload or socket drop doesn't silently roll them back
+    # to 'default'. NULL in the DB → fall back to the profile's
+    # `default_permission_mode` (today's behavior: still None → SDK
+    # default). The DB value wins so a user who flipped to plan mode
+    # before reload doesn't get re-asked.
+    persisted_mode = row.get("permission_mode")
+    permission_mode = persisted_mode or agent_cfg.default_permission_mode
     agent = AgentSession(
         session_id,
         row["working_dir"],
@@ -95,12 +104,20 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
         max_budget_usd=row.get("max_budget_usd"),
         db=conn,
         sdk_session_id=row.get("sdk_session_id"),
-        # Restore the user's last PermissionMode (migration 0012) so a
-        # browser reload or socket drop doesn't silently roll them back
-        # to 'default'. NULL in the DB → None here → 'default' behavior
-        # in the SDK.
-        permission_mode=row.get("permission_mode"),
-        thinking=_thinking_config(app.state.settings.agent.thinking),
+        permission_mode=permission_mode,
+        thinking=_thinking_config(agent_cfg.thinking),
+        # Permission-profile gates (2026-04-21 security audit §5).
+        # `power-user` profile leaves these at today's defaults so the
+        # `ClaudeAgentOptions` payload is byte-identical to pre-toggle-
+        # layer behavior. `safe` profile flips them so a session under
+        # Bearings starts with no `~/.claude` settings inherit, no MCP
+        # inherit, no hook inherit. We snapshot setting_sources to a
+        # fresh list so a per-session mutation can't leak into config.
+        setting_sources=list(agent_cfg.setting_sources)
+        if agent_cfg.setting_sources is not None
+        else None,
+        inherit_mcp_servers=agent_cfg.inherit_mcp_servers,
+        inherit_hooks=agent_cfg.inherit_hooks,
     )
     runner = SessionRunner(
         session_id,
@@ -355,12 +372,33 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
                 await runner.request_stop()
             elif msg_type == "set_permission_mode":
                 mode = payload.get("mode")
-                # Async now because the runner also retro-applies the
-                # new mode to any parked approval (see the broker's
-                # `resolve_for_mode` matrix). Await so an
-                # `approval_resolved` fan-out gets on the wire before we
-                # consider ourselves ready for the next frame.
-                await runner.set_permission_mode(mode or None)
+                # Profile gate: refuse `bypassPermissions` escalation
+                # when the active config disallows it. Today's default
+                # (and `power-user`/`workstation` profiles) leaves
+                # `allow_bypass_permissions=True`, so the refusal only
+                # bites under the `safe` profile or an operator who
+                # opted in manually. Silent ignore + a wire `error` so
+                # the UI knows the click did nothing instead of
+                # appearing to succeed; the event reducer surfaces
+                # `error` events as a transient toast.
+                allow_bypass = app.state.settings.agent.allow_bypass_permissions
+                if mode == "bypassPermissions" and not allow_bypass:
+                    await _send_frame(
+                        websocket,
+                        {
+                            "type": "error",
+                            "session_id": session_id,
+                            "message": ("bypassPermissions disabled by active permission profile"),
+                        },
+                    )
+                else:
+                    # Async now because the runner also retro-applies
+                    # the new mode to any parked approval (see the
+                    # broker's `resolve_for_mode` matrix). Await so an
+                    # `approval_resolved` fan-out gets on the wire
+                    # before we consider ourselves ready for the next
+                    # frame.
+                    await runner.set_permission_mode(mode or None)
             elif msg_type == "approval_response":
                 # Resolves a pending `can_use_tool` future. Unknown /
                 # already-resolved ids are no-ops inside the runner, so

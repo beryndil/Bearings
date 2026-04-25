@@ -108,6 +108,74 @@ def test_post_create_applies_global_default_budget_when_unset(tmp_path) -> None:
         assert row2["max_budget_usd"] == 9.0
 
 
+def test_post_create_uses_workspace_root_sandbox_when_no_working_dir(tmp_path) -> None:
+    """`safe`-profile path: caller omits `working_dir` and the route
+    materializes a per-session sandbox subdir under
+    `agent.workspace_root`. The directory must exist on disk by the
+    time the response returns so the agent's first tool call doesn't
+    trip on a missing cwd. 2026-04-21 security audit §5."""
+    from fastapi.testclient import TestClient
+
+    from bearings.config import AgentCfg, ServerCfg, Settings, StorageCfg
+    from bearings.server import create_app
+
+    from .conftest import TEST_ORIGIN
+
+    workspace_root = tmp_path / "workspaces"
+    cfg = Settings(
+        server=ServerCfg(allowed_origins=[TEST_ORIGIN]),
+        storage=StorageCfg(db_path=tmp_path / "db.sqlite"),
+        agent=AgentCfg(workspace_root=workspace_root),
+    )
+    cfg.config_file = tmp_path / "config.toml"
+    with TestClient(create_app(cfg)) as c:
+        c.headers["origin"] = TEST_ORIGIN
+        tag_id = c.post("/api/tags", json={"name": "t"}).json()["id"]
+        # No `working_dir` in the body — the route must fill it in.
+        row = c.post(
+            "/api/sessions",
+            json={"model": "m", "title": None, "tag_ids": [tag_id]},
+        ).json()
+        expected_dir = workspace_root / row["id"]
+        assert row["working_dir"] == str(expected_dir)
+        assert expected_dir.is_dir()
+
+
+def test_post_create_honors_explicit_working_dir_under_workspace_root(tmp_path) -> None:
+    """When the operator passes a real `working_dir`, it wins
+    unconditionally — even with `workspace_root` configured. This
+    keeps the sandbox-subdir behavior opt-in by absence rather than
+    opt-out by configuration, so existing callers aren't surprised."""
+    from fastapi.testclient import TestClient
+
+    from bearings.config import AgentCfg, ServerCfg, Settings, StorageCfg
+    from bearings.server import create_app
+
+    from .conftest import TEST_ORIGIN
+
+    workspace_root = tmp_path / "workspaces"
+    cfg = Settings(
+        server=ServerCfg(allowed_origins=[TEST_ORIGIN]),
+        storage=StorageCfg(db_path=tmp_path / "db.sqlite"),
+        agent=AgentCfg(workspace_root=workspace_root),
+    )
+    cfg.config_file = tmp_path / "config.toml"
+    with TestClient(create_app(cfg)) as c:
+        c.headers["origin"] = TEST_ORIGIN
+        tag_id = c.post("/api/tags", json={"name": "t"}).json()["id"]
+        row = c.post(
+            "/api/sessions",
+            json={
+                "working_dir": "/explicit/path",
+                "model": "m",
+                "title": None,
+                "tag_ids": [tag_id],
+            },
+        ).json()
+        # Explicit caller path wins over the sandbox default.
+        assert row["working_dir"] == "/explicit/path"
+
+
 def test_get_list_includes_created(client: TestClient) -> None:
     created = _create(client)
     resp = client.get("/api/sessions")

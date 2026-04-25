@@ -59,15 +59,37 @@ async def create_session(body: SessionCreate, request: Request) -> SessionOut:
     budget = body.max_budget_usd
     if budget is None:
         budget = settings.agent.default_max_budget_usd
+    # working_dir resolution. Caller-supplied wins. When absent the
+    # route falls back to the profile's `workspace_root` (per-session
+    # sandbox subdir, `safe` profile) or the legacy
+    # `settings.agent.working_dir` default. We pre-create the sandbox
+    # subdir so the agent's first tool call doesn't trip on a missing
+    # cwd. 2026-04-21 security audit §5 (workspace sandboxing).
+    requested_dir = (body.working_dir or "").strip()
+    workspace_root = settings.agent.workspace_root
+    use_sandbox = not requested_dir and workspace_root is not None
+    if requested_dir:
+        working_dir = requested_dir
+    elif workspace_root is None:
+        working_dir = str(settings.agent.working_dir)
+    else:
+        # Provisional path; the per-session subdir gets the real
+        # session_id appended after `create_session` mints it.
+        working_dir = str(settings.agent.working_dir)
     row = await store.create_session(
         conn,
-        working_dir=body.working_dir,
+        working_dir=working_dir,
         model=body.model,
         title=body.title,
         description=body.description,
         max_budget_usd=budget,
         kind=body.kind,
     )
+    if use_sandbox:
+        assert workspace_root is not None  # narrowed by use_sandbox
+        sandbox_dir = workspace_root / row["id"]
+        sandbox_dir.mkdir(parents=True, exist_ok=True)
+        await store.set_working_dir(conn, row["id"], str(sandbox_dir))
     for tag_id in body.tag_ids:
         await store.attach_tag(conn, row["id"], tag_id)
     # Severity invariant (migration 0021): every session carries exactly

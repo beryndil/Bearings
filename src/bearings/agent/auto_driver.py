@@ -293,9 +293,7 @@ class Driver:
                 # "nothing was here" — wrong, plenty was there, the
                 # agent just couldn't finish it.
                 touched_any = (
-                    self._items_completed > 0
-                    or self._items_skipped > 0
-                    or self._items_failed > 0
+                    self._items_completed > 0 or self._items_skipped > 0 or self._items_failed > 0
                 )
                 if not touched_any:
                     return self._result(DriverOutcome.HALTED_EMPTY)
