@@ -1161,7 +1161,16 @@ it then. Do not exercise the historical checklists as-is.
   only, emitted only at first entry), so `ExitPlanMode` →
   `EnterPlanMode` round-trip clears the constraint without needing
   to clobber, archive, or hand off to a fresh session. Retire rule
-  when #53046 ships a proper fix.
+  when #53046 ships a proper fix. **Local mitigation 2026-04-25:**
+  installed `~/.claude/hooks/plan-pin-rotate.py` (PostToolUse on
+  `ExitPlanMode`) so the manual ritual is now automatic. Mechanism
+  details and recovery steps live in the (private) workaround rule
+  file; deliberately not mirrored here. v2 deferreds: read
+  `plansDirectory` from settings instead of hardcoding the path,
+  add an mtime threshold so refinement loops don't lose the in-
+  progress plan, periodic prune of `~/.claude/plans/.archive/`.
+  Mitigation retires together with the rule when Anthropic ships
+  the upstream fix.
 
 - [ ] **Feature: Session Reorg — message triage across sessions.**
   Plan: `~/.claude/plans/sparkling-triaging-otter.md`. Session:
