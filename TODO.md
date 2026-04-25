@@ -700,31 +700,54 @@ Two violations remain:
     (b) trim some `__init__` comments to module-level docs.
     Skipped in round 1 to keep diff small + tests green.
 
-- [ ] `frontend/src/lib/components/Conversation.svelte` — **1,631
-  lines** (4× cap). Highest-risk of the three: Svelte script +
-  markup + style are interdependent, and CLAUDE.md requires browser
-  verification for UI changes. Natural extraction candidates from
-  the script block:
-  - Reorg picker state + handlers (lines ~222–640: `openMoveFor` /
+- [ ] `frontend/src/lib/components/Conversation.svelte` — **1,954
+  lines** (was 2,013; round 1 trim landed 2026-04-25). Highest-risk
+  of the original three: Svelte script + markup + style are
+  interdependent, and CLAUDE.md requires browser verification for
+  UI changes.
+
+  Round 1 (landed 2026-04-25): **pure helpers extracted** — the
+  parts that don't touch component state and CAN be verified by
+  unit test alone.
+  - `parseUriList` / `extractPaths` / `hasFiles` →
+    `frontend/src/lib/utils/composer-dragdrop.ts` (89 lines) +
+    `composer-dragdrop.test.ts` (15 cases).
+  - `pickerTitle` / `pickerConfirmLabel` + `PickerOp` type →
+    `frontend/src/lib/utils/reorg-picker.ts` (38 lines) +
+    `reorg-picker.test.ts` (12 cases).
+  - svelte-check clean, all 669 vitest cases green. Full file shrinks
+    by ~60 lines; the remaining bulk is component-state-tied.
+
+  Round 2 (deferred — needs browser verification):
+  - **Reorg picker state + handlers** (`openMoveFor` /
     `openSplitFor` / `onBulkMove` / `onBulkSplit` / `openMerge` /
-    `closePicker` / `pickerTitle` / `pickerConfirmLabel` plus the
-    `PickerOp` type) → `ReorgPicker.svelte` subcomponent + a
-    `reorg-picker.ts` state helper.
-  - Drag/drop cluster (lines ~958–1152: `hasFiles` / `parseUriList`
-    / `onDragEnter` / `onDragOver` / `onDragLeave` / `extractPaths`
-    / `onDrop` / swallow-handler setup) → `composer-dragdrop.ts`
-    utility module.
-  - Bulk-mode controls (lines ~193–220: `toggleBulkMode` /
-    `onBulkToggleSelect`) → either a thin `BulkModeBar.svelte` or
-    inline props on an existing subcomponent.
-  - Textarea autosize + send + keydown (lines ~841–911) — small
-    enough to stay, but watch it doesn't push a post-extraction
-    Conversation.svelte back over cap.
-  - After each extraction: `npm run check` (svelte-check) + run
-    `uv run bearings serve` and exercise:
-    conversation scroll, send, keyboard shortcut, reorg (move /
-    split / merge with undo), bulk mode select + apply, drag-drop
-    file upload, drag-drop text URI.
+    `closePicker`, plus `pickerOpen` / `pickerOp` / `pickerAnchor`
+    / `pickerBulkIds` `$state`) → `ReorgPicker.svelte` subcomponent.
+    These DO touch reactive state and the `reorgStore` `$effect`
+    bridge — extraction needs running picker open/close on every
+    op variant in the browser.
+  - **Reorg mutation flows** (`doMove` / `doBulkMove` / `doSplit` /
+    `doMerge` / `onPickerPickExisting` / `onPickerPickNew` /
+    `createEmptySession`, ~270 lines) — these own undo plumbing,
+    audit refresh, and session reconcile. Could move to a
+    `reorg-actions.ts` module if it accepts a small "ops bag" of
+    runner callbacks. Verification: every variant + undo path.
+  - **Drag/drop handlers** (`onDragEnter` / `onDragOver` /
+    `onDragLeave` / `onDrop` / `onPaste` / `uploadDroppedFiles`
+    plus the document-level swallow `$effect`) → could move to
+    composables or a small action; needs Hyprland/Wayland live
+    verification because Chrome on Wayland has the broken
+    drop-dispatch path the current handlers work around.
+  - **Bulk-mode controls** (`toggleBulkMode` / `onBulkToggleSelect`)
+    → thin `BulkModeBar.svelte` or inline props on an existing
+    subcomponent. Verification: shift-click range selection,
+    bulk-mode entry/exit, selection clearing on session switch.
+
+  After each round-2 extraction: `npm run check` (svelte-check) +
+  run `uv run bearings serve` and exercise: conversation scroll,
+  send, keyboard shortcut, reorg (move / split / merge with undo),
+  bulk mode select + apply, drag-drop file upload, drag-drop text
+  URI.
 
 ## Browser verification — deferred to pre-1.0.0
 

@@ -46,6 +46,16 @@
     messagesAsMarkdown,
     pressureClass
   } from '$lib/utils/conversation-ui';
+  import {
+    extractPaths,
+    hasFiles,
+    parseUriList
+  } from '$lib/utils/composer-dragdrop';
+  import {
+    pickerConfirmLabel,
+    pickerTitle,
+    type PickerOp
+  } from '$lib/utils/reorg-picker';
 
   // Item 29 / perf audit 2026-04-21 (refactor 2026-04-24):
   // `turns` and `timeline` now live on `ConversationStore`; the
@@ -255,7 +265,6 @@
   // fresh session (picker opens on the create form). Slice 5 added
   // `merge`: folds the entire source into an existing target (no
   // create-new path, no per-message anchor).
-  type PickerOp = 'move' | 'split' | 'bulk-move' | 'bulk-split' | 'merge';
   let pickerOpen = $state(false);
   let pickerOp = $state<PickerOp>('move');
   let pickerAnchor = $state<api.Message | null>(null);
@@ -390,24 +399,6 @@
     pickerOpen = false;
     pickerAnchor = null;
     pickerBulkIds = [];
-  }
-
-  function pickerTitle(op: PickerOp, bulkCount: number): string {
-    if (op === 'split') return 'Split remaining messages into…';
-    if (op === 'bulk-move') {
-      return `Move ${bulkCount} selected message${bulkCount === 1 ? '' : 's'} to…`;
-    }
-    if (op === 'bulk-split') {
-      return `Split ${bulkCount} selected message${bulkCount === 1 ? '' : 's'} into a new session`;
-    }
-    if (op === 'merge') return 'Merge this session into…';
-    return 'Move message to…';
-  }
-
-  function pickerConfirmLabel(op: PickerOp): string {
-    if (op === 'split' || op === 'bulk-split') return 'Split here';
-    if (op === 'merge') return 'Merge here';
-    return 'Move here';
   }
 
   // Slice 5: persistent reorg-audit dividers. Fetched on session
@@ -1215,29 +1206,6 @@
     };
   });
 
-  function hasFiles(e: DragEvent): boolean {
-    return e.dataTransfer?.types.includes('Files') ?? false;
-  }
-
-  function parseUriList(text: string): string[] {
-    // RFC 2483: lines starting with `#` are comments. Blank lines are
-    // separators. Each remaining line is one URI.
-    const out: string[] = [];
-    for (const raw of text.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      if (!line.startsWith('file://')) continue;
-      try {
-        const url = new URL(line);
-        if (url.hostname && url.hostname !== 'localhost') continue;
-        out.push(decodeURIComponent(url.pathname));
-      } catch {
-        // Malformed URI — skip rather than inject garbage.
-      }
-    }
-    return out;
-  }
-
   function onDragEnter(e: DragEvent) {
     if (hasFiles(e)) dragging = true;
   }
@@ -1262,33 +1230,6 @@
     if (!related || !(e.currentTarget as Node).contains(related)) {
       dragging = false;
     }
-  }
-
-  /** Pull candidate absolute paths out of every DataTransfer format the
-   * browser/OS combo might expose. Chromium on Linux is inconsistent:
-   * Nautilus/Thunar usually set `text/uri-list`, Dolphin sometimes sets
-   * only `text/plain` with a `file://` URI, and some Wayland setups
-   * strip URIs entirely for security. We try everything and dedupe. */
-  function extractPaths(dt: DataTransfer): { paths: string[]; formats: string[] } {
-    const formats: string[] = [];
-    const paths = new Set<string>();
-    const tryFormat = (fmt: string) => {
-      const raw = dt.getData(fmt);
-      if (!raw) return;
-      formats.push(`${fmt}=${raw.slice(0, 200)}`);
-      for (const p of parseUriList(raw)) paths.add(p);
-      // Raw-path fallback: some sources (KDE, xdg, plain-text drags)
-      // put the absolute path directly, no file:// prefix.
-      for (const line of raw.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('/') && !trimmed.includes(' ')) paths.add(trimmed);
-      }
-    };
-    tryFormat('text/uri-list');
-    tryFormat('text/x-moz-url');
-    tryFormat('application/x-kde4-urilist');
-    tryFormat('text/plain');
-    return { paths: [...paths], formats };
   }
 
   // Drop diagnostic state lives OUTSIDE `conversation.error` because that
