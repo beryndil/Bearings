@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(/home/beryndil/Projects/Bearings/**)",
+      "Write(/home/beryndil/Projects/Bearings/**)"
+    ]
+  }
+}
