@@ -1688,10 +1688,20 @@
         </ul>
       {/if}
       {#if sessions.selected?.description}
+        <!--
+          Two-layer clamp. `line-clamp-3` is the nice path (3 lines + ellipsis
+          via -webkit-line-clamp) and works in Chromium. Firefox supports the
+          same property pair, but the `-webkit-box` display can lose the cascade
+          on flex children + whitespace-pre-wrap, leaving the clamp inert and
+          the full multi-paragraph plug eating half the viewport. The explicit
+          `max-h-[3.75rem]` (3 × 1.25rem text-xs line-height) + `overflow-hidden`
+          is the floor that hard-caps height regardless of -webkit-box state,
+          so Firefox sees the same 3-line preview Chromium does.
+        -->
         <p
           bind:this={descriptionEl}
           class="text-xs text-slate-400 mt-1 whitespace-pre-wrap break-words
-            {descriptionExpanded ? '' : 'line-clamp-3'}"
+            {descriptionExpanded ? '' : 'line-clamp-3 max-h-[3.75rem] overflow-hidden'}"
           data-testid="session-description"
           data-expanded={descriptionExpanded ? 'true' : 'false'}
         >
