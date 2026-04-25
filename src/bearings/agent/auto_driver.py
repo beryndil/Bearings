@@ -399,7 +399,28 @@ class Driver:
         return created_blocking
 
     async def _mark_done(self, item_id: int) -> None:
+        """Mark the item checked AND tidy the related sessions.
+
+        Tidy = close every leg session paired to the item so the
+        sidebar moves them into the Closed group instead of
+        accumulating one open chat per checked item. Already-closed
+        legs are skipped (re-closing a closed session is harmless,
+        but the no-op keeps the audit log clean).
+
+        After the per-item close, if the toggle just completed the
+        whole checklist (every top-level item checked), close the
+        parent checklist session too — matches the auto-close
+        behavior of the manual `toggle_item` HTTP handler so the
+        autonomous and manual paths land identical end-states."""
+        # Snapshot legs BEFORE toggling so a future schema change
+        # that wipes pointers on toggle doesn't lose us the IDs.
+        legs = await store.list_item_sessions(self._conn, item_id)
         await store.toggle_item(self._conn, item_id, checked=True)
+        for leg in legs:
+            if leg.get("closed_at") is None:
+                await store.close_session(self._conn, leg["id"])
+        if await store.is_checklist_complete(self._conn, self._checklist_id):
+            await store.close_session(self._conn, self._checklist_id)
 
     async def _record_failure(self, item_id: int, reason: str) -> None:
         self._items_failed += 1

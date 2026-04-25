@@ -457,6 +457,103 @@ async def test_followup_depth_cap_halts_failure(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_completed_item_closes_its_leg_session(tmp_path: Path) -> None:
+    """When an item completes, its paired leg session should be
+    closed so the sidebar moves it into the Closed group rather
+    than accumulating one open chat per item."""
+    from bearings.db.store import get_session
+
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        item = await create_item(conn, checklist_id, label="closeme")
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={item["id"]: ["CHECKLIST_ITEM_DONE"]},
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver.drive()
+        # Leg session was created by spawn_leg → closed by _mark_done.
+        # The stub's reverse map session_id → item_id is the cleanest
+        # way to recover the session id without reading the DB twice.
+        leg_session_id = next(
+            sid for sid, iid in runtime._session_to_item.items() if iid == item["id"]
+        )
+        leg_row = await get_session(conn, leg_session_id)
+        assert leg_row is not None
+        assert leg_row["closed_at"] is not None, "leg session should be closed after item completes"
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_completed_run_closes_parent_checklist_session(
+    tmp_path: Path,
+) -> None:
+    """When the last top-level item completes, the parent checklist
+    session itself should auto-close — matches the manual toggle_item
+    HTTP handler's behavior so autonomous and manual end-states are
+    identical."""
+    from bearings.db.store import get_session
+
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="a", sort_order=0)
+        b = await create_item(conn, checklist_id, label="b", sort_order=1)
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                a["id"]: ["CHECKLIST_ITEM_DONE"],
+                b["id"]: ["CHECKLIST_ITEM_DONE"],
+            },
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.COMPLETED
+        parent = await get_session(conn, checklist_id)
+        assert parent is not None
+        assert parent["closed_at"] is not None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_partial_run_leaves_parent_checklist_open(
+    tmp_path: Path,
+) -> None:
+    """If a run halts before every item is done, the parent
+    checklist must NOT close — there's still work to do."""
+    from bearings.db.store import get_session
+
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="a", sort_order=0)
+        await create_item(conn, checklist_id, label="b", sort_order=1)
+        # Only `a` has a script; `b` would fail. Use max_items_per_run
+        # cap to halt cleanly after `a`.
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={a["id"]: ["CHECKLIST_ITEM_DONE"]},
+        )
+        config = DriverConfig(max_items_per_run=1)
+        driver = Driver(
+            conn=conn,
+            runtime=runtime,
+            checklist_session_id=checklist_id,
+            config=config,
+        )
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.HALTED_MAX_ITEMS
+        parent = await get_session(conn, checklist_id)
+        assert parent is not None
+        assert parent["closed_at"] is None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
 async def test_failure_reason_persists_to_item_notes(tmp_path: Path) -> None:
     """When the driver halts an item with failure, the reason is
     written to `checklist_items.notes` so the existing ChecklistView
