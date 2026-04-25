@@ -131,6 +131,18 @@ class SessionOut(BaseModel):
     error_pending: bool = False
 
 
+class RegenerateFromMessageOut(BaseModel):
+    """Response for `POST /sessions/{id}/regenerate_from/{message_id}`
+    — Phase 15 of docs/context-menu-plan.md. Carries both the new
+    forked session row AND the user-prompt text the boundary user-turn
+    held, so the frontend can navigate to the new session and seed its
+    composer with the prompt for re-send. The original session is
+    untouched."""
+
+    session: SessionOut
+    prompt: str
+
+
 class SessionBulkBody(BaseModel):
     """Body for `POST /sessions/bulk` — Phase 9a of the context-menu
     plan. One endpoint for every multi-session op the sidebar exposes:

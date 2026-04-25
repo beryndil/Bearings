@@ -189,6 +189,63 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
     }
   },
   {
+    id: 'message.regenerate',
+    label: 'Regenerate from this message…',
+    section: 'create',
+    handler: async ({ target }) => {
+      const t = asMessage(target);
+      if (!t) return;
+      try {
+        const result = await api.regenerateFromMessage(t.sessionId, t.id);
+        sessions.select(result.session.id);
+        // Seed the composer with the user prompt so the next turn
+        // re-runs the same ask against a fresh sdk_session_id. The
+        // composer-bridge custom event is what Conversation.svelte
+        // listens for; the seed lands in the textarea on the next
+        // mount tick.
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('bearings:composer-prefill', {
+              detail: { sessionId: result.session.id, text: result.prompt }
+            })
+          );
+        }
+      } catch (err) {
+        notYetImplemented(
+          'message.regenerate',
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    },
+    disabled: (target) => {
+      const t = asMessage(target);
+      if (!t) return null;
+      // The fork is anchored on a user-turn boundary at-or-before the
+      // target; an assistant-only conversation has no boundary to
+      // pick. The server returns 400 on the same condition, so the
+      // disabled tooltip just preempts the failed round-trip.
+      const live = conversation.messages.find((m) => m.id === t.id);
+      if (!live) return null;
+      const userExists = conversation.messages.some(
+        (m) => m.role === 'user' && m.created_at <= live.created_at
+      );
+      return userExists ? null : 'No user turn at or before this message';
+    }
+  },
+  {
+    id: 'message.regenerate.in_place',
+    label: 'Regenerate (rewrite in place)',
+    section: 'create',
+    advanced: true,
+    handler: () =>
+      notYetImplemented(
+        'message.regenerate.in_place',
+        'Rewrite-in-place coming in a later version. Use Regenerate (fork) for now.'
+      ),
+    disabled: () =>
+      'Rewrite-in-place lands in v0.10.x+. Use Regenerate (fork) for now.'
+  },
+  {
     id: 'message.delete',
     label: 'Delete message',
     section: 'destructive',

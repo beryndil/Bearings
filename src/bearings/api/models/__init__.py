@@ -42,6 +42,7 @@ from .reorg import (
 from .search import SearchHit
 from .sessions import (
     NewSessionSpec,
+    RegenerateFromMessageOut,
     SessionBulkBody,
     SessionBulkResult,
     SessionCreate,
@@ -97,6 +98,7 @@ __all__ = [
     "ReorgSplitRequest",
     "ReorgSplitResult",
     "ReorgWarning",
+    "RegenerateFromMessageOut",
     "SearchHit",
     "SessionBulkBody",
     "SessionBulkResult",

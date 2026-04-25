@@ -6,8 +6,10 @@
 types, ~150+ actions). This document plans implementation; it does not
 restate the spec.
 
-Status: **planning — no code written**. Five governing decisions have been
-made (§2). Six open questions remain (§8).
+Status: **planning — phases 1-13 implemented in v0.9.x; phases 14-16
+unblocked 2026-04-25** by §8.3/§8.4/§8.5 resolutions. Five governing
+decisions made (§2). Three open questions remain (§8: Chrome flag,
+touch long-press tests, slash-command collision).
 
 ---
 
@@ -508,16 +510,11 @@ phase.
    on anchors, but explicit tests must enforce. *Resolve before
    Phase 11.*
 
-3. **`~/.bearings/pending.toml` panel home**. Backend routes land in
-   Phase-A, but the menu target has no UI anchor until a panel
-   exists. Options: sidebar tab, Inspector tab, floating card.
-   *Resolve before Phase 16.*
+3. **`~/.bearings/pending.toml` panel home**. **RESOLVED 2026-04-25
+   — floating card.** See §8.3.
 
-4. **"Regenerate from this message"**. Interacts with SDK's
-   session-resume model — `sdk_session_id` holds hidden state; a
-   partial-turn regenerate needs a rewound-history SDK session.
-   Non-trivial. *Resolve before Phase 15.* Action stays
-   disabled-with-tooltip until then.
+4. **"Regenerate from this message"**. **RESOLVED 2026-04-25 — fork
+   only, fresh SDK session.** See §8.4.
 
 5. **Slash-command shortcut collision**. `CommandMenu.svelte` binds
    `/` inside textareas. If a user TOMLs a menu shortcut that
@@ -528,6 +525,181 @@ phase.
 
 6. **TOML hot-reload**. Server restart required in v0.9.x. If demand
    emerges, `watchdog` dep + file observer. Deferred.
+
+---
+
+### 8.3 Pending-ops panel home (resolved)
+
+**Decision: floating card with a sidebar-header badge indicator.**
+Opened via the badge, via Ctrl+Shift+P → "Show pending operations,"
+or via dedicated shortcut (default `Ctrl+Shift+O`, rebindable through
+`menus.toml`).
+
+Rejected alternatives:
+
+- **Sidebar tab** — permanent real estate for sparse data. Pending
+  ops are rare in normal use; a third sidebar tab pollutes the
+  steady-state UI. If usage data later shows pending ops are common
+  (multi-resolve-per-day baseline), promote to sidebar tab in a
+  follow-up — the floating card's data shape doesn't change.
+- **Inspector tab** — wrong scope. `pending.toml` is per-installation,
+  not per-session. Inspector is session-scoped. Mismatched lifetime
+  would force either a confusing "global tab inside per-session
+  panel" or a duplicate global panel.
+
+Component layout (Phase 16):
+
+```
+frontend/src/lib/components/pending/
+├── PendingOpsCard.svelte         ≤ 250  Floating panel, list + actions
+├── PendingOpRow.svelte           ≤ 150  One row: name, summary, resolve/dismiss
+└── PendingOpsBadge.svelte        ≤ 80   Header badge with count + click handler
+```
+
+Badge mounts in the sidebar header next to the existing search/new-session
+icons. Hidden when count is zero. Hover shows "N pending operations" tooltip.
+Card is a viewport-anchored overlay (bottom-right, similar to `UndoToastHost`),
+dismisses on Esc / outside-click. Keyboard nav reuses the context-menu
+keyboard FSM (`keyboard.ts`).
+
+Action target `pending_operation` (already enumerated in §3.1) stays as
+designed; right-click on a row in the floating card opens its actions
+menu (Resolve / Dismiss / Copy name / Open file in editor).
+
+### 8.4 Regenerate-from-this-message (resolved)
+
+**Decision: fork-only for v1; rewrite-in-place is a separate disabled
+action that ships later.**
+
+Mechanics for `message.regenerate` (fork variant, ships in Phase 15):
+
+1. Find the user-turn boundary at or before the target message.
+2. Create a new session via the existing import pathway with messages
+   `[1..boundary-1]` copied verbatim.
+3. Send the user message at `boundary` as the first prompt of the new
+   session. Fresh `sdk_session_id` minted by the SDK on first turn.
+4. New session inherits parent's `model`, `tags`, `permission_mode`.
+   Title prefix `↳ regen: `. Backlink stored in `sessions.fork_parent_id`
+   (already present from the existing "Fork from last message" action).
+5. The original session is **untouched** — its history, sdk_session_id,
+   and pending tool calls all stay live. Users can compare side-by-side.
+
+Why fork-only:
+
+- **Avoids the rewound-history SDK problem entirely.** We never rewind
+  a live SDK session; we always start fresh in a new one. The "hidden
+  state in `sdk_session_id`" risk vanishes because the fork has its own
+  fresh id.
+- **Matches existing "Fork from last message" pattern.** Implementation
+  reuses the same import pathway. Marginal new code is the
+  message-N-truncation logic, not a parallel surgery system.
+- **Preserves history.** Destructive in-place rewrite makes "compare
+  attempt A vs attempt B" impossible. Fork makes it free.
+- **Decision posture (`decision-posture.md`):** when the bandaid (in-
+  place rewrite) leaves a real gap (no comparison, hidden-state risk)
+  and the complete fix has bounded scope (re-use import pathway), pick
+  the complete fix.
+
+Rewrite-in-place (`message.regenerate.in_place`):
+
+- Stays **disabled-with-tooltip** in v0.9.x and v0.10.x: "Rewrite-in-
+  place coming in a later version. Use Regenerate (fork) for now."
+- Lands when there's demonstrated demand AND the SDK's session-resume
+  story documents a clean partial-turn rewind path. Until then, the
+  destruction risk outweighs convenience.
+- Action ID reserved now to prevent later collision.
+
+Phase 15 deliverables:
+
+- `POST /sessions/{id}/regenerate_from/{message_id}` — server-side
+  truncation + import + new-session creation in one call. Returns
+  new session id.
+- Frontend action `message.regenerate` (un-disabled in Phase 15) calls
+  the route, navigates to the new session.
+- Action `message.regenerate.in_place` registered, permanently disabled
+  with the v0.10.x+ tooltip.
+
+### 8.5 Phase 14 attachments UX (resolved)
+
+**Upload trigger placement: both.** Composer paperclip button (discoverable)
+plus drag-and-drop onto the composer or conversation pane (fast for power
+users). Marginal code cost — same `<input type="file">` handler reachable
+from two pathways.
+
+**MIME whitelist: images + pdf + text/code.** Specifically:
+
+- `image/png`, `image/jpeg`, `image/gif`, `image/webp` — screenshots,
+  diagrams, photos.
+- `application/pdf` — Anthropic's API supports PDFs natively; common
+  documentation form.
+- `text/plain`, `text/markdown`, `application/json`, `text/csv`,
+  `application/toml`, `application/yaml` — review-this-file workflows.
+- Code-by-extension fallback (since browsers serve many code files as
+  `application/octet-stream`): `.py .ts .tsx .js .jsx .svelte .vue .go
+  .rs .java .kt .swift .c .cpp .h .hpp .cs .rb .php .sh .zsh .bash
+  .toml .yaml .yml .ini .conf .sql .html .css .scss .xml`. Configurable
+  via `attachments.allowed_extensions`.
+
+Rejected: "everything." Binary archives, video, executables don't have
+a useful Claude-API path, bloat storage, and invite security review
+concerns. If demand emerges, expand the allowlist case-by-case.
+
+**Max sizes (configurable defaults):**
+
+- `attachments.max_file_bytes` = `10_485_760` (10 MB per file).
+- `attachments.max_per_turn_bytes` = `52_428_800` (50 MB per turn).
+- `attachments.max_per_turn_count` = `10`.
+
+Anthropic supports up to 100 MB per file via the Files API; 10 MB
+captures reasonable docs without enabling video uploads. Per-turn cap
+prevents accidental directory-drag mass uploads.
+
+**Storage layout under `~/.local/share/bearings/`:**
+
+```
+~/.local/share/bearings/
+├── attachments/
+│   └── <session_id>/
+│       └── <message_id>/
+│           └── <attachment_id>__<safe_filename>
+```
+
+- **Per-session locality** so "delete session → delete files" is a
+  single `rmtree` on `attachments/<session_id>/`. No content-addressed
+  dedup in v1 — attachments rarely repeat, and dedup adds GC complexity
+  for marginal savings.
+- **Filename = `<attachment_id>__<safe_filename>`.** Id prefix prevents
+  collisions on duplicate uploads in the same message; the safe filename
+  (sanitized via `secure_filename` rules: alnum + `._-`, truncated to
+  120 chars) is preserved for human inspection in `~/.local/share`.
+- **Atomic write:** stream upload to `<...>.partial`, `fsync`, rename
+  to final name. Crash-safe.
+- **DB table** `attachments(id TEXT PK, session_id TEXT FK, message_id
+  TEXT FK, original_filename TEXT, stored_filename TEXT, mime_type
+  TEXT, size_bytes INTEGER, sha256 TEXT, created_at TEXT, deleted_at
+  TEXT NULL)`. Migration `0026_attachments.sql` (Phase 14).
+- **Cascade:** `ON DELETE CASCADE` from `sessions` (delete session →
+  delete attachment rows + directory). Message deletion soft-deletes
+  rows (`deleted_at` set) but keeps the file on disk for audit until
+  the session is deleted.
+- **Hand-off to File Display:** the artifacts subsystem (session
+  `edaae9bad976411a86e8674665a3dac4`) reuses this storage tree under
+  `~/.local/share/bearings/artifacts/` (parallel directory, same shape).
+  Decisions about lifetime there (per-session vs global) are
+  independent of the attachments layout chosen here.
+
+Phase 14 deliverables:
+
+- Migration `0026_attachments.sql`.
+- `routes_attachments.py`: `POST /api/sessions/{id}/attachments`
+  (multipart upload), `GET /api/attachments/{id}` (stream),
+  `DELETE /api/attachments/{id}` (soft-delete row, file kept).
+- Frontend `Composer.svelte` extension: paperclip button +
+  drag-and-drop overlay + chip list of staged attachments.
+- `attachment` action target moves from "all-disabled-with-tooltip"
+  (placeholder in §3.1) to fully wired with copy, save-as, delete,
+  open-in-default-app actions.
+- Config keys in `~/.config/bearings/config.toml` under `[attachments]`.
 
 ---
 
@@ -616,3 +788,9 @@ From the spec; restated for plan completeness:
 - **2026-04-22** — Initial plan. Five governing decisions made
   (§2.1–§2.5). Target train v0.9.0-alpha → v0.9.3. Six open
   questions remain (§8).
+- **2026-04-25** — Phase 14-16 product gates resolved (§8.3 floating
+  card, §8.4 fork-only regenerate, §8.5 attachments UX + storage
+  layout). Three of the original six open questions closed; three
+  remain (Chrome flag doc, touch long-press tests, slash-command
+  collision test). Phases 14-16 unblocked for execute-step
+  implementation; the gating session is `d0c2b70026574cb4a1683f617a81d565`.

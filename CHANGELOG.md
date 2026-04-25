@@ -5,6 +5,80 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-04-25
+
+Context-menu phases 14-16 — attachments cleanup, regenerate-from-this-
+message, and the pending-operations floating card. Closes the §8.3 /
+§8.4 / §8.5 product gates from `docs/context-menu-plan.md`.
+
+### Added
+
+- **`message.regenerate` (fork-only)** — Phase 15. New endpoint
+  `POST /api/sessions/{id}/regenerate_from/{message_id}` walks back to
+  the user-turn boundary at-or-before the target message, copies the
+  prefix into a fresh session via `store.import_session`, inherits
+  parent tags + `permission_mode`, and returns the boundary user-prompt
+  text so the frontend can seed the new session's composer for re-send
+  against a fresh `sdk_session_id`. Title prefix `↳ regen: `. The
+  source session is untouched, so users can compare attempts side-by-
+  side. The rewrite-in-place variant (`message.regenerate.in_place`) is
+  registered with a permanently-disabled tooltip per decision §8.4 —
+  reserved for v0.10.x+ when the SDK's partial-turn rewind story
+  documents a clean path.
+- **`pending_operation` context-menu target + floating card** — Phase
+  16, decision §8.3. New `PendingOpsBadge` mounts in the sidebar
+  header next to the import / vault / settings icons, hidden when the
+  active project has zero pending ops. Click toggles the
+  `PendingOpsCard`, a viewport-anchored bottom-right overlay that
+  lists ops with left-click resolve and right-click for the full
+  action set (`pending_operation.resolve`, `dismiss`, `copy_name`,
+  `copy_command`, `open_in.editor`). Dedicated shortcut `Ctrl+Shift+O`
+  toggles the card; Esc cascade closes it before any other overlay.
+  Polling at 30s pauses while the tab is hidden.
+- **`attachment` context-menu target** — Phase 14. Wires the existing
+  `[File N]` chip (composer + transcript) to a four-action menu:
+  `attachment.copy_path`, `attachment.copy_filename`,
+  `attachment.open_in.editor`, `attachment.open_in.file_explorer`,
+  `attachment.remove` (composer-only — disabled-with-tooltip on chips
+  belonging to already-sent messages). The Open verbs route through
+  the existing `/api/shell/open` bridge so no new server primitive was
+  required.
+- **MIME allowlist on uploads** — Phase 14, decision §8.5. New
+  `[uploads]` config keys `allowed_mime_types`, `allowed_extensions`,
+  `max_per_turn_count` (default 10), `max_per_turn_bytes` (default
+  50 MB). When `allowed_mime_types` is non-empty, the upload route
+  switches from legacy denylist mode to allowlist mode; uploads are
+  accepted when the `Content-Type` matches OR when the lowercased
+  extension matches (the per-extension fallback exists because
+  browsers serve many code files as `application/octet-stream`).
+  Empty list keeps the legacy behaviour for installs that haven't
+  opted in.
+
+### Frozen action-ID catalog (v0.16.0)
+
+The public action-ID surface (per plan §7) grew by 12 IDs across 3
+target types — every new ID has a `*.test.ts` snapshot guarding
+against silent renames. Renames must go through `Action.aliases` with
+a deprecation warning.
+
+- `attachment.copy_filename`, `attachment.copy_path`,
+  `attachment.open_in.editor`, `attachment.open_in.file_explorer`,
+  `attachment.remove`
+- `message.regenerate`, `message.regenerate.in_place`
+- `pending_operation.copy_command`, `pending_operation.copy_name`,
+  `pending_operation.dismiss`, `pending_operation.open_in.editor`,
+  `pending_operation.resolve`
+
+### Tests
+
+- `tests/test_routes_regenerate.py` — 7 cases covering boundary walk-
+  back from assistant + user targets, source-untouched invariant,
+  permission_mode inheritance, and the cross-session / unknown-id /
+  assistant-only-prefix rejection paths.
+- `frontend/.../actions/attachment.test.ts` and
+  `pending_operation.test.ts` — frozen ID snapshots + section /
+  destructive flag / disabled-predicate gating.
+
 ## [0.15.0] - 2026-04-25
 
 Keyboard Shortcuts v1 — config-driven binding registry plus the picked

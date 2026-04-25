@@ -249,7 +249,9 @@ class UploadsCfg(BaseModel):
     upload_dir: Path = Field(default_factory=lambda: DATA_HOME / "uploads")
     # Size cap in whole megabytes. 25 is enough for screenshots, PDFs,
     # log excerpts; anything larger should be referenced by path via
-    # the native picker instead.
+    # the native picker instead. Plan §8.5 calls for 10 MB as the
+    # per-spec attachment ceiling — installs that want the tighter cap
+    # set this to 10 in `config.toml`.
     max_size_mb: int = 25
     # Extensions we refuse regardless of size — defense-in-depth against
     # dragging a shell script or binary. Bearings is localhost-only and
@@ -274,6 +276,24 @@ class UploadsCfg(BaseModel):
             ".appimage",
         ]
     )
+    # Plan §8.5 attachment MIME allowlist. Non-empty list switches the
+    # upload route from denylist mode (legacy) to allowlist mode: only
+    # files whose `Content-Type` is in `allowed_mime_types` OR whose
+    # lowercased extension is in `allowed_extensions` are accepted; the
+    # per-extension fallback exists because browsers serve many code
+    # files as `application/octet-stream` and rejecting on MIME alone
+    # would break review-this-file workflows. Empty list keeps the
+    # legacy denylist behaviour so existing configs are unaffected.
+    allowed_mime_types: list[str] = Field(default_factory=list)
+    allowed_extensions: list[str] = Field(default_factory=list)
+    # Per-turn caps (plan §8.5). The frontend enforces these before the
+    # POST round-trip — they live here so the same number can be served
+    # to the UI via `/ui-config` and a config bump propagates without a
+    # frontend rebuild. The backend doesn't enforce per-turn caps
+    # directly (it doesn't see "turn boundaries"); the per-FILE cap
+    # above is the hard backend gate.
+    max_per_turn_count: int = 10
+    max_per_turn_bytes: int = 50 * 1024 * 1024
 
 
 class ArtifactsCfg(BaseModel):

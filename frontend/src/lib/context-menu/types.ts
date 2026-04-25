@@ -129,6 +129,37 @@ export type MultiSelectTarget = {
   ids: readonly string[];
 };
 
+/** A `[File N]` attachment chip — either staged in the composer
+ * (pre-send) or rendered inside a transcript user bubble (post-send).
+ * Phase 14 of docs/context-menu-plan.md. `messageId` is null while
+ * the chip lives in the composer (no message row exists yet); once
+ * the prompt is sent the transcript chip carries the real message id
+ * so handlers can scope to "this attachment on this message." `path`
+ * is absolute so `open_in.editor` / `copy_path` work without a server
+ * round-trip. */
+export type AttachmentTarget = {
+  type: 'attachment';
+  n: number;
+  path: string;
+  filename: string;
+  size_bytes: number | null;
+  sessionId: string | null;
+  messageId: string | null;
+};
+
+/** A row in the pending-operations floating card (Phase 16). `name`
+ * is the stable id from `.bearings/pending.toml`; `directory` is the
+ * absolute project path the row belongs to (the same param the API
+ * routes take). `command` and `description` are snapshots from the
+ * row at right-click time so handlers can copy without a refetch. */
+export type PendingOperationTarget = {
+  type: 'pending_operation';
+  name: string;
+  directory: string;
+  command: string | null;
+  description: string;
+};
+
 /** Discriminated union of every right-clickable target. Extend this
  * whenever a new target type is added to the spec. */
 export type ContextTarget =
@@ -140,7 +171,9 @@ export type ContextTarget =
   | CodeBlockTarget
   | LinkTarget
   | CheckpointTarget
-  | MultiSelectTarget;
+  | MultiSelectTarget
+  | AttachmentTarget
+  | PendingOperationTarget;
 export type TargetType = ContextTarget['type'];
 
 /** Passed to every handler. `event` is null when the action is fired

@@ -118,6 +118,15 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
     data home by default). Enforcement order: extension check first
     (cheap, rejects before any bytes land on disk), then streaming
     write with a size cap that tears down the partial file on reject.
+
+    Phase 14 (plan §8.5) added an opt-in MIME allowlist on top of the
+    legacy denylist. When `uploads.allowed_mime_types` is non-empty,
+    a request whose `Content-Type` is NOT in that list AND whose
+    lowercased extension is NOT in `allowed_extensions` is rejected
+    with 415 — the per-extension fallback exists because browsers
+    serve many code files as `application/octet-stream`. Empty list
+    keeps the legacy behaviour for installs that haven't set the
+    allowlist.
     """
     settings = request.app.state.settings
     cfg = settings.uploads
@@ -139,6 +148,22 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
             status_code=415,
             detail=f"extension not allowed: {requested_suffix}",
         )
+
+    allowed_mime = {m.lower() for m in cfg.allowed_mime_types}
+    if allowed_mime:
+        allowed_ext = {e.lower() for e in cfg.allowed_extensions}
+        content_type = (file.content_type or "").lower()
+        # Match by MIME or by extension; either is sufficient.
+        ext_ok = bool(ext) and ext in allowed_ext
+        mime_ok = content_type in allowed_mime
+        if not (ext_ok or mime_ok):
+            raise HTTPException(
+                status_code=415,
+                detail=(
+                    f"MIME {content_type or 'unknown'} not in allowlist "
+                    f"and extension {requested_suffix or '(none)'} not allowed"
+                ),
+            )
 
     # Build the on-disk filename: sanitized stem + normalized ext.
     # `Path.name` strips any path components from the user-supplied

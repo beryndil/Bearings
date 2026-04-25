@@ -9,6 +9,7 @@
   import { contextmenu } from '$lib/actions/contextmenu';
   import type { ContextTarget } from '$lib/context-menu/types';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
+  import PendingOpsBadge from '$lib/components/pending/PendingOpsBadge.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
   import TagFilterPanel from '$lib/components/TagFilterPanel.svelte';
@@ -390,6 +391,7 @@
         bind:this={importInput}
         onchange={onImportFile}
       />
+      <PendingOpsBadge />
       <TemplatePicker />
       <a
         href="/vault"

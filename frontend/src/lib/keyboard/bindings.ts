@@ -30,6 +30,7 @@
 
 import { agent } from '$lib/agent.svelte';
 import { palette } from '$lib/context-menu/palette.svelte';
+import { pending } from '$lib/stores/pending.svelte';
 import { sessions } from '$lib/stores/sessions.svelte';
 import { uiActions } from '$lib/stores/ui_actions.svelte';
 
@@ -173,6 +174,10 @@ function handleEscape(e: KeyboardEvent): void {
     palette.hide();
     return;
   }
+  if (pending.closeCard()) {
+    e.preventDefault();
+    return;
+  }
   if (uiActions.dismissOverlays()) {
     e.preventDefault();
     return;
@@ -267,6 +272,16 @@ function buildBindings(): BindingDef[] {
       group: 'Help',
       label: 'Show this cheat sheet',
       run: () => uiActions.toggleCheatSheet()
+    },
+
+    // Pending operations
+    {
+      id: 'pending.toggle',
+      chord: 'Ctrl+Shift+O',
+      group: 'Help',
+      label: 'Toggle pending-ops card',
+      global: true,
+      run: () => pending.toggleCard()
     },
 
     // Command palette

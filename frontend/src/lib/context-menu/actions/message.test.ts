@@ -24,7 +24,7 @@ const MESSAGE: ContextTarget = {
 };
 
 describe('message.ts — action-ID stability', () => {
-  it('exposes the frozen v0.9.1 catalog', () => {
+  it('exposes the frozen v0.16.0 catalog', () => {
     const ids = MESSAGE_ACTIONS.map((a) => a.id).sort();
     expect(ids).toEqual([
       'message.copy_as_markdown',
@@ -36,6 +36,8 @@ describe('message.ts — action-ID stability', () => {
       'message.jump_to_turn',
       'message.move_to_session',
       'message.pin',
+      'message.regenerate',
+      'message.regenerate.in_place',
       'message.split_here'
     ]);
   });

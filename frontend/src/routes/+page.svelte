@@ -11,12 +11,14 @@
   import UndoToastHost from '$lib/components/context-menu/UndoToastHost.svelte';
   import Conversation from '$lib/components/Conversation.svelte';
   import Inspector from '$lib/components/Inspector.svelte';
+  import PendingOpsCard from '$lib/components/pending/PendingOpsCard.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
   import { dispatchShortcut } from '$lib/keyboard/bindings';
   import { agent } from '$lib/agent.svelte';
   import { auth } from '$lib/stores/auth.svelte';
   import { billing } from '$lib/stores/billing.svelte';
   import { preferences } from '$lib/stores/preferences.svelte';
+  import { pending } from '$lib/stores/pending.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { sessionsWs } from '$lib/stores/ws_sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
@@ -97,6 +99,15 @@
   // Re-trigger once the user clears the gate.
   $effect(() => {
     if ((auth.status === 'open' || auth.status === 'ok') && !booted) boot();
+  });
+
+  // Re-point the pending-ops store at whatever project the active
+  // session lives in. The store handles polling start/stop and
+  // resets its op list when the directory flips, so a session
+  // switch flushes any stale badge count from the previous project.
+  $effect(() => {
+    const dir = sessions.selected?.working_dir ?? null;
+    void pending.setDirectory(dir);
   });
 
   // Tab regained focus while a session is selected → stamp
@@ -283,6 +294,7 @@
 <ConfirmDialog />
 <UndoToastHost />
 <StubToastHost />
+<PendingOpsCard />
 <main
   class="grid h-full"
   style="grid-template-columns: {panes.left}px 6px minmax(0,1fr) 6px {panes.right}px"

@@ -36,6 +36,7 @@
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import SessionPickerModal from '$lib/components/SessionPickerModal.svelte';
   import { reorgStore } from '$lib/context-menu/reorg.svelte';
+  import { contextmenu } from '$lib/actions/contextmenu';
   import ContextMeter from '$lib/components/ContextMeter.svelte';
   import LiveTodos from '$lib/components/LiveTodos.svelte';
   import TokenMeter from '$lib/components/TokenMeter.svelte';
@@ -1395,6 +1396,34 @@
     return () => document.removeEventListener('keydown', onDocKey);
   });
 
+  // Phase 14 — `attachment.remove` action dispatches this event so the
+  // composer chip's right-click menu can drop the chip without owning
+  // a reference to `removeAttachment`. Phase 15 — `message.regenerate`
+  // dispatches `bearings:composer-prefill` after navigating to the new
+  // session; we seed the textarea so the user can re-run the boundary
+  // user prompt against a fresh sdk_session_id.
+  $effect(() => {
+    function onAttachmentRemove(e: Event) {
+      const detail = (e as CustomEvent<{ n: number }>).detail;
+      if (typeof detail?.n === 'number') removeAttachment(detail.n);
+    }
+    function onComposerPrefill(e: Event) {
+      const detail = (e as CustomEvent<{ sessionId: string; text: string }>).detail;
+      if (!detail) return;
+      // Only seed if we're rendering the destination session — a stale
+      // dispatch into the wrong tab would clobber an unrelated draft.
+      if (detail.sessionId !== sessions.selectedId) return;
+      promptText = detail.text;
+      queueMicrotask(() => textareaEl?.focus());
+    }
+    window.addEventListener('bearings:attachment-remove', onAttachmentRemove);
+    window.addEventListener('bearings:composer-prefill', onComposerPrefill);
+    return () => {
+      window.removeEventListener('bearings:attachment-remove', onAttachmentRemove);
+      window.removeEventListener('bearings:composer-prefill', onComposerPrefill);
+    };
+  });
+
 </script>
 
 <SessionEdit
@@ -1883,6 +1912,17 @@
             class="inline-flex items-center gap-1.5 rounded border border-slate-700
               bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300"
             title={`${att.path}${att.size_bytes ? ' · ' + formatBytes(att.size_bytes) : ''}`}
+            use:contextmenu={{
+              target: {
+                type: 'attachment',
+                n: att.n,
+                path: att.path,
+                filename: att.filename,
+                size_bytes: att.size_bytes,
+                sessionId: sessions.selectedId,
+                messageId: null
+              }
+            }}
           >
             <span class="text-slate-500">[File {att.n}]</span>
             <span class="truncate max-w-[220px]">{att.filename}</span>

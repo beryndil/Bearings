@@ -554,3 +554,30 @@ export function deleteReorgAudit(
     method: 'DELETE'
   });
 }
+
+/** Server-side response for regenerate-from-message (Phase 15 of
+ * docs/context-menu-plan.md, §8.4). The route forks at the user-turn
+ * boundary at-or-before `messageId`, returns the freshly-imported
+ * session AND the user-prompt text the boundary turn carried — so
+ * the frontend can navigate to the new session and seed its composer
+ * with the prompt for re-send against a fresh sdk_session_id. */
+export type RegenerateFromMessageResult = {
+  session: Session;
+  prompt: string;
+};
+
+/** Fork the session at the user-turn boundary at-or-before
+ * `messageId`. New session inherits parent model, tags, and
+ * permission_mode. Title is prefixed with `↳ regen: `. The original
+ * session is untouched — users can compare the two side-by-side. */
+export function regenerateFromMessage(
+  sessionId: string,
+  messageId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<RegenerateFromMessageResult> {
+  return jsonFetch<RegenerateFromMessageResult>(
+    fetchImpl,
+    `/api/sessions/${sessionId}/regenerate_from/${messageId}`,
+    { method: 'POST' }
+  );
+}
