@@ -63,6 +63,7 @@ from bearings.agent.runner_types import (
 from bearings.agent.session import AgentSession
 from bearings.agent.sessions_broker import SessionsBroker, publish_runner_state
 from bearings.agent.tool_output_coalescer import ToolOutputCoalescer
+from bearings.config import ArtifactsCfg
 from bearings.db import store
 
 log = logging.getLogger(__name__)
@@ -111,6 +112,7 @@ class SessionRunner:
         db: aiosqlite.Connection,
         *,
         sessions_broker: SessionsBroker | None = None,
+        artifacts_cfg: ArtifactsCfg | None = None,
     ) -> None:
         self.session_id = session_id
         self.agent = agent
@@ -120,6 +122,12 @@ class SessionRunner:
         # pass it through. The publish helpers no-op on None so the
         # turn loop stays oblivious.
         self._sessions_broker = sessions_broker
+        # Phase-1 File Display: settings sub-block consumed by the
+        # auto-register hook in `agent/_artifacts.py`. `None` disables
+        # auto-register cleanly (every test that doesn't care about
+        # artifacts skips the wiring), keeping the new feature dormant
+        # in any harness that constructs a runner without app settings.
+        self._artifacts_cfg = artifacts_cfg
         self._prompts: asyncio.Queue[str | _Submit | _Replay | _Shutdown] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
         self._subscribers: set[asyncio.Queue[_Envelope]] = set()

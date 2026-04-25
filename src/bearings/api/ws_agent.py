@@ -137,6 +137,11 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
         # `/ws/sessions` subscriber. Absent on tests that skip the full
         # app wiring — `getattr` keeps the factory usable there.
         sessions_broker=getattr(app.state, "sessions_broker", None),
+        # Phase-1 File Display: auto-register hook in turn_executor
+        # reads `serve_roots` + `max_register_size_mb` off this. Pulled
+        # off settings (not snapshotted) so a config edit + reload
+        # picks up new roots on the next runner construction.
+        artifacts_cfg=app.state.settings.artifacts,
     )
     # Late-bind the approval callback: the SDK's `can_use_tool` hook
     # parks futures on the runner, but the runner only exists after

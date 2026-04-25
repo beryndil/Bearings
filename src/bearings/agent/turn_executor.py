@@ -24,6 +24,7 @@ import aiosqlite
 from claude_agent_sdk import ClaudeSDKError
 
 from bearings import metrics
+from bearings.agent._artifacts import maybe_auto_register_image_artifact
 from bearings.agent._attachments import prune_and_serialize, substitute_tokens
 from bearings.agent.events import (
     ContextUsage,
@@ -274,6 +275,14 @@ async def execute_turn(  # noqa: C901
     current_message_id: str | None = None
     persisted = False
     stopped = False
+    # Tool name + input cached by `tool_call_id` between `ToolCallStart`
+    # and `ToolCallEnd`. The auto-register hook for image artifacts
+    # (Phase 1 File Display) needs both the tool name (Write only) and
+    # the input dict (path argument), but only fires once we know the
+    # call succeeded (`ok=True` on the end frame), so we stash both on
+    # start and look them up on end. Pruned in the same `ToolCallEnd`
+    # arm so the dict can't grow without bound on a many-tool turn.
+    tool_calls_in_flight: dict[str, tuple[str, dict[str, Any]]] = {}
 
     try:
         async for event in runner.agent.stream(agent_prompt):
@@ -293,6 +302,12 @@ async def execute_turn(  # noqa: C901
                     input_json=json.dumps(event.input),
                 )
                 tool_call_ids.append(event.tool_call_id)
+                # Stash for the auto-register hook in the matching
+                # `ToolCallEnd` arm. `dict(event.input)` snapshots the
+                # SDK's input — keeping a reference would be fine in
+                # practice, but copying is a one-line guard against a
+                # future SDK change that mutates the dict in place.
+                tool_calls_in_flight[event.tool_call_id] = (event.name, dict(event.input))
                 metrics.tool_calls_started.inc()
                 # Start the keepalive ticker for this call. See
                 # `progress_ticker.ProgressTickerManager._ticker` for
@@ -335,6 +350,32 @@ async def execute_turn(  # noqa: C901
                     error=event.error,
                 )
                 metrics.tool_calls_finished.labels(ok=str(event.ok).lower()).inc()
+                # Phase-1 File Display auto-register: pop the cached
+                # (tool_name, tool_input) and, if the call was a
+                # successful Write of an image under `serve_roots`,
+                # register an artifact row and stream its markdown
+                # image into the assistant reply. Hook returns None
+                # (and registers nothing) for every non-image /
+                # non-Write / failed call, so the common path is a
+                # couple of cheap dict lookups.
+                start = tool_calls_in_flight.pop(event.tool_call_id, None)
+                if start is not None:
+                    start_name, start_input = start
+                    injection = await maybe_auto_register_image_artifact(
+                        runner,
+                        tool_name=start_name,
+                        tool_input=start_input,
+                        ok=event.ok,
+                    )
+                    if injection:
+                        # Append to the persisted buffer AND emit a
+                        # synthetic Token so live subscribers see the
+                        # image inline at the moment the Write
+                        # completed, not only after a reload.
+                        buf.append(injection)
+                        await runner._emit_event(
+                            Token(session_id=runner.session_id, text=injection)
+                        )
             elif isinstance(event, ContextUsage):
                 # Persist the latest snapshot on the session row so a
                 # fresh page load / reconnect has a number to paint

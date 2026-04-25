@@ -2307,18 +2307,25 @@ for first-paint. Derived from the latest `tool_calls` row where
 
 ## Agent-authored artifacts — Phase 1 shipped, Phases 2–4 open — 2026-04-24
 
-**Phase 1 shipped.** Outbound file-display surface: the agent writes a
-file, `POST /api/sessions/{sid}/artifacts` registers the path, and
-`GET /api/artifacts/{id}` streams it back with inline
-`Content-Disposition` so the existing markdown `<img>` allowlist
-renders it in the conversation view. Migration 0028 adds the
-`artifacts` table (id, session_id, path, filename, mime_type,
+**Phase 1 shipped + auto-register hook (2026-04-25).** Outbound file-
+display surface: the agent writes a file, `POST /api/sessions/{sid}/
+artifacts` registers the path, and `GET /api/artifacts/{id}` streams
+it back with inline `Content-Disposition` so the existing markdown
+`<img>` allowlist renders it in the conversation view. Migration 0028
+adds the `artifacts` table (id, session_id, path, filename, mime_type,
 size_bytes, sha256, created_at). Config: `[artifacts] artifacts_dir`
 (default `$XDG_DATA_HOME/bearings/artifacts`), `serve_roots` (default
 artifacts_dir + uploads_dir), `max_register_size_mb` (default 100).
-18 tests in `tests/test_routes_artifacts.py` cover happy path,
-path-allowlist, cross-session isolation, serve-time revocation, and
-MIME detection overrides for svg/markdown.
+v0.16.1 (2026-04-25) added the agent-side auto-register hook:
+`bearings.agent._artifacts.maybe_auto_register_image_artifact` watches
+`Write` tool calls in the runner's turn executor and, on a successful
+write of an image-MIME file under `serve_roots`, registers an artifact
+row and injects `![filename](/api/artifacts/{id})` into the assistant's
+streamed reply (synthetic `Token` event for live subscribers, appended
+to the persisted message buffer for reload). Stdlib only (`mimetypes`,
+`hashlib`, `pathlib`) — Phases 2-4 remain dep-free of the auto path.
+Tests: 18 in `tests/test_routes_artifacts.py` (HTTP), 7 in
+`tests/test_agent_artifacts.py` (auto-register).
 
 **Phase 2 — PDF + HTML preview.**
 
@@ -2363,10 +2370,23 @@ MIME detection overrides for svg/markdown.
   default set — it pulls large C deps (cairo, pango). Agent can
   `uv add --script` for one-off needs.
 - [ ] **Convenience tool for "generate + register" as one step.**
-  Today Claude does `Write` then `curl POST /api/sessions/.../artifacts`;
-  a helper MCP tool / CLI subcommand (`bearings artifact register
-  <path>`) would make it one call. Low priority — curl works and is
-  traceable in the transcript.
+  ~~Today Claude does `Write` then `curl POST /api/sessions/.../
+  artifacts`~~. v0.16.1 auto-registers image-MIME writes; this entry
+  now covers only non-image types Phases 2-4 will surface (PDF, DOCX,
+  XLSX). A helper MCP tool / CLI subcommand (`bearings artifact
+  register <path>`) is still the right move when the explicit-register
+  path is needed for non-image types Phase 2 onward. Low priority —
+  curl works and is traceable in the transcript.
+
+- [ ] **Auto-register for `Edit` and `MultiEdit`.** v0.16.1 hook fires
+  on `Write` only — the SDK's intuitive "agent is producing a new
+  file" signal. `Edit`/`MultiEdit` can also produce viewable artifacts
+  (overwriting a placeholder image, regenerating a chart with new
+  inputs) but the dedup story isn't trivial: the same path may already
+  have an artifact row from a prior `Write`. Defer until either a real
+  workflow surfaces the gap, OR (session_id, path) dedup at the
+  artifacts table level lands so Edit/MultiEdit can re-register
+  idempotently.
 
 **Unblocked upstream by Phase 1:**
 

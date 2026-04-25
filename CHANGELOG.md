@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.1] - 2026-04-25
+
+File Display — Phase 1. Closes Phase 1 of the scope-locked plan in
+linked Bearings session `edaae9bad976411a86e8674665a3dac4`: the
+artifacts table + register/list/serve endpoints have shipped on main
+since `0028_artifacts.sql`; this release adds the agent-side
+auto-register hook so Claude no longer has to call
+`POST /api/sessions/{sid}/artifacts` by hand for inline image display.
+
+### Added
+
+- **Auto-register hook on `Write` for image artifacts** — when the
+  SDK's `Write` tool successfully produces an image-MIME file under
+  `settings.artifacts.serve_roots`, the runner now registers an
+  artifact row and injects `![filename](/api/artifacts/{id})` into
+  the assistant's reply. The injection is appended to the persisted
+  message body AND streamed as a synthetic `Token` event so live
+  subscribers render the image inline at the moment the Write
+  completed, without waiting for a reload. Logic lives in the new
+  `src/bearings/agent/_artifacts.py` module; turn-executor wiring
+  reads `(name, input)` from cached `ToolCallStart` payloads on the
+  matching `ToolCallEnd` arm.
+- **`SessionRunner(artifacts_cfg=...)`** — optional constructor arg
+  threading `ArtifactsCfg` from app settings down to the hook. `None`
+  is the off switch; every existing test that doesn't opt in keeps
+  the new feature dormant. `ws_agent._build_runner` passes
+  `app.state.settings.artifacts` so live sessions get auto-register
+  by default.
+
+### Notes
+
+- Phase 1 is stdlib-only by design (`mimetypes`, `hashlib`,
+  `pathlib`). Phases 2-4 (FilePreview.svelte modal, python-docx /
+  openpyxl preview backends, reportlab / weasyprint / Pillow PDF +
+  raster previews) are deferred to a later checklist item per the
+  scope lock — see `TODO.md` and the plan in the linked session.
+- Phase 1 needed no frontend changes. The markdown renderer's
+  DOMPurify allowlist already accepts `<img src=/api/artifacts/...>`
+  with no scheme filter; the existing Conversation pane renders the
+  injection as soon as it arrives.
+- Edit / MultiEdit tools do NOT auto-register. Phase 1 is intentionally
+  narrow — only the `Write` tool fires the hook. Edit-tool support is
+  deferred until there's a concrete UX gap.
+- The lifetime decision in the linked session locked artifacts to
+  per-session FK + CASCADE on `sessions.id` (already in main via
+  migration `0028_artifacts.sql`). On-disk bytes still rely on the
+  shared GC sweep tracked alongside uploads in TODO.md.
+
 ## [0.16.0] - 2026-04-25
 
 Context-menu phases 14-16 — attachments cleanup, regenerate-from-this-
