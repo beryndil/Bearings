@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
@@ -35,6 +38,7 @@ from bearings.agent.events import (
     Token,
     ToolCallEnd,
     ToolCallStart,
+    ToolOutputDelta,
 )
 from bearings.agent.mcp_tools import (
     BEARINGS_MCP_SERVER_NAME,
@@ -44,6 +48,15 @@ from bearings.agent.mcp_tools import (
 from bearings.agent.prompt import assemble_prompt
 from bearings.agent.researcher_prompt import RESEARCHER_PROMPT
 from bearings.db._messages import list_messages
+
+log = logging.getLogger(__name__)
+
+# Full SDK-prefixed name the model sees for our streaming bash tool.
+# When session.stream() observes a ToolCallStart with this name it
+# pushes the call's id onto the pending-bash-id queue so the bash
+# handler can claim it on entry. See agent/bash_tool.py for the
+# correlation rationale.
+BASH_TOOL_SDK_NAME = f"mcp__{BEARINGS_MCP_SERVER_NAME}__bash"
 
 # Upper bound on the number of recent DB messages pulled into the
 # context-priming preamble on the first turn of a freshly-built
@@ -531,6 +544,36 @@ class AgentSession:
             # "use defaults". The dict is required-typed in the SDK
             # so we can't pass `None`.
             options_kwargs["mcp_servers"] = mcp_servers
+        # Per-stream side channel for the streaming bash tool. The
+        # bash handler pushes a `ToolOutputDelta` per subprocess line
+        # onto `delta_queue`; the receive_response loop multiplexes
+        # those into the yielded event stream alongside SDK messages.
+        # The bash handler also awaits `pending_bash_ids.get()` to
+        # claim its model-side `tool_use.id` (the MCP tools/call
+        # payload doesn't carry it; we push from the matching
+        # ToolCallStart). Both queues are unbounded — the SDK's own
+        # backpressure (handler runs on the same loop as the consumer)
+        # keeps growth in check.
+        delta_queue: asyncio.Queue[ToolOutputDelta] = asyncio.Queue()
+        pending_bash_ids: asyncio.Queue[str] = asyncio.Queue()
+
+        def emit_delta_cb(tool_use_id: str, line: str) -> None:
+            try:
+                delta_queue.put_nowait(
+                    ToolOutputDelta(
+                        session_id=self.session_id,
+                        tool_call_id=tool_use_id,
+                        delta=line,
+                    )
+                )
+            except asyncio.QueueFull:
+                # Unbounded queue — should never happen. Log and drop
+                # rather than crash the bash subprocess pump.
+                log.warning(
+                    "session %s: delta_queue full (unexpected); dropping live frame",
+                    self.session_id,
+                )
+
         # Bearings' own in-process MCP server. Gated by the
         # `enable_bearings_mcp` knob AND the presence of a DB (the
         # `get_tool_output` tool reads from it). Composed with the
@@ -538,7 +581,10 @@ class AgentSession:
         # policy, the Bearings server is added on top.
         if self.enable_bearings_mcp and self.db is not None:
             mcp_servers[BEARINGS_MCP_SERVER_NAME] = build_bearings_mcp_server(
-                self.session_id, self._current_db
+                self.session_id,
+                self._current_db,
+                emit_delta=emit_delta_cb,
+                bash_id_getter=pending_bash_ids.get,
             )
             options_kwargs["mcp_servers"] = mcp_servers
         hooks_map: dict[str, list[HookMatcher]] = {}
@@ -567,10 +613,28 @@ class AgentSession:
                         "this turn's context."
                     ),
                     prompt=RESEARCHER_PROMPT,
-                    tools=["Read", "Grep", "Glob", "Bash"],
+                    # Streaming bash tool replaces the built-in Bash
+                    # so the researcher's shell calls also flow through
+                    # the live-output pipe. Read/Grep/Glob remain
+                    # builtin — they're already small-output.
+                    tools=["Read", "Grep", "Glob", BASH_TOOL_SDK_NAME],
                     model="inherit",
                 )
             }
+        # Route the model away from the built-in `Bash` tool toward
+        # our streaming MCP equivalent. We disallow built-in Bash and
+        # leave allowed_tools empty (= "no allowlist filter") so every
+        # other tool — including all MCP tools we expose — remains
+        # available. Setting allowed_tools to a non-empty list would
+        # turn it into an exclusive allowlist and accidentally hide
+        # everything else from the model. Wired only when our MCP
+        # server is registered, so test sessions without DB still
+        # have the built-in Bash available.
+        if self.enable_bearings_mcp and self.db is not None:
+            disallowed = list(options_kwargs.get("disallowed_tools") or [])
+            if "Bash" not in disallowed:
+                disallowed.append("Bash")
+            options_kwargs["disallowed_tools"] = disallowed
         if self.db is not None:
             # Assemble the layered system prompt (base → tag memories →
             # session instructions) from the current DB state. Called
@@ -604,51 +668,168 @@ class AgentSession:
         cost_usd: float | None = None
         usage: dict[str, Any] | None = None
         context_event: ContextUsage | None = None
+
+        # Sentinels for the multiplexed event channel. The drain task
+        # below pushes ("msg", msg) for every receive_response item
+        # and ("done", None) once the iterator is exhausted; the bash
+        # handler pushes ("delta", ToolOutputDelta) directly via the
+        # emit_delta callback. The main loop drains a single queue,
+        # so ordering matches the order things land — receive_response
+        # messages and tool-output deltas interleave naturally.
+        async def _drain_msgs(
+            client: ClaudeSDKClient,
+            shared: asyncio.Queue[tuple[str, Any]],
+        ) -> None:
+            try:
+                async for msg in client.receive_response():
+                    await shared.put(("msg", msg))
+            except asyncio.CancelledError:
+                # Cancelled when the main loop breaks out of the
+                # multiplex — re-raise so the task winds down cleanly.
+                raise
+            except Exception as exc:  # noqa: BLE001 — surface to consumer
+                await shared.put(("error", exc))
+            finally:
+                with contextlib.suppress(asyncio.QueueFull):
+                    shared.put_nowait(("done", None))
+
         try:
             async with ClaudeSDKClient(options=options) as client:
                 self._client = client
+                drain_task: asyncio.Task[None] | None = None
                 try:
                     await client.query(prompt)
                     yield MessageStart(session_id=self.session_id, message_id=message_id)
-                    # Track per-block-type streaming. Opus 4.7 in adaptive
-                    # mode emits text_delta but NOT thinking_delta — the
-                    # thinking content only arrives in the final
-                    # AssistantMessage's ThinkingBlock. A single
-                    # streamed_this_msg flag would drop that thinking
-                    # block as a "duplicate" because text_delta fired.
-                    # Track each block type independently so we only
-                    # suppress the kind we actually saw streamed.
+                    # Single multiplex queue: receive_response messages
+                    # AND streaming tool-output deltas land here. The
+                    # bash handler put-no-waits onto the same channel
+                    # via the `delta_queue` shared with emit_delta_cb.
+                    shared: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+                    drain_task = asyncio.create_task(_drain_msgs(client, shared))
+                    # Track per-block-type streaming. Opus 4.7 in
+                    # adaptive mode emits text_delta but NOT
+                    # thinking_delta — the thinking content only
+                    # arrives in the final AssistantMessage's
+                    # ThinkingBlock. A single streamed_this_msg flag
+                    # would drop that thinking block as a "duplicate"
+                    # because text_delta fired. Track each block type
+                    # independently so we only suppress the kind we
+                    # actually saw streamed.
                     streamed_text = False
                     streamed_thinking = False
-                    async for msg in client.receive_response():
-                        if isinstance(msg, StreamEvent):
-                            event = self._translate_stream_event(msg.event)
-                            if event is not None:
-                                if isinstance(event, Token):
-                                    streamed_text = True
-                                elif isinstance(event, Thinking):
-                                    streamed_thinking = True
-                                yield event
-                        elif isinstance(msg, AssistantMessage):
-                            if msg.session_id:
-                                self.sdk_session_id = msg.session_id
-                            for block in msg.content:
-                                if streamed_text and isinstance(block, TextBlock):
-                                    continue
-                                if streamed_thinking and isinstance(block, ThinkingBlock):
-                                    continue
-                                event = self._translate_block(block)
+                    finished = False
+                    while not finished:
+                        # Drain any tool-output deltas first so a fast
+                        # bash command's lines can't pile up behind a
+                        # slow receive_response. ``get_nowait`` is the
+                        # right primitive: when there are no deltas,
+                        # we fall through to an awaitable shared.get().
+                        flushed_delta = False
+                        while True:
+                            try:
+                                yield delta_queue.get_nowait()
+                                flushed_delta = True
+                            except asyncio.QueueEmpty:
+                                break
+                        if flushed_delta:
+                            # Yield once more so deltas published in
+                            # bursts can drain without blocking on a
+                            # message that might not arrive for a while.
+                            await asyncio.sleep(0)
+                        # Wait on EITHER a fresh delta OR the next
+                        # multiplexed message. Whichever lands first
+                        # wins the iteration.
+                        delta_get: asyncio.Task[ToolOutputDelta] = asyncio.create_task(
+                            delta_queue.get()
+                        )
+                        shared_get: asyncio.Task[tuple[str, Any]] = asyncio.create_task(
+                            shared.get()
+                        )
+                        pending: set[asyncio.Task[Any]] = {delta_get, shared_get}
+                        try:
+                            done, pending = await asyncio.wait(
+                                pending,
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                        finally:
+                            for task in (delta_get, shared_get):
+                                if not task.done():
+                                    task.cancel()
+                                    with contextlib.suppress(asyncio.CancelledError):
+                                        await task
+                        for task in done:
+                            if task is delta_get:
+                                # delta_queue.get() returns ToolOutputDelta
+                                yield delta_get.result()
+                                continue
+                            # The other branch is shared.get() returning
+                            # ("kind", payload). Read off the typed
+                            # task to keep mypy happy with the union.
+                            kind, payload = shared_get.result()
+                            if kind == "delta":
+                                # Bash handler pushes onto delta_queue
+                                # directly; this branch covers a future
+                                # producer that wants to push through
+                                # `shared`. Harmless either way.
+                                if isinstance(payload, ToolOutputDelta):
+                                    yield payload
+                                continue
+                            if kind == "done":
+                                finished = True
+                                continue
+                            if kind == "error":
+                                if isinstance(payload, BaseException):
+                                    raise payload
+                                continue
+                            msg = payload
+                            if isinstance(msg, StreamEvent):
+                                event = self._translate_stream_event(msg.event)
                                 if event is not None:
+                                    if isinstance(event, Token):
+                                        streamed_text = True
+                                    elif isinstance(event, Thinking):
+                                        streamed_thinking = True
                                     yield event
-                            streamed_text = False
-                            streamed_thinking = False
-                        elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
-                            for block in msg.content:
-                                if isinstance(block, ToolResultBlock):
-                                    yield self._tool_call_end(block)
-                        elif isinstance(msg, ResultMessage):
-                            cost_usd = msg.total_cost_usd
-                            usage = msg.usage
+                            elif isinstance(msg, AssistantMessage):
+                                if msg.session_id:
+                                    self.sdk_session_id = msg.session_id
+                                for block in msg.content:
+                                    if streamed_text and isinstance(block, TextBlock):
+                                        continue
+                                    if streamed_thinking and isinstance(block, ThinkingBlock):
+                                        continue
+                                    event = self._translate_block(block)
+                                    if event is None:
+                                        continue
+                                    # Pre-register bash tool_use_ids
+                                    # for the side-channel correlator
+                                    # before yielding so the handler
+                                    # can claim the right id when the
+                                    # SDK invokes call_tool.
+                                    if (
+                                        isinstance(event, ToolCallStart)
+                                        and event.name == BASH_TOOL_SDK_NAME
+                                    ):
+                                        with contextlib.suppress(asyncio.QueueFull):
+                                            pending_bash_ids.put_nowait(event.tool_call_id)
+                                    yield event
+                                streamed_text = False
+                                streamed_thinking = False
+                            elif isinstance(msg, UserMessage) and isinstance(msg.content, list):
+                                for block in msg.content:
+                                    if isinstance(block, ToolResultBlock):
+                                        yield self._tool_call_end(block)
+                            elif isinstance(msg, ResultMessage):
+                                cost_usd = msg.total_cost_usd
+                                usage = msg.usage
+                                finished = True
+                    # Drain any deltas that landed between the final
+                    # multiplex iteration and now (a fast bash command
+                    # whose last line raced the ResultMessage).
+                    while True:
+                        try:
+                            yield delta_queue.get_nowait()
+                        except asyncio.QueueEmpty:
                             break
                     # Capture the context-usage snapshot while the CLI
                     # subprocess is still live. The async-with exit
@@ -656,6 +837,10 @@ class AgentSession:
                     # a closed connection.
                     context_event = await self._capture_context_usage(client)
                 finally:
+                    if drain_task is not None and not drain_task.done():
+                        drain_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await drain_task
                     self._client = None
             # Yield the context-usage snapshot *before* MessageComplete
             # because the runner's stream loop breaks on MessageComplete

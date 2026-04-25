@@ -14,6 +14,15 @@ Current tool set:
     200k-char ``grep -r`` into an on-demand reference instead of a
     200k-char replay in every subsequent turn's cached input.
 
+  - ``bearings__bash(command, timeout?)`` — drop-in replacement for
+    the built-in ``Bash`` tool that streams stdout/stderr line-by-line
+    over a side channel as the subprocess produces it. Registered
+    only when the caller passes both ``emit_delta`` and
+    ``bash_id_getter`` so unit tests / fallback paths can build a
+    server with just ``get_tool_output``. See ``agent/bash_tool.py``
+    for the streaming implementation; the side-channel wiring lives
+    in ``agent/session.py``.
+
 Closures over ``session_id`` + an injected ``db getter`` keep the
 server stateless on disk. Callers (``AgentSession``) supply a callable
 returning the current ``aiosqlite.Connection`` so a server built at
@@ -36,6 +45,7 @@ import aiosqlite
 from claude_agent_sdk import create_sdk_mcp_server, tool
 from claude_agent_sdk.types import McpSdkServerConfig
 
+from bearings.agent.bash_tool import EmitDelta, ToolUseIdGetter, build_bash_tool
 from bearings.db import store
 
 log = logging.getLogger(__name__)
@@ -204,7 +214,13 @@ def _build_get_tool_output(session_id: str, db_getter: DbGetter) -> Any:
     return get_tool_output
 
 
-def build_bearings_mcp_server(session_id: str, db_getter: DbGetter) -> McpSdkServerConfig:
+def build_bearings_mcp_server(
+    session_id: str,
+    db_getter: DbGetter,
+    *,
+    emit_delta: EmitDelta | None = None,
+    bash_id_getter: ToolUseIdGetter | None = None,
+) -> McpSdkServerConfig:
     """Construct the Bearings in-process MCP server for one session.
 
     Called from ``AgentSession.stream()`` on every turn so the tool
@@ -214,8 +230,19 @@ def build_bearings_mcp_server(session_id: str, db_getter: DbGetter) -> McpSdkSer
     lightweight closure, no subprocess or IPC.
 
     ``db_getter`` is called inside the tool handler, not at build
-    time, so the returned server stays valid across DB reconnects."""
+    time, so the returned server stays valid across DB reconnects.
+
+    ``emit_delta`` + ``bash_id_getter`` opt-in the streaming bash
+    tool. Both must be present to register it: the emit callback fans
+    each subprocess line out as a `ToolOutputDelta` event, and the
+    getter resolves the model's `tool_use.id` for correlation (the
+    MCP `tools/call` payload doesn't carry it; the session pushes it
+    onto a queue when it observes the matching `ToolCallStart`).
+    Tests and fallback paths that don't need streaming can omit both
+    and the server will register only `get_tool_output`."""
     tools: list[Any] = [_build_get_tool_output(session_id, db_getter)]
+    if emit_delta is not None and bash_id_getter is not None:
+        tools.append(build_bash_tool(emit_delta, bash_id_getter))
     return create_sdk_mcp_server(
         name=BEARINGS_MCP_SERVER_NAME,
         version="1.0.0",
