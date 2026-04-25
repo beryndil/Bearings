@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   `data-theme` is set synchronously by the no-flash boot script below,
-  before %sveltekit.head% and before first paint. v1 ships three
+  before the SvelteKit head injection and before first paint. v1 ships three
   bundled themes: `midnight-glass` (default dark), `default` (saved
   Tailwind palette), and `paper-light`. The `data-theme` attribute is
   the only switching surface — Tailwind color classes resolve through
@@ -24,8 +24,8 @@
     <title>Bearings</title>
     <!--
       Track B — no-flash theme boot (Themes & skins v1, design §4 Track B).
-      Runs synchronously before %sveltekit.head% and before any stylesheet
-      paints. Reads the cached preferences row (the same key
+      Runs synchronously before the SvelteKit head injection and before
+      any stylesheet paints. Reads the cached preferences row (the same key
       `bearings:preferences-cache` that preferences.svelte.ts writes after
       every PATCH) so a reload in any theme paints the saved theme on the
       first frame instead of flashing midnight-glass and then re-applying.
