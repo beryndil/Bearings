@@ -762,26 +762,6 @@ it then. Do not exercise the historical checklists as-is.
     2 (before Phase 11), 3 (before Phase 16), 4 (before Phase 15),
     5 (before Phase 10). Items 1 and 6 are document-only / deferred.
 
-- [ ] **Implement `bearings todo` CLI subcommand (2026-04-22).**
-  Part of the TODO.md discipline enforcement layer (CLI + hooks +
-  standard schema) accepted in Bearings session
-  `1a2b1c1e-06a5-4d39-b35f-7dba25f81da8`. New `bearings todo`
-  subcommand with four operations: `open` (list open entries from
-  ./TODO.md and nested), `check` (lint for missing headers, age >60d,
-  shipped-looking words inside Open entries), `add` (append a properly-
-  formatted stub), `recent` (used by hooks for injection). `TodoEntry`
-  dataclass + regex parser + tests + CHANGELOG + v0.8.0 bump. Lands
-  in src/bearings/cli.py.
-  - **Spec** (must exist before this starts):
-    `~/.claude/specs/todo-discipline-v1.md`
-  - **Bearings session for this work:**
-    `4cb745a0b5c34e648ca4f37e49c00093` ("bearings todo CLI subcommand")
-  - **Depends on:** spec session
-    `986e99685b2d4954afc6b98448f7f6df` ("TODO.md discipline spec v1")
-  - **Followed by:** session
-    `54b9290a287648f6b1516a449a72d95d` ("Install TODO discipline
-    hooks+migrate") — installs the hooks once this CLI is on PATH.
-
 - [x] **Silence gap during long Task sub-agent runs (2026-04-21, diagnosed 2026-04-23, P0–P3 shipped 2026-04-23).**
   Dave reported the UI sat silent for far too long between his "are you
   hung up?" prompt and the plan-agent response during the token-cost
