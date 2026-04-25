@@ -16,6 +16,15 @@
     highlightQuery: string;
     copiedMsgId: string | null;
     onCopyMessage: (msg: Message) => void;
+    /** "More info" elaborate-on-this-reply button. Only rendered on
+     * the most-recent finished assistant turn (see `isLatestAssistant`)
+     * to keep the contract clear: clicking pre-fills the composer with
+     * an "elaborate on your previous response" prompt — and there's
+     * exactly one "previous response" the model is going to read,
+     * which is the latest one. Pre-fill + focus, never auto-send;
+     * Dave can edit or Esc-cancel before pressing Enter. */
+    onMoreInfo?: (msg: Message) => void;
+    isLatestAssistant?: boolean;
     /** Slice 4: bulk-select mode. When `bulkMode` is true the header
      * renders a checkbox in place of the ordinary role tag and the
      * context-menu action is still wired — right-click while in bulk
@@ -48,6 +57,8 @@
     highlightQuery,
     copiedMsgId,
     onCopyMessage,
+    onMoreInfo,
+    isLatestAssistant = false,
     bulkMode = false,
     selectedIds,
     onToggleSelect
@@ -363,7 +374,19 @@
       <span class="inline-block animate-pulse">▍</span>
     {/if}
     {#if assistant}
-      <div class="mt-2 flex justify-end">
+      <div class="mt-2 flex justify-end gap-3">
+        {#if isLatestAssistant && !isStreaming && onMoreInfo}
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Ask for more detail on this reply"
+            title="Pre-fill composer to ask for more detail (Enter to send)"
+            data-testid="more-info-button"
+            onclick={() => onMoreInfo(assistant!)}
+          >
+            ℹ more
+          </button>
+        {/if}
         <button
           type="button"
           class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"

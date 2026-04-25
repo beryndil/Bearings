@@ -858,14 +858,20 @@ it then. Do not exercise the historical checklists as-is.
   (3) Midnight Glass is now the default theme — P0 affordance must use
   theme tokens / existing tailwind utilities, not hardcoded colors.
 
-- [ ] **Feature: "More info" button next to Copy on assistant responses
-  (2026-04-21).** Dave's ask: each assistant turn already has a Copy
-  button in its action row; add a sibling button that, when clicked,
-  sends a follow-up prompt to the agent asking it to go into more
-  detail on the *same* issue/topic from that response. Should feel
-  like a one-click "elaborate" shortcut — no typing required.
-  Likely surface: the message actions component in
-  `frontend/src/lib/components/MessageTurn.svelte` (lines 344–356).
+- [x] **Feature: "More info" button next to Copy on assistant
+  responses (2026-04-21, shipped v0.12.1 / frontend 0.8.3).** Dave's
+  ask: each assistant turn already has a Copy button in its action
+  row; add a sibling button that, when clicked, sends a follow-up
+  prompt to the agent asking it to go into more detail on the same
+  issue/topic from that response. Implementation: new `ℹ MORE`
+  button in the `MessageTurn` footer action row, gated to the
+  most-recent finished assistant turn (computed in `Conversation`
+  via `latestAssistantTurnKey`). Click pre-fills the composer with
+  `Please go into more detail on your previous response.` and
+  focuses the textarea — no auto-send, so Dave can append a
+  qualifier or Esc-cancel. Five new unit tests in `MessageTurn.test`
+  cover render-only-on-latest, hidden-during-stream, hidden-on-
+  older-rows, hidden-when-handler-missing, and click-fires-callback.
 
   **Decisions (2026-04-22):**
   - (a) *Prompt text:* literally `Please go into more detail on

@@ -104,6 +104,24 @@
     sessions.select(targetId);
   }
 
+  /** Turn key of the chronologically last turn that has a finished
+   * (non-streaming) assistant message. The "ℹ MORE" button only
+   * renders on this turn — see decision 2026-04-22 in TODO.md
+   * "Feature: More info button". A streaming turn doesn't qualify
+   * (asking for "more detail on your previous response" before that
+   * response finishes is incoherent), so we look only at settled
+   * turns when streaming is active. Returns null when no assistant
+   * has spoken yet, which keeps the empty-conversation state clean.
+   */
+  const latestAssistantTurnKey = $derived.by((): string | null => {
+    const source = conversation.streamingActive ? settledTurns : turns;
+    for (let i = source.length - 1; i >= 0; i -= 1) {
+      const t = source[i];
+      if (t.assistant !== null) return t.key;
+    }
+    return null;
+  });
+
   let promptText = $state('');
   let scrollContainer: HTMLDivElement | undefined = $state();
   let editingSession = $state(false);
@@ -238,6 +256,19 @@
     setTimeout(() => {
       if (copiedMsgId === msg.id) copiedMsgId = null;
     }, 1500);
+  }
+
+  /** "More info" button on the most-recent assistant turn (decision
+   * 2026-04-22 in TODO.md): pre-fill composer with the elaborate
+   * prompt and focus it — no auto-send. Dave can append a qualifier
+   * ("…especially about X") and Enter, or Esc-clear and back out.
+   * The prompt is intentionally minimal because the reply is already
+   * in context for the model; a richer quoted template would waste
+   * tokens and ambiguate "which version am I elaborating on?" */
+  const MORE_INFO_PROMPT = 'Please go into more detail on your previous response.';
+  function onMoreInfo(_msg: api.Message) {
+    promptText = MORE_INFO_PROMPT;
+    queueMicrotask(() => textareaEl?.focus());
   }
 
   // Slice 3: Session Reorg — Move + Split ops driven from the per-
@@ -1840,6 +1871,8 @@
             highlightQuery={conversation.highlightQuery}
             {copiedMsgId}
             {onCopyMessage}
+            {onMoreInfo}
+            isLatestAssistant={item.turn.key === latestAssistantTurnKey}
             {bulkMode}
             {selectedIds}
             onToggleSelect={onBulkToggleSelect}

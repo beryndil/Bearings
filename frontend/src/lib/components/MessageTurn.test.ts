@@ -113,6 +113,64 @@ describe('MessageTurn (bulk mode)', () => {
   });
 });
 
+describe('MessageTurn (more-info button)', () => {
+  it('renders ℹ MORE only when isLatestAssistant is true and not streaming', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onMoreInfo: vi.fn(), isLatestAssistant: true })
+    );
+    const btn = queryByTestId('more-info-button');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toContain('ℹ');
+    expect(btn!.textContent!.toLowerCase()).toContain('more');
+  });
+
+  it('hides ℹ MORE on non-latest turns (older history rows)', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onMoreInfo: vi.fn(), isLatestAssistant: false })
+    );
+    expect(queryByTestId('more-info-button')).toBeNull();
+  });
+
+  it('hides ℹ MORE while the turn is still streaming', () => {
+    // The contract is "elaborate on your previous response" — that's
+    // incoherent before the response itself has finished.
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        onMoreInfo: vi.fn(),
+        isLatestAssistant: true,
+        isStreaming: true
+      })
+    );
+    expect(queryByTestId('more-info-button')).toBeNull();
+  });
+
+  it('hides ℹ MORE when no onMoreInfo handler is provided', () => {
+    // Defensive: callers that haven't wired the handler shouldn't
+    // render a dead button. Conversation.svelte always wires it,
+    // but legacy callers / tests passing a partial prop set don't.
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ isLatestAssistant: true })
+    );
+    expect(queryByTestId('more-info-button')).toBeNull();
+  });
+
+  it('clicking ℹ MORE fires onMoreInfo with the assistant message', async () => {
+    const onMoreInfo = vi.fn();
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({ onMoreInfo, isLatestAssistant: true })
+    );
+    await fireEvent.click(getByTestId('more-info-button'));
+    expect(onMoreInfo).toHaveBeenCalledTimes(1);
+    expect(onMoreInfo.mock.calls[0][0].id).toBe('a-1');
+    expect(onMoreInfo.mock.calls[0][0].role).toBe('assistant');
+  });
+});
+
 describe('MessageTurn (tool-call rows)', () => {
   function call(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
     return {
