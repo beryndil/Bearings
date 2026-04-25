@@ -103,6 +103,15 @@ class StubRuntime:
             title=f"{item['label']} (leg {leg_number})",
         )
         self._session_to_item[session["id"]] = item["id"]
+        # Mirror the real `AgentRunnerDriverRuntime.spawn_leg`: every
+        # spawn advances the item's forward pointer (`chat_session_id`)
+        # so the child item shows up paired in the checklist UI. Tests
+        # that don't care about pairing don't have to look at the row;
+        # tests that DO care (fix-and-return: "the fix-it session must
+        # be added to the checklist") can assert on it.
+        from bearings.db.store import set_item_chat_session
+
+        await set_item_chat_session(self.conn, item["id"], session["id"])
         return str(session["id"])
 
     async def run_turn(self, *, session_id: str, prompt: str) -> str:
@@ -1508,6 +1517,72 @@ async def test_visit_existing_falls_back_to_spawn_when_session_closed(
         assert parent["id"] in spawn_item_ids, (
             "Parent should fall back to spawn-fresh when existing session closed"
         )
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_blocker_child_session_added_to_checklist(tmp_path: Path) -> None:
+    """When the fix-and-return path spawns a fresh session for a
+    driver-created blocking child, that session must be ADDED to the
+    checklist — i.e. the child item's `chat_session_id` ends up
+    pointing at the new session. Otherwise the fix-it session would
+    be a floating chat the user can't navigate to from the checklist
+    view, which would make the "spin up a new session to correct the
+    issue" pattern undiscoverable.
+
+    Asserts both directions of the pairing:
+      - Forward pointer (`checklist_items.chat_session_id`) → spawned
+        session id.
+      - Reverse pointer (`sessions.checklist_item_id`) → child id.
+    """
+    from bearings.db.store import get_session, set_item_chat_session
+
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        parent = await create_item(conn, checklist_id, label="parent")
+        existing_chat = await create_session(
+            conn,
+            working_dir="/tmp",
+            model="stub-model",
+            kind="chat",
+            checklist_item_id=parent["id"],
+        )
+        await set_item_chat_session(conn, parent["id"], existing_chat["id"])
+        child_id = parent["id"] + 1
+        runtime = StubRuntime(conn=conn)
+        runtime._session_to_item[existing_chat["id"]] = parent["id"]
+        runtime.turns_by_item[parent["id"]] = [
+            "CHECKLIST_BLOCKED\nfix the prereq\nCHECKLIST_BLOCKED_END",
+            "CHECKLIST_ITEM_DONE",
+        ]
+        runtime.turns_by_item[child_id] = ["CHECKLIST_ITEM_DONE"]
+        config = DriverConfig(visit_existing_sessions=True)
+        driver = Driver(
+            conn=conn,
+            runtime=runtime,
+            checklist_session_id=checklist_id,
+            config=config,
+        )
+        await driver.drive()
+
+        # Child item now has a chat_session_id pointer (from the
+        # spawn_leg → set_item_chat_session path). Find the spawned
+        # session id from the stub's reverse map.
+        spawned_session_id = next(
+            sid for sid, iid in runtime._session_to_item.items() if iid == child_id
+        )
+        child = await get_item(conn, child_id)
+        assert child is not None
+        assert child["chat_session_id"] == spawned_session_id, (
+            "Fix-it session must be paired to the child item via "
+            "chat_session_id so the checklist UI surfaces it"
+        )
+        # And the reverse pointer on the session row.
+        spawned = await get_session(conn, spawned_session_id)
+        assert spawned is not None
+        assert spawned["checklist_item_id"] == child_id
     finally:
         await conn.close()
 
