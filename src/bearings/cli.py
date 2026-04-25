@@ -24,6 +24,8 @@ from bearings.profiles import (
     available_profiles,
     merge_profile_into_toml,
 )
+from bearings.todo import dispatch as _todo_dispatch
+from bearings.todo import register_parser as _todo_register
 
 # Hostnames / IPs that the interlock treats as loopback-only. Anything
 # else (wildcard binds like `0.0.0.0` / `::`, a LAN address, an
@@ -235,6 +237,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Target directory (default: current working directory)",
     )
+
+    _todo_register(sub)
 
     return parser
 
@@ -528,6 +532,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "pending":
         return _run_pending(args)
+
+    if args.command == "todo":
+        return _todo_dispatch(args)
 
     return 1
 

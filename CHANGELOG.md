@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-04-25
+
+`bearings todo` CLI subcommand — first of three layers in the TODO.md
+discipline enforcement plan locked in
+`~/.claude/specs/todo-discipline-v1.md`. Hooks (UserPromptSubmit /
+Stop / PreToolUse-on-`git commit`), the `~/.claude/CLAUDE.md` rule
+update, and per-project TODO.md migration land in a separate session
+once this CLI is on PATH.
+
+### Added
+
+- **`bearings todo open`** — list every Open / In Progress entry from
+  every `TODO.md` in scope, sorted by Logged date ascending. Flags:
+  `--status` (default `Open,In Progress`; `any` widens to Blocked too),
+  `--area` (case-insensitive substring filter), `--format text|json`.
+  Exit 0 always per spec §2.4. JSON shape is stable so the
+  UserPromptSubmit hook can pipe structured findings into
+  `additionalContext` once it ships.
+- **`bearings todo check`** — lint every `TODO.md` for §1.3 schema
+  violations and staleness. Hard rules (E001-E008): missing or
+  out-of-order header lines, malformed Status/Logged values, duplicate
+  fields, orphan H2 with no header triplet. Soft rules (W101 stale
+  age, W102 shipped-looking word in an Open entry). Exit 1 on any
+  finding, 0 when clean. Flags: `--max-age-days` (default 60),
+  `--format text|json`, `--quiet`.
+- **`bearings todo add "<title>"`** — append a properly-formatted
+  stub entry. Creates the file with an H1 + project name when missing,
+  appends with `---` framing when already present. Flags: `--status`
+  (default `Open`, must be one of the canonical three values),
+  `--area`, `--body`, `--file`. Round-trips through the parser and
+  passes lint on the freshly-written stub — the CLI is the
+  conformance guarantor that hand-writing entries can't match.
+- **`bearings todo recent`** — list entries that changed in the last
+  N days. Primary signal: `git log -p` of the `TODO.md` walked
+  newest-commit-first, with first-classification-wins per entry title
+  so an entry added then later edited reads as `[modified]` (the
+  fresher signal) rather than collapsing to `[added]`. Non-git
+  fallback: filter by the entry's own `Logged:` date being within the
+  window. Flags: `--days` (default 7), `--format text|json`. Exit 0
+  always.
+
+### Notes
+
+- New `src/bearings/todo/` package mirrors the existing
+  `src/bearings/bearings_dir/` shape — `parse.py` (TodoEntry dataclass,
+  spec §1.3 authoritative regexes, file discovery walker honoring the
+  §2.2 skip-list), `lint.py` (per-rule check functions + the `check`
+  runner), `open.py`, `add.py`, `recent.py`. Argparse wiring +
+  dispatcher live in `src/bearings/todo/__init__.py` so `cli.py`
+  doesn't grow further past its 400-line target — three new lines
+  there register the subparser and dispatch.
+- 63 new tests across six files cover: well-formed entry parsing,
+  every E00N / W10N rule from spec §2.5, the discovery walker's
+  skip-list, every subcommand happy-path, every flag, JSON-format
+  round trips, the `recent` git-log primary path (using ephemeral
+  real repos to exercise actual `git log -p` parsing), the non-git
+  Logged-date fallback, and end-to-end `cli.main(['todo', …])`
+  invocation. Full backend suite: 1042 tests, mypy strict + ruff
+  clean.
+
 ## [0.12.2] - 2026-04-24
 
 Frontend perf: timeline virtualization + completed in-place tail
