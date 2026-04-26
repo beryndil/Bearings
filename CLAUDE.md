@@ -8,9 +8,16 @@
   local SQLite database
 - **License**: MIT (deliberate deviation from the Unlicense used elsewhere —
   per spec)
-- **Status**: Pre-release (0.x.x development). Current: v0.10.0 — feature
-  development in progress (sessions, reorg, checklists, checkpoints,
-  templates, vault, paired chats all landed).
+- **Status**: Pre-release (0.x.x development). Current: v0.17.x — feature
+  development in progress. Shipped post-v0.10: tag-filter sidebar OR
+  semantics + Finder-click filter (v0.10), token-cost survival kit
+  (v0.12), `bearings todo` CLI (v0.13), themes & skins v1 (v0.14),
+  keyboard shortcuts v1 (v0.15), context-menu phases 14-16 +
+  auto-register Write image artifacts + tool-output linkifier (v0.16),
+  intra-call tool-output streaming + Conversation.svelte split (v0.17).
+  v0.1 closed at v0.1.40; tags landed in v0.2; permission profiles in
+  v0.4; checkpoints / templates / vault / paired chats / live todos
+  across v0.6 → v0.9.
 - **Repository**: `Beryndil/Bearings` (decided 2026-04-22)
 
 ## Tech Stack
