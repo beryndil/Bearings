@@ -74,6 +74,13 @@ class _ItemOutcome(StrEnum):
     DONE = "done"
     FAILED = "failed"
     SKIPPED = "skipped"
+    # Item is genuinely outside the agent's reach (pay a bill, plug
+    # in hardware, supply a 2FA code) and Dave must act. Distinct
+    # from FAILED: the paired session stays open for Dave, the run
+    # advances regardless of `failure_policy`, and the item shows up
+    # in the awaiting axis of the sidebar. See sentinel grammar in
+    # `checklist_sentinels.py` and migration 0033.
+    BLOCKED = "blocked"
 
 
 class DriverOutcome(StrEnum):
@@ -106,6 +113,11 @@ class DriverResult:
     # advances rather than halting. `items_skipped` covers only the
     # "no work attempted" case so the two counters stay distinct.
     items_skipped: int = 0
+    # Items the agent flagged as `CHECKLIST_ITEM_BLOCKED` — outside
+    # its reach and needing Dave to act. Distinct from `items_failed`:
+    # blocked items leave their paired session open for Dave to
+    # resolve, and the run advances regardless of `failure_policy`.
+    items_blocked: int = 0
     failed_item_id: int | None = None
     failure_reason: str | None = None
 
@@ -244,6 +256,7 @@ class Driver:
         self._items_completed = 0
         self._items_failed = 0
         self._items_skipped = 0
+        self._items_blocked = 0
         self._legs_spawned = 0
         self._failed_item_id: int | None = None
         self._failure_reason: str | None = None
@@ -332,7 +345,10 @@ class Driver:
                 # "nothing was here" — wrong, plenty was there, the
                 # agent just couldn't finish it.
                 touched_any = (
-                    self._items_completed > 0 or self._items_skipped > 0 or self._items_failed > 0
+                    self._items_completed > 0
+                    or self._items_skipped > 0
+                    or self._items_failed > 0
+                    or self._items_blocked > 0
                 )
                 if not touched_any:
                     return self._result(DriverOutcome.HALTED_EMPTY)
@@ -351,6 +367,15 @@ class Driver:
                 # Skip is unconditional advance (independent of
                 # failure_policy) but the item still needs exclusion
                 # to avoid re-pick.
+                self._attempted_failed.add(int(item["id"]))
+            elif outcome == _ItemOutcome.BLOCKED:
+                # Blocked is unconditional advance, same as SKIPPED —
+                # the item is set aside for Dave to act on, the run
+                # keeps going. Exclude it from re-pick so the next
+                # `next_unchecked_top_level_item` lookup doesn't loop
+                # back here. The DB row carries `blocked_at` non-null
+                # but `checked_at` IS NULL, so without the exclusion
+                # the unchecked-only query would re-surface it.
                 self._attempted_failed.add(int(item["id"]))
             # Snapshot once per outer iteration — captures every
             # counter mutation that just happened (item completion,
@@ -503,6 +528,26 @@ class Driver:
                 self._items_completed += 1
                 return _ItemOutcome.DONE
 
+            if sentinels.item_blocked is not None:
+                # Item is genuinely outside the agent's reach (pay a
+                # bill, plug in hardware, supply a 2FA code). Stamp
+                # blocked, leave the paired session OPEN for Dave,
+                # advance regardless of `failure_policy`. The parser
+                # already enforced category-whitelist + non-empty
+                # TRIED:; reaching this branch means the sentinel
+                # was well-formed and the agent provided real
+                # attempt evidence. The leg is torn down (already
+                # happened above) but the session row stays alive
+                # in the sidebar for Dave to type into.
+                blocked = sentinels.item_blocked
+                await self._mark_blocked(
+                    item["id"],
+                    category=blocked.category,
+                    reason=blocked.reason,
+                    tried=blocked.tried,
+                )
+                return _ItemOutcome.BLOCKED
+
             if sentinels.handoff_plug is not None:
                 plug = sentinels.handoff_plug
                 continue
@@ -552,6 +597,17 @@ class Driver:
                 await self._mark_done(item["id"])
                 self._items_completed += 1
                 return _ItemOutcome.DONE
+            if nudge_sentinels.item_blocked is not None:
+                # Same path as the main-turn handler — agent realized
+                # mid-nudge that the item is blocked. Honor it.
+                blocked = nudge_sentinels.item_blocked
+                await self._mark_blocked(
+                    item["id"],
+                    category=blocked.category,
+                    reason=blocked.reason,
+                    tried=blocked.tried,
+                )
+                return _ItemOutcome.BLOCKED
             if nudge_sentinels.handoff_plug is not None:
                 plug = nudge_sentinels.handoff_plug
                 continue
@@ -639,6 +695,53 @@ class Driver:
         the storage primitive."""
         await store.toggle_item(self._conn, item_id, checked=True)
 
+    async def _mark_blocked(
+        self,
+        item_id: int,
+        *,
+        category: str,
+        reason: str,
+        tried: tuple[str, ...],
+    ) -> None:
+        """Stamp the item as blocked-on-Dave and increment the counter.
+
+        Crucially does NOT close the paired chat session — the whole
+        point of blocked is that the session stays open for Dave to
+        act on. This is the key behavioral departure from `_mark_done`,
+        which closes the leg via `toggle_item`'s cascade.
+
+        The agent's `tried` log is folded into `blocked_reason_text`
+        so the UI can render it without a separate column. Rendering
+        format mirrors what the agent emitted:
+
+            <reason>
+
+            TRIED:
+            - <attempt 1>
+            - <attempt 2>
+
+        Joined this way so a future parser (or the human reading the
+        tooltip) can reverse it back into structured fields. The
+        category enum is the source of truth for "what kind of
+        blocker"; the text body is the human-facing detail.
+        """
+        body = reason
+        if tried:
+            bullets = "\n".join(f"- {t}" for t in tried)
+            body = f"{reason}\n\nTRIED:\n{bullets}"
+        await store.set_item_blocked(
+            self._conn,
+            item_id,
+            category=category,
+            reason=body,
+        )
+        self._items_blocked += 1
+        log.info(
+            "autonomous driver blocked item %s (category=%s)",
+            item_id,
+            category,
+        )
+
     async def _record_failure(self, item_id: int, reason: str) -> None:
         self._items_failed += 1
         # First failure wins — the driver halts on first failure by
@@ -708,6 +811,7 @@ class Driver:
         self._items_completed = int(snap.get("items_completed") or 0)
         self._items_failed = int(snap.get("items_failed") or 0)
         self._items_skipped = int(snap.get("items_skipped") or 0)
+        self._items_blocked = int(snap.get("items_blocked") or 0)
         self._legs_spawned = int(snap.get("legs_spawned") or 0)
         failed_id = snap.get("failed_item_id")
         self._failed_item_id = int(failed_id) if failed_id is not None else None
@@ -744,6 +848,7 @@ class Driver:
                 items_completed=self._items_completed,
                 items_failed=self._items_failed,
                 items_skipped=self._items_skipped,
+                items_blocked=self._items_blocked,
                 legs_spawned=self._legs_spawned,
                 failed_item_id=self._failed_item_id,
                 failure_reason=self._failure_reason,
@@ -931,7 +1036,29 @@ class Driver:
             "For other followups: CHECKLIST_FOLLOWUP block=yes|no / "
             "CHECKLIST_FOLLOWUP_END. block=yes makes it a child that "
             "must complete before this item. block=no appends to the "
-            "end of the checklist."
+            "end of the checklist.\n"
+            "If the item is GENUINELY outside your reach and Dave must "
+            "act personally — pay a bill (his payment method), plug in "
+            "hardware (physical access), supply a 2FA code (his phone), "
+            "use credentials only he has, or make a decision he has "
+            "explicitly reserved — emit\n"
+            "CHECKLIST_ITEM_BLOCKED category=<one of: physical_action, "
+            "payment, external_credential, identity_or_2fa, human_judgment>\n"
+            "<short reason text>\n"
+            "TRIED:\n"
+            "- <attempt 1 and why it could not succeed without Dave>\n"
+            "- <attempt 2 ...>\n"
+            "CHECKLIST_ITEM_BLOCKED_END\n"
+            "Before flagging blocked, ATTEMPT THE WORK. 'I don't know "
+            "how' is not blocked — that's needs-more-thinking, keep "
+            "working. 'This is risky' is not blocked — make the call "
+            "yourself. 'I'm not sure' is not blocked — try first. The "
+            "TRIED: log MUST list real attempts; an empty TRIED block "
+            "rejects the sentinel and the run keeps you working. "
+            "ITEM_BLOCKED is for what only Dave's body, accounts, "
+            "payment method, or reserved-judgment can resolve. Bias "
+            "hard against using it; an unjustified blocked-flag is a "
+            "more expensive failure mode than a genuine attempt."
         )
         if plug is not None:
             return (
@@ -984,6 +1111,7 @@ class Driver:
             items_failed=self._items_failed,
             legs_spawned=self._legs_spawned,
             items_skipped=self._items_skipped,
+            items_blocked=self._items_blocked,
             failed_item_id=self._failed_item_id,
             failure_reason=self._failure_reason,
         )

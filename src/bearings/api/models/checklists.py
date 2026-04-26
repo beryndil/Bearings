@@ -171,6 +171,12 @@ class AutoRunStatus(BaseModel):
     items_completed: int | None = None
     items_failed: int | None = None
     items_skipped: int | None = None
+    # Items the agent flagged as `CHECKLIST_ITEM_BLOCKED` — outside
+    # its reach and needing Dave to act. Distinct axis from
+    # completed/failed/skipped: blocked items leave their paired
+    # session open and the run advances regardless of `failure_policy`.
+    # See migration 0033 + the autonomous driver's `_mark_blocked`.
+    items_blocked: int | None = None
     legs_spawned: int | None = None
     outcome: str | None = None
     failed_item_id: int | None = None

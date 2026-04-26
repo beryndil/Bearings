@@ -34,7 +34,7 @@ from bearings.db._common import _now
 
 _AUTO_RUN_COLS = (
     "checklist_session_id, state, items_completed, items_failed, "
-    "items_skipped, legs_spawned, failed_item_id, failure_reason, "
+    "items_skipped, items_blocked, legs_spawned, failed_item_id, failure_reason, "
     "config_json, attempted_failed_json, created_at, updated_at"
 )
 
@@ -47,6 +47,7 @@ async def upsert_auto_run_state(
     items_completed: int,
     items_failed: int,
     items_skipped: int,
+    items_blocked: int,
     legs_spawned: int,
     failed_item_id: int | None,
     failure_reason: str | None,
@@ -68,12 +69,13 @@ async def upsert_auto_run_state(
     now = _now()
     await conn.execute(
         f"INSERT INTO auto_run_state ({_AUTO_RUN_COLS}) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(checklist_session_id) DO UPDATE SET "
         "state = excluded.state, "
         "items_completed = excluded.items_completed, "
         "items_failed = excluded.items_failed, "
         "items_skipped = excluded.items_skipped, "
+        "items_blocked = excluded.items_blocked, "
         "legs_spawned = excluded.legs_spawned, "
         "failed_item_id = excluded.failed_item_id, "
         "failure_reason = excluded.failure_reason, "
@@ -86,6 +88,7 @@ async def upsert_auto_run_state(
             items_completed,
             items_failed,
             items_skipped,
+            items_blocked,
             legs_spawned,
             failed_item_id,
             failure_reason,

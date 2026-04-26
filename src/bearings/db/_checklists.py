@@ -338,6 +338,59 @@ async def toggle_item(
     return await get_item(conn, item_id)
 
 
+async def set_item_blocked(
+    conn: aiosqlite.Connection,
+    item_id: int,
+    *,
+    category: str,
+    reason: str,
+) -> dict[str, Any] | None:
+    """Stamp an item as blocked-on-Dave. Stores `blocked_at`,
+    `blocked_reason_category`, and `blocked_reason_text` on the row;
+    leaves `checked_at`, `chat_session_id`, and the paired session's
+    `closed_at` alone. Returns the refreshed row, or None when the
+    id is unknown.
+
+    This is the autonomous-driver entry point for the
+    `CHECKLIST_ITEM_BLOCKED` sentinel. Unlike `toggle_item(checked=True)`,
+    it does NOT close the paired chat session — the whole point of
+    blocked is that the session stays open for Dave to act on.
+
+    Mutual-exclusion contract (`checked_at` IS NULL OR `blocked_at`
+    IS NULL): caller is responsible for not invoking this on a row
+    that already has `checked_at` set. The driver only stamps blocked
+    on the way to advancing past an unchecked item, so the path
+    naturally upholds it. The reverse direction (clearing
+    `blocked_at` when an item gets checked) lives in `toggle_item`'s
+    cascade — landing in a follow-up commit alongside the cascade
+    carve-out for blocked siblings.
+
+    Caller is responsible for validating `category` against
+    `bearings.agent.checklist_sentinels.ITEM_BLOCKED_CATEGORIES` —
+    the SQLite CHECK constraint will refuse out-of-range values but
+    raises a generic IntegrityError that the driver would have to
+    translate; sentinel-layer validation is the cleaner gate."""
+    now = _now()
+    cursor = await conn.execute(
+        "UPDATE checklist_items "
+        "SET blocked_at = ?, blocked_reason_category = ?, blocked_reason_text = ?, "
+        "    updated_at = ? "
+        "WHERE id = ?",
+        (now, category, reason, now, item_id),
+    )
+    if cursor.rowcount == 0:
+        await conn.commit()
+        return None
+    row = await get_item(conn, item_id)
+    if row is not None:
+        await conn.execute(
+            "UPDATE checklists SET updated_at = ? WHERE session_id = ?",
+            (now, row["checklist_id"]),
+        )
+    await conn.commit()
+    return row
+
+
 async def is_checklist_complete(conn: aiosqlite.Connection, session_id: str) -> bool:
     """Return True when every root-level item in the given checklist
     has `checked_at` set AND the checklist has at least one root item.

@@ -1,0 +1,14 @@
+-- Migration 0034: track items_blocked count in auto_run_state.
+--
+-- Companion to migration 0033 (`blocked_at` on `checklist_items`).
+-- The autonomous driver now stamps blocked items via the
+-- `CHECKLIST_ITEM_BLOCKED` sentinel, advances regardless of
+-- `failure_policy`, and increments `_items_blocked`. That counter
+-- has to survive a systemd restart the same way `items_completed`
+-- and `items_skipped` do, so the rehydrate path on next-boot lifespan
+-- has the right starting numbers.
+--
+-- Additive — no backfill needed. Existing rows read back with the
+-- new column at 0, which matches the pre-migration behavior (no
+-- blocked items existed before this migration landed).
+ALTER TABLE auto_run_state ADD COLUMN items_blocked INTEGER NOT NULL DEFAULT 0;

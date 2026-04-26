@@ -1820,3 +1820,198 @@ async def test_kickoff_prompt_on_successor_leg_includes_plug(
         assert "midstate" in leg_two_prompt
     finally:
         await conn.close()
+
+
+# --- item_blocked --------------------------------------------------
+#
+# CHECKLIST_ITEM_BLOCKED is the third item state — the agent reports
+# the item is genuinely outside its reach and Dave must act. Distinct
+# from FAILED: paired session stays open, run advances regardless of
+# `failure_policy`. See ~/.claude/plans/crimson-flagging-checklist.md.
+
+
+@pytest.mark.asyncio
+async def test_item_blocked_stamps_db_and_advances(tmp_path: Path) -> None:
+    """End-to-end: agent emits CHECKLIST_ITEM_BLOCKED on item A, plain
+    DONE on item B. Run completes; A has `blocked_at` set, `checked_at`
+    null; B is checked. `items_blocked=1`, `items_completed=1`."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="blocked", sort_order=0)
+        b = await create_item(conn, checklist_id, label="ok", sort_order=1)
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                a["id"]: [
+                    "I cannot continue without your action.\n"
+                    "CHECKLIST_ITEM_BLOCKED category=physical_action\n"
+                    "Server needs to be physically plugged into the new switch.\n"
+                    "TRIED:\n"
+                    "- ssh'd in but no remote port toggle exists for this hardware\n"
+                    "- BMC can power-cycle but not reroute the cable\n"
+                    "CHECKLIST_ITEM_BLOCKED_END"
+                ],
+                b["id"]: ["CHECKLIST_ITEM_DONE"],
+            },
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.COMPLETED
+        assert result.items_completed == 1
+        assert result.items_blocked == 1
+        a_row = await get_item(conn, a["id"])
+        b_row = await get_item(conn, b["id"])
+        assert a_row is not None and b_row is not None
+        assert a_row["checked_at"] is None
+        assert a_row["blocked_at"] is not None
+        assert a_row["blocked_reason_category"] == "physical_action"
+        assert "physically plugged" in a_row["blocked_reason_text"]
+        assert "TRIED:" in a_row["blocked_reason_text"]
+        assert b_row["checked_at"] is not None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_item_blocked_leaves_paired_session_open(tmp_path: Path) -> None:
+    """The defining behavior: blocked items DO NOT close their paired
+    chat session. Dave's resolution flow needs to type into that still-
+    open session."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        from bearings.db.store import get_session
+
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="blocked")
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                a["id"]: [
+                    "Need your card.\n"
+                    "CHECKLIST_ITEM_BLOCKED category=payment\n"
+                    "Need your payment method on file to settle this invoice.\n"
+                    "TRIED:\n"
+                    "- looked for stored payment method, none on file\n"
+                    "CHECKLIST_ITEM_BLOCKED_END"
+                ],
+            },
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        await driver.drive()
+        # The leg that emitted the blocked sentinel was spawned (1 spawn).
+        assert len(runtime.spawn_calls) == 1
+        leg_session_id = runtime._session_to_item.keys()
+        # Find the paired session row and assert it's still open.
+        for sid in leg_session_id:
+            session = await get_session(conn, sid)
+            assert session is not None
+            assert session.get("closed_at") is None, (
+                "blocked items must leave their paired session open for Dave"
+            )
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_item_blocked_advances_under_halt_policy(tmp_path: Path) -> None:
+    """Blocked is its own axis — advances regardless of `failure_policy`.
+    Verify under the default halt policy: a blocked item does NOT halt
+    the run, and a downstream item still completes."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="blocked", sort_order=0)
+        b = await create_item(conn, checklist_id, label="downstream", sort_order=1)
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                a["id"]: [
+                    "CHECKLIST_ITEM_BLOCKED category=identity_or_2fa\n"
+                    "Need 2FA from your phone.\n"
+                    "TRIED:\n"
+                    "- read auth flow docs, requires user device\n"
+                    "CHECKLIST_ITEM_BLOCKED_END"
+                ],
+                b["id"]: ["CHECKLIST_ITEM_DONE"],
+            },
+        )
+        # Default config = failure_policy='halt'. If blocked were treated
+        # as failure, this run would halt before touching `b`.
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.COMPLETED
+        assert result.items_blocked == 1
+        assert result.items_completed == 1
+        b_row = await get_item(conn, b["id"])
+        assert b_row is not None
+        assert b_row["checked_at"] is not None
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_item_blocked_does_not_loop_on_blocked_item(tmp_path: Path) -> None:
+    """A blocked item must not be re-picked by the outer loop — same
+    contract as failed-and-skipped. Script exactly one turn for the
+    blocked item; if it got re-picked, run_turn would raise on missing
+    script."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        await create_item(conn, checklist_id, label="blocked")
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                1: [
+                    "CHECKLIST_ITEM_BLOCKED category=external_credential\n"
+                    "Need GitHub org admin access.\n"
+                    "TRIED:\n"
+                    "- bot account lacks admin rights\n"
+                    "CHECKLIST_ITEM_BLOCKED_END"
+                ]
+            },
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.COMPLETED
+        assert result.items_blocked == 1
+        assert len(runtime.spawn_calls) == 1
+    finally:
+        await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_malformed_item_blocked_falls_through_to_silent_failure(
+    tmp_path: Path,
+) -> None:
+    """Mechanical guardrail check: a blocked sentinel with a missing
+    TRIED: block should be rejected by the parser, leaving the leg
+    looking like a silent exit. The driver fires its standard nudge,
+    and (if also silent) records a normal failure under `halt`. Item
+    has no `blocked_at` — the agent's give-up didn't take."""
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        checklist_id = await _fresh_checklist(conn)
+        a = await create_item(conn, checklist_id, label="lazy")
+        runtime = StubRuntime(
+            conn=conn,
+            turns_by_item={
+                a["id"]: [
+                    "CHECKLIST_ITEM_BLOCKED category=human_judgment\n"
+                    "I'd rather not.\n"
+                    "CHECKLIST_ITEM_BLOCKED_END",
+                    "still nothing",  # nudge response
+                ],
+            },
+        )
+        driver = Driver(conn=conn, runtime=runtime, checklist_session_id=checklist_id)
+        result = await driver.drive()
+        assert result.outcome == DriverOutcome.HALTED_FAILURE
+        assert result.items_blocked == 0
+        a_row = await get_item(conn, a["id"])
+        assert a_row is not None
+        assert a_row["blocked_at"] is None
+        assert a_row["checked_at"] is None
+    finally:
+        await conn.close()

@@ -325,6 +325,7 @@ class AutoDriverRegistry:
                 "items_completed": driver._items_completed,
                 "items_failed": driver._items_failed,
                 "items_skipped": driver._items_skipped,
+                "items_blocked": driver._items_blocked,
                 "legs_spawned": driver._legs_spawned,
             }
         # Task finished — either cleanly with a result, or with an
