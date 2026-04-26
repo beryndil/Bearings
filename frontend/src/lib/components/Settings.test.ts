@@ -157,6 +157,53 @@ describe('Settings', () => {
     });
   });
 
+  it('About section renders version and build from /api/version', async () => {
+    const stub = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { version: '0.20.5', build: '1714075200000000000' };
+      },
+      async text() {
+        return JSON.stringify({ version: '0.20.5', build: '1714075200000000000' });
+      }
+    }));
+    vi.stubGlobal('fetch', stub);
+
+    const { getByTestId, findByText } = render(Settings, {
+      props: { open: true }
+    });
+
+    await fireEvent.click(getByTestId('settings-rail-about'));
+    expect(getByTestId('settings-section-about')).toBeInTheDocument();
+    // Version trailing renders once the fetch resolves.
+    await findByText('v0.20.5');
+  });
+
+  it('About section falls back gracefully when /api/version is unreachable', async () => {
+    const stub = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      async json() {
+        return { detail: 'boom' };
+      },
+      async text() {
+        return JSON.stringify({ detail: 'boom' });
+      }
+    }));
+    vi.stubGlobal('fetch', stub);
+
+    const { getByTestId, findAllByText } = render(Settings, {
+      props: { open: true }
+    });
+
+    await fireEvent.click(getByTestId('settings-rail-about'));
+    // Both rows (Version + Build) render 'unavailable' rather than
+    // spinning forever, so the assertion uses findAllByText.
+    const matches = await findAllByText('unavailable');
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('Authentication section writes the token to localStorage and not /api/preferences', async () => {
     const stub = stubPatchOk({});
     const { getByLabelText, getByTestId } = render(Settings, {
