@@ -72,11 +72,12 @@
     // Seamless-reload watcher: pin the live build, poll for changes,
     // and reload the SPA when the operator ships a new bundle. Reload
     // fires on `visibilitychange → hidden` (so the user never sees a
-    // disruptive reload while looking at the tab) or after a long
-    // foreground idle gap. The disruption guards make sure the idle-
-    // fire branch never reloads while a session is mid-stream — the
-    // visibility branch ignores them on the assumption that "not
-    // looking" makes any reload cheap.
+    // disruptive reload while looking at the tab) or, while visible,
+    // after a brief interactivity debounce so an in-flight click
+    // stream isn't yanked out from under the user. The disruption
+    // guards make sure the visible branch never reloads while a
+    // session is mid-stream — the visibility branch ignores them on
+    // the assumption that "not looking" makes any reload cheap.
     versionWatcher.configure({
       isAgentStreaming: () =>
         agent.sessionId !== null && sessions.running.has(agent.sessionId)

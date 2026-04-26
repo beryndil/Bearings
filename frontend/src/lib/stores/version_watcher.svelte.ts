@@ -5,51 +5,80 @@
  * the SPA's identity (`myBuild`); subsequent polls compare the live
  * `serverBuild` against that pin. When they diverge — meaning the
  * operator ran `npm run build` while the SPA was running — the
- * watcher arms a reload and waits for a moment that won't disrupt the
- * user.
+ * watcher arms a reload and fires it the moment the user pauses
+ * interacting, gated by the disruption guards.
  *
  * The reload triggers, in order of preference:
  *
  *   1. `visibilitychange` to hidden — the user just switched tabs or
  *      windows. They aren't looking. Reload silently and they'll be
- *      on the new bundle the moment they look back. This is the
- *      "99% of the time" path: zero disruption, zero notification.
- *   2. Long idle while visible — composer empty, no streaming agent,
- *      no modal. Catches the "user keeps Bearings foreground all
- *      day" case so the SPA doesn't drift forever; the actual
- *      heuristic is "no `interactiveActivity` ping for IDLE_MS."
+ *      on the new bundle the moment they look back. Zero disruption,
+ *      zero notification.
+ *   2. Brief interactivity-debounce while visible — armed reload
+ *      fires once the user has paused keyboard / pointer / scroll
+ *      activity for IDLE_DEBOUNCE_MS, AND the disruption guards are
+ *      clear. This is the active-tab path: a Bearings user who keeps
+ *      the tab foreground all day still lands on the new bundle
+ *      within seconds of their next natural pause.
  *   3. (future) WS reconnect carrying a new build token — fast path
  *      after a server bounce. Wired separately in `ws_sessions`.
  *
- * Disruption guards:
+ * Disruption guards (configured by the consumer; default to "always
+ * safe" for unit tests):
  *
- *   - We never reload while a modal is open (data-attribute on the
- *     modal host).
  *   - We never reload while the agent is actively streaming a turn
  *     on the focused session.
- *   - We never reload while the composer holds non-empty draft text.
- *     Drafts are localStorage-persisted by `drafts.svelte`, so this
- *     is belt-and-suspenders — even if a reload landed mid-typing,
- *     the draft would re-hydrate.
+ *   - We never reload while a modal is open (when the consumer wires
+ *     `isModalOpen`).
+ *   - We never reload while the composer holds non-empty draft text
+ *     (when the consumer wires `hasComposerDraft`). Drafts are
+ *     localStorage-persisted by `drafts.svelte`, so this is belt-
+ *     and-suspenders — even if a reload landed mid-typing, the draft
+ *     would re-hydrate.
+ *
+ * Why a short debounce instead of a long idle wait. An older policy
+ * required ~10 minutes of no activity before the visible-tab branch
+ * would fire; for an active Bearings user that window almost never
+ * arrived, so a freshly-built bundle never reached them without a
+ * manual reload — defeating the whole point of the watcher. The
+ * disruption guards above already cover the actual hazards (mid-
+ * stream, mid-typing, modal); a short interactivity debounce just
+ * adds "don't reload mid-click" on top.
  *
  * Public API:
  *
  *   - `versionWatcher.init()` — call once on boot. Pins myBuild,
- *     starts the poll, wires the visibility/idle triggers.
- *   - `versionWatcher.markActivity()` — bump the idle clock. Hooked
- *     into composer keystrokes and route changes by the consumer.
+ *     starts the poll, wires the visibility / interactivity hooks.
+ *   - `versionWatcher.markActivity()` — bump the activity clock.
+ *     Called automatically by the document-level keydown / pointer /
+ *     scroll listeners installed by `init()`; consumers can also
+ *     call it explicitly to extend the debounce on programmatic
+ *     activity (e.g. a route change with no user input).
  *   - `versionWatcher.dispose()` — tear down (test-only).
  */
 
-import { fetchVersion } from '$lib/api/version';
+import { fetchVersion } from "$lib/api/version";
 
 const POLL_INTERVAL_MS = 60_000;
 /** How long the watcher waits, while visible, with no user activity
- * before it considers the page idle and reloads if armed. Ten minutes
- * is the lower bound where Daisy is unambiguously not actively using
- * the page; shorter would surprise her, longer reduces the seamless
- * experience for users who never switch tabs. */
-const IDLE_RELOAD_MS = 10 * 60_000;
+ * before firing an armed reload. Five seconds is short enough that a
+ * natural pause (finished reading a response, finished a click) lets
+ * the bundle land within seconds, and long enough that an in-flight
+ * click stream or rapid keypresses don't get yanked out from under
+ * the user. The disruption guards (streaming / modal / draft) cover
+ * the data-loss hazards; this debounce just covers the "don't reload
+ * mid-action" UX hazard. */
+const IDLE_DEBOUNCE_MS = 5_000;
+/** How often the idle sweep checks whether the debounce has elapsed.
+ * One second gives sub-debounce granularity without burning CPU —
+ * the body is one date subtract and a few function calls per tick. */
+const IDLE_SWEEP_INTERVAL_MS = 1_000;
+/** Document events that count as user interactivity for the debounce.
+ * Keyboard + pointer + scroll covers the common cases (typing,
+ * clicking, reading-with-scroll); pointermove is intentionally NOT
+ * included because cursor drift while reading is not meaningful
+ * activity and would defeat the debounce entirely. */
+const ACTIVITY_EVENTS = ["keydown", "pointerdown", "wheel", "scroll"] as const;
 
 type ActivityCheck = () => boolean;
 
@@ -66,14 +95,23 @@ class VersionWatcher {
    * handshake). When this diverges from `myBuild`, the SPA is stale. */
   serverBuild = $state<string | null>(null);
 
-  /** Wall-clock of the last user activity ping. Idle reload waits for
-   * this to age past IDLE_RELOAD_MS before firing. Initialized to
-   * "now" on boot so the first idle window starts fresh. */
+  /** Wall-clock of the last user activity ping. The visible-tab
+   * reload waits for this to age past IDLE_DEBOUNCE_MS before firing.
+   * Initialized to "now" on boot so the first debounce window starts
+   * fresh. */
   private lastActivityAt = Date.now();
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private idleTimer: ReturnType<typeof setInterval> | null = null;
   private visibilityHandler: (() => void) | null = null;
+  private activityHandler: (() => void) | null = null;
+
+  /** Latched true after a reload has been attempted. Stops the idle
+   * sweep from re-firing every tick while the page is in the middle
+   * of unloading — and guards against pathological cases where
+   * `location.reload()` is suppressed (e.g. a `beforeunload` handler
+   * blocking, browser intervention) so we don't spin at 1 Hz. */
+  private reloadAttempted = false;
 
   /** Caller-supplied predicates for the disruption guards. Held as
    * functions rather than reactive reads so the watcher stays
@@ -120,13 +158,16 @@ class VersionWatcher {
     }
     this.startPoll();
     this.installVisibilityHandler();
+    this.installInteractivityHandler();
     this.startIdleSweep();
   }
 
-  /** Bump the activity clock — idle reload waits IDLE_RELOAD_MS past
-   * this before firing. Hooked into composer keystrokes / focus /
-   * pointer events by the +page.svelte wiring. Also called
-   * automatically on `visibilitychange` to visible. */
+  /** Bump the activity clock — the visible-tab reload waits
+   * IDLE_DEBOUNCE_MS past this before firing. Called automatically by
+   * the document-level keydown / pointerdown / wheel / scroll
+   * listeners installed by `init()`, by `visibilitychange → visible`,
+   * and by any consumer that wants to extend the debounce on
+   * programmatic activity (e.g. a route change with no user input). */
   markActivity(): void {
     this.lastActivityAt = Date.now();
   }
@@ -140,9 +181,15 @@ class VersionWatcher {
       clearInterval(this.idleTimer);
       this.idleTimer = null;
     }
-    if (this.visibilityHandler && typeof document !== 'undefined') {
-      document.removeEventListener('visibilitychange', this.visibilityHandler);
+    if (this.visibilityHandler && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.visibilityHandler);
       this.visibilityHandler = null;
+    }
+    if (this.activityHandler && typeof document !== "undefined") {
+      for (const ev of ACTIVITY_EVENTS) {
+        document.removeEventListener(ev, this.activityHandler, true);
+      }
+      this.activityHandler = null;
     }
   }
 
@@ -166,10 +213,12 @@ class VersionWatcher {
    * tests can assert "we tried to reload" without actually reloading
    * the test runner. */
   attemptReload(reloadImpl: () => void = () => location.reload()): boolean {
+    if (this.reloadAttempted) return false;
     if (!this.wantsReload) return false;
     if (this.isAgentStreaming()) return false;
     if (this.isModalOpen()) return false;
     if (this.hasComposerDraft()) return false;
+    this.reloadAttempted = true;
     reloadImpl();
     return true;
   }
@@ -182,14 +231,17 @@ class VersionWatcher {
   }
 
   private installVisibilityHandler(): void {
-    if (typeof document === 'undefined') return;
+    if (typeof document === "undefined") return;
     this.visibilityHandler = () => {
-      if (document.visibilityState === 'hidden') {
+      if (document.visibilityState === "hidden") {
         // Don't bother with the disruption guards on hidden — the user
         // isn't looking. Streaming will reconnect on the new bundle's
         // boot path; modal state has no practical user impact when the
         // tab is invisible; composer drafts already persist.
-        if (this.wantsReload) location.reload();
+        if (this.wantsReload && !this.reloadAttempted) {
+          this.reloadAttempted = true;
+          location.reload();
+        }
       } else {
         // Becoming visible counts as activity; reset the idle clock so
         // a user who's been actively switching tabs doesn't get an
@@ -197,21 +249,39 @@ class VersionWatcher {
         this.markActivity();
       }
     };
-    document.addEventListener('visibilitychange', this.visibilityHandler);
+    document.addEventListener("visibilitychange", this.visibilityHandler);
+  }
+
+  /** Wire document-level activity events to `markActivity` so the
+   * debounce reflects real user interaction rather than just wall-
+   * clock since boot. Capture-phase + passive so we never interfere
+   * with downstream handlers. The hidden-tab branch doesn't need
+   * this — it reloads unconditionally on visibilitychange. */
+  private installInteractivityHandler(): void {
+    if (typeof document === "undefined") return;
+    this.activityHandler = () => this.markActivity();
+    for (const ev of ACTIVITY_EVENTS) {
+      document.addEventListener(ev, this.activityHandler, {
+        capture: true,
+        passive: true,
+      });
+    }
   }
 
   private startIdleSweep(): void {
     if (this.idleTimer !== null) return;
-    // Check every minute; the actual idle threshold is
-    // IDLE_RELOAD_MS. Cheap — one comparison + a few function calls
-    // per minute, no I/O.
+    // Tick every IDLE_SWEEP_INTERVAL_MS so the "user just paused"
+    // case lands within ~1 s of crossing the debounce threshold.
+    // Body is one date subtract + a few function calls — cheap enough
+    // to run at 1 Hz without showing up in any profile.
     this.idleTimer = setInterval(() => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState !== 'visible') return; // visibility branch handles this
+      if (typeof document === "undefined") return;
+      if (document.visibilityState !== "visible") return; // visibility branch handles this
+      if (!this.wantsReload) return;
       const elapsed = Date.now() - this.lastActivityAt;
-      if (elapsed < IDLE_RELOAD_MS) return;
+      if (elapsed < IDLE_DEBOUNCE_MS) return;
       this.attemptReload();
-    }, 60_000);
+    }, IDLE_SWEEP_INTERVAL_MS);
   }
 }
 
