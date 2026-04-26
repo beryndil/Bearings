@@ -77,6 +77,39 @@ uv run pytest
   `src/bearings/config.py` — override only the keys you need in the TOML file.
 - Never read env vars for secrets; wire them through config or keyring.
 
+## Checklists ("create a checklist" — what Dave means)
+
+When Dave says **"create a checklist"** he means a Bearings
+**`kind="checklist"` session**, not a markdown TODO and not a `TodoWrite`
+call. Canonical reference: `docs/checklists.md`. Read it before improvising.
+
+Quick rules:
+
+- **Two session kinds.** `chat` (default) has a *read-only* `/todos` view
+  mirroring the agent's `TodoWrite`. `checklist` has the writable
+  `/checklist/items` API. `POST /checklist/items` against a chat-kind
+  session returns **400 "session is not a checklist session"**.
+- **Format = §36 of `~/.claude/coding-standards.md`.** Every item needs a
+  `Done when:` clause in its `notes`. Pack `Context` / `Files` /
+  `Done when` / `Notes` into the single `notes` field, joined by ` | ` or
+  newlines. The picking-up agent reads `label` for what to do and `notes`
+  for how to verify.
+- **Multi-fix audit pattern (default).** N chat sessions (one per fix,
+  each with a self-contained plug) + 1 master checklist session indexing
+  them. Each top-level item links to its chat via
+  `POST /checklist/items/{iid}/link {"chat_session_id": "..."}`. Steps
+  nest as children with `parent_item_id`. Worked Python recipe in
+  `docs/checklists.md`.
+- **Tag every checklist.** Minimum: one project tag + one severity tag
+  (Blocker=8 / Critical=9 / Medium=10 / Low=11 / QoL=12). Look up live
+  IDs via `GET /api/tags`; do not guess.
+- **Title prefixes.** Master checklist: `[Audit]`, `[Roadmap]`,
+  `[Refactor]`. Linked chat sessions: `[Bug]` / `[Feature]` /
+  `[Security]` / `[A11y]` / `[UX]` / `[Code Quality]`.
+
+If asked to create a checklist for follow-up work, default to the
+multi-fix audit pattern unless Dave says otherwise.
+
 ## Service install
 
 Systemd `--user` unit at `config/bearings.service`. Install with

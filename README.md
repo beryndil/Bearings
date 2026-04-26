@@ -200,23 +200,69 @@ viewport reports `pointer: coarse`. Desktop-mouse path is untouched.
   prompt into the new composer for a fresh `sdk_session_id` re-run.
   Title prefix `↳ regen: `.
 
-### Checklists, live todos, paired chats (v0.7 → v0.9)
+### Checklists — structured work that outlives any one conversation
 
-Checklist sessions are first-class alongside chat sessions. The
-right pane mounts an embedded `ChecklistChat` panel above the list
-body so you can talk to Claude about the checklist itself; the
-backend prompt assembler injects the list's title, notes, and
-current item tree (with `[x]`/`[ ]` glyphs) into every turn so the
-agent stays grounded. Items support a fix-and-return pattern with
-auto-close cascade on item check (v0.9), Tour mode
-(`failure_policy` + visit-existing), and an autonomous-run state.
+**This is one of the features that makes Bearings worth running.** A
+checklist in Bearings is not a markdown TODO buried in a chat; it is a
+first-class **session kind** (`kind="checklist"`) that holds a structured
+tree of items with notes, nesting, and links to paired chat sessions. It
+survives compactions, restarts, forks, and the heat death of any single
+context window.
 
-`LiveTodos` (v0.8) is a separate widget — a sticky card at the top
-of the Conversation pane that mirrors the agent's own
-**in-session** TodoWrite list (the one Claude Code TUI renders
-inline). Tri-state glyphs (○ pending, ● in-progress, ✓ completed)
-match the running tool-call indicator. Complementary to — not a
-replacement for — cross-session `TODO.md` discipline.
+**What you get:**
+
+- Persistent item tree, rendered live in the right pane. Two levels of
+  nesting in practice (top-level area + child step). Auto-cascade closes
+  parents when all children check off (v0.9).
+- Embedded `ChecklistChat` panel above the list — talk to Claude about
+  the checklist itself; the prompt assembler injects the title, notes,
+  and current item tree with `[x]`/`[ ]` glyphs into every turn so the
+  agent stays grounded in *what's actually done*.
+- **Paired chat sessions per item.** Right-click → *Open paired chat*
+  spawns a dedicated chat-kind session linked back to the item. Each
+  item's work has its own scrollback; the checklist is the index.
+- **Fix-and-return.** Drop into a paired chat, do the work, check the
+  item — Bearings tracks completion across the link.
+- **Tour mode + autonomous run.** Hit `▶︎ Run` to walk the items in
+  order. The auto-driver opens each linked chat, drives it to its
+  Done-when criterion, marks the item, and moves on. Stop anytime.
+- **Severity tags + Finder-click filter** apply to checklist sessions
+  too. Pin a `[Roadmap]` master to the top of your sidebar.
+
+**How to create one:**
+
+In the UI: sidebar `📋 New checklist` (or `Ctrl+Shift+P → New
+checklist`). Pick at least one project tag and one severity tag.
+
+Via REST (every Bearings install exposes this):
+
+```bash
+# 1. Create the master
+curl -sS -X POST http://127.0.0.1:8787/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"[Roadmap] Q3","working_dir":"/abs/path","model":"claude-opus-4-7","tag_ids":[2,9],"kind":"checklist"}'
+
+# 2. Add an item
+curl -sS -X POST http://127.0.0.1:8787/api/sessions/<id>/checklist/items \
+  -H 'Content-Type: application/json' \
+  -d '{"label":"Add CONTRIBUTING.md","notes":"Files: CONTRIBUTING.md (new). Done when: covers setup/test/style + linked from README."}'
+```
+
+Full reference — schema, REST endpoints, the §36 format mapping, the
+"audit-master + N linked chat sessions" recipe, best practices for
+writing items — lives in [`docs/checklists.md`](docs/checklists.md).
+
+**LiveTodos vs checklist sessions vs `TODO.md` — three surfaces, one
+discipline:**
+
+| Surface | What it is | Lifetime |
+|---|---|---|
+| **Checklist session** | Persistent structured tree, optionally linked to chats. Human + API editable. | Forever, across restarts. |
+| **`LiveTodos` widget** (v0.8) | Sticky card at the top of the Conversation pane mirroring the agent's in-conversation `TodoWrite` list. Tri-state glyphs ○/●/✓. Read-only from your side. | Per-conversation, ephemeral. |
+| **Cross-project `TODO.md`** | Markdown at each project root for deferred work. Surfaced and lint-checked by the `bearings todo` CLI (v0.13). | Forever, in git. |
+
+All three coexist. Reach for a checklist session when you need
+structured work tracking that outlives any single chat.
 
 ### `bearings todo` CLI (v0.13)
 
