@@ -6,10 +6,13 @@
 types, ~150+ actions). This document plans implementation; it does not
 restate the spec.
 
-Status: **planning — phases 1-13 implemented in v0.9.x; phases 14-16
-unblocked 2026-04-25** by §8.3/§8.4/§8.5 resolutions. Five governing
-decisions made (§2). Three open questions remain (§8: Chrome flag,
-touch long-press tests, slash-command collision).
+Status: **shipped — phases 1-13 in v0.9.x; phases 14-16 in v0.16.0
+(`86b9b22`, 2026-04-25).** Five governing decisions accepted as
+written (§2); §8.3 / §8.4 / §8.5 product gates resolved in the same
+commit. Three §8 open questions remain as document-only / test-only
+polish on already-shipped phases (Chrome flag README/CheatSheet doc,
+touch long-press integration test for Phase 11, slash-command
+collision integration test for Phase 10) — none block any phase.
 
 ---
 

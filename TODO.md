@@ -791,37 +791,42 @@ it then. Do not exercise the historical checklists as-is.
 
 ## Open feature work
 
-- [ ] **Context menu system — v0.9.0-alpha → v0.9.3 (2026-04-22).**
+- [x] **Context menu system — v0.9.0-alpha → v0.16.0 (2026-04-22 → 2026-04-25, shipped).**
   Registry-driven right-click / long-press menus across 17 target types.
-  Canonical plan: `docs/context-menu-plan.md`. Baseline v0.8.0. Plan
-  makes five governing decisions:
-  (1) "Change model for continuation" mutates session in place, does
-  not fork.
-  (2) `session.archive` action ID aliases to existing close route —
-  no new archived state, no migration for archived_at.
-  (3) Unbuilt actions use hybrid signalling: 501-route actions fire a
-  stub toast on click; actions whose DB primitive does not exist yet
-  (checkpoint / template / attachment) render disabled with "Coming
-  in vX.Y.Z" tooltip.
-  (4) Ctrl+Shift+P command palette ships in Phase 4 alongside first
-  real menus, not in polish phase 12.
-  (5) Shift-right-click = advanced mode (spec wins);
-  Ctrl+Shift+right-click = native-Chrome-menu passthrough.
-  Six open questions remain (see §8 of the plan): Chrome
-  `always-show-context-menu` flag behavior, touch long-press
-  precedence on links-in-code-blocks, pending-ops panel home,
-  regenerate-from-message SDK-resume interaction, slash-command
-  shortcut collision precedence, TOML hot-reload. None block Phase 1.
-  Migrations reserved: 0022 session.pinned, 0023 message flags, 0024
-  checkpoints, 0025 session_templates. `Conversation.svelte` (1424
-  lines) is directive-only in this work — no new handler bodies may
-  land there.
-  - **Plan doc:** `docs/context-menu-plan.md`
-  - **Phase 1 entry criterion:** decisions 1-5 reviewed and accepted
-    (or amended) by Dave.
-  - **Phase-gated decisions still needed:** see plan §8 items
-    2 (before Phase 11), 3 (before Phase 16), 4 (before Phase 15),
-    5 (before Phase 10). Items 1 and 6 are document-only / deferred.
+  Canonical plan: `docs/context-menu-plan.md`. Baseline v0.8.0.
+  - Phases 1–6 (skeleton, positioning/keyboard, confirm/undo/stub,
+    session+tag+palette, message+tool_call, code_block+file_edit+link)
+    landed across v0.9.0-alpha → v0.9.1.
+  - Phases 7–13 (checkpoints, message flags, multi-select+bulk,
+    templates, TOML customization, touch + coarse pointer, Ctrl+?
+    help mode) shipped across v0.9.0–v0.9.5; right-click surface
+    declared "feature-complete per the shippable portion of the
+    spec" at end of Phase 13.
+  - Phases 14–16 (attachments, regenerate-from-this-message,
+    pending-ops floating card) shipped 2026-04-25 in commit
+    `86b9b22`, v0.16.0. §8.3/§8.4/§8.5 product gates resolved in
+    the same commit. Phase 14 implemented as terminal-style
+    `[File N]` chips wired through `/api/shell/open` (decision
+    pivot from the original full-attachment-table-with-storage
+    spec); Phase 15 as `POST /api/sessions/{id}/regenerate_from/
+    {message_id}` fork-only; Phase 16 as `PendingOpsBadge` +
+    `PendingOpsCard` mounted alongside CheatSheet/CommandPalette
+    with `Ctrl+Shift+O` shortcut.
+  - Five governing decisions accepted as written: model-mutation in
+    place, archive-as-alias-for-close, hybrid stub vs disabled-with-
+    tooltip, Ctrl+Shift+P in Phase 4 not 12, Shift-right-click =
+    advanced / Ctrl+Shift+right-click = native passthrough.
+  - Migrations 0022 (session.pinned), 0023 (message flags), 0024
+    (checkpoints), 0025 (session_templates) all landed; 0027
+    (message_attachments) added for the terminal-style file-token
+    pivot.
+  - Three §8 open questions remain — all document-only / test-only
+    polish on already-shipped phases, not blockers: Chrome
+    `always-show-context-menu` flag (README + CheatSheet doc),
+    touch long-press precedence on links-in-code-blocks (Phase 11
+    integration test), slash-command shortcut collision precedence
+    (Phase 10 integration test). Track separately if pulled
+    forward; not part of the context-menu rollout itself.
 
 - [x] **Silence gap during long Task sub-agent runs (2026-04-21, diagnosed 2026-04-23, P0–P3 shipped 2026-04-23).**
   Dave reported the UI sat silent for far too long between his "are you
