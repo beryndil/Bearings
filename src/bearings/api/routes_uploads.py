@@ -37,7 +37,8 @@ import re
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from bearings.api.auth import require_auth
 from bearings.api.models import UploadOut
@@ -108,30 +109,22 @@ def _safe_extension(filename: str, blocked: set[str]) -> str:
     return lowered
 
 
-@router.post("", response_model=UploadOut)
-async def upload_file(request: Request, file: UploadFile) -> UploadOut:
-    """Persist the uploaded bytes under the configured upload dir and
-    return the absolute path. Size cap is enforced while reading so a
-    client that lies about Content-Length can't blow up server memory.
+async def _persist_upload(file: UploadFile, cfg: object) -> UploadOut:
+    """Write a single `UploadFile` to disk and return its `UploadOut`.
 
-    The route auto-creates the upload directory on first call (XDG
-    data home by default). Enforcement order: extension check first
-    (cheap, rejects before any bytes land on disk), then streaming
-    write with a size cap that tears down the partial file on reject.
+    Extracted from `upload_file` so the batch endpoint can reuse the
+    exact same enforcement order without duplicating the size-cap +
+    blocklist + allowlist + sanitize + UUID-subdir + cleanup logic.
+    `cfg` is duck-typed `UploadsCfg`; the typing module isn't imported
+    to keep this helper independent of pydantic settings internals.
 
-    Phase 14 (plan §8.5) added an opt-in MIME allowlist on top of the
-    legacy denylist. When `uploads.allowed_mime_types` is non-empty,
-    a request whose `Content-Type` is NOT in that list AND whose
-    lowercased extension is NOT in `allowed_extensions` is rejected
-    with 415 — the per-extension fallback exists because browsers
-    serve many code files as `application/octet-stream`. Empty list
-    keeps the legacy behaviour for installs that haven't set the
-    allowlist.
+    Behaviour matches the single-file endpoint's contract verbatim —
+    every reject branch raises the same `HTTPException` (413 / 415 /
+    500) so the batch caller can let exceptions propagate and FastAPI
+    serialises one error per fail-fast batch the same as a solo POST.
     """
-    settings = request.app.state.settings
-    cfg = settings.uploads
-    max_bytes = cfg.max_size_mb * 1024 * 1024
-    blocked = {e.lower() for e in cfg.blocked_extensions}
+    max_bytes = cfg.max_size_mb * 1024 * 1024  # type: ignore[attr-defined]
+    blocked = {e.lower() for e in cfg.blocked_extensions}  # type: ignore[attr-defined]
 
     original_name = file.filename or "upload"
     requested_suffix = Path(original_name).suffix
@@ -149,9 +142,9 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
             detail=f"extension not allowed: {requested_suffix}",
         )
 
-    allowed_mime = {m.lower() for m in cfg.allowed_mime_types}
+    allowed_mime = {m.lower() for m in cfg.allowed_mime_types}  # type: ignore[attr-defined]
     if allowed_mime:
-        allowed_ext = {e.lower() for e in cfg.allowed_extensions}
+        allowed_ext = {e.lower() for e in cfg.allowed_extensions}  # type: ignore[attr-defined]
         content_type = (file.content_type or "").lower()
         # Match by MIME or by extension; either is sufficient.
         ext_ok = bool(ext) and ext in allowed_ext
@@ -177,7 +170,7 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
     # drops of the same filename don't collide, and server-generated
     # so the traversal surface is limited to `safe_name` — which can
     # only be a single path component by construction.
-    upload_dir = Path(cfg.upload_dir)
+    upload_dir = Path(cfg.upload_dir)  # type: ignore[attr-defined]
     dest_dir = upload_dir / uuid.uuid4().hex
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / safe_name
@@ -193,7 +186,7 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
                 if size > max_bytes:
                     raise HTTPException(
                         status_code=413,
-                        detail=f"file exceeds {cfg.max_size_mb} MB limit",
+                        detail=f"file exceeds {cfg.max_size_mb} MB limit",  # type: ignore[attr-defined]
                     )
                 out.write(chunk)
     except HTTPException:
@@ -215,3 +208,71 @@ async def upload_file(request: Request, file: UploadFile) -> UploadOut:
         size_bytes=size,
         mime_type=file.content_type or _DEFAULT_MIME,
     )
+
+
+@router.post("", response_model=UploadOut)
+async def upload_file(request: Request, file: UploadFile) -> UploadOut:
+    """Persist the uploaded bytes under the configured upload dir and
+    return the absolute path. Size cap is enforced while reading so a
+    client that lies about Content-Length can't blow up server memory.
+
+    The route auto-creates the upload directory on first call (XDG
+    data home by default). Enforcement order: extension check first
+    (cheap, rejects before any bytes land on disk), then streaming
+    write with a size cap that tears down the partial file on reject.
+
+    Phase 14 (plan §8.5) added an opt-in MIME allowlist on top of the
+    legacy denylist. When `uploads.allowed_mime_types` is non-empty,
+    a request whose `Content-Type` is NOT in that list AND whose
+    lowercased extension is NOT in `allowed_extensions` is rejected
+    with 415 — the per-extension fallback exists because browsers
+    serve many code files as `application/octet-stream`. Empty list
+    keeps the legacy behaviour for installs that haven't set the
+    allowlist.
+    """
+    return await _persist_upload(file, request.app.state.settings.uploads)
+
+
+class UploadBatchOut(BaseModel):
+    """Response for `POST /api/uploads/batch`. `uploads` carries one
+    `UploadOut` per file in the request, in the same order the files
+    arrived. The frontend's drop pipeline relies on that ordering to
+    inject `[File N]` tokens at the cursor in the same sequence the
+    user dropped them — a re-ordered list would scramble the prompt."""
+
+    uploads: list[UploadOut]
+
+
+@router.post("/batch", response_model=UploadBatchOut)
+async def upload_batch(
+    request: Request,
+    files: list[UploadFile] = File(default_factory=list),  # noqa: B008 — FastAPI pattern
+) -> UploadBatchOut:
+    """Persist multiple files in one round-trip and return them all.
+
+    The single-file route already does a clean job for a one-file
+    drop — this endpoint exists for multi-file drops where the
+    frontend was previously serial-awaiting N requests just to keep
+    injection order deterministic. Batching trades N round-trips for
+    one and gives the operator a single progress arc instead of N
+    flickers.
+
+    Fail-fast semantics: the first file that violates a guard (size
+    cap, blocked extension, MIME allowlist, disk error) raises and
+    earlier successes stay on disk. Mirroring the single-file route,
+    failures don't roll back successful peers — the client surfaces
+    the reject via its diagnostic banner and the user can retry the
+    survivors. Tearing down committed peers would also leak a window
+    where a half-applied batch's prefix is on disk before the rollback
+    walks; cleaner to commit per-file and let the client decide.
+
+    Empty list returns 400 — a zero-file batch is a client bug, not
+    a no-op success path.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="batch must contain at least one file")
+    cfg = request.app.state.settings.uploads
+    results: list[UploadOut] = []
+    for file in files:
+        results.append(await _persist_upload(file, cfg))
+    return UploadBatchOut(uploads=results)

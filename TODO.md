@@ -477,18 +477,30 @@ only the default launcher + its profile changed.
 
 **Open follow-ups (not blocking):**
 
-- [ ] GC sweep of `~/.local/share/bearings/uploads/` — time-based
+- [x] GC sweep of `~/.local/share/bearings/uploads/` — time-based
   (e.g. delete UUID subdirs > 30d old) or tied to session deletion.
-  Deferred until disk-usage becomes a real concern.
-- [ ] XHR progress events so the "Uploading N file(s)…" pill shows
-  actual bytes/sec instead of just a spinner. Irrelevant for small
-  text drops; matters once a user drops a multi-MB image or PDF.
-- [ ] Batch-POST endpoint for multi-file drops — current code serial-
+  **Shipped v0.20.4 (L5.9).** `bearings gc uploads --dry-run /
+  --retention-days N` wraps `bearings.uploads_gc.find_expired_subdirs
+  + prune_subdirs`. Default retention 30d via
+  `UploadsCfg.retention_days`.
+- [x] XHR progress events so the "Uploading N file(s)…" pill shows
+  actual bytes/sec instead of just a spinner. **Shipped v0.20.4
+  (L5.9).** `lib/api/uploads.ts` switched from `fetch` to a local
+  `xhrPostJson` so `upload.onprogress` events tee into
+  `DragDropController.uploadProgress`; the overlay renders a
+  `<div role="progressbar">` with a determinate bar when the total
+  is known and a marquee fallback otherwise.
+- [x] Batch-POST endpoint for multi-file drops — current code serial-
   awaits per file to keep injection order deterministic. A single
   multipart POST with ordered parts would cut localhost latency.
+  **Shipped v0.20.4 (L5.9).** `POST /api/uploads/batch` returns
+  `UploadBatchOut { uploads }` in send order; the controller calls
+  `uploadFiles` for N>1 drops and stays on the single-file route for
+  N=1 (smaller diff for the common case).
 - [ ] Retest Chrome with `--enable-features=FileSystemAccessDragAndDrop`
   at some point — if/when Chromium fixes the Wayland drop dispatch,
-  we'd prefer not to tell users they need Firefox.
+  we'd prefer not to tell users they need Firefox. **Manual.** L5.9
+  punch list left this for Dave; the rest of L5.9 shipped in v0.20.4.
 
 **Do NOT remove:** the drop receiver, `parseUriList`, `extractPaths`,
 or the `dropDiagnostic` amber banner. Those are the instrumentation
@@ -2383,13 +2395,16 @@ Initial slice shipped 2026-04-22 (`POST /api/uploads` + drop handler in
 `max_size_mb` (default 25), `blocked_extensions` (default executables).
 Remaining:
 
-- [ ] **GC for upload dir.** Time-based sweep of `upload_dir` — e.g.
-  delete files older than `uploads.retention_days` (default 30) on
-  server start and on a daily timer. Currently the directory grows
-  unbounded; low-priority because uploads are small and localhost
-  disk is cheap, but it'll accumulate over years of use. Consider
-  tying cleanup to session deletion instead (per-session upload
-  subdirs) if the attachment-chip work lands first.
+- [x] **GC for upload dir.** Time-based sweep of `upload_dir` — delete
+  UUID subdirs whose newest mtime is older than `uploads.retention_days`
+  (default 30). **Shipped v0.20.4 (L5.9).** `bearings gc uploads` CLI
+  subcommand drives `bearings.uploads_gc.find_expired_subdirs +
+  prune_subdirs`; `--dry-run` previews and `--retention-days N`
+  overrides the config default. No on-server-start auto-sweep — the
+  CLI hook is the contract surface so a systemd-timer / cron / manual
+  invocation owns the schedule. Open follow-up if disk pressure ever
+  becomes real: tie the sweep to a configurable timer in
+  `config/bearings.service` rather than rely on cron.
 - [ ] **Attachment chip above user bubble.** Render a small chip
   (filename + size + click-to-preview-or-open) above the user's
   message when the prompt contains one of our upload paths. Requires
@@ -2398,15 +2413,20 @@ Remaining:
   in content and look them up. The `UploadOut` model already carries
   `filename` / `size_bytes` / `mime_type` for this shape; need a way
   to persist them per-turn.
-- [ ] **Progress UI for large uploads.** Current fallback fires with
-  a static "Uploading dropped file…" overlay; a 25 MB PDF on a slow
-  bus is a noticeable pause. Options: XHR with `upload.onprogress`
-  (gives real byte-count feedback) or a Fetch-based streaming POST
-  with a `ReadableStream` tee. Cheap wins first — a dots-animation
-  is probably enough for typical drops.
-- [ ] **Batch POST for multi-file drops.** Today each file is a
-  separate round-trip. For 10+ small files on a slow link this
-  adds up. Not urgent — typical drop is 1-3 files.
+- [x] **Progress UI for large uploads.** **Shipped v0.20.4 (L5.9).**
+  `lib/api/uploads.ts` switched from `jsonFetch` to a local
+  `xhrPostJson` so `XMLHttpRequest.upload.onprogress` events surface
+  bytes-loaded / total. `DragDropController` exposes `uploadProgress`
+  + `uploadLabel`; the overlay in `Conversation.svelte` renders a
+  determinate `<div role="progressbar">` when total is known and
+  falls back to a marquee when the browser couldn't size the body.
+- [x] **Batch POST for multi-file drops.** **Shipped v0.20.4 (L5.9).**
+  `POST /api/uploads/batch` accepts `files: list[UploadFile]` and
+  returns `UploadBatchOut { uploads }` in send order. The drop
+  controller calls `uploadFiles` for N>1 drops (one round-trip, one
+  progress arc) and stays on the single-file route for N=1 (smaller
+  diff for the common case). Fail-fast 4xx on the first reject —
+  committed peers stay on disk, mirroring the single-file route.
 - [ ] **Live smoke test on Kubuntu + Hyprland + Chrome.** Tests and
   typecheck are green; the in-browser drop test happens after the
   next server restart (restart would kick the live Bearings session

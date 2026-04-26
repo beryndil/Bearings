@@ -306,6 +306,13 @@ class UploadsCfg(BaseModel):
     # above is the hard backend gate.
     max_per_turn_count: int = 10
     max_per_turn_bytes: int = 50 * 1024 * 1024
+    # Retention window for `bearings gc uploads`. UUID subdirs whose
+    # newest entry is older than this many days get pruned by the sweep.
+    # 30 days lines up with the L5.9 punch-list ask and is the floor
+    # most workflows can tolerate — a session that needs to re-read a
+    # dropped file weeks later should re-attach it. Set to 0 to disable
+    # the sweep (the CLI subcommand still runs, it just finds nothing).
+    retention_days: int = 30
 
 
 class ArtifactsCfg(BaseModel):

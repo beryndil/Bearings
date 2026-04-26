@@ -5,6 +5,74 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.4] - 2026-04-26
+
+DnD upload follow-ups (L5.9). Three of the five sub-items ship as
+code; sub-item 2 (attachment chip) was already shipped in Phase 14
+v0.16; sub-item 5 (Chrome-on-Wayland retest with the experimental
+`--enable-features=FileSystemAccessDragAndDrop` flag) is a manual
+verification deliberately deferred to Dave.
+
+### Added
+
+- **`src/bearings/uploads_gc.py`** — pure-logic time-based sweep over
+  the upload directory. `find_expired_subdirs(upload_dir, cutoff_epoch)`
+  walks UUID-named subdirs whose newest mtime is strictly older than
+  the cutoff and returns them oldest-first; `prune_subdirs` removes
+  them and tallies freed bytes + per-target errors. Keys on the
+  *newest* mtime under each dir so a recently re-read drop isn't
+  pulled out from under an active session, and the shape filter
+  (`^[0-9a-f]{32}$`) refuses to touch hand-created subdirs or
+  top-level loose files — a config typo can't make this delete `~`.
+- **`src/bearings/cli.py`** — `bearings gc uploads` subcommand wrapping
+  the sweep. `--retention-days N` overrides the config-default cutoff
+  (default `uploads.retention_days = 30`); `--dry-run` prints what
+  would be removed without touching disk. Per-target errors land on
+  stderr with exit code 1 so a cron job can retry rather than mark
+  success on a partial sweep.
+- **`UploadsCfg.retention_days: int = 30`** — new config knob in
+  `config.py` so the sweep picks up its default cutoff without a CLI
+  flag every run. Set to 0 to disable (the CLI still runs, finds
+  nothing).
+- **`POST /api/uploads/batch`** in `routes_uploads.py` — multipart
+  endpoint accepting `files: list[UploadFile]`, returning
+  `UploadBatchOut { uploads: list[UploadOut] }` in send order. One
+  round-trip per drop instead of N for multi-file drops; size-cap +
+  blocklist + allowlist + sanitize logic extracted into a shared
+  `_persist_upload` helper so single and batch use the same
+  enforcement order. Empty list → 400; first reject aborts the batch
+  fail-fast (mirrors the single-file route's "commit then 413"
+  semantics — committed peers stay on disk, the client banner names
+  the failure).
+- **Frontend `lib/api/uploads.ts`** — switched from `jsonFetch` to a
+  local `xhrPostJson` so `XMLHttpRequest.upload.onprogress` can
+  surface live byte counters. `fetch` exposes download progress but
+  not upload progress in any browser as of 2026; XHR is the only
+  cross-browser option for an honest progress bar. `uploadFile(file,
+  onProgress?)` and a new `uploadFiles(files, onProgress?)` for the
+  batch path.
+- **`DragDropController`** — new `uploadProgress` and `uploadLabel`
+  reactive state. The drop handler kicks off a single batch POST for
+  N>1 files (one progress arc, deterministic order) and the
+  single-file POST for N=1 (smaller diff for the common case). The
+  upload overlay in `Conversation.svelte` renders a determinate
+  `<div role="progressbar">` when the total is known, falling back
+  to a faint marquee when the browser couldn't size the body.
+- **Tests** — `test_uploads_gc.py` (10 tests). Batch-endpoint tests
+  added to `test_routes_uploads.py` (4: ordered multi-file, empty-list
+  400, fail-fast 415 with surviving peer on disk, single-file shape
+  parity).
+
+### Status
+
+L5.9 sub-items: (1) GC sweep ✅ ship, (2) attachment chip ✅ already
+shipped Phase 14, (3) progress UI ✅ ship, (4) batch-POST ✅ ship,
+(5) Chrome-on-Wayland retest ⏳ manual — Dave runs it when convenient.
+The Firefox-preferred default in `bearings window` already routes
+around the upstream Chromium/Wayland drop-dispatch bug; the retest
+exists for the day Chromium fixes it and we'd prefer not to tell
+users they need Firefox.
+
 ## [0.20.3] - 2026-04-26
 
 `bearings window` follow-ups (L5.8). One of the two open follow-ups

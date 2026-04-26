@@ -255,3 +255,93 @@ def test_upload_caps_absurdly_long_filename(client: TestClient, tmp_settings: Se
     dest = Path(resp.json()["path"])
     assert len(dest.name) <= 255
     assert dest.suffix == ".txt"
+
+
+# --- Batch endpoint -----------------------------------------------------
+#
+# The batch route exists so the drop pipeline can collapse N parallel
+# `[File N]` injections into one round-trip while preserving the
+# ordering Claude sees in the prompt. The fixtures share the same
+# tmp upload dir as the single-file tests, so the disk-layout
+# assertions can reuse `_uploads_dir`.
+
+
+def test_batch_upload_returns_each_in_order(client: TestClient, tmp_settings: Settings) -> None:
+    """Two files in one POST land in two distinct UUID dirs and the
+    response carries them in the same order they were sent. Order is
+    load-bearing: the frontend uses it to inject `[File 1] [File 2]`
+    tokens at the cursor in send order."""
+    resp = client.post(
+        "/api/uploads/batch",
+        files=[
+            ("files", ("first.txt", b"alpha", "text/plain")),
+            ("files", ("second.txt", b"beta-payload", "text/plain")),
+        ],
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    uploads = payload["uploads"]
+    assert [u["filename"] for u in uploads] == ["first.txt", "second.txt"]
+    assert [u["size_bytes"] for u in uploads] == [5, 12]
+    a, b = Path(uploads[0]["path"]), Path(uploads[1]["path"])
+    assert a.parent != b.parent  # distinct UUID subdirs
+    assert a.parent.parent == b.parent.parent == _uploads_dir(tmp_settings)
+    assert a.read_bytes() == b"alpha"
+    assert b.read_bytes() == b"beta-payload"
+
+
+def test_batch_upload_rejects_empty_list(client: TestClient) -> None:
+    """A zero-file batch is a client bug — it'd return an empty
+    `uploads` array and the caller would silently inject nothing.
+    Surface a 400 so the failure mode is loud."""
+    # Send a multipart body that *parses* as a request but contains no
+    # `files` part. FastAPI maps `files: list[UploadFile]` to an empty
+    # list when no parts match; the route raises 400 explicitly.
+    # `data={}` keeps it a valid multipart shape with no files.
+    resp = client.post("/api/uploads/batch", files=[], data={"_": ""})
+    assert resp.status_code == 400
+
+
+def test_batch_upload_fails_fast_on_blocked_extension(
+    client: TestClient, tmp_settings: Settings
+) -> None:
+    """A `.sh` in position 2 of a batch must reject the whole request
+    with 415. Files written before the reject stay on disk — the
+    single-file route already commits-then-fails on size overruns
+    inside the read loop, and the batch endpoint deliberately
+    matches that contract instead of trying to roll back. The first
+    file's path remains visible so the client can decide what to do."""
+    resp = client.post(
+        "/api/uploads/batch",
+        files=[
+            ("files", ("ok.txt", b"safe", "text/plain")),
+            ("files", ("malicious.sh", b"#!/bin/sh\nrm -rf /", "text/x-sh")),
+        ],
+    )
+    assert resp.status_code == 415
+    # First file landed; document the contract so future refactors
+    # don't quietly start rolling back peers without an opt-in.
+    root = _uploads_dir(tmp_settings)
+    survivors = list(root.rglob("ok.txt"))
+    assert len(survivors) == 1
+
+
+def test_batch_upload_with_one_file_matches_single_endpoint_shape(
+    client: TestClient, tmp_settings: Settings
+) -> None:
+    """A single-file batch returns the same `UploadOut` payload the
+    `/api/uploads` route would, just wrapped in `{uploads: [...]}`.
+    The frontend can then drop the single-file path entirely if
+    that simplifies the upload pipeline; this test pins the shape."""
+    resp = client.post(
+        "/api/uploads/batch",
+        files=[("files", ("solo.txt", b"hello", "text/plain"))],
+    )
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert len(payload["uploads"]) == 1
+    one = payload["uploads"][0]
+    assert one["filename"] == "solo.txt"
+    assert one["size_bytes"] == 5
+    assert one["mime_type"] == "text/plain"
+    assert Path(one["path"]).read_bytes() == b"hello"

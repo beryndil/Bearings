@@ -259,6 +259,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     _todo_register(sub)
 
+    gc = sub.add_parser(
+        "gc",
+        help="Garbage-collect on-disk state (uploads, etc.).",
+    )
+    gc_sub = gc.add_subparsers(dest="gc_command", required=True)
+    gc_uploads = gc_sub.add_parser(
+        "uploads",
+        help=(
+            "Sweep the upload directory: delete UUID subdirs whose "
+            "newest mtime is older than --retention-days (default: "
+            "uploads.retention_days from config, 30)."
+        ),
+    )
+    gc_uploads.add_argument(
+        "--retention-days",
+        type=int,
+        default=None,
+        help=(
+            "Override `uploads.retention_days`. UUID subdirs whose "
+            "newest mtime is older than N days get pruned. 0 sweeps "
+            "everything (use only after backing up)."
+        ),
+    )
+    gc_uploads.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Print which UUID subdirs WOULD be removed and how many "
+            "bytes that would free, without touching anything on disk."
+        ),
+    )
+
     return parser
 
 
@@ -600,6 +632,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "todo":
         return _todo_dispatch(args)
 
+    if args.command == "gc":
+        return _run_gc(args)
+
     return 1
 
 
@@ -660,3 +695,83 @@ def _run_pending(args: argparse.Namespace) -> int:
             print(f"  {op.started.isoformat()}  {op.name}{desc}")
         return 0
     return 1
+
+
+def _format_bytes(n: int) -> str:
+    """Render a byte count as a short human string (B/KB/MB/GB).
+
+    Mirrors the frontend's `formatBytes` exactly enough for the
+    summary line — picks a single unit, no decimal places below 1 KB.
+    Kept local because nothing else server-side currently needs it.
+    """
+    units = ("B", "KB", "MB", "GB", "TB")
+    size = float(n)
+    idx = 0
+    while size >= 1024 and idx < len(units) - 1:
+        size /= 1024
+        idx += 1
+    if idx == 0:
+        return f"{int(size)} {units[idx]}"
+    return f"{size:.1f} {units[idx]}"
+
+
+def _run_gc(args: argparse.Namespace) -> int:
+    """Drive `bearings gc <subcommand>`.
+
+    The sweep is intentionally read-only when `--dry-run` is set so
+    the operator can preview an aggressive `--retention-days 0` before
+    committing. Output format is one path per line (so it can be fed
+    to `xargs ls -ld` for inspection) plus a final summary line.
+    """
+    if args.gc_command != "uploads":
+        return 1
+
+    import time
+
+    from bearings.uploads_gc import find_expired_subdirs, prune_subdirs
+
+    cfg = load_settings()
+    retention = (
+        args.retention_days if args.retention_days is not None else cfg.uploads.retention_days
+    )
+    if retention < 0:
+        print(
+            f"bearings gc uploads: --retention-days must be ≥ 0 (got {retention}).",
+            file=sys.stderr,
+        )
+        return 2
+
+    upload_dir = Path(cfg.uploads.upload_dir)
+    cutoff = time.time() - retention * 86400
+    expired = find_expired_subdirs(upload_dir, cutoff_epoch=cutoff)
+
+    if not expired:
+        print(f"bearings gc uploads: nothing to prune under {upload_dir}")
+        print(f"  retention: {retention}d, scanned {upload_dir}")
+        return 0
+
+    total_bytes = sum(e.size_bytes for e in expired)
+    verb = "would prune" if args.dry_run else "pruning"
+    print(f"bearings gc uploads: {verb} {len(expired)} subdir(s) under {upload_dir}")
+    for entry in expired:
+        age_days = (time.time() - entry.newest_mtime) / 86400
+        print(f"  {entry.path}  ({_format_bytes(entry.size_bytes)}, {age_days:.1f}d old)")
+
+    if args.dry_run:
+        print(
+            f"  total: {len(expired)} subdir(s), "
+            f"{_format_bytes(total_bytes)} (dry-run, nothing removed)"
+        )
+        return 0
+
+    result = prune_subdirs(expired)
+    print(f"  removed: {result.removed} subdir(s), freed {_format_bytes(result.freed_bytes)}")
+    if result.errors:
+        # Surface each failure on stderr so a recurring permissions
+        # problem is visible across runs without parsing the success
+        # summary. Exit 1 if any directory failed to clean up — the
+        # caller's cron job should retry rather than mark success.
+        for path, msg in result.errors:
+            print(f"  failed to remove {path}: {msg}", file=sys.stderr)
+        return 1
+    return 0

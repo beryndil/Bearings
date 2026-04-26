@@ -4,6 +4,7 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
+  import { formatBytes } from '$lib/attachments';
   import { copyText } from '$lib/utils/conversation-ui';
   import { BulkModeController } from '$lib/utils/bulk-mode.svelte';
   import { DragDropController } from '$lib/utils/composer-dragdrop-handlers.svelte';
@@ -375,9 +376,54 @@
         border-sky-500/60 bg-slate-950/70 flex items-center justify-center z-20"
       data-testid="conversation-upload-hint"
     >
-      <div class="flex flex-col items-center gap-3 text-sky-300">
+      <div class="flex flex-col items-center gap-3 text-sky-300 w-72 max-w-[80%]">
         <BearingsMark size={56} spin label="Uploading file" />
-        <p class="text-sm">Uploading dropped file…</p>
+        <p class="text-sm truncate w-full text-center" data-testid="upload-label">
+          {dragdrop.uploadLabel
+            ? `Uploading ${dragdrop.uploadLabel}…`
+            : 'Uploading dropped file…'}
+        </p>
+        <!-- Determinate bar when the browser handed us a total; marquee
+             when it didn't (chunked encoding, redirects). The width
+             calc clamps at 100 so a buggy ProgressEvent reporting
+             loaded > total can't overflow the bar. -->
+        {#if dragdrop.uploadProgress && dragdrop.uploadProgress.total != null && dragdrop.uploadProgress.total > 0}
+          {@const total = dragdrop.uploadProgress.total}
+          {@const loaded = dragdrop.uploadProgress.loaded}
+          {@const pct = Math.min(100, Math.round((loaded / total) * 100))}
+          <div
+            class="h-1.5 w-full rounded bg-slate-800 overflow-hidden"
+            data-testid="upload-progress-bar"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
+            <div
+              class="h-full bg-sky-500 transition-[width] duration-150 ease-out"
+              style="width: {pct}%"
+            ></div>
+          </div>
+          <p class="text-[11px] text-sky-400/80">
+            {formatBytes(loaded)} / {formatBytes(total)} · {pct}%
+          </p>
+        {:else if dragdrop.uploadProgress}
+          <!-- Indeterminate fallback: render a faint marquee so the
+               operator sees motion even when bytes/sec aren't known. -->
+          <div
+            class="h-1.5 w-full rounded bg-slate-800 overflow-hidden relative"
+            data-testid="upload-progress-bar-indeterminate"
+            role="progressbar"
+          >
+            <div
+              class="h-full w-1/3 bg-sky-500/60 animate-pulse"
+              style="margin-left: 33%"
+            ></div>
+          </div>
+          <p class="text-[11px] text-sky-400/80">
+            {formatBytes(dragdrop.uploadProgress.loaded)} sent
+          </p>
+        {/if}
       </div>
     </div>
   {/if}

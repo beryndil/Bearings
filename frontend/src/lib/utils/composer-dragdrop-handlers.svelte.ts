@@ -51,6 +51,23 @@ export class DragDropController {
    * `dragging` so the user can tell drop succeeded). */
   uploading = $state(false);
 
+  /** Live byte counters for the in-flight upload, or null when nothing
+   * is uploading. `loaded` is bytes posted so far; `total` is the full
+   * batch size, or null if the browser couldn't compute one (chunked
+   * encoding, redirects). Drives the determinate progress bar in the
+   * upload overlay; absent / null `total` falls back to a marquee.
+   *
+   * For multi-file batches the counters are CUMULATIVE across the
+   * whole request — XHR exposes one progress stream per HTTP request,
+   * not per multipart part, and the UX wants one bar per drop anyway. */
+  uploadProgress = $state<{ loaded: number; total: number | null } | null>(null);
+
+  /** Filename label for the upload overlay. Single-file drops show the
+   * actual filename; multi-file batches show "N files". Kept separate
+   * from `uploadProgress` so the overlay can render the label even
+   * before the first `progress` event arrives. */
+  uploadLabel = $state<string | null>(null);
+
   /** Soft-error banner — shown above the composer when a drop landed
    * but didn't yield anything actionable, or when an upload rejected.
    * Lives outside `conversation.error` because that store only renders
@@ -143,35 +160,58 @@ export class DragDropController {
   /** Bytes-upload fallback path for drops that exposed no filesystem
    * path. Chrome on Wayland strips `text/uri-list` and `text/plain`
    * even when the File objects are fully readable — so we read the
-   * bytes with file.arrayBuffer(), POST each to `/api/uploads`, and
-   * inject the resulting absolute path at the cursor. Order is
-   * preserved by awaiting each upload in sequence rather than firing
-   * parallel POSTs whose `attachFileAtCursor` calls would race the
-   * textarea selection.
+   * bytes via FormData, POST them to `/api/uploads/batch` (or
+   * `/api/uploads` for a single file), and inject the resulting
+   * absolute paths at the cursor in send order.
+   *
+   * Order semantics: for N>1 files we send a single multipart batch —
+   * the server returns the `uploads` array in the same order as the
+   * request, and we walk that array to call `attachFileAtCursor` once
+   * per file. One round-trip instead of N keeps localhost-latency-
+   * sensitive flows snappy and gives the UI a single progress arc.
+   * Single-file drops keep using the single-file endpoint so the
+   * legacy `/api/uploads` shape stays in active use (smaller diff for
+   * the common case, easier debugging when something regresses).
    *
    * Public so the file-input `change` handler can reuse the pipeline
    * for Browse-button uploads. */
   async uploadDroppedFiles(files: FileList): Promise<void> {
     if (this.uploading) return;
+    const list = Array.from(files);
+    if (list.length === 0) return;
     this.uploading = true;
+    this.uploadLabel = list.length === 1 ? list[0].name : `${list.length} files`;
+    this.uploadProgress = { loaded: 0, total: null };
     try {
-      for (const file of Array.from(files)) {
-        try {
-          const result = await uploadsApi.uploadFile(file);
+      const onProgress = (p: { loaded: number; total: number | null }): void => {
+        this.uploadProgress = p;
+      };
+      try {
+        if (list.length === 1) {
+          const result = await uploadsApi.uploadFile(list[0], onProgress);
           this.ops.attachFileAtCursor(result.path, result.filename, result.size_bytes);
-        } catch (e) {
-          // Surface the specific reason (413 over-size, 415 blocked
-          // extension, 500 disk full) so the user can act. The banner
-          // replaces any prior diagnostic — a mid-batch reject is the
-          // most relevant thing to see.
-          const msg = e instanceof Error ? e.message : String(e);
-          this.dropDiagnostic = `Upload failed for "${file.name}": ${msg}`;
-          return;
+        } else {
+          const batch = await uploadsApi.uploadFiles(list, onProgress);
+          for (const result of batch.uploads) {
+            this.ops.attachFileAtCursor(result.path, result.filename, result.size_bytes);
+          }
         }
+        this.dropDiagnostic = null;
+      } catch (e) {
+        // Surface the specific reason (413 over-size, 415 blocked
+        // extension, 500 disk full) so the user can act. Keying the
+        // label off the drop label rather than the individual file is
+        // honest — the batch endpoint is fail-fast, so we don't know
+        // *which* file in a batch tripped the reject without parsing
+        // the server's detail string.
+        const msg = e instanceof Error ? e.message : String(e);
+        const target = list.length === 1 ? `"${list[0].name}"` : `${list.length} files`;
+        this.dropDiagnostic = `Upload failed for ${target}: ${msg}`;
       }
-      this.dropDiagnostic = null;
     } finally {
       this.uploading = false;
+      this.uploadProgress = null;
+      this.uploadLabel = null;
     }
   }
 
