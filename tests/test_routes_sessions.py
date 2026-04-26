@@ -469,11 +469,26 @@ def test_get_tool_calls_filters_by_message_ids(
     """The conversation pane scopes the fetch to the on-screen message
     window — confirms `?message_ids=<id>` narrows the response and that
     a bogus id returns an empty list instead of everything."""
+    import time
+
     created = _create(client, title="tc-filter")
     with client.websocket_connect(f"/ws/sessions/{created['id']}") as ws:
         ws.send_json({"type": "prompt", "content": "read hosts"})
         for _ in range(4):
             ws.receive_text()
+        # `MessageComplete` is fanned out to WS subscribers BEFORE
+        # `persist_assistant_turn` runs `attach_tool_calls_to_message` to
+        # backfill `tool_calls.message_id`. In isolation the persist
+        # wins; under full-suite load the GET below sometimes races
+        # ahead and sees a NULL message_id, tripping the
+        # `parent_msg_id is not None` assertion. Poll the same way
+        # `test_export_includes_messages_and_tool_calls` does so the
+        # test waits for the linkage before asserting on it.
+        for _ in range(50):
+            rows = client.get(f"/api/sessions/{created['id']}/tool_calls").json()
+            if rows and rows[0]["message_id"]:
+                break
+            time.sleep(0.02)
 
     rows = client.get(f"/api/sessions/{created['id']}/tool_calls").json()
     assert len(rows) == 1
