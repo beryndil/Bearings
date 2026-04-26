@@ -5,7 +5,7 @@
    * Top-of-pane hero (centered column):
    *   1. App mark (BearingsMark at 64px)
    *   2. App title — "Bearings"
-   *   3. Release version — "v0.20.6", from /api/version's `version`
+   *   3. Release version — "v0.20.7", from /api/version's `version`
    *   4. Tagline — Bearings' one-line description
    *   5. "by Beryndil" — clickable, opens
    *      hardknocks.university/developer.html

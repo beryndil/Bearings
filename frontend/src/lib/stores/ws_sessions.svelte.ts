@@ -10,17 +10,25 @@ import { sessions } from '$lib/stores/sessions.svelte';
  * frames for every session in the UI. Pairs with
  * `SessionsBroker` on the backend.
  *
- * Why both this AND the Phase-1 softRefresh poll? The broadcast is the
- * live path: sub-second latency, no list-sized fetch per tick. The
- * poll stays as a belt-and-suspenders reconcile — if a broker
- * publisher drops a slow subscriber, or the socket bounces, the
- * next poll converges the list within 3 s. Once the broadcast has
- * earned trust (metrics, uptime), the poll can be removed.
+ * Live path: the broadcast itself. Sub-second latency, no list-sized
+ * fetch per tick. The Phase-2 cleanup (L6.1) retired the 3 s
+ * `startRunningPoll` once the broadcast had a few months of clean
+ * uptime; the broker still has no replay buffer, so reconnect
+ * reconciliation lives here:
  *
- * Reconnect matches `AgentConnection`: exponential backoff capped at
- * 30 s. On connect (fresh or reconnect) we fire one `softRefresh` so
- * any events missed while down are reconciled in one shot — the
- * broker has no replay buffer because the poll already is one.
+ *   - `sessions.softRefresh()` reseeds the session list from
+ *     `/api/sessions` — picks up upserts/deletes that landed while
+ *     down or before this tab subscribed.
+ *   - `sessions.runningSnapshot()` reseeds the `running` / `awaiting`
+ *     indicator sets from `/api/sessions/{running,awaiting}` — covers
+ *     sessions that were already mid-turn when the tab loaded, so the
+ *     sidebar's orange/red dots aren't blind until the next state
+ *     transition.
+ *
+ * Both fire on every successful open (fresh connect or reconnect).
+ * Failures are silent — `runningSnapshot` preserves the last set and
+ * the next live frame reconciles. Reconnect matches `AgentConnection`:
+ * exponential backoff capped at 30 s.
  */
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
@@ -107,10 +115,14 @@ class SessionsWsConnection {
       }
       this.state = 'open';
       this.retryCount = 0;
-      // Reconcile once on every successful open (fresh or reconnect)
-      // so anything missed while down is picked up in one shot.
-      // Silent on failure — the next poll tick catches it.
+      // Reconcile once on every successful open (fresh or reconnect):
+      //   - softRefresh — session list (upserts/deletes)
+      //   - runningSnapshot — `running`/`awaiting` indicator sets
+      // Both are silent on failure; the next live broadcast frame
+      // reconciles any transient gap. See module header for the
+      // full live-vs-snapshot story.
       void sessions.softRefresh();
+      void sessions.runningSnapshot();
     });
 
     ws.addEventListener('message', (msg) => {

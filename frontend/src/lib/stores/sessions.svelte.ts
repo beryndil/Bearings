@@ -23,8 +23,6 @@ function writeStoredId(id: string | null): void {
   }
 }
 
-const RUNNING_POLL_MS = 3_000;
-
 /** Structural equality for two `Session` rows. Used by `softRefresh`
  * to decide whether the server's poll response carries any change
  * relative to the local copy — when it doesn't, we keep the local
@@ -59,19 +57,22 @@ class SessionStore {
   filter = $state<api.SessionFilter>({});
 
   /** Session ids whose server-side runner has a turn in flight right
-   * now. Polled from `/api/sessions/running`; the UI lights up the
+   * now. Live updates arrive on the `/ws/sessions` broadcast via
+   * `applyRunnerState`; on every WS connect/reconnect a one-shot
+   * `runningSnapshot()` reseeds from `/api/sessions/running` so a
+   * fresh tab (or one whose socket bounced) doesn't sit blind to
+   * sessions that started before it subscribed. The UI lights up the
    * orange-flashing "working" indicator on each. A session appearing
    * in BOTH `running` and `awaiting` is red-flashing (the agent is
    * running but parked on a user decision). */
   running = $state<Set<string>>(new Set());
 
   /** Session ids whose runner is currently parked on a `can_use_tool`
-   * decision — tool-use approval OR AskUserQuestion. Polled from
-   * `/api/sessions/awaiting` in parallel with `running` as the
-   * fallback path when the `/ws/sessions` broadcast is down; live
-   * updates arrive via `applyRunnerState` from the broadcast's
-   * per-frame `is_awaiting_user` field. Drives the red-flashing
-   * "look at this now" indicator. */
+   * decision — tool-use approval OR AskUserQuestion. Same live +
+   * snapshot pattern as `running`: live updates via the WS broadcast's
+   * per-frame `is_awaiting_user` field, snapshot reseed from
+   * `/api/sessions/awaiting` on every WS connect/reconnect. Drives the
+   * red-flashing "look at this now" indicator. */
   awaiting = $state<Set<string>>(new Set());
 
   /** Monotonically increasing counter that ticks every time the
@@ -84,8 +85,6 @@ class SessionStore {
    * deliberately don't tick: stealing the viewport when a background
    * agent finishes a turn would be intrusive. */
   scrollTick = $state(0);
-
-  private runningTimer: ReturnType<typeof setInterval> | null = null;
 
   selected = $derived(this.list.find((s) => s.id === this.selectedId) ?? null);
 
@@ -283,10 +282,13 @@ class SessionStore {
   }
 
   /** Reconcile the list against the server without blowing away
-   * optimistic local state. Called by `startRunningPoll` every tick so
-   * activity that originated in another tab — or in a background
-   * session this tab never WS-subscribed to — reaches the sidebar
-   * without a full reload.
+   * optimistic local state. Called once on every WS open
+   * (fresh connect or reconnect) so anything that landed on the
+   * `/ws/sessions` broadcast while the socket was down — or while the
+   * tab was load-blank before the broker subscription registered — is
+   * reconciled in one shot. The broadcast is the live path; this is
+   * the reconnect-time replay buffer (the broker itself doesn't
+   * persist one).
    *
    * Merge rules:
    *   - Rows present server-side: take the server row, unless the local
@@ -488,64 +490,39 @@ class SessionStore {
     writeStoredId(id);
   }
 
-  /** Poll the backend for session ids with in-flight runners AND for
-   * changes to the session list itself. Safe to call repeatedly —
-   * existing timer is cleared first. Called from +page.svelte on boot.
+  /** Reseed `running` and `awaiting` from the server in one shot.
+   * Called by `sessionsWs` on every successful open (fresh connect or
+   * reconnect). The `/ws/sessions` broadcast carries `runner_state`
+   * frames live, but the broker has no replay buffer — a session that
+   * was already running before this tab subscribed (or one that
+   * transitioned during a socket bounce) would otherwise stay invisible
+   * to the sidebar's orange/red indicators until the next state
+   * change. Snapshot fetch on connect closes that gap.
    *
-   * The per-tick work splits in two:
-   *   - `listRunningSessions()` → refresh the `running` badge set.
-   *   - `softRefresh()` → pick up activity (new `updated_at`, new cost,
-   *     newly-created sessions, deletions) from other tabs or from
-   *     background sessions this tab never WS-subscribed to. Without
-   *     this, a session running while the user is on a different row
-   *     stays stuck at its old sidebar position until a full reload.
-   *
-   * Calls run in parallel — they're independent and both tolerate
-   * transport blips on their own. */
-  startRunningPoll(): void {
-    this.stopRunningPoll();
-    const tick = async () => {
-      const runningCall = (async () => {
-        try {
-          const ids = await api.listRunningSessions();
-          this.running = new Set(ids);
-        } catch (err) {
-          // Preserve the previous running Set on transport blips. A
-          // failed fetch is "I don't know what's running right now",
-          // NOT "nothing is running" — overwriting with an empty Set
-          // flips every live indicator off for up to one poll tick
-          // (3 s), which Daisy sees as the sidebar ping flickering
-          // gone-then-back while an agent is demonstrably still
-          // working. The next successful tick reconciles any real
-          // idle transition we missed. Real 401s are handled by the
-          // auth layer; other failures get logged so a persistent
-          // server problem surfaces in the devtools console instead
-          // of silently degrading the badge.
-          console.warn('sessions.running poll failed; keeping last snapshot', err);
-        }
-      })();
-      // Same pattern for the red-flashing axis. Parallel fetch, same
-      // preserve-on-error discipline so a blip doesn't flash every
-      // "needs attention" indicator off for a poll window.
-      const awaitingCall = (async () => {
-        try {
-          const ids = await api.listAwaitingSessions();
-          this.awaiting = new Set(ids);
-        } catch (err) {
-          console.warn('sessions.awaiting poll failed; keeping last snapshot', err);
-        }
-      })();
-      await Promise.all([runningCall, awaitingCall, this.softRefresh()]);
-    };
-    tick();
-    this.runningTimer = setInterval(tick, RUNNING_POLL_MS);
-  }
-
-  stopRunningPoll(): void {
-    if (this.runningTimer !== null) {
-      clearInterval(this.runningTimer);
-      this.runningTimer = null;
-    }
+   * Both endpoints are fetched in parallel and silently preserve the
+   * existing set on transport error — a failed snapshot is "I don't
+   * know what's running right now", NOT "nothing is running", same
+   * discipline the per-tick poll used before being retired. The next
+   * successful WS frame still reconciles any real transition we may
+   * have missed in the interim. */
+  async runningSnapshot(): Promise<void> {
+    const runningCall = (async () => {
+      try {
+        const ids = await api.listRunningSessions();
+        this.running = new Set(ids);
+      } catch (err) {
+        console.warn('sessions.running snapshot failed; keeping last set', err);
+      }
+    })();
+    const awaitingCall = (async () => {
+      try {
+        const ids = await api.listAwaitingSessions();
+        this.awaiting = new Set(ids);
+      } catch (err) {
+        console.warn('sessions.awaiting snapshot failed; keeping last set', err);
+      }
+    })();
+    await Promise.all([runningCall, awaitingCall]);
   }
 }
 

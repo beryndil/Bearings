@@ -747,14 +747,27 @@ describe('sessions.applyRunnerState', () => {
   });
 });
 
-describe('sessions.startRunningPoll catch behavior', () => {
-  it('preserves the previous running Set when listRunningSessions fails', async () => {
-    // Seed a non-empty set — represents the prior successful poll.
-    sessions.running = new Set(['sess-live']);
+describe('sessions.runningSnapshot', () => {
+  it('reseeds running and awaiting from the parallel endpoints on success', async () => {
+    sessions.running = new Set();
+    sessions.awaiting = new Set();
+    queueResponses([
+      { ok: true, body: ['r1', 'r2'] },
+      { ok: true, body: ['a1'] }
+    ]);
 
-    // Next fetch throws. `softRefresh` also runs inside the tick, so
-    // it has to see a fetch failure too — queue one rejecting response
-    // and enable the passthrough fallback for everything else.
+    await sessions.runningSnapshot();
+
+    expect([...sessions.running].sort()).toEqual(['r1', 'r2']);
+    expect([...sessions.awaiting]).toEqual(['a1']);
+  });
+
+  it('preserves each set independently when its endpoint fails', async () => {
+    // Seed both axes — represents the state from the last successful
+    // snapshot or a recent live broadcast frame.
+    sessions.running = new Set(['sess-live']);
+    sessions.awaiting = new Set(['sess-parked']);
+
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal(
       'fetch',
@@ -763,16 +776,18 @@ describe('sessions.startRunningPoll catch behavior', () => {
       })
     );
 
-    sessions.startRunningPoll();
-    // startRunningPoll fires its tick synchronously and schedules the
-    // interval. Await the microtask queue so the catch branch runs.
-    await new Promise((r) => setTimeout(r, 0));
-    sessions.stopRunningPoll();
+    await sessions.runningSnapshot();
 
     expect(sessions.running.has('sess-live')).toBe(true);
     expect(sessions.running.size).toBe(1);
+    expect(sessions.awaiting.has('sess-parked')).toBe(true);
+    expect(sessions.awaiting.size).toBe(1);
     expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('sessions.running poll failed'),
+      expect.stringContaining('sessions.running snapshot failed'),
+      expect.any(Error)
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('sessions.awaiting snapshot failed'),
       expect.any(Error)
     );
   });

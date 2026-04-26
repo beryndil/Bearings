@@ -2382,17 +2382,20 @@ bug now fixed in v0.6.1.
 ## Live session list — Phase 2 follow-ups
 
 Phase 2 (`/ws/sessions` broadcast) shipped in v0.7.0 — see CHANGELOG.
-Two follow-ups remain (poll stays until the broadcast has earned trust
-via metrics / uptime):
+Both follow-ups landed under L6.1 (v0.20.7) once the broadcast had
+months of clean uptime:
 
-- [ ] Drop the `softRefresh` call from `startRunningPoll` once the
-  broadcast has a few weeks of clean data. `sessions.softRefresh`
-  itself stays — it's the reconnect reconciliation path.
-- [ ] Drop the `running`-set poll once the broadcast's `runner_state`
-  frames have earned the same trust. Requires a reconnect-time
-  snapshot of currently-running sessions (the WS currently has no
-  replay buffer; either a short `/api/sessions/running` tick on
-  connect or a `runner_state_snapshot` frame would work).
+- [x] Drop the `softRefresh` call from `startRunningPoll`. **Shipped
+  v0.20.7 (L6.1).** `softRefresh` itself stays as the reconnect
+  reconciliation path — `sessionsWs` fires it on every successful
+  open (fresh connect or reconnect).
+- [x] Drop the `running`-set poll. **Shipped v0.20.7 (L6.1).**
+  Reconnect-time snapshot mechanism added: new
+  `sessions.runningSnapshot()` fetches `/api/sessions/{running,awaiting}`
+  in parallel and reseeds the indicator sets; `sessionsWs` fires it
+  on every successful open alongside `softRefresh`. The recurring
+  3 s `startRunningPoll` / `stopRunningPoll` API was removed —
+  broadcast is the only live path now.
 
 ## Drag-and-drop file uploads — follow-ups
 

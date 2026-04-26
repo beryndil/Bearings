@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.7] - 2026-04-26
+
+L6.1 — Live session list Phase 2 cleanup. The 3 s background
+`startRunningPoll` retired now that the `/ws/sessions` broadcast
+has months of clean uptime. The broadcast is the only live path; a
+new reconnect-time snapshot covers the gap the poll filled (sessions
+that were already mid-turn before this tab subscribed).
+
+### Added
+
+- `sessions.runningSnapshot()` — fetches `/api/sessions/running` and
+  `/api/sessions/awaiting` in parallel and reseeds the indicator sets.
+  Each axis preserves its prior set on transport error (`console.warn`,
+  no overwrite) so a blip doesn't flash every live indicator off
+  for a poll window. `sessionsWs` invokes it on every successful open
+  (fresh connect or reconnect) alongside `sessions.softRefresh()` —
+  closes the gap left by the broker having no replay buffer.
+
+### Changed
+
+- `sessionsWs` open handler now fires both `softRefresh` (session
+  list) and `runningSnapshot` (running/awaiting sets) on every
+  successful connect/reconnect. Module header rewritten to document
+  the live (broadcast) vs. snapshot (on-connect) split now that the
+  Phase-1 poll is gone.
+
+### Removed
+
+- `SessionStore.startRunningPoll` / `stopRunningPoll`, the
+  `runningTimer` field, and the `RUNNING_POLL_MS` constant. The
+  recurring 3 s tick that backstopped both the running-set poll and
+  the session-list `softRefresh` is gone — broadcast frames carry
+  state changes live, and the on-connect snapshot handles
+  reconciliation.
+- `sessions.startRunningPoll()` call from `+page.svelte` boot.
+
 ## [0.20.6] - 2026-04-26
 
 Settings dialog rewritten for Spyglass parity. The previous

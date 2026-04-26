@@ -59,15 +59,15 @@
     // still appear. No persistence yet; every reload resets to All.
     tags.selectAll();
     await Promise.all([billingInit, prefsInit, sessions.refresh(tags.filter)]);
-    // Start the background runner poll so session rows flag which
-    // sessions are still working even when you're on a different one.
-    sessions.startRunningPoll();
-    // Open the sessions-list broadcast channel. The poll above stays
-    // in place as a belt-and-suspenders reconcile (slow subscriber
-    // drops, broker hiccups) — this socket is the live path that
-    // delivers upserts / deletes / runner-state transitions in
-    // sub-second time. On connect / reconnect the WS fires one
-    // softRefresh so nothing missed while the socket was down escapes.
+    // Open the sessions-list broadcast channel. This is the live path
+    // for sidebar updates — upserts / deletes / runner-state
+    // transitions fan in sub-second over `/ws/sessions`. On every
+    // successful open (fresh or reconnect) the WS fires one
+    // `softRefresh` (session list) and one `runningSnapshot`
+    // (running/awaiting indicator sets) so anything missed while down,
+    // or already in-flight before this tab subscribed, is reconciled
+    // in one shot. The L6.1 cleanup retired the 3 s background poll
+    // that used to backstop both — the broadcast has earned trust.
     sessionsWs.connect();
     // Seamless-reload watcher: pin the live build, poll for changes,
     // and reload the SPA when the operator ships a new bundle. Reload
