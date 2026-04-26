@@ -528,7 +528,13 @@ async def reopen_if_closed(
     await conn.commit()
 
 
-async def add_session_cost(conn: aiosqlite.Connection, session_id: str, delta_usd: float) -> bool:
+async def add_session_cost(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    delta_usd: float,
+    *,
+    commit: bool = True,
+) -> bool:
     """Accumulate SDK-reported cost onto the session row. Also bumps
     `updated_at` so a cost-only delta still re-sorts the sidebar — the
     current call path in `runner.py` pairs this with
@@ -536,12 +542,17 @@ async def add_session_cost(conn: aiosqlite.Connection, session_id: str, delta_us
     double-touch is a no-op there, but any future path that records
     cost without a MessageComplete stays sort-correct by default.
 
+    `commit=False` lets `persist_assistant_turn` fold the cost write
+    into its single end-of-turn commit. The default preserves the
+    fire-and-forget behavior every other call site relies on.
+
     Returns False if the session row is gone (e.g. deleted mid-stream)."""
     cursor = await conn.execute(
         "UPDATE sessions SET total_cost_usd = total_cost_usd + ?, updated_at = ? WHERE id = ?",
         (delta_usd, _now(), session_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return cursor.rowcount > 0
 
 
@@ -577,11 +588,20 @@ async def touch_session(conn: aiosqlite.Connection, session_id: str) -> None:
     await conn.commit()
 
 
-async def mark_session_completed(conn: aiosqlite.Connection, session_id: str) -> None:
+async def mark_session_completed(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    *,
+    commit: bool = True,
+) -> None:
     """Stamp `last_completed_at` (and `updated_at`) at the moment a
     MessageComplete lands. Drives the sidebar's "finished but unviewed"
     indicator — compared at render time against `last_viewed_at` to
     decide whether to paint the amber dot.
+
+    `commit=False` lets `persist_assistant_turn` batch this into the
+    single end-of-turn commit alongside the message insert, tool-call
+    backfill, and cost accrual. Default preserves legacy behavior.
 
     No-op on unknown ids."""
     now = _now()
@@ -589,7 +609,8 @@ async def mark_session_completed(conn: aiosqlite.Connection, session_id: str) ->
         "UPDATE sessions SET last_completed_at = ?, updated_at = ? WHERE id = ?",
         (now, now, session_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
 
 
 async def mark_session_viewed(conn: aiosqlite.Connection, session_id: str) -> dict[str, Any] | None:

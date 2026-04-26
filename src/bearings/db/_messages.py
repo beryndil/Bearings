@@ -30,7 +30,17 @@ async def insert_message(
     cache_read_tokens: int | None = None,
     cache_creation_tokens: int | None = None,
     attachments: str | None = None,
+    commit: bool = True,
 ) -> dict[str, Any]:
+    """Insert one message row and bump the owning session's
+    `updated_at`.
+
+    `commit=False` lets the caller compose this with sibling writes
+    inside a single transaction (see `persist_assistant_turn`), folding
+    the assistant-turn persist's per-helper commits into one. The
+    default preserves the historical fire-and-forget behavior used by
+    every standalone call site (user prompts, template seeding, tests).
+    """
     message_id = id or _new_id()
     now = _now()
     await conn.execute(
@@ -59,7 +69,8 @@ async def insert_message(
         "UPDATE sessions SET updated_at = ? WHERE id = ?",
         (now, session_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return {
         "id": message_id,
         "session_id": session_id,
@@ -361,12 +372,17 @@ async def attach_tool_calls_to_message(
     *,
     message_id: str,
     tool_call_ids: list[str],
+    commit: bool = True,
 ) -> int:
     """Backfill tool_calls.message_id for a just-persisted assistant turn.
 
     Called after `insert_message(role="assistant")` — at that point the
     messages row exists so the FK can be populated. Returns the number
     of rows updated.
+
+    `commit=False` skips the per-call commit so this helper composes
+    with the rest of `persist_assistant_turn` under a single
+    transaction. Default preserves the legacy fire-and-forget behavior.
     """
     if not tool_call_ids:
         return 0
@@ -375,7 +391,8 @@ async def attach_tool_calls_to_message(
         f"UPDATE tool_calls SET message_id = ? WHERE id IN ({placeholders})",
         (message_id, *tool_call_ids),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return cursor.rowcount
 
 
