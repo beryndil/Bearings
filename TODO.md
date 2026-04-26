@@ -561,6 +561,18 @@ or (b) virtualizing the message list so only the currently-visible
 articles are live compositing layers. See `midnight-glass.css` comment
 at the `article` rule for the full diagnosis.
 
+**Status 2026-04-26 (punch-list L7.2 review).** Option (b) shipped
+*conditionally* in `VirtualItem.svelte` — `Conversation.svelte` gates
+virtualization behind `VIRTUALIZE_THRESHOLD = 200` timeline entries,
+so sessions under that threshold still mount every `<article>` at
+once and would re-trigger the compositor-layer explosion if we
+re-added per-message `backdrop-filter`. Item remains deferred. To
+actually reopen, do (a) the composer restructure, or extend (b) to
+always-virtualize (or a threshold low enough that the cold-paint of
+a fresh long session is also covered) and re-verify the original
+composer-textarea symptom is gone. Severity stays Low/QoL — no
+action unless Dave prioritizes glass-on-every-card.
+
 ---
 
 ## Theme switcher UI — RESOLVED 2026-04-26

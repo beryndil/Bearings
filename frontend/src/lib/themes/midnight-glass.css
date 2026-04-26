@@ -231,8 +231,18 @@
  * If we want real glass on messages later, the right move is to
  * restructure the composer so its position doesn't depend on flex
  * sibling height settling synchronously — or to virtualize the
- * message list so only visible articles are composited. Neither is
- * in scope for a theme pass. */
+ * message list so only visible articles are composited.
+ *
+ * Status update 2026-04-26: timeline virtualization shipped in
+ * `VirtualItem.svelte`, but `Conversation.svelte` only enables it
+ * past `VIRTUALIZE_THRESHOLD = 200` timeline entries. Sessions under
+ * that threshold still mount every MessageTurn at once, so the
+ * compositor-layer explosion would recur there if we re-added
+ * per-article `backdrop-filter`. A real reopen needs either the
+ * composer restructure (option a), or always-virtualize / a much
+ * lower threshold + verification that the composer-textarea bug
+ * stays fixed under cold paint of a fresh long session. Neither is
+ * in scope for a theme pass; punch-list item L7.2 (Low/QoL). */
 [data-theme='midnight-glass'] article {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.06),
