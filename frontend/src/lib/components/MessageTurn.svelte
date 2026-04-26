@@ -37,6 +37,14 @@
      * it. v0 hard-codes single-chat shape — Wave 3 will swap in an
      * LLM classifier that may pick checklist / N-chats instead. */
     onSpawn?: (msg: Message) => void;
+    /** L4.3.2 — `✂ TLDR` button. Renders on every finished assistant
+     * reply alongside `＋ SPAWN`. Click fires the handler with the
+     * assistant message; the parent's `Conversation.svelte` opens the
+     * shared `ReplyActionPreview` modal which streams the sub-agent's
+     * TL;DR straight into the modal body. The modal is generic — the
+     * underlying invocation infrastructure also serves L4.3.3's
+     * `⚔ CRIT` button by passing a different action name. */
+    onTldr?: (msg: Message) => void;
     /** Slice 4: bulk-select mode. When `bulkMode` is true the header
      * renders a checkbox in place of the ordinary role tag and the
      * context-menu action is still wired — right-click while in bulk
@@ -79,6 +87,7 @@
     onMoreInfo,
     isLatestAssistant = false,
     onSpawn,
+    onTldr,
     bulkMode = false,
     selectedIds,
     onToggleSelect,
@@ -436,6 +445,23 @@
             onclick={() => onSpawn(assistant!)}
           >
             ＋ spawn
+          </button>
+        {/if}
+        {#if !isStreaming && onTldr}
+          <!-- L4.3.2 / Wave 2 lane 2. Opens the shared sub-agent
+               preview modal and streams a TL;DR of this reply.
+               Modal is generic — L4.3.3 will reuse it for `⚔ CRIT`
+               by adding a backend prompt template and a sibling
+               button here. -->
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Summarize this reply"
+            title="Stream a TL;DR sub-agent against this reply"
+            data-testid="tldr-button"
+            onclick={() => onTldr(assistant!)}
+          >
+            ✂ tldr
           </button>
         {/if}
         <button

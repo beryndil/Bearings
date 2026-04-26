@@ -15,3 +15,4 @@ export * from './shell';
 export * from './vault';
 export * from './preferences';
 export * from './pending';
+export * from './replyActions';

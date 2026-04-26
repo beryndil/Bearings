@@ -955,8 +955,42 @@ it then. Do not exercise the historical checklists as-is.
   user role, 400 on cross-session message, 404 on unknown ids,
   source untouched) + 5 frontend tests in
   `MessageTurn.test.ts:describe('MessageTurn (spawn button)')`.
-  Lanes 2 (`✂ TLDR` + sub-agent infra) and 3 (`⚔ CRIT`) still
-  pending — keep this research entry open until Wave 2 fully lands.
+  Lane 2 (`✂ TLDR` + sub-agent infra) shipped 2026-04-26 (L4.3.2).
+  New backend: `src/bearings/agent/sub_invoke.py` (one-shot tool-less
+  `ClaudeSDKClient` wrapper, `PROMPT_TEMPLATES` action enum,
+  TextChunk / Complete / Failure event dataclasses, cost folded into
+  parent session via `add_session_cost`); `src/bearings/api/
+  routes_reply_actions.py` (POST `/sessions/{id}/invoke_reply_action/
+  {message_id}` returning SSE — chosen over WS because sub-agent
+  runs are ephemeral, scoped to one HTTP request, and re-using WS
+  would force a `sub_invocation_id` on every wire event globally;
+  GET `/sessions/reply_actions/catalog` exposes `ACTION_LABELS` so
+  the frontend doesn't hardcode the enum). New frontend:
+  `frontend/src/lib/api/replyActions.ts` (`fetch` + manual SSE
+  parser since `EventSource` can't carry bearer auth headers,
+  `streamReplyAction` returns a cancel/done handle); store in
+  `frontend/src/lib/stores/replyActions.svelte.ts` (singleton
+  `state` rune with `idle / streaming / complete / error /
+  cancelled` discriminator, owns the in-flight stream handle);
+  generic modal `frontend/src/lib/components/ReplyActionPreview.
+  svelte` (header label from catalog, streaming caret, Copy /
+  Send-to-composer / Close-or-Cancel footer, ESC closes); `✂ TLDR`
+  button wired in `MessageTurn.svelte` next to `＋ SPAWN`,
+  `onTldr` handler in `Conversation.svelte`. Result is *ephemeral*
+  in v0 — nothing persists in `messages` (schema has no kind enum,
+  adding one was scope creep). Send-to-composer dispatches the
+  same `bearings:composer-prefill` event the regenerate path uses.
+  Coverage: 14 backend tests in `tests/test_reply_actions.py`
+  (action enum, prompt assembly, SSE frame ordering, Failure-as-
+  SSE-error, model override, 400 / 404 paths, generator unit
+  test) + 10 frontend tests in
+  `frontend/src/lib/components/ReplyActionPreview.test.ts` (modal
+  visibility, label, streaming caret, cost label, error message,
+  Copy, Send-to-composer event, disabled-while-streaming, Close
+  button, ESC). Lane 3 (`⚔ CRIT`, L4.3.3) still pending — adds a
+  `critique` entry to `PROMPT_TEMPLATES` + `ACTION_LABELS` and a
+  sibling button; modal is generic and needs no change. Keep this
+  research entry open until lane 3 lands.
 
   Dave's primary ask: alongside Copy (existing) and
   More Info (logged above), add a button that takes the *output of

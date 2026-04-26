@@ -1,5 +1,6 @@
 <script lang="ts">
   import { conversation } from '$lib/stores/conversation.svelte';
+  import { replyActions } from '$lib/stores/replyActions.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
@@ -8,6 +9,7 @@
   import { DragDropController } from '$lib/utils/composer-dragdrop-handlers.svelte';
   import { ReorgController } from '$lib/utils/reorg-actions.svelte';
   import ApprovalModal from '$lib/components/ApprovalModal.svelte';
+  import ReplyActionPreview from '$lib/components/ReplyActionPreview.svelte';
   import AskUserQuestionModal from '$lib/components/AskUserQuestionModal.svelte';
   import BearingsMark from '$lib/components/icons/BearingsMark.svelte';
   import BulkActionBar from '$lib/components/BulkActionBar.svelte';
@@ -116,6 +118,21 @@
     void sessions.spawnFromReply(sid, msg.id);
   }
 
+  /** L4.3.2 — `✂ TLDR` action. Hands the assistant message to the
+   * `replyActions` store, which opens the shared preview modal and
+   * streams the sub-agent's response into it. The store handles
+   * cancel / cleanup; we just kick it off. The catalog refresh on
+   * first invocation is fire-and-forget — if it fails the modal
+   * falls back to the raw action name as the label, but the stream
+   * still works. */
+  function onTldr(msg: api.Message): void {
+    if (!msg.session_id) return;
+    if (Object.keys(replyActions.catalog).length === 0) {
+      void replyActions.refreshCatalog();
+    }
+    replyActions.start('summarize', msg);
+  }
+
   // Persistent reorg-audit dividers (Slice 5). Fetched on session
   // switch + on `updated_at` bumps so a move from the other end also
   // invalidates the list on refocus.
@@ -219,6 +236,12 @@
     />
   {/if}
 {/if}
+
+<!-- L4.3.2 — Reply-action preview modal. Always mounted; it owns
+     its own visibility off `replyActions.state.status !== 'idle'`.
+     Generic by design so L4.3.3's `⚔ CRIT` reuses this same component
+     without modification. -->
+<ReplyActionPreview />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
@@ -360,6 +383,7 @@
             {onCopyMessage}
             {onMoreInfo}
             {onSpawn}
+            {onTldr}
             isLatestAssistant={item.turn.key === latestAssistantTurnKey}
             bulkMode={bulk.active}
             selectedIds={bulk.selectedIds}
