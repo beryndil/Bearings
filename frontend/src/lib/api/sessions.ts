@@ -555,6 +555,58 @@ export function deleteReorgAudit(
   });
 }
 
+/** Slice 6 of the Session Reorg plan
+ * (`~/.claude/plans/sparkling-triaging-otter.md`). The analyzer is
+ * read-only: it returns proposed splits for the source session.
+ * The frontend orchestrates `/reorg/split` per approved proposal —
+ * the server never moves rows directly from this endpoint. */
+export type ReorgProposalSession = {
+  title: string;
+  description: string | null;
+  tag_ids: number[];
+};
+
+export type ReorgProposal = {
+  topic: string;
+  rationale: string;
+  /** Analyzer's self-reported [0..1] confidence. Heuristic emits 1.0
+   * for time-gap splits and 0.6 for topic-distance splits; LLM emits
+   * its own. Advisory only — never used to auto-approve. */
+  confidence: number;
+  message_ids: string[];
+  suggested_session: ReorgProposalSession;
+};
+
+export type ReorgAnalyzeResult = {
+  proposals: ReorgProposal[];
+  /** Echoes the analyzer that actually ran — `"llm"` may degrade to
+   * `"heuristic"` when the config knob is off or the JSON parse
+   * fails twice. UI surfaces `notes` when this differs from the
+   * requested mode. */
+  mode_used: 'llm' | 'heuristic';
+  messages_in: number;
+  notes: string;
+};
+
+export type ReorgAnalyzeRequest = {
+  mode: 'llm' | 'heuristic';
+};
+
+/** Run the reorg analyzer against `sessionId`. Read-only — returns
+ * proposals only; nothing on the server moves until the caller
+ * issues `reorgSplit()` per approved proposal. */
+export function analyzeReorg(
+  sessionId: string,
+  body: ReorgAnalyzeRequest,
+  fetchImpl: typeof fetch = fetch
+): Promise<ReorgAnalyzeResult> {
+  return jsonFetch<ReorgAnalyzeResult>(fetchImpl, `/api/sessions/${sessionId}/reorg/analyze`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+}
+
 /** Server-side response for regenerate-from-message (Phase 15 of
  * docs/context-menu-plan.md, §8.4). The route forks at the user-turn
  * boundary at-or-before `messageId`, returns the freshly-imported

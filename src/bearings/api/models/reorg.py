@@ -1,11 +1,17 @@
 """Reorg-operation DTOs: move / split / merge request & result shapes
-plus the persistent audit row."""
+plus the persistent audit row.
+
+Slice 6 (LLM-assisted analyze, v0.18.0) layered on
+`ReorgAnalyzeRequest` / `ReorgAnalyzeResult` / `ReorgProposal` /
+`ReorgProposalSession`. The analyzer is read-only — it returns
+proposed splits; the frontend orchestrates the actual `/reorg/split`
+calls per approved proposal."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .sessions import NewSessionSpec, SessionOut
 
@@ -95,6 +101,77 @@ class ReorgMergeResult(BaseModel):
     warnings: list[ReorgWarning] = []
     audit_id: int | None = None
     deleted_source: bool
+
+
+class ReorgAnalyzeRequest(BaseModel):
+    """Body for `POST /sessions/{id}/reorg/analyze`. `mode` picks the
+    analyzer: `"heuristic"` runs the deterministic time-gap + Jaccard
+    splitter (free, fast, no LLM); `"llm"` calls the SDK and parses a
+    structured-JSON proposal list. The route falls back to heuristic
+    when `mode="llm"` is requested but `agent.enable_llm_reorg_analyze`
+    is False — keeps the failure mode visible in the response
+    (`mode_used` echoes the actually-run analyzer)."""
+
+    mode: Literal["llm", "heuristic"] = "heuristic"
+
+
+class ReorgProposalSession(BaseModel):
+    """Inline session draft attached to each proposal. The frontend
+    treats this as a starting point — title / description / tag_ids
+    are pre-populated from the analyzer's suggestion (heuristic copies
+    source tags + auto-titles "Segment N (M messages)"; LLM picks a
+    topical title and inherits source tags). `tag_ids` is non-empty by
+    construction so the downstream `/reorg/split` call passes the v0.2.13
+    tag-required gate without further validation. Severity tag is always
+    copied from the source (per migration 0021 invariant —
+    `ensure_default_severity` backfills if the LLM somehow drops it)."""
+
+    title: str
+    description: str | None = None
+    tag_ids: list[int]
+
+
+class ReorgProposal(BaseModel):
+    """One proposed split — a contiguous run of messages the analyzer
+    thinks belongs to a single topical thread.
+
+    `message_ids` is ordered by source-session creation order; the
+    frontend renders them as a collapsible preview on each proposal
+    card. `topic` is the analyzer's one-line label (heuristic emits
+    "Segment N"; LLM emits a topic phrase). `rationale` is a short
+    explanation the LLM mode produces; heuristic mode emits a
+    deterministic "split on time gap >2h" / "topic shift" string so
+    the UI has consistent surface to render. `confidence` is the LLM's
+    self-reported [0..1] score; heuristic mode emits 1.0 for time-gap
+    splits and 0.6 for topic-distance splits (advisory — not used to
+    auto-approve, just to sort cards)."""
+
+    topic: str
+    rationale: str
+    confidence: float = Field(ge=0.0, le=1.0, default=1.0)
+    message_ids: list[str]
+    suggested_session: ReorgProposalSession
+
+
+class ReorgAnalyzeResult(BaseModel):
+    """Response shape for the analyze endpoint.
+
+    `proposals` is the list of suggested splits — empty when the
+    analyzer thinks the source is already coherent. `mode_used`
+    echoes which analyzer actually ran (heuristic or llm); `"llm"`
+    requests can degrade to `"heuristic"` when the LLM is disabled
+    by config or the structured-JSON parse fails twice. `messages_in`
+    is the source-session message count the analyzer saw — the UI
+    renders it next to a rough cost estimate so the user can decide
+    whether to re-run with a different mode. `notes` carries any
+    advisory string the analyzer wants to surface (e.g. "fell back
+    to heuristic: LLM disabled in config", "LLM JSON parse failed,
+    showing heuristic instead"). Empty string when nothing to say."""
+
+    proposals: list[ReorgProposal]
+    mode_used: Literal["llm", "heuristic"]
+    messages_in: int
+    notes: str = ""
 
 
 class ReorgAuditOut(BaseModel):

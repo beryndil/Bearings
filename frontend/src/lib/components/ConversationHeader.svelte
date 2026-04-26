@@ -35,11 +35,18 @@
     bulkMode,
     onToggleBulk,
     onOpenMerge,
+    onOpenAnalyze,
     onEditSession
   }: {
     bulkMode: boolean;
     onToggleBulk: () => void;
     onOpenMerge: () => void;
+    /** Slice 6 of the Session Reorg plan. Opens the analyze-and-reorg
+     * modal — heuristic / LLM analyzer that proposes splits, with
+     * per-card editing + per-card approval committed via
+     * `/reorg/split`. Server returns proposals only; the actual
+     * splits run client-side. */
+    onOpenAnalyze: () => void;
     onEditSession: () => void;
   } = $props();
 
@@ -354,6 +361,16 @@
           data-testid="merge-session"
         >
           ⇲
+        </button>
+        <button
+          type="button"
+          class="text-xs text-slate-500 hover:text-slate-300"
+          aria-label="Analyze and reorg this session"
+          title="Analyze & reorg — propose splits"
+          onclick={onOpenAnalyze}
+          data-testid="analyze-reorg"
+        >
+          ✂
         </button>
         <button
           type="button"

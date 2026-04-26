@@ -20,6 +20,7 @@
   import MessageTurn from '$lib/components/MessageTurn.svelte';
   import ReorgAuditDivider from '$lib/components/ReorgAuditDivider.svelte';
   import ReorgPicker, { type ReorgPickerHandle } from '$lib/components/ReorgPicker.svelte';
+  import ReorgProposalEditor from '$lib/components/ReorgProposalEditor.svelte';
   import ReorgUndoToast from '$lib/components/ReorgUndoToast.svelte';
   import SessionEdit from '$lib/components/SessionEdit.svelte';
   import VirtualItem from '$lib/components/VirtualItem.svelte';
@@ -55,6 +56,11 @@
   let scrollContainer: HTMLDivElement | undefined = $state();
   let editingSession = $state(false);
   let copiedMsgId = $state<string | null>(null);
+  // Slice 6 of the Session Reorg plan: LLM-assisted / heuristic-
+  // assisted analyzer modal. Open from the header's ✂ button. Cards
+  // commit via `/reorg/split` per approved card; the modal owns its
+  // own loading + per-card state.
+  let analyzeOpen = $state(false);
 
   // Per-Conversation controllers. Each pane owns its own bulk-mode,
   // drop-state, and reorg/undo because all three are tab-local.
@@ -257,7 +263,15 @@
     bulkMode={bulk.active}
     onToggleBulk={() => bulk.toggle()}
     onOpenMerge={() => picker?.openMerge()}
+    onOpenAnalyze={() => (analyzeOpen = true)}
     onEditSession={() => (editingSession = true)}
+  />
+
+  <ReorgProposalEditor
+    open={analyzeOpen}
+    sessionId={sessions.selectedId}
+    onClose={() => (analyzeOpen = false)}
+    onApproved={() => (analyzeOpen = false)}
   />
 
   {#if conversation.highlightQuery}

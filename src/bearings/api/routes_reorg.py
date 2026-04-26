@@ -29,17 +29,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from bearings.api.auth import require_auth
 from bearings.api.models import (
+    ReorgAnalyzeRequest,
+    ReorgAnalyzeResult,
     ReorgAuditOut,
     ReorgMergeRequest,
     ReorgMergeResult,
     ReorgMoveRequest,
     ReorgMoveResult,
+    ReorgProposal,
+    ReorgProposalSession,
     ReorgSplitRequest,
     ReorgSplitResult,
     ReorgWarning,
     SessionOut,
 )
 from bearings.db import store
+from bearings.db._reorg_analyze import heuristic_analyze, llm_analyze
 from bearings.metrics import session_reorg_total
 
 router = APIRouter(
@@ -374,6 +379,103 @@ async def list_reorg_audits(
         raise HTTPException(status_code=404, detail="session not found")
     rows = await store.list_reorg_audits(conn, session_id)
     return [ReorgAuditOut(**row) for row in rows]
+
+
+@router.post(
+    "/{session_id}/reorg/analyze",
+    response_model=ReorgAnalyzeResult,
+)
+async def reorg_analyze(
+    session_id: str,
+    body: ReorgAnalyzeRequest,
+    request: Request,
+) -> ReorgAnalyzeResult:
+    """Slice 6 of the Session Reorg plan: read-only analyzer that
+    proposes how the source session should be split into coherent
+    sub-sessions. Two modes behind one route:
+
+    - `mode="heuristic"` (default) runs the deterministic time-gap +
+      Jaccard topic-distance splitter. Always available.
+    - `mode="llm"` calls `claude_agent_sdk.query()` in-process with a
+      structured-JSON prompt. Gated on
+      `agent.enable_llm_reorg_analyze=True` — disabled in config
+      degrades to heuristic with a `notes` advisory so the UI can
+      surface the fallback to the user.
+
+    The route writes nothing to the database. Approved proposals are
+    committed by the frontend via subsequent `/reorg/split` calls,
+    one per card. Severity tags are always copied from the source
+    (per migration 0021 invariant); other source tags inherit by
+    default and the user can edit per-card before commit.
+    """
+    conn = request.app.state.db
+    settings = request.app.state.settings
+    source = await store.get_session(conn, session_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="source session not found")
+    _require_chat_kind(source, role="source")
+
+    messages = await store.list_messages(conn, session_id)
+    source_tag_ids = await store.list_session_tags(conn, session_id)
+    tag_ids = [int(t["id"]) for t in source_tag_ids]
+    notes = ""
+
+    requested_mode = body.mode
+    mode_used: str = requested_mode
+    proposals_raw: list[dict[str, Any]] = []
+
+    if requested_mode == "llm":
+        if not settings.agent.enable_llm_reorg_analyze:
+            mode_used = "heuristic"
+            notes = "LLM mode disabled in config; ran heuristic instead"
+        else:
+            llm_result, llm_notes = await llm_analyze(
+                messages,
+                source_tag_ids=tag_ids,
+                model=source.get("model") or settings.agent.model,
+            )
+            if llm_result is None:
+                mode_used = "heuristic"
+                notes = (
+                    f"LLM analyze failed ({llm_notes}); ran heuristic instead"
+                    if llm_notes
+                    else "LLM analyze failed; ran heuristic instead"
+                )
+            else:
+                proposals_raw = llm_result
+
+    if mode_used == "heuristic":
+        proposals_raw = heuristic_analyze(messages, source_tag_ids=tag_ids)
+
+    proposals: list[ReorgProposal] = []
+    for entry in proposals_raw:
+        sugg = entry["suggested_session"]
+        # Belt-and-brace: every proposal session must carry ≥1 tag so
+        # the downstream `/reorg/split` call clears the v0.2.13 gate.
+        # The analyzers already inherit source tags, but a misbehaving
+        # LLM could in principle drop them — fall back to source tags
+        # before the Pydantic validator rejects the payload.
+        sugg_tag_ids = sugg.get("tag_ids") or tag_ids or []
+        proposals.append(
+            ReorgProposal(
+                topic=str(entry.get("topic", "")),
+                rationale=str(entry.get("rationale", "")),
+                confidence=float(entry.get("confidence", 1.0)),
+                message_ids=list(entry.get("message_ids", [])),
+                suggested_session=ReorgProposalSession(
+                    title=str(sugg.get("title", "")) or "Untitled segment",
+                    description=sugg.get("description"),
+                    tag_ids=list(sugg_tag_ids),
+                ),
+            )
+        )
+
+    return ReorgAnalyzeResult(
+        proposals=proposals,
+        mode_used=mode_used,  # type: ignore[arg-type]
+        messages_in=len(messages),
+        notes=notes,
+    )
 
 
 @router.delete(

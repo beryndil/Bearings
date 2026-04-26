@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-04-26
+
+LLM-assisted (and heuristic-assisted) Session Reorg analyzer — Slice 6
+of the Session Reorg plan
+(`~/.claude/plans/sparkling-triaging-otter.md`). The conversation
+header gains a ✂ button that opens a modal: the analyzer proposes
+how the source session should be split into coherent sub-sessions,
+the user edits per-card title / tags / rejected, then "Approve all"
+commits each surviving card via `/reorg/split`. The analyze endpoint
+itself is read-only — server returns proposals; frontend orchestrates
+the splits.
+
+Two analyzer modes behind one route:
+
+- **Heuristic** (default, always available). Deterministic time-gap
+  splitter (>2h between adjacent messages = new segment) plus a
+  Jaccard topic-distance pass within each gap segment (3-message
+  sliding window of stop-word-filtered user-turn tokens; >0.7
+  distance starts a new segment).
+- **LLM**, gated on `agent.enable_llm_reorg_analyze=True` (default
+  `False` until dogfooded). One-shot
+  `claude_agent_sdk.query(...)` call — fixed system prompt that
+  instructs the model to emit strict JSON `{proposals: [...]}` and
+  no overlap. Two-attempt validate-and-retry; falls through to
+  heuristic on parse error or SDK exception with a `notes`
+  advisory the UI surfaces in an amber banner.
+
+Severity tag is always copied from the source per migration 0021;
+the rest of the source's tags inherit by default and the user can
+edit per-card before commit. The heuristic confidence label scores
+time-gap splits at 1.0 and topic-shift splits at 0.6 (advisory; not
+used to auto-approve).
+
+### Added
+
+- **`src/bearings/db/_reorg_analyze.py`** — heuristic + LLM analyzer
+  module (~470 lines). Heuristic exposes `heuristic_analyze`
+  (pure-deterministic, no I/O); LLM exposes `llm_analyze` with a
+  `query_fn` test seam so tests can inject fake SDK responses
+  without an outbound call. `_run_llm_query` lazy-imports the SDK so
+  installs that never enable LLM mode pay zero import cost.
+- **`src/bearings/api/models/reorg.py`** — `ReorgAnalyzeRequest`,
+  `ReorgAnalyzeResult`, `ReorgProposal`, `ReorgProposalSession`. The
+  result carries `mode_used` (echo of the analyzer that actually
+  ran — LLM can degrade to heuristic) and `notes` (fallback
+  explanation, empty on the happy path).
+- **`src/bearings/api/routes_reorg.py`** — `POST
+  /sessions/{id}/reorg/analyze`. Validates source kind, falls back
+  on disabled config or LLM failure, threads source tag inheritance
+  into every proposal as a belt-and-brace against a misbehaving
+  LLM dropping tags.
+- **`src/bearings/config.py`** —
+  `agent.enable_llm_reorg_analyze: bool = False`. Off by default;
+  flip on after a few real noisy sessions have been dogfooded.
+- **`frontend/src/lib/components/ReorgProposalEditor.svelte`** —
+  modal that auto-runs the heuristic on open, lets the user toggle
+  to LLM, edit per-card title/tags, reject/restore individual
+  cards, and approve all surviving cards in one click. Each
+  approval issues a `/reorg/split` call against the message
+  immediately before the proposal's first id.
+- **`frontend/src/lib/api/sessions.ts`** — `analyzeReorg(sessionId,
+  {mode})` plus `ReorgProposal` / `ReorgAnalyzeResult` types.
+- **`frontend/src/lib/components/ConversationHeader.svelte`** — ✂
+  button next to the merge ⇲ button; calls a new `onOpenAnalyze`
+  prop wired through `Conversation.svelte`.
+
+### Tests
+
+- **`tests/test_db_reorg_analyze.py`** (~14 tests) — heuristic
+  determinism, time-gap split, single-segment passthrough, missing
+  timestamps, tokenization stop-words, Jaccard distance edges, LLM
+  JSON validation (fenced output, unknown ids, dedupe across
+  proposals, missing key), LLM analyze with fake `query_fn` (happy
+  path, parse failure, exception, empty proposals).
+- **`tests/test_routes_reorg_analyze.py`** (~7 tests) — 404 on
+  missing source, 400 on checklist kind, heuristic happy path
+  (asserts source tag inheritance), read-only contract
+  (`message_count` unchanged after analyze), LLM-disabled fallback,
+  LLM-enabled with monkeypatched `_run_llm_query`, LLM exception
+  fallback, default mode = heuristic.
+
+### Notes
+
+- v1 ships the per-card edit + reject UX. Drag-between-proposals
+  rebalancing is deferred — live with per-card edit for a few
+  dogfood runs first.
+- Cost preview before clicking Analyze is deferred; for a 100-msg
+  session worst-case the LLM call is ~10K input tokens and the
+  user already invoked the action.
+- The LLM mode runs `max_turns=1` and `setting_sources=None` so the
+  analyzer can't accidentally inherit user-level hooks or MCP
+  servers from `~/.claude/settings.json`.
+
 ## [0.17.4] - 2026-04-25
 
 Subscribe replay window is now O(K) on the number of events to replay

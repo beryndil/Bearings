@@ -215,6 +215,18 @@ class AgentCfg(BaseModel):
     # until the researcher prompt has a few real-world turns of
     # iteration under it.
     enable_researcher_subagent: bool = False
+    # Slice 6 of the Session Reorg plan
+    # (`~/.claude/plans/sparkling-triaging-otter.md`). Whether
+    # `POST /sessions/{id}/reorg/analyze?mode=llm` is allowed to spawn
+    # an in-process one-shot `claude_agent_sdk.query(...)` call to
+    # propose how the source session should be split. Disabled by
+    # default — the heuristic analyzer (time-gap + Jaccard topic
+    # distance) ships ON regardless. Flip on after the LLM prompt has
+    # been dogfooded against a few real noisy sessions; until then,
+    # heuristic-only is the well-tested path. When False, an LLM-mode
+    # request degrades to the heuristic and the response's `notes`
+    # field surfaces the fallback to the UI.
+    enable_llm_reorg_analyze: bool = False
 
 
 class StorageCfg(BaseModel):
