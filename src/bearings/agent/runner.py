@@ -381,7 +381,7 @@ class SessionRunner:
     @property
     def can_use_tool(self) -> Any:
         """Callback bound onto `AgentSession.can_use_tool` by
-        `ws_agent._build_runner`. Wraps the broker's callback so each
+        `ws_agent.build_runner`. Wraps the broker's callback so each
         entry/exit broadcasts a `runner_state` frame — the sidebar
         reads `awaiting_user` off that frame and flips the red-flashing
         "needs attention" indicator. The broker stays transport-

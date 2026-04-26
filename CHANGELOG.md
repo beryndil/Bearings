@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-04-26
+
+Cross-session prompt injection. The HTTP facade for the same
+`runner.submit_prompt` pipeline `bearings send` and the WebSocket
+`{type:"prompt"}` frame already use — exposed so an orchestrator chat
+session can dispatch into its executor chat sessions (and executors
+can callback) without the human having to copy messages between tabs
+in the sidebar. Originating use case: the Bearings standards-audit
+orchestrator (`33befa3d…`) driving its 14 linked executor chats
+through the audit checklist.
+
+### Added
+
+- `POST /api/sessions/{session_id}/prompt` — body `{"content": "..."}`,
+  202 Accepted on enqueue. Reuses `require_auth` (router-level
+  dependency, same bearer token as `/ws/sessions`). Lazy-spawns a
+  runner via the same factory the WS handler uses if none is live yet,
+  so an orchestrator can dispatch into a fresh executor that has
+  never been opened in a tab. Returns `{"queued": true, "session_id": "..."}`
+  with a `Location` header pointing at the session row. Validation:
+  404 for missing session, 400 for empty/whitespace content, 400 for
+  non-runnable kinds, 409 for closed sessions, 422 for non-string
+  content. Seven new tests in `tests/test_routes_sessions.py`.
+
+### Changed
+
+- `bearings.api.ws_agent._build_runner` renamed to `build_runner`
+  (now public) and `_RUNNABLE_KINDS` to `RUNNABLE_KINDS` so the new
+  prompt-injection route can share the same factory + kind set the
+  WebSocket handler uses. Internal-only rename — no public API
+  consumers existed before this release. Stale references in
+  `agent/runner.py`, `agent/approval_broker.py`,
+  `agent/auto_driver_runtime.py` updated.
+
 ## [0.20.7] - 2026-04-26
 
 L6.1 — Live session list Phase 2 cleanup. The 3 s background

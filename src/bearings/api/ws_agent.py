@@ -67,14 +67,19 @@ CODE_SESSION_KIND_UNSUPPORTED = 4400
 # `checklist_overview` layer so the agent sees the list's structure on
 # every turn, and the ChecklistView frontend renders a compact chat
 # panel above the list body.
-_RUNNABLE_KINDS = {"chat", "checklist"}
+RUNNABLE_KINDS = {"chat", "checklist"}
 
 
-async def _build_runner(app: Any, session_id: str) -> SessionRunner:
+async def build_runner(app: Any, session_id: str) -> SessionRunner:
     """Construct a SessionRunner wired to app-scoped state. Used as
     the factory passed into `RunnerRegistry.get_or_create`
     (`bearings.agent.registry`) — keeps all the FastAPI-specific wiring
-    out of the runner module."""
+    out of the runner module.
+
+    Public (was `_build_runner` until v0.21.0) because the prompt-injection
+    HTTP route (`POST /api/sessions/{id}/prompt`) needs the same factory
+    to lazily spawn a runner when an external caller dispatches into a
+    session that hasn't been opened in a tab yet."""
     conn = app.state.db
     row = await store.get_session(conn, session_id)
     assert row is not None, "caller must verify the session exists first"
@@ -83,10 +88,10 @@ async def _build_runner(app: Any, session_id: str) -> SessionRunner:
     # caller (imports, migrations, tests) skips that gate, fail loudly
     # here rather than spawning an SDK subprocess that has nothing to
     # do.
-    if row.get("kind", "chat") not in _RUNNABLE_KINDS:
+    if row.get("kind", "chat") not in RUNNABLE_KINDS:
         raise ValueError(
             f"cannot build runner for session kind={row.get('kind')!r}; "
-            f"runnable kinds: {sorted(_RUNNABLE_KINDS)!r}"
+            f"runnable kinds: {sorted(RUNNABLE_KINDS)!r}"
         )
     agent_cfg = app.state.settings.agent
     # Restore the user's last PermissionMode (migration 0012) so a
@@ -260,7 +265,7 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     if row is None:
         await websocket.close(code=CODE_SESSION_NOT_FOUND)
         return
-    if row.get("kind", "chat") not in _RUNNABLE_KINDS:
+    if row.get("kind", "chat") not in RUNNABLE_KINDS:
         # Future non-runnable kinds land here. Close loud so the bug
         # is obvious if a frontend ever tries to connect to a kind
         # whose UI should be local-only.
@@ -272,7 +277,7 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
 
     since_seq = _parse_since_seq(websocket)
     registry = app.state.runners
-    runner = await registry.get_or_create(session_id, factory=lambda sid: _build_runner(app, sid))
+    runner = await registry.get_or_create(session_id, factory=lambda sid: build_runner(app, sid))
     # Directory Context System (v0.6.1): stamp the `history.jsonl`
     # start marker and kick off stale-state revalidation. Idempotent —
     # safe to call on every reconnect; the runner gates internally so

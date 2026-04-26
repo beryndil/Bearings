@@ -8,7 +8,7 @@ plumbing and leaves the approval protocol testable on its own.
 
 The runner composes one of these per session and late-binds
 `broker.can_use_tool` onto the `AgentSession` (see
-`ws_agent._build_runner`). The broker never touches the SDK session
+`ws_agent.build_runner`). The broker never touches the SDK session
 directly — it only emits events via the callback the runner hands in
 and resolves Futures the SDK is awaiting.
 """
@@ -102,7 +102,7 @@ class ApprovalBroker:
         """SDK `can_use_tool` callback. Emits an `ApprovalRequest` event
         and blocks on a Future until the WS handler receives the
         matching `approval_response` frame (or a stop/shutdown denies
-        it). Bound to `agent.can_use_tool` by `ws_agent._build_runner`
+        it). Bound to `agent.can_use_tool` by `ws_agent.build_runner`
         so the agent stays ignorant of the runner.
 
         Mode-aware fast path (added 2026-04-25 after the fae8f1a8

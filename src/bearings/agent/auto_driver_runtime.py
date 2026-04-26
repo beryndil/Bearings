@@ -55,7 +55,7 @@ class AgentRunnerDriverRuntime:
         # spawn_leg can persist `bypassPermissions` (default for
         # autonomous mode) onto the new chat session BEFORE the runner
         # is built. The runner reads `permission_mode` off the row at
-        # construction time (see `ws_agent._build_runner`), so this
+        # construction time (see `ws_agent.build_runner`), so this
         # has to happen before the first `run_turn` call.
         self._config = config or DriverConfig()
         # Per-session last-observed ContextUsage percentage. Populated
@@ -153,10 +153,10 @@ class AgentRunnerDriverRuntime:
         """
         # Lazy import to avoid pulling FastAPI-specific plumbing into
         # modules that don't need it (the driver itself stays pure).
-        from bearings.api.ws_agent import _build_runner
+        from bearings.api.ws_agent import build_runner
 
         async def _factory(sid: str) -> Any:
-            return await _build_runner(self._app, sid)
+            return await build_runner(self._app, sid)
 
         registry = self._app.state.runners
         runner = await registry.get_or_create(session_id, factory=_factory)

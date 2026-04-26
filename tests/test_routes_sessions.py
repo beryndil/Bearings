@@ -1125,3 +1125,142 @@ def test_pinned_round_trips_through_list(client: TestClient) -> None:
     rows = client.get("/api/sessions").json()
     match = next(r for r in rows if r["id"] == created["id"])
     assert match["pinned"] is True
+
+
+# ---- POST /sessions/{id}/prompt (cross-session injection) -----------
+# Shipped v0.21.0. The HTTP facade for `runner.submit_prompt` so an
+# orchestrator chat can drive its executor chats without going through
+# the WebSocket.
+
+
+class _PromptRecorder:
+    """Stub runner that records `submit_prompt` calls instead of spawning
+    an SDK subprocess. Plants into `app.state.runners._runners` directly
+    via `_plant_runner` so the route's `get_or_create` returns it."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.shutdown_calls = 0
+
+    async def submit_prompt(self, prompt: str) -> None:
+        self.prompts.append(prompt)
+
+    async def shutdown(self) -> None:
+        self.shutdown_calls += 1
+
+
+def _plant_recorder(client: TestClient, session_id: str) -> _PromptRecorder:
+    rec = _PromptRecorder()
+    registry = client.app.state.runners  # type: ignore[attr-defined]
+    registry._runners[session_id] = rec  # type: ignore[assignment]
+    return rec
+
+
+def test_post_prompt_queues_and_returns_202(client: TestClient) -> None:
+    created = _create(client, title="injection target")
+    rec = _plant_recorder(client, created["id"])
+
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": "go"},
+    )
+    assert resp.status_code == 202, resp.text
+    body = resp.json()
+    assert body == {"queued": True, "session_id": created["id"]}
+    assert resp.headers.get("location") == f"/api/sessions/{created['id']}"
+    assert rec.prompts == ["go"]
+
+
+def test_post_prompt_strips_surrounding_whitespace(client: TestClient) -> None:
+    """The route trims leading/trailing whitespace before enqueueing —
+    matches every other text field in this surface (title, description)
+    and keeps tests deterministic when callers slip in trailing newlines."""
+    created = _create(client, title="trim me")
+    rec = _plant_recorder(client, created["id"])
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": "   start the audit\n"},
+    )
+    assert resp.status_code == 202
+    assert rec.prompts == ["start the audit"]
+
+
+def test_post_prompt_404_on_missing_session(client: TestClient) -> None:
+    resp = client.post(
+        "/api/sessions/nosuch/prompt",
+        json={"content": "go"},
+    )
+    assert resp.status_code == 404
+    assert "not found" in resp.json()["detail"]
+
+
+def test_post_prompt_400_on_empty_content(client: TestClient) -> None:
+    """Empty stripped content gets rejected at the route boundary so the
+    runner never sees a no-op turn."""
+    created = _create(client, title="empty input")
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": ""},
+    )
+    assert resp.status_code == 400
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": "   \n\t  "},
+    )
+    assert resp.status_code == 400
+
+
+def test_post_prompt_422_on_missing_or_non_string_content(client: TestClient) -> None:
+    """Missing field or non-string `content` is malformed input — 422
+    so callers can distinguish a structural error from a rejected value."""
+    created = _create(client, title="bad shape")
+    resp = client.post(f"/api/sessions/{created['id']}/prompt", json={})
+    assert resp.status_code == 422
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": 42},
+    )
+    assert resp.status_code == 422
+
+
+def test_post_prompt_409_on_closed_session(client: TestClient) -> None:
+    """Closed sessions stay in the DB but their runner is drained;
+    silently re-spawning one through a prompt POST would surprise the
+    user. Demand an explicit reopen first."""
+    created = _create(client, title="zombie")
+    client.post(f"/api/sessions/{created['id']}/close")
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": "still listening?"},
+    )
+    assert resp.status_code == 409
+    assert "closed" in resp.json()["detail"]
+
+
+def test_post_prompt_lazy_spawns_runner_when_none_exists(client: TestClient) -> None:
+    """If no runner is live for the session yet (no WS tab open, never
+    been opened since restart), the route must spawn one via the same
+    factory the WS handler uses — otherwise an orchestrator dispatching
+    into a fresh executor would get a spurious failure on the first
+    POST. We assert that `get_or_create` ran by verifying the registry
+    grew an entry; we don't actually exercise the SDK here."""
+    created = _create(client, title="lazy spawn")
+    registry = client.app.state.runners  # type: ignore[attr-defined]
+    assert created["id"] not in registry._runners
+
+    captured: dict[str, str] = {}
+
+    async def fake_get_or_create(session_id: str, *, factory) -> _PromptRecorder:  # type: ignore[no-untyped-def]
+        captured["session_id"] = session_id
+        rec = _PromptRecorder()
+        registry._runners[session_id] = rec  # type: ignore[assignment]
+        return rec
+
+    registry.get_or_create = fake_get_or_create  # type: ignore[assignment]
+    resp = client.post(
+        f"/api/sessions/{created['id']}/prompt",
+        json={"content": "first turn"},
+    )
+    assert resp.status_code == 202, resp.text
+    assert captured["session_id"] == created["id"]
+    assert created["id"] in registry._runners

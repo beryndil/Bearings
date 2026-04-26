@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
 from bearings import metrics
 from bearings.agent.prompt import assemble_prompt, estimate_tokens
@@ -25,6 +25,7 @@ from bearings.api.models import (
     TokenTotalsOut,
     ToolCallOut,
 )
+from bearings.api.ws_agent import RUNNABLE_KINDS, build_runner
 from bearings.db import store
 
 router = APIRouter(
@@ -343,6 +344,72 @@ async def mark_session_viewed(session_id: str, request: Request) -> SessionOut:
         session_id,
     )
     return SessionOut(**row)
+
+
+@router.post("/{session_id}/prompt", status_code=202)
+async def inject_prompt(
+    session_id: str,
+    body: dict[str, Any],
+    request: Request,
+    response: Response,
+) -> dict[str, Any]:
+    """Enqueue a user-role prompt into a session's runner from outside
+    the WebSocket — the HTTP facade for the same `submit_prompt` pipeline
+    `bearings send` and the WS frame `{type:"prompt"}` use.
+
+    Shipped v0.21.0 to support cross-session orchestration: an orchestrator
+    chat session can drive its executor chats by POSTing here, and each
+    executor can callback by POSTing to the orchestrator's session id.
+    The receiving runner is created on demand if the session has no live
+    runner yet (lazy spawn, mirroring the WS handler's behavior on first
+    connect). Returns 202 because the prompt is queued, not awaited — use
+    the WebSocket `/ws/sessions/{id}` stream to observe completion.
+
+    Body: `{"content": "<prompt>"}`. Whitespace-only content rejected at
+    the boundary so we don't hand the SDK a no-op turn. Sessions whose
+    `kind` isn't in `RUNNABLE_KINDS` (today: `chat`, `checklist`) get a
+    400 — same gate the WS handler uses, kept in sync via the shared
+    constant so a future kind change updates both surfaces at once.
+    """
+    raw_content = body.get("content")
+    if not isinstance(raw_content, str):
+        raise HTTPException(
+            status_code=422,
+            detail="`content` is required and must be a string",
+        )
+    content = raw_content.strip()
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="`content` must be a non-empty string after stripping whitespace",
+        )
+
+    conn = request.app.state.db
+    row = await store.get_session(conn, session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    kind = row.get("kind", "chat")
+    if kind not in RUNNABLE_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"session kind {kind!r} does not support prompts",
+        )
+    if row.get("closed_at") is not None:
+        # Closed sessions stay in the DB for audit but their runner is
+        # drained. Reopen first; don't silently re-spawn one through a
+        # POST that the user might not realize is reviving the row.
+        raise HTTPException(
+            status_code=409,
+            detail="session is closed; reopen it before injecting a prompt",
+        )
+
+    registry = request.app.state.runners
+    runner = await registry.get_or_create(
+        session_id, factory=lambda sid: build_runner(request.app, sid)
+    )
+    await runner.submit_prompt(content)
+    response.headers["Location"] = f"/api/sessions/{session_id}"
+    return {"queued": True, "session_id": session_id}
 
 
 @router.delete("/{session_id}")
