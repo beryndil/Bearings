@@ -122,6 +122,41 @@ describe('Settings', () => {
     expect(getByLabelText('Default working directory')).toHaveValue('/home/dave');
   });
 
+  it('Esc closes the dialog', async () => {
+    const onOpenChange = vi.fn();
+    const { component } = render(Settings, { props: { open: true } });
+    // `open` is bindable; subscribe via the property change after key
+    // dispatch. Using window keydown matches the production listener.
+    void component;
+    void onOpenChange;
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    // After Esc, the dialog markup unmounts. We assert via the
+    // backdrop testid going away rather than reaching into the bound
+    // prop, which we can't read back from outside.
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="settings-backdrop"]')).toBeNull();
+    });
+  });
+
+  it('clicking the backdrop closes the dialog; clicking the dialog surface does not', async () => {
+    const { getByTestId } = render(Settings, { props: { open: true } });
+    // Click the dialog interior — should NOT close.
+    await fireEvent.click(getByTestId('settings-dialog'));
+    expect(document.querySelector('[data-testid="settings-backdrop"]')).not.toBeNull();
+    // Click the backdrop wrapper — should close.
+    await fireEvent.click(getByTestId('settings-backdrop'));
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="settings-backdrop"]')).toBeNull();
+    });
+  });
+
+  it('opening the dialog moves focus to the close button', async () => {
+    const { getByTestId } = render(Settings, { props: { open: true } });
+    await waitFor(() => {
+      expect(document.activeElement).toBe(getByTestId('settings-close'));
+    });
+  });
+
   it('Authentication section writes the token to localStorage and not /api/preferences', async () => {
     const stub = stubPatchOk({});
     const { getByLabelText, getByTestId } = render(Settings, {
