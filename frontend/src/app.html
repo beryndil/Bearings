@@ -43,6 +43,11 @@
     <script>
       (function () {
         try {
+          // SYNC WITH `src/lib/themes/meta-theme-colors.ts` —
+          // this script runs synchronously before any module loads
+          // (so it can't `import`), so the literal is duplicated
+          // here. `preferences.svelte.ts.checkBootDrift()` runs at
+          // init and `console.warn`s if the two ever diverge.
           var THEME_COLORS = {
             'midnight-glass': '#0A0E1C',
             'default': '#020617',

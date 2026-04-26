@@ -25,18 +25,9 @@
  */
 
 import * as api from '$lib/api';
+import { THEME_META_COLORS } from '$lib/themes/meta-theme-colors';
 
 const CACHE_KEY = 'bearings:preferences-cache';
-
-/** Mobile browser chrome color per bundled theme. Mirrors the table
- * in `app.html`'s no-flash boot script so `<meta name="theme-color">`
- * stays in sync across (a) initial paint, (b) picker save, and
- * (c) reload. Keep both in sync if a new theme lands. */
-const THEME_COLORS: Record<string, string> = {
-  'midnight-glass': '#0A0E1C',
-  'default': '#020617',
-  'paper-light': '#FAF7F0'
-};
 const LEGACY_MODEL_KEY = 'bearings:defaultModel';
 const LEGACY_WORKDIR_KEY = 'bearings:defaultWorkingDir';
 const LEGACY_NOTIFY_KEY = 'bearings:notifyOnComplete';
@@ -190,8 +181,32 @@ class PreferencesStore {
     document.documentElement.dataset.theme = this.row.theme;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
-      const color = THEME_COLORS[this.row.theme];
+      const color = THEME_META_COLORS[this.row.theme];
       if (color) meta.setAttribute('content', color);
+    }
+  }
+
+  /** Compares the meta theme-color the boot script applied against the
+   * canonical `THEME_META_COLORS` table. Any mismatch means the inline
+   * literal in `app.html`'s no-flash script has drifted from this
+   * module — fix one or the other. Warning-only because a transient
+   * mismatch (e.g. user just switched themes mid-init) is not a real
+   * bug; the live store's `applyTheme` corrects it on the next tick. */
+  private checkBootDrift(): void {
+    if (typeof document === 'undefined') return;
+    if (!this.row.theme) return;
+    const expected = THEME_META_COLORS[this.row.theme];
+    if (!expected) return;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const actual = meta?.getAttribute('content');
+    if (actual && actual.toLowerCase() !== expected.toLowerCase()) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[preferences] meta theme-color drift: boot script applied ${actual} ` +
+          `but THEME_META_COLORS expects ${expected} for theme '${this.row.theme}'. ` +
+          `Sync the literal in app.html's no-flash boot script with ` +
+          `src/lib/themes/meta-theme-colors.ts.`
+      );
     }
   }
 
@@ -200,6 +215,10 @@ class PreferencesStore {
    * keeps the cached preferences visible; the next refresh / focus /
    * navigation tries again. */
   async init(fetchImpl: typeof fetch = fetch): Promise<void> {
+    // Drift detector runs first against the boot-script-applied state,
+    // before `apply()` re-writes the meta tag — otherwise we'd be
+    // measuring our own write.
+    this.checkBootDrift();
     try {
       const fresh = await api.fetchPreferences(fetchImpl);
       const wasSeed = isSeedState(fresh);
