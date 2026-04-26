@@ -336,7 +336,12 @@ def test_ws_refuses_bypass_permissions_when_profile_disallows(tmp_path: Path) ->
         tag_id = c.post("/api/tags", json={"name": "t"}).json()["id"]
         sid = c.post(
             "/api/sessions",
-            json={"working_dir": "/tmp", "model": "m", "title": "test session", "tag_ids": [tag_id]},
+            json={
+                "working_dir": "/tmp",
+                "model": "m",
+                "title": "test session",
+                "tag_ids": [tag_id],
+            },
         ).json()["id"]
         with c.websocket_connect(f"/ws/sessions/{sid}") as ws:
             _consume_initial_status(ws)

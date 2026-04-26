@@ -434,11 +434,21 @@ def test_api_list_sessions_severity_tags_query(client: TestClient) -> None:
     t = client.post("/api/tags", json={"name": "infra"}).json()
     s1 = client.post(
         "/api/sessions",
-        json={"working_dir": "/a", "model": "m", "title": "test session", "tag_ids": [t["id"], sev["Blocker"]]},
+        json={
+            "working_dir": "/a",
+            "model": "m",
+            "title": "test session",
+            "tag_ids": [t["id"], sev["Blocker"]],
+        },
     ).json()
     client.post(
         "/api/sessions",
-        json={"working_dir": "/b", "model": "m", "title": "test session", "tag_ids": [t["id"], sev["Low"]]},
+        json={
+            "working_dir": "/b",
+            "model": "m",
+            "title": "test session",
+            "tag_ids": [t["id"], sev["Low"]],
+        },
     ).json()
 
     blockers = client.get(f"/api/sessions?severity_tags={sev['Blocker']}").json()

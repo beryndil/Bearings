@@ -192,7 +192,12 @@ def test_system_prompt_base_only(client: TestClient) -> None:
     # layer. Base is the only layer emitted.
     sess = client.post(
         "/api/sessions",
-        json={"working_dir": "/tmp", "model": "m", "title": "test session", "tag_ids": [_default_tag_id(client)]},
+        json={
+            "working_dir": "/tmp",
+            "model": "m",
+            "title": "test session",
+            "tag_ids": [_default_tag_id(client)],
+        },
     ).json()
     resp = client.get(f"/api/sessions/{sess['id']}/system_prompt")
     assert resp.status_code == 200
@@ -241,7 +246,12 @@ def test_put_tag_memory_drops_runners_for_every_attached_session(
     other_tag = client.post("/api/tags", json={"name": "unrelated"}).json()
     sess_c = client.post(
         "/api/sessions",
-        json={"working_dir": "/tmp", "model": "m", "title": "test session", "tag_ids": [other_tag["id"]]},
+        json={
+            "working_dir": "/tmp",
+            "model": "m",
+            "title": "test session",
+            "tag_ids": [other_tag["id"]],
+        },
     ).json()
 
     tracker_a = _plant_runner(client, sess_a["id"])
