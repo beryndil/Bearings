@@ -163,6 +163,25 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to a Firefox- or Chromium-family browser binary. Defaults to autodetect.",
     )
+    window.add_argument(
+        "--plain",
+        action="store_true",
+        help=(
+            "Skip Bearings' SSB customization. Firefox: drops the bundled profile "
+            "(no userChrome.css collapse, uses your default profile). Chromium: "
+            "drops --app=URL so the page opens in a normal browser window."
+        ),
+    )
+    window.add_argument(
+        "--profile",
+        dest="profile_path",
+        default=None,
+        help=(
+            "Path to a custom browser profile directory. Firefox: passed as "
+            "--profile <path>. Chromium: passed as --user-data-dir=<path>. "
+            "Mutually exclusive with --plain."
+        ),
+    )
 
     send = sub.add_parser("send", help="Send a one-shot prompt to an agent session")
     send.add_argument("--session", required=True, help="Session id")
@@ -323,7 +342,13 @@ def _is_firefox_like(browser_path: str) -> bool:
     return any(fam in name for fam in ("firefox", "librewolf", "waterfox", "floorp"))
 
 
-def launch_app_window(browser: str, url: str) -> subprocess.Popen[bytes]:
+def launch_app_window(
+    browser: str,
+    url: str,
+    *,
+    plain: bool = False,
+    profile_path: str | None = None,
+) -> subprocess.Popen[bytes]:
     """Spawn a standalone browser window pointed at `url` and detach.
 
     Firefox-family browsers get a bearings-owned SSB profile (via
@@ -338,15 +363,43 @@ def launch_app_window(browser: str, url: str) -> subprocess.Popen[bytes]:
     default launcher so drag-and-drop file attachments survive the
     composer path. See TODO.md 2026-04-24.
 
+    Two escape hatches override the SSB defaults:
+
+    * ``plain=True`` skips Bearings' customization entirely. Firefox
+      drops the bundled profile (regular default-profile window);
+      Chromium drops ``--app=URL`` so the page opens in a normal
+      browser window. Useful when our userChrome.css collapses
+      something the user actually wants visible, or when our profile
+      is wedged.
+    * ``profile_path=<path>`` points at a user-supplied profile dir.
+      Firefox passes it as ``--profile <path>``; Chromium maps it to
+      ``--user-data-dir=<path>``. We do **not** bootstrap our
+      ``user.js`` / ``userChrome.css`` into a user-supplied profile —
+      the escape hatch exists so the user can use their profile as-is.
+
+    The two flags are mutually exclusive — ``main()`` rejects the
+    combination at parse time.
+
     The process is detached (``start_new_session``) so ``bearings window``
     returns immediately and the window's lifetime is decoupled from
     this CLI invocation.
     """
-    if _is_firefox_like(browser):
-        profile = _ensure_firefox_ssb_profile()
-        argv = [browser, "--profile", str(profile), "--new-window", url]
+    firefox = _is_firefox_like(browser)
+    if firefox:
+        if plain:
+            argv = [browser, "--new-window", url]
+        elif profile_path is not None:
+            argv = [browser, "--profile", profile_path, "--new-window", url]
+        else:
+            profile = _ensure_firefox_ssb_profile()
+            argv = [browser, "--profile", str(profile), "--new-window", url]
     else:
-        argv = [browser, f"--app={url}"]
+        if plain:
+            argv = [browser, "--new-window", url]
+        elif profile_path is not None:
+            argv = [browser, f"--user-data-dir={profile_path}", f"--app={url}"]
+        else:
+            argv = [browser, f"--app={url}"]
     return subprocess.Popen(
         argv,
         stdout=subprocess.DEVNULL,
@@ -499,6 +552,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.command == "window":
+        if args.plain and args.profile_path is not None:
+            print(
+                "bearings window: --plain and --profile are mutually exclusive.",
+                file=sys.stderr,
+            )
+            return 2
         cfg = load_settings()
         host = args.host or cfg.server.host
         port = args.port or cfg.server.port
@@ -514,7 +573,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        launch_app_window(browser, url)
+        launch_app_window(
+            browser,
+            url,
+            plain=args.plain,
+            profile_path=args.profile_path,
+        )
         print(f"bearings window: opened {url} via {browser}", file=sys.stderr)
         return 0
 

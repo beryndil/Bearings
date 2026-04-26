@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.3] - 2026-04-26
+
+`bearings window` follow-ups (L5.8). One of the two open follow-ups
+ships; the other is deliberately retired (see TODO.md "bearings window
+default browser: Firefox" section for the rationale).
+
+### Added
+
+- **`src/bearings/cli.py`** — `bearings window --plain` and
+  `bearings window --profile <path>` escape hatches for the SSB
+  profile. `--plain` skips Bearings' customization entirely: Firefox
+  drops the bundled profile (regular default-profile window, no
+  userChrome.css collapse); Chromium drops `--app=URL` so the page
+  opens in a normal browser window. `--profile <path>` points at a
+  user-supplied profile dir — Firefox passes it as `--profile <path>`,
+  Chromium maps it to `--user-data-dir=<path>`. The two flags are
+  mutually exclusive (parse-time error, exit 2). When `--profile` is
+  used we do **not** bootstrap our `user.js` / `userChrome.css` into
+  the user's profile — the escape hatch exists so the profile is used
+  as-is. The default no-flag behavior (bearings-owned SSB profile,
+  bootstrapped lazily on first launch) is unchanged for everyone who
+  doesn't pass either flag.
+- **`tests/test_cli_window.py`** — 7 new tests covering plain-Firefox
+  (no SSB bootstrap), plain-Chromium (drops `--app`), custom Firefox
+  profile (no SSB bootstrap into user dir), custom Chromium profile
+  (`--user-data-dir=` form), the mutual-exclusion error path, and CLI
+  dispatch wiring for both flags.
+
+### Removed
+
+- **First-launch window-sizing follow-up retired without
+  implementation.** Firefox's `xulstore.json` format isn't a stable
+  contract, and seeded geometry on multi-monitor + Hyprland tiling +
+  Wayland scaling is fiddly. Firefox's session manager already
+  remembers window geometry across the user's first resize; the
+  marginal win of a "nice" first-launch size is paid for by ongoing
+  maintenance against an unstable upstream format. Adopt the original
+  TODO note's hedge ("just let the user move it once and trust
+  sessionStore") deliberately.
+
 ## [0.20.2] - 2026-04-26
 
 `LiveTodos` widget polish (L5.7 follow-ups). Two of the five v2 items

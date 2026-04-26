@@ -422,16 +422,24 @@ only the default launcher + its profile changed.
 
 **Open follow-ups (not blocking):**
 
-- [ ] Escape hatch flag for the SSB profile — `bearings window --plain`
-  (or `--profile /custom/path`) if someone wants the normal Firefox
-  window back without editing config. Not needed today; add if Dave
-  hits a case where the SSB window is in the way.
-- [ ] First-launch window sizing. Firefox remembers window geometry
-  in the profile, but the very first SSB window opens at Firefox's
-  default size — on a multi-monitor setup that can land awkwardly.
-  Could set `toolkit.startup.max_resumed_crashes` + a default width/
-  height via `browser.link.open_newwindow.override.external` or just
-  let the user move it once and trust sessionStore.
+- [x] Escape hatch flag for the SSB profile — shipped in v0.20.3
+  (L5.8). `bearings window --plain` drops Bearings' customization
+  entirely (Firefox: no `--profile`, default-profile window; Chromium:
+  no `--app=URL`, normal browser window). `bearings window --profile
+  <path>` points at a user-supplied profile dir (Firefox: passed as
+  `--profile <path>`; Chromium: mapped to `--user-data-dir=<path>`).
+  Mutually exclusive — parse-time error, exit 2. User-supplied
+  profiles are not bootstrapped with our `user.js` / `userChrome.css`
+  on purpose: the escape hatch is meant to use the profile as-is.
+- [x] First-launch window sizing — **retired, not implemented**
+  (L5.8, v0.20.3). Firefox's `xulstore.json` format isn't a stable
+  contract, and seeded geometry on multi-monitor + Hyprland tiling +
+  Wayland scaling is fiddly. Firefox's session manager already
+  remembers window geometry across the user's first resize; the
+  marginal win of a "nice" first-launch size is paid for by ongoing
+  maintenance against an unstable upstream format. Adopt the
+  original "let the user move it once and trust sessionStore" hedge
+  deliberately and close the entry.
 
 ---
 

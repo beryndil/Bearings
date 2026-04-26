@@ -171,7 +171,7 @@ def test_window_command_launches_when_browser_found(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    def fake_launch(browser: str, url: str) -> Any:
+    def fake_launch(browser: str, url: str, **kwargs: Any) -> Any:
         calls.append((browser, url))
         return None
 
@@ -193,7 +193,7 @@ def test_window_command_honors_browser_override(
     user has a non-standard binary (e.g. ungoogled-chromium in /opt)."""
     calls: list[tuple[str, str]] = []
 
-    def fake_launch(browser: str, url: str) -> Any:
+    def fake_launch(browser: str, url: str, **kwargs: Any) -> Any:
         calls.append((browser, url))
         return None
 
@@ -203,3 +203,161 @@ def test_window_command_honors_browser_override(
     rc = cli.main(["window", "--browser", "/opt/custom-chrome/chrome"])
     assert rc == 0
     assert calls[0][0] == "/opt/custom-chrome/chrome"
+
+
+def test_launch_plain_firefox_skips_ssb_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`plain=True` for Firefox drops the bundled SSB profile entirely —
+    no `--profile` flag, just `--new-window URL` against the user's
+    default profile. The bearings-owned profile dir is also NOT
+    bootstrapped (no userChrome.css/user.js gets written), since the
+    user is explicitly opting out of our customization."""
+    calls: list[list[str]] = []
+
+    class FakePopen:
+        def __init__(self, argv: list[str], **kwargs: Any) -> None:
+            calls.append(argv)
+            self.kwargs = kwargs
+
+    profile_dir = tmp_path / "firefox-ssb"
+    monkeypatch.setattr(cli, "FIREFOX_SSB_PROFILE_DIR", profile_dir)
+    monkeypatch.setattr(cli.subprocess, "Popen", FakePopen)
+    cli.launch_app_window("/usr/bin/firefox", "http://127.0.0.1:8787/", plain=True)
+    assert calls == [["/usr/bin/firefox", "--new-window", "http://127.0.0.1:8787/"]]
+    # SSB profile dir is NOT created when --plain bypasses bootstrap.
+    assert not profile_dir.exists()
+
+
+def test_launch_plain_chromium_drops_app_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`plain=True` for Chromium drops `--app=URL`, leaving a normal
+    browser window with full chrome — useful when the user wants the
+    URL bar back for debugging."""
+    calls: list[list[str]] = []
+
+    class FakePopen:
+        def __init__(self, argv: list[str], **kwargs: Any) -> None:
+            calls.append(argv)
+            self.kwargs = kwargs
+
+    monkeypatch.setattr(cli.subprocess, "Popen", FakePopen)
+    cli.launch_app_window("/usr/bin/chromium", "http://127.0.0.1:8787/", plain=True)
+    assert calls == [["/usr/bin/chromium", "--new-window", "http://127.0.0.1:8787/"]]
+
+
+def test_launch_with_custom_firefox_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`profile_path=<dir>` for Firefox passes the user-supplied path
+    as `--profile <path>` and does NOT bootstrap our SSB customization
+    into it — the escape hatch is meant to use the user's profile as-is."""
+    calls: list[list[str]] = []
+
+    class FakePopen:
+        def __init__(self, argv: list[str], **kwargs: Any) -> None:
+            calls.append(argv)
+            self.kwargs = kwargs
+
+    ssb_dir = tmp_path / "firefox-ssb"
+    user_profile = tmp_path / "my-profile"
+    user_profile.mkdir()
+    monkeypatch.setattr(cli, "FIREFOX_SSB_PROFILE_DIR", ssb_dir)
+    monkeypatch.setattr(cli.subprocess, "Popen", FakePopen)
+    cli.launch_app_window(
+        "/usr/bin/firefox",
+        "http://127.0.0.1:8787/",
+        profile_path=str(user_profile),
+    )
+    assert calls == [
+        [
+            "/usr/bin/firefox",
+            "--profile",
+            str(user_profile),
+            "--new-window",
+            "http://127.0.0.1:8787/",
+        ]
+    ]
+    # User-supplied profile is left alone — no SSB bootstrap into it.
+    assert not (user_profile / "user.js").exists()
+    assert not (user_profile / "chrome").exists()
+    # And the bearings-owned dir isn't created either.
+    assert not ssb_dir.exists()
+
+
+def test_launch_with_custom_chromium_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`profile_path=<dir>` for Chromium maps to `--user-data-dir=<path>`
+    while keeping the `--app=URL` chromeless mode. Lets a user point at
+    a Chromium profile that has the right extensions / certs / cookies."""
+    calls: list[list[str]] = []
+
+    class FakePopen:
+        def __init__(self, argv: list[str], **kwargs: Any) -> None:
+            calls.append(argv)
+            self.kwargs = kwargs
+
+    user_profile = tmp_path / "chrome-profile"
+    user_profile.mkdir()
+    monkeypatch.setattr(cli.subprocess, "Popen", FakePopen)
+    cli.launch_app_window(
+        "/usr/bin/chromium",
+        "http://127.0.0.1:8787/",
+        profile_path=str(user_profile),
+    )
+    assert calls == [
+        [
+            "/usr/bin/chromium",
+            f"--user-data-dir={user_profile}",
+            "--app=http://127.0.0.1:8787/",
+        ]
+    ]
+
+
+def test_window_command_plain_and_profile_are_mutually_exclusive(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`bearings window --plain --profile X` exits 2 with a clear error.
+    Catching this at parse time keeps `launch_app_window` from having to
+    pick a winner between two contradictory escape hatches."""
+    monkeypatch.setattr(cli, "find_browser", lambda: "/usr/bin/firefox")
+    rc = cli.main(["window", "--plain", "--profile", "/tmp/foo"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "mutually exclusive" in err
+
+
+def test_window_command_passes_plain_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI dispatch forwards `--plain` to `launch_app_window` so the
+    flag actually reaches the launcher (regression guard for a wiring bug)."""
+    captured: dict[str, Any] = {}
+
+    def fake_launch(browser: str, url: str, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(cli, "find_browser", lambda: "/usr/bin/firefox")
+    monkeypatch.setattr(cli, "launch_app_window", fake_launch)
+    rc = cli.main(["window", "--plain"])
+    assert rc == 0
+    assert captured == {"plain": True, "profile_path": None}
+
+
+def test_window_command_passes_profile_path_through(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The CLI dispatch forwards `--profile <path>` to `launch_app_window`."""
+    captured: dict[str, Any] = {}
+
+    def fake_launch(browser: str, url: str, **kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return None
+
+    monkeypatch.setattr(cli, "find_browser", lambda: "/usr/bin/firefox")
+    monkeypatch.setattr(cli, "launch_app_window", fake_launch)
+    rc = cli.main(["window", "--profile", "/home/me/.mozilla/firefox/abc123.bearings"])
+    assert rc == 0
+    assert captured == {
+        "plain": False,
+        "profile_path": "/home/me/.mozilla/firefox/abc123.bearings",
+    }
