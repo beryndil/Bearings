@@ -7,6 +7,13 @@ import pytest
 
 from bearings.agent.base_prompt import BASE_PROMPT
 from bearings.agent.prompt import assemble_prompt
+from bearings.bearings_dir.io import (
+    MANIFEST_FILE,
+    bearings_path,
+    ensure_bearings_dir,
+    write_toml_model,
+)
+from bearings.bearings_dir.schema import Manifest
 from bearings.db.store import (
     attach_tag,
     create_checklist,
@@ -399,3 +406,81 @@ async def test_text_contains_every_layer_header_verbatim(tmp_path: Path) -> None
         await conn.close()
     for layer in result.layers:
         assert f"<!-- layer: {layer.kind}[{layer.name}] -->" in result.text
+
+
+def _seed_bearings_dir(workdir: Path, *, name: str = "DemoProj") -> None:
+    """Lay down a minimal `.bearings/manifest.toml` so the
+    directory-context brief renders. Used by the directory_bearings
+    layer tests below."""
+    ensure_bearings_dir(workdir)
+    write_toml_model(
+        bearings_path(workdir) / MANIFEST_FILE,
+        Manifest(name=name, path=str(workdir), description="for tests"),
+    )
+
+
+@pytest.mark.asyncio
+async def test_directory_bearings_layer_omitted_without_manifest(
+    tmp_path: Path,
+) -> None:
+    """Working dir without a `.bearings/manifest.toml` skips the layer
+    silently — pre-onboarding directories shouldn't pay any prompt
+    real estate."""
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir=str(workdir), model="m", title="t")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    kinds = [layer.kind for layer in result.layers]
+    assert "directory_bearings" not in kinds
+
+
+@pytest.mark.asyncio
+async def test_directory_bearings_layer_injected_when_onboarded(
+    tmp_path: Path,
+) -> None:
+    """An onboarded directory gets the brief as a `directory_bearings`
+    layer; the rendered text includes the manifest's project name."""
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    _seed_bearings_dir(workdir, name="DemoProj")
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir=str(workdir), model="m", title="t")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    layer = next(
+        (layer for layer in result.layers if layer.kind == "directory_bearings"),
+        None,
+    )
+    assert layer is not None
+    assert "DemoProj" in layer.content
+
+
+@pytest.mark.asyncio
+async def test_directory_bearings_layer_precedes_session_instructions(
+    tmp_path: Path,
+) -> None:
+    """The brief must land between tag memories and session
+    instructions so per-session overrides still get the last word."""
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    _seed_bearings_dir(workdir)
+    conn = await init_db(tmp_path / "db.sqlite")
+    try:
+        sess = await create_session(conn, working_dir=str(workdir), model="m", title="t")
+        tag = await create_tag(conn, name="infra")
+        await _set_tag_memory(conn, tag["id"], "tm")
+        await attach_tag(conn, sess["id"], tag["id"])
+        await _set_session_instructions(conn, sess["id"], "si")
+        result = await assemble_prompt(conn, sess["id"])
+    finally:
+        await conn.close()
+    kinds = [layer.kind for layer in result.layers]
+    assert "directory_bearings" in kinds
+    assert kinds.index("tag_memory") < kinds.index("directory_bearings")
+    assert kinds.index("directory_bearings") < kinds.index("session")

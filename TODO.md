@@ -1328,24 +1328,36 @@ it then. Do not exercise the historical checklists as-is.
 
 `v0.6.0` foundation shipped 2026-04-22 (see CHANGELOG). Remaining:
 
-### v0.6.1 — session-layer integration
+### v0.6.1 — session-layer integration (✅ shipped 2026-04-26)
 
-- [ ] **`history.jsonl` session lifecycle writer.** Session-start
-  appends a marker (`started`, `session_id`, `branch`); session-end
-  updates with `ended`, `commits`, `summary`. If the end hook never
-  fires (crash), the start marker stays on disk so the next session
-  can see the prior one ended unclean.
-- [ ] **Prompt pipeline layer.** New `LayerKind = "directory_bearings"`
-  inserted between `tag_memory` and `session` in
+- [x] **`history.jsonl` session lifecycle writer.** Session-start
+  appends an `in_progress` marker (`started`, `session_id`,
+  `branch`); session-end appends a closing entry with `ended`,
+  `commits` (enumerated via `git rev-list <start>..HEAD`, capped at
+  64), and `status` (clean/unclean from `git status --porcelain`).
+  Append-only by design — a crash between start and end leaves the
+  in-progress marker on disk so the brief renders the prior session
+  as "likely crashed." Writer in
+  `src/bearings/bearings_dir/lifecycle.py`; runner hooks in
+  `SessionRunner.note_directory_context_start` (called from
+  `agent_ws`) + `SessionRunner.shutdown` (calls `record_session_end`
+  via `asyncio.to_thread`).
+- [x] **Prompt pipeline layer.** New `LayerKind = "directory_bearings"`
+  inserted between checklist context and `session` in
   `assemble_prompt()`. Sourced from manifest summary, state
   environment block, all pending ops, last 10 history lines. Size
-  cap ~800 tokens. Per-turn filesystem reads (same cadence as tag
-  memories today).
-- [ ] **Stale-state detection.** At session start, read
-  `state.toml.environment.last_validated`. If > 24h, re-run the
-  cheap checks (step 3). If > 7 days, re-run steps 2+3+5. If a
-  pending operation's `started` > 30 days old, flag in the brief
-  as "stale, may already be resolved."
+  cap 3200 chars (~800 tokens). Per-turn filesystem reads (same
+  cadence as tag memories). Renderer in
+  `src/bearings/bearings_dir/brief.py`. Pre-onboarding directories
+  silently skip the layer.
+- [x] **Stale-state detection.** At session start (in
+  `note_directory_context_start`), if
+  `state.toml.environment.last_validated` is > 24h old, fire-and-
+  forget `check.run_check` via `asyncio.create_task` →
+  `asyncio.to_thread`. Brief renderer flags any pending op whose
+  `started` is > 30 days old with a `STALE` prefix. v0.6.1 collapses
+  the spec's 24h-cheap / 7d-full distinction into a single 24h
+  trigger; splitting the thresholds is v0.6.3 polish.
 
 ### v0.6.2 — automatic onboarding
 

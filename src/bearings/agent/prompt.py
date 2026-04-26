@@ -51,6 +51,7 @@ LayerKind = Literal[
     "tag_memory",
     "checklist_context",
     "checklist_overview",
+    "directory_bearings",
     "session",
 ]
 
@@ -278,7 +279,8 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
     layers: list[Layer] = [Layer(name="base", kind="base", content=BASE_PROMPT)]
 
     async with conn.execute(
-        "SELECT title, description, session_instructions, checklist_item_id, kind "
+        "SELECT title, description, session_instructions, checklist_item_id, kind, "
+        "working_dir "
         "FROM sessions WHERE id = ?",
         (session_id,),
     ) as cursor:
@@ -291,6 +293,7 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
     session_instructions = session_row["session_instructions"]
     checklist_item_id = session_row["checklist_item_id"]
     kind = session_row["kind"] if "kind" in session_row.keys() else "chat"
+    working_dir = session_row["working_dir"] if "working_dir" in session_row.keys() else None
 
     # Identity layer first — the agent needs the common reference
     # (title + id) before any task-specific layer arrives so it can
@@ -339,7 +342,35 @@ async def assemble_prompt(conn: aiosqlite.Connection, session_id: str) -> Assemb
         if overview_layer is not None:
             layers.append(overview_layer)
 
+    # Directory-context brief (v0.6.1). Reads `<working_dir>/.bearings/`
+    # on every turn; the cadence matches tag memories so an out-of-band
+    # `bearings pending add` lands on the next prompt without a runner
+    # respawn. Returns None when the directory hasn't been onboarded —
+    # we silently skip the layer rather than emitting an empty section.
+    if working_dir:
+        brief = _format_directory_brief_safe(working_dir)
+        if brief:
+            layers.append(Layer(name="brief", kind="directory_bearings", content=brief))
+
     if session_instructions:
         layers.append(Layer(name="session", kind="session", content=session_instructions))
 
     return _finalize(layers)
+
+
+def _format_directory_brief_safe(working_dir: str) -> str | None:
+    """Wrap `format_directory_brief` so a torn `.bearings/` directory
+    can never break prompt assembly. Pure-FS reads do raise on
+    permission errors, race conditions, or unicode-broken paths; the
+    brief is advisory and any failure should fall back to "no layer
+    this turn" rather than 500-ing the runner.
+
+    Local import to keep the bearings_dir package out of the
+    prompt-assembly hot path on sessions whose `working_dir` doesn't
+    exist (the import is cheap, but explicit > implicit)."""
+    from bearings.bearings_dir.brief import format_directory_brief
+
+    try:
+        return format_directory_brief(working_dir)
+    except OSError:
+        return None

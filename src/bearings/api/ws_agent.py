@@ -273,6 +273,11 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
     since_seq = _parse_since_seq(websocket)
     registry = app.state.runners
     runner = await registry.get_or_create(session_id, factory=lambda sid: _build_runner(app, sid))
+    # Directory Context System (v0.6.1): stamp the `history.jsonl`
+    # start marker and kick off stale-state revalidation. Idempotent —
+    # safe to call on every reconnect; the runner gates internally so
+    # the start marker lands exactly once per runner lifetime.
+    await runner.note_directory_context_start()
     queue, replay = await runner.subscribe(since_seq)
 
     metrics.ws_active_connections.inc()

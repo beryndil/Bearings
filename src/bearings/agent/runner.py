@@ -56,6 +56,7 @@ from bearings.agent.runner_types import (
 from bearings.agent.session import AgentSession
 from bearings.agent.sessions_broker import SessionsBroker, publish_runner_state
 from bearings.agent.tool_output_coalescer import ToolOutputCoalescer
+from bearings.bearings_dir import lifecycle as dir_lifecycle
 from bearings.config import ArtifactsCfg
 from bearings.db import store
 
@@ -147,6 +148,20 @@ class SessionRunner:
         # it off via `subscribe()` immediately, so the initial window
         # is effectively zero.
         self._quiet_since: float | None = time.monotonic()
+        # Directory Context System (v0.6.1) lifecycle handle. Captured
+        # by `note_directory_context_start` on the first WS connection
+        # and consumed by `shutdown` to append the matching end-marker
+        # to `<working_dir>/.bearings/history.jsonl`. Stays `None` for
+        # directories that haven't been onboarded yet — the start hook
+        # no-ops there and the end hook checks for `None`.
+        self._dir_handle: dir_lifecycle.SessionLifecycleHandle | None = None
+        # Idempotency guard: `note_directory_context_start` is called on
+        # every WS connection (the runner outlives reconnects), but the
+        # history-jsonl start marker should land exactly once per runner
+        # lifetime. True after the first call regardless of whether the
+        # directory was onboarded — re-calling on a non-onboarded
+        # directory shouldn't pay the FS-stat tax on every reconnect.
+        self._dir_start_attempted: bool = False
 
     # ---- backwards-compat ticker accessors ------------------------
     #
@@ -203,6 +218,46 @@ class SessionRunner:
                 await self._worker
             except asyncio.CancelledError:
                 pass
+        # Directory Context System: append the matching end-marker to
+        # `history.jsonl`. Synchronous git lookups + JSONL append, so
+        # we offload to a thread to keep the event loop honest under
+        # `pytest-asyncio` and the production loop alike. No-op when
+        # `_dir_handle` is None.
+        handle = self._dir_handle
+        self._dir_handle = None
+        if handle is not None:
+            await asyncio.to_thread(dir_lifecycle.record_session_end, handle)
+
+    async def note_directory_context_start(self) -> None:
+        """Idempotent one-shot. Stamps the `history.jsonl` start
+        marker and kicks off stale-state revalidation in the
+        background. Safe to call on every WS attach — the worst case
+        is a single FS-stat for a non-onboarded directory.
+
+        Called by the WS handler after `registry.get_or_create` so the
+        FS work runs at most once per runner-lifetime, not once per
+        connection. Async-safe: both the start-marker write and the
+        revalidation pass through `asyncio.to_thread` so the event
+        loop never blocks on git or `uv sync`."""
+        if self._dir_start_attempted:
+            return
+        self._dir_start_attempted = True
+        working_dir = self.agent.working_dir
+        if not working_dir:
+            return
+        # History start marker: cheap, but still synchronous I/O —
+        # offload so a slow disk doesn't stall the WS handler.
+        self._dir_handle = await asyncio.to_thread(
+            dir_lifecycle.record_session_start, working_dir, self.session_id
+        )
+        # Stale-state revalidation: fire-and-forget. Wraps the
+        # subprocess-heavy `run_check` in a task so the user starts
+        # typing immediately. The brief renders from whatever's on
+        # disk; the revalidation result lands on the *next* turn.
+        asyncio.create_task(
+            asyncio.to_thread(dir_lifecycle.maybe_revalidate, working_dir),
+            name=f"dir-revalidate:{self.session_id}",
+        )
 
     # ---- public API ------------------------------------------------
 
