@@ -24,8 +24,8 @@ function seedPreferences(over: Record<string, unknown>): void {
   Object.assign(row, over);
 }
 
-/** Stub `fetch` for the PATCH the modal fires on Save. Returns the
- * spy so tests can assert the body that landed on the server. */
+/** Stub `fetch` for the PATCH the dialog fires on autosave. Returns
+ * the spy so tests can assert the body that landed on the server. */
 function stubPatchOk(response: Record<string, unknown>): ReturnType<typeof vi.fn> {
   const stub = vi.fn(async () => ({
     ok: true,
@@ -48,62 +48,40 @@ beforeEach(() => {
 });
 
 describe('Settings', () => {
-  it('pre-fills fields from current preferences when opened', () => {
-    seedPreferences({
-      display_name: 'Dave',
-      default_model: 'claude-opus-4-7',
-      default_working_dir: '/home/dave'
+  it('opens onto the Profile section by default', () => {
+    seedPreferences({ display_name: 'Dave' });
+    const { getByLabelText, getByTestId } = render(Settings, {
+      props: { open: true }
     });
-    prefs.save({ authToken: 'existing-token' });
-    const { getByLabelText } = render(Settings, { props: { open: true } });
+    // Profile section is the lowest-weight entry in the registry, so
+    // it's the active pane on open.
+    expect(getByTestId('settings-section-profile')).toBeInTheDocument();
     expect(getByLabelText('Display name')).toHaveValue('Dave');
-    expect(getByLabelText('Default model')).toHaveValue('claude-opus-4-7');
-    expect(getByLabelText('Default working dir')).toHaveValue('/home/dave');
-    expect(getByLabelText('Auth token')).toHaveValue('existing-token');
   });
 
-  it('Save fires PATCH with edited preference values and writes the auth token', async () => {
+  it('autosaves Display name after the debounce window', async () => {
     const stub = stubPatchOk({
       display_name: 'Dave',
       theme: null,
-      default_model: 'claude-sonnet-4-6',
-      default_working_dir: '/tmp/work',
+      default_model: null,
+      default_working_dir: null,
       notify_on_complete: false,
       updated_at: '2026-04-25T00:00:01+00:00'
     });
-    const { getByLabelText, getByRole } = render(Settings, {
-      props: { open: true }
-    });
+    const { getByLabelText } = render(Settings, { props: { open: true } });
+
     await fireEvent.input(getByLabelText('Display name'), {
       target: { value: 'Dave' }
     });
-    await fireEvent.input(getByLabelText('Default model'), {
-      target: { value: 'claude-sonnet-4-6' }
-    });
-    await fireEvent.input(getByLabelText('Default working dir'), {
-      target: { value: '/tmp/work' }
-    });
-    await fireEvent.input(getByLabelText('Auth token'), {
-      target: { value: 'fresh-token' }
-    });
-    await fireEvent.click(getByRole('button', { name: 'Save' }));
 
+    // 400ms debounce in SettingsTextField — `waitFor` polls until
+    // the spy has fired or the default 1s timeout trips.
     await waitFor(() => expect(stub).toHaveBeenCalledTimes(1));
     const [, init] = stub.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('PATCH');
     const body = JSON.parse(init.body as string);
     expect(body.display_name).toBe('Dave');
-    expect(body.default_model).toBe('claude-sonnet-4-6');
-    expect(body.default_working_dir).toBe('/tmp/work');
-    expect(body.notify_on_complete).toBe(false);
-
-    // Auth token persisted via the local prefs store. `onSave` runs
-    // its `prefs.save` after `await preferences.update`; wait for the
-    // microtask drain so the assertion sees the post-await state.
-    await waitFor(() => expect(prefs.authToken).toBe('fresh-token'));
-    // Server-backed fields landed via the response.
-    expect(preferences.displayName).toBe('Dave');
-    expect(preferences.defaultModel).toBe('claude-sonnet-4-6');
+    await waitFor(() => expect(preferences.displayName).toBe('Dave'));
   });
 
   it('blank Display name lands on the wire as null', async () => {
@@ -116,13 +94,11 @@ describe('Settings', () => {
       notify_on_complete: false,
       updated_at: '2026-04-25T00:00:02+00:00'
     });
-    const { getByLabelText, getByRole } = render(Settings, {
-      props: { open: true }
-    });
+    const { getByLabelText } = render(Settings, { props: { open: true } });
+
     await fireEvent.input(getByLabelText('Display name'), {
       target: { value: '   ' }
     });
-    await fireEvent.click(getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(stub).toHaveBeenCalledTimes(1));
     const [, init] = stub.mock.calls[0] as [string, RequestInit];
@@ -130,15 +106,36 @@ describe('Settings', () => {
     expect(body.display_name).toBeNull();
   });
 
-  it('Cancel does not fire a PATCH', async () => {
-    const stub = stubPatchOk({});
-    const { getByLabelText, getByRole } = render(Settings, {
+  it('navigating to Defaults shows the model + working dir fields seeded from the store', async () => {
+    seedPreferences({
+      default_model: 'claude-opus-4-7',
+      default_working_dir: '/home/dave'
+    });
+    const { getByLabelText, getByTestId } = render(Settings, {
       props: { open: true }
     });
-    await fireEvent.input(getByLabelText('Default model'), {
-      target: { value: 'edited' }
+
+    await fireEvent.click(getByTestId('settings-rail-defaults'));
+
+    expect(getByTestId('settings-section-defaults')).toBeInTheDocument();
+    expect(getByLabelText('Default model')).toHaveValue('claude-opus-4-7');
+    expect(getByLabelText('Default working directory')).toHaveValue('/home/dave');
+  });
+
+  it('Authentication section writes the token to localStorage and not /api/preferences', async () => {
+    const stub = stubPatchOk({});
+    const { getByLabelText, getByTestId } = render(Settings, {
+      props: { open: true }
     });
-    await fireEvent.click(getByRole('button', { name: 'Cancel' }));
+
+    await fireEvent.click(getByTestId('settings-rail-auth'));
+
+    await fireEvent.input(getByLabelText('Auth token'), {
+      target: { value: 'fresh-token' }
+    });
+
+    // Wait past the debounce so the assertion isn't racing the timer.
+    await waitFor(() => expect(prefs.authToken).toBe('fresh-token'));
     expect(stub).not.toHaveBeenCalled();
   });
 });

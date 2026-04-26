@@ -121,6 +121,20 @@ function isSeedState(prefs: api.Preferences): boolean {
   return allUnset && seedTimestamp;
 }
 
+/** Aggregate save state surfaced to the dialog footer. Mirrors the
+ * per-row indicator carried by primitives, but at one level higher:
+ * "did anything fail to save in the last write across the whole
+ * dialog." `idle` after the most recent success has faded; `saving`
+ * while a PATCH is in flight; `saved` for a brief window after
+ * success; `error` until the next save attempt. */
+export type PreferencesSaveStatus =
+  | { kind: 'idle' }
+  | { kind: 'saving' }
+  | { kind: 'saved' }
+  | { kind: 'error'; error: string };
+
+const SAVED_FADE_MS = 2000;
+
 class PreferencesStore {
   /** The full row, mirroring the server shape. Components reactively
    * derive the fields they need (`displayName`, `defaultModel`, etc.)
@@ -129,6 +143,11 @@ class PreferencesStore {
    * changes. */
   private row = $state<CachedPrefs>(readCache() ?? EMPTY_PREFS);
   loaded = $state(false);
+  /** Most-recent save state, consumed by the dialog footer line.
+   * Per-row primitives carry their own state; this one is the
+   * "anything failing right now?" cross-row signal. */
+  lastSaveStatus = $state<PreferencesSaveStatus>({ kind: 'idle' });
+  private savedFadeTimer: ReturnType<typeof setTimeout> | null = null;
 
   // --- public getters (component-friendly accessors) ----------------
   // Using getters rather than `$derived` so consumers can read them
@@ -234,15 +253,38 @@ class PreferencesStore {
   }
 
   /** PATCH the server with a partial body. Optimistic: applies the
-   * response on success, leaves state unchanged on failure (the call
-   * site rethrows so a Save handler can keep the modal open + show an
-   * error). */
+   * response on success, leaves state unchanged on failure. The
+   * promise rejects with the underlying error so per-row primitives
+   * surface their own error pill *and* the dialog footer reflects
+   * the global state via `lastSaveStatus`. */
   async update(
     patch: api.PreferencesPatch,
     fetchImpl: typeof fetch = fetch
   ): Promise<void> {
-    const fresh = await api.patchPreferences(patch, fetchImpl);
-    this.apply(fresh);
+    if (this.savedFadeTimer) {
+      clearTimeout(this.savedFadeTimer);
+      this.savedFadeTimer = null;
+    }
+    this.lastSaveStatus = { kind: 'saving' };
+    try {
+      const fresh = await api.patchPreferences(patch, fetchImpl);
+      this.apply(fresh);
+      this.lastSaveStatus = { kind: 'saved' };
+      this.savedFadeTimer = setTimeout(() => {
+        // Only fade if no new save started while we were waiting —
+        // a saving/error transition would have replaced `saved` and
+        // the timer is moot.
+        if (this.lastSaveStatus.kind === 'saved') {
+          this.lastSaveStatus = { kind: 'idle' };
+        }
+      }, SAVED_FADE_MS);
+    } catch (err) {
+      this.lastSaveStatus = {
+        kind: 'error',
+        error: err instanceof Error ? err.message : String(err)
+      };
+      throw err;
+    }
   }
 
   /** Hydrate the server from the three legacy localStorage keys. Only
