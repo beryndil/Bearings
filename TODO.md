@@ -2449,24 +2449,18 @@ titles (`[I5]`, `[DN10]`, `[S10]`, etc.) where the severity
 reflects the item's real priority and Dave is the only judge of
 which ones are actually Low vs higher.
 
-- [ ] Review the 33 post-first-pass Low-tagged sessions and decide
-  which deserve escalation. Query to enumerate:
-  ```sql
-  SELECT s.id, s.title, s.created_at FROM sessions s
-  JOIN session_tags st ON st.session_id = s.id
-  JOIN tags t ON t.id = st.tag_id
-  WHERE t.name = 'Low' AND t.tag_group = 'severity'
-    AND s.created_at > '2026-04-22 15:14'
-  ORDER BY s.created_at;
-  ```
-  Current distribution (2026-04-22 evening): Blocker=17,
-  Critical=36, Medium=64, Low=40, QoL=25 (total 182). The sidebar
-  severity filter + color picker shipped in v0.7.2/v0.7.3 make
-  this a click-through pass rather than a SQL exercise. No
-  automated classification attempted: title signals (e.g.
-  "security audit: cleanup (low priority)") are usually
-  trustworthy but project-scoped bracketed items need Dave's
-  judgment on their actual priority.
+- [x] **Severity backfill — done 2026-04-26 (L5.11).** By the time
+  the second pass ran, the cohort had grown from 33 to 94 Low-
+  tagged sessions (post-cutoff 2026-04-22 15:14). Reclassified 42
+  with the title+plug heuristic (Medium for real bugs / file-cap
+  violations / launch-blockers, QoL for docs/cosmetic/accounting,
+  Low retained for monitor-only / DONE / deferred / no-signal). 52
+  remained Low — correct default. Final distribution:
+  Blocker=21, Critical=45, Medium=368, Low=58, QoL=67. (Medium
+  ballooned because the create-default flipped from Low to Medium
+  somewhere between 2026-04-22 and 2026-04-26 — that's the cohort
+  inflating, not this pass over-escalating.) Script:
+  `/tmp/severity_backfill.py` was a one-shot; not committed.
 
 ## Live TodoWrite widget (deferred from 2026-04-22)
 
