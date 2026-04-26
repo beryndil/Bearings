@@ -142,17 +142,36 @@ async def list_running_sessions(request: Request) -> list[str]:
 @router.get("/awaiting", response_model=list[str])
 async def list_awaiting_sessions(request: Request) -> list[str]:
     """Session ids whose runner is currently parked on a `can_use_tool`
-    decision (tool-use permission OR AskUserQuestion). Drives the
+    decision (tool-use permission OR AskUserQuestion) OR whose linked
+    checklist item is blocked-on-Dave (migration 0033). Drives the
     sidebar's red-flashing "look at this now" indicator as the poll
     fallback when the `/ws/sessions` broadcast socket is down.
 
+    Two sources, unioned:
+
+    - In-memory: runners parked on a permission decision. Live signal,
+      changes turn-by-turn.
+    - DB-backed: paired chat sessions whose checklist item carries
+      `blocked_at IS NOT NULL` and is still open. Persists across
+      restarts; clears when Dave acts and the agent emits
+      `CHECKLIST_ITEM_DONE` (the cascade clears `blocked_at` in the
+      same write that sets `checked_at`).
+
     A session can be reported by both `/running` and `/awaiting` — the
-    intersection is exactly the red-flashing set; `/running \\ /awaiting`
-    is orange-flashing. Cheap — in-memory registry walk, no DB hit."""
+    intersection is exactly the red-flashing set. The DB query is
+    cheap (one indexed scan over open sessions joined to blocked items)
+    and runs at the existing 3 s sidebar poll cadence. Folding both
+    into a single endpoint keeps the existing red-flag axis as the one
+    source of truth for "Dave needs to look at this," per the v1
+    design call: no new color."""
+    awaiting: set[str] = set()
     runners = getattr(request.app.state, "runners", None)
-    if runners is None:
-        return []
-    return sorted(runners.awaiting_user_ids())
+    if runners is not None:
+        awaiting.update(runners.awaiting_user_ids())
+    db = getattr(request.app.state, "db", None)
+    if db is not None:
+        awaiting.update(await store.list_blocked_paired_session_ids(db))
+    return sorted(awaiting)
 
 
 def _parse_tag_csv(raw: str | None, param_name: str) -> list[int] | None:

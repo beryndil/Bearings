@@ -573,6 +573,54 @@ def test_running_endpoint_empty_when_no_runners(client: TestClient) -> None:
     assert awaiting.json() == []
 
 
+def test_awaiting_endpoint_includes_blocked_paired_sessions(
+    client: TestClient,
+) -> None:
+    """Per migration 0033 + the v1 design call: blocked checklist
+    items surface their paired sessions through the existing red
+    awaiting axis (no new color). The endpoint must union the
+    in-memory parked-runner set with a DB query for sessions whose
+    linked checklist item has `blocked_at` non-null."""
+    import asyncio
+
+    from bearings.db.store import (
+        create_checklist,
+        create_item,
+        create_session,
+        set_item_blocked,
+        set_item_chat_session,
+    )
+
+    db = client.app.state.db
+
+    async def seed() -> str:
+        # Build a minimal checklist with one blocked item paired to a
+        # chat session. The pairing is what makes the chat session
+        # surface in the awaiting set.
+        checklist_session = await create_session(
+            db, working_dir="/tmp", model="m", kind="checklist"
+        )
+        await create_checklist(db, checklist_session["id"])
+        item = await create_item(db, checklist_session["id"], label="blocked-item")
+        chat_session = await create_session(
+            db, working_dir="/tmp", model="m", kind="chat",
+            checklist_item_id=item["id"],
+        )
+        await set_item_chat_session(db, item["id"], chat_session["id"])
+        await set_item_blocked(
+            db, item["id"], category="payment", reason="need card on file"
+        )
+        return str(chat_session["id"])
+
+    chat_session_id = asyncio.get_event_loop().run_until_complete(seed())
+    awaiting = client.get("/api/sessions/awaiting")
+    assert awaiting.status_code == 200
+    body = awaiting.json()
+    assert chat_session_id in body, (
+        "blocked items must surface their paired sessions in the awaiting set"
+    )
+
+
 def test_running_endpoint_reports_session_with_live_turn(
     client: TestClient, mock_agent_long_stream: None
 ) -> None:

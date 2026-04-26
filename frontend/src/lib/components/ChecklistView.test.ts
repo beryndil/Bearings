@@ -537,4 +537,78 @@ describe('ChecklistView Slice 4.1', () => {
     ) as HTMLInputElement;
     expect(childBox.disabled).toBe(false);
   });
+
+  it('renders the blocked flag on items with blocked_at set', async () => {
+    // Migration 0033 tri-state: blocked items render a red flag
+    // affordance with the category + reason in the tooltip. Reuses
+    // the existing red awaiting axis — no new color — per the v1
+    // design call.
+    const checklist = {
+      session_id: 'sess-cl',
+      notes: null,
+      created_at: '2026-04-26T00:00:00+00:00',
+      updated_at: '2026-04-26T00:00:00+00:00',
+      items: [
+        {
+          id: 11,
+          checklist_id: 'sess-cl',
+          parent_item_id: null,
+          label: 'Pay invoice',
+          notes: null,
+          checked_at: null,
+          sort_order: 0,
+          created_at: '2026-04-26T00:00:00+00:00',
+          updated_at: '2026-04-26T00:00:00+00:00',
+          chat_session_id: 'paired-chat-blocked',
+          blocked_at: '2026-04-26T00:05:00+00:00',
+          blocked_reason_category: 'payment',
+          blocked_reason_text:
+            "Need your card on file.\n\nTRIED:\n- looked for stored payment method"
+        }
+      ]
+    };
+    queueResponses([{ ok: true, body: checklist }]);
+    const { getByTestId } = render(ChecklistView);
+    const flag = await waitFor(() => getByTestId('blocked-flag'));
+    expect(flag).not.toBeNull();
+    // Tooltip carries category + reason for the at-a-glance read.
+    const title = flag.getAttribute('title') ?? '';
+    expect(title).toContain('payment');
+    expect(title).toContain('Need your card');
+    expect(title).toContain('TRIED:');
+  });
+
+  it('does not render the blocked flag when checked_at is also set', async () => {
+    // Defensive — if a row somehow ends up with both blocked_at AND
+    // checked_at non-null (e.g. stale frontend cache mid-resolution),
+    // treat it as done. The DB-layer cascade clears blocked_at on
+    // check, but the UI shouldn't paint a contradictory state.
+    const checklist = {
+      session_id: 'sess-cl',
+      notes: null,
+      created_at: '2026-04-26T00:00:00+00:00',
+      updated_at: '2026-04-26T00:00:00+00:00',
+      items: [
+        {
+          id: 12,
+          checklist_id: 'sess-cl',
+          parent_item_id: null,
+          label: 'Resolved item',
+          notes: null,
+          checked_at: '2026-04-26T00:10:00+00:00',
+          sort_order: 0,
+          created_at: '2026-04-26T00:00:00+00:00',
+          updated_at: '2026-04-26T00:10:00+00:00',
+          chat_session_id: null,
+          blocked_at: '2026-04-26T00:05:00+00:00',
+          blocked_reason_category: 'payment',
+          blocked_reason_text: 'stale'
+        }
+      ]
+    };
+    queueResponses([{ ok: true, body: checklist }]);
+    const { queryByTestId } = render(ChecklistView);
+    await waitFor(() => expect(checklists.current?.items.length).toBe(1));
+    expect(queryByTestId('blocked-flag')).toBeNull();
+  });
 });

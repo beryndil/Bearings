@@ -27,6 +27,21 @@ export type ChecklistItem = {
    * the per-item button between "Work on this" (spawn) and
    * "Continue working" (navigate). */
   chat_session_id: string | null;
+  /** Migration 0033 tri-state. An item is open (both null), done
+   * (`checked_at` non-null), or blocked-on-Dave (`blocked_at`
+   * non-null, `checked_at` null). Mutually exclusive at the
+   * application layer. The autonomous driver stamps these via the
+   * `CHECKLIST_ITEM_BLOCKED` sentinel for items genuinely outside
+   * its reach (pay a bill, plug in hardware, supply a 2FA code).
+   * The paired session stays open for Dave to act on; closing it
+   * (agent emits done) clears `blocked_at` in the same write. */
+  blocked_at: string | null;
+  /** One of `physical_action`, `payment`, `external_credential`,
+   * `identity_or_2fa`, `human_judgment`. Null when not blocked. */
+  blocked_reason_category: string | null;
+  /** Free-form reason text plus the agent's `TRIED:` log of
+   * attempts. Rendered in the tooltip on the blocked-item flag. */
+  blocked_reason_text: string | null;
 };
 
 export type Checklist = {

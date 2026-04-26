@@ -592,6 +592,38 @@ async def list_item_sessions(
         return [dict(row) async for row in cursor]
 
 
+async def list_blocked_paired_session_ids(
+    conn: aiosqlite.Connection,
+) -> list[str]:
+    """Return every still-open paired chat session id whose linked
+    checklist item is currently blocked-on-Dave (`blocked_at` non-null,
+    `checked_at` null). Used by `/api/sessions/awaiting` to fold blocked
+    items into the existing red-flag axis without inventing a new
+    indicator color (per the v1 design call: "Red means blocked, we
+    don't need another color").
+
+    Filters on `closed_at IS NULL` so a session that was manually
+    closed by Dave drops out of the awaiting set even if the
+    checklist row's `blocked_at` stamp survives. The cascade in
+    `toggle_item` clears `blocked_at` whenever an item flips to
+    checked, so the natural happy path keeps the two columns in
+    sync; the `closed_at` filter is the safety net for any edge
+    case where they desync.
+
+    Returns ids in (created_at ASC, id ASC) order — same order
+    `list_item_sessions` uses — so a UI that shows multiple awaiting
+    sessions sees stable, age-sorted output across polls."""
+    async with conn.execute(
+        "SELECT s.id FROM sessions s "
+        "INNER JOIN checklist_items ci ON ci.id = s.checklist_item_id "
+        "WHERE ci.blocked_at IS NOT NULL "
+        "  AND ci.checked_at IS NULL "
+        "  AND s.closed_at IS NULL "
+        "ORDER BY s.created_at ASC, s.id ASC",
+    ) as cursor:
+        return [row["id"] async for row in cursor]
+
+
 async def next_unchecked_top_level_item(
     conn: aiosqlite.Connection,
     checklist_id: str,

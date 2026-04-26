@@ -506,6 +506,7 @@
 
       {#snippet itemRow(item: ChecklistItem)}
         {@const checked = item.checked_at !== null}
+        {@const blocked = item.blocked_at !== null && item.checked_at === null}
         {@const parentOf = hasChildren(item.id)}
         {@const pairedChat = item.chat_session_id
           ? (sessions.list.find((s) => s.id === item.chat_session_id) ?? null)
@@ -549,6 +550,26 @@
                 title="Click to edit"
               >
                 {item.label}
+              </button>
+            {/if}
+            {#if blocked}
+              <!-- Blocked-on-Dave flag (migration 0033). Red flag
+                   icon next to the label, tooltip carries the
+                   category + the agent's reason + TRIED: log so
+                   Dave can see at a glance why the item stalled and
+                   what was attempted. Click jumps to the still-open
+                   paired session where Dave can type to re-engage
+                   the agent. Reuses the existing red awaiting axis —
+                   no new color per the design discussion. -->
+              <button
+                type="button"
+                class="text-xs text-rose-400 hover:text-rose-300"
+                data-testid="blocked-flag"
+                aria-label={`Blocked: ${item.blocked_reason_category ?? 'unknown'}`}
+                title={`Blocked (${item.blocked_reason_category ?? 'unknown'})\n\n${item.blocked_reason_text ?? ''}`}
+                onclick={() => pairedChat && handleOpenPairedChat(pairedChat.id)}
+              >
+                🚩
               </button>
             {/if}
             {#if !parentOf && pairedChat}
