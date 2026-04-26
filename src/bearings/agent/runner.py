@@ -2,36 +2,28 @@
 WebSocket connection.
 
 Why: in v0.2.x the agent loop lived inside the WS handler, so closing
-the socket (navigate-away, session switch, tab close) killed the
-in-flight stream. Sessions are meant to be independent — you should be
-able to kick off work in one and walk away. The runner owns the
-`AgentSession`, the streaming task, and a ring buffer of recent events.
-WebSocket handlers become thin subscribers that can come and go without
-disturbing execution. Completed messages/tool calls are already
-persisted to SQLite (see `turn_executor.execute_turn`), so "closed the
-tab, came back an hour later" also works across server restarts.
+the socket killed the in-flight stream. Sessions are meant to be
+independent — kick off work in one and walk away. The runner owns the
+`AgentSession`, the streaming task, and a ring buffer of recent events;
+WS handlers become thin subscribers that can come and go without
+disturbing execution. Completed messages/tool calls are persisted to
+SQLite by `turn_executor.execute_turn`, so reconnecting after a server
+restart also works.
 
-Lifecycle:
-- First WS connect for a session constructs a runner and registers it.
-- Runner lives until the app shuts down or the session is deleted.
-- Subscribers (WS connections) attach via `subscribe(since_seq)`; any
-  buffered events with seq > since_seq are replayed so a reconnecting
-  client catches up.
-- A single worker task drains a prompt queue; prompts submitted during
-  an in-flight turn wait their turn.
+Lifecycle: first WS connect constructs and registers a runner. It lives
+until app shutdown or session deletion. Subscribers attach via
+`subscribe(since_seq)` and replay any buffered events with seq >
+since_seq. A single worker task drains the prompt queue.
 
-Nothing in here depends on FastAPI or WebSockets — that's deliberate so
+Nothing here depends on FastAPI or WebSockets — that's deliberate so
 the runner is trivially testable.
 
-Module layout: this file owns the `SessionRunner` class — public API,
-subscriber set, ring buffer, approval forwarding, reaper hook. Worker-
-loop and per-turn execution live in `turn_executor.py`. Wire types
-(_Envelope, _Replay, _Submit, _Shutdown) and tunables (RING_MAX,
-SUBSCRIBER_QUEUE_MAX, TOOL_PROGRESS_INTERVAL_S) live in `runner_types`
-and are re-exported here for backwards compatibility (tests + ws_agent
-import them from this module). Ticker management is delegated to
-`progress_ticker.ProgressTickerManager`. Assistant-turn persistence is
-delegated to `persist.persist_assistant_turn`.
+Module layout: this file owns `SessionRunner`. Worker loop and per-turn
+execution live in `turn_executor.py`; wire types/tunables in
+`runner_types.py`; subscribe/unsubscribe/should_reap in
+`runner_subscribers.py`; tickers in `progress_ticker.py`; assistant-turn
+persistence in `persist.py`. The `runner_types` symbols and
+`_persist_assistant_turn` are re-exported here for backwards compat.
 """
 
 from __future__ import annotations
@@ -45,6 +37,7 @@ from typing import Any
 import aiosqlite
 from claude_agent_sdk import ClaudeSDKError
 
+from bearings.agent import runner_subscribers
 from bearings.agent.approval_broker import ApprovalBroker
 from bearings.agent.event_fanout import emit_ephemeral, emit_event
 from bearings.agent.events import AgentEvent
@@ -70,10 +63,6 @@ log = logging.getLogger(__name__)
 
 # Re-exported for backwards compatibility — tests, `ws_agent`, and
 # downstream callers import these names from `bearings.agent.runner`.
-# Keeping the symbols rebound at module level (rather than only via
-# `from ... import ...`) makes them visible to both static type
-# checkers and runtime `getattr` callers (sessions broker, monkey-
-# patched test fixtures).
 __all__ = [
     "RING_MAX",
     "SUBSCRIBER_QUEUE_MAX",
@@ -86,18 +75,6 @@ __all__ = [
     "_Shutdown",
     "_Submit",
 ]
-
-
-def _get_progress_interval() -> float:
-    """Module-level lookup of `TOOL_PROGRESS_INTERVAL_S`.
-
-    Used as the `interval_getter` callable for every runner's progress
-    manager. Reading via this function (rather than capturing the
-    constant at construction) keeps the test contract:
-    `monkeypatch.setattr(runner_mod, "TOOL_PROGRESS_INTERVAL_S", X)`
-    is observed on the very next sleep, because every loop iteration
-    re-reads the module global from inside this function."""
-    return TOOL_PROGRESS_INTERVAL_S
 
 
 class SessionRunner:
@@ -117,16 +94,10 @@ class SessionRunner:
         self.session_id = session_id
         self.agent = agent
         self.db = db
-        # Server-wide sessions pubsub. `None` is valid — tests that
-        # don't care about the broadcast channel (most runner tests)
-        # pass it through. The publish helpers no-op on None so the
-        # turn loop stays oblivious.
+        # Sessions pubsub (None ok — publish helpers no-op on None).
         self._sessions_broker = sessions_broker
-        # Phase-1 File Display: settings sub-block consumed by the
-        # auto-register hook in `agent/_artifacts.py`. `None` disables
-        # auto-register cleanly (every test that doesn't care about
-        # artifacts skips the wiring), keeping the new feature dormant
-        # in any harness that constructs a runner without app settings.
+        # Phase-1 File Display settings; consumed by `_artifacts.py`'s
+        # auto-register hook. None disables auto-register cleanly.
         self._artifacts_cfg = artifacts_cfg
         self._prompts: asyncio.Queue[str | _Submit | _Replay | _Shutdown] = asyncio.Queue()
         self._worker: asyncio.Task[None] | None = None
@@ -134,67 +105,47 @@ class SessionRunner:
         self._event_log: deque[_Envelope] = deque(maxlen=RING_MAX)
         self._next_seq = 1
         self._status: RunnerStatus = "idle"
-        # True while a turn is mid-flight and the user asked to stop.
-        # The stream loop checks this between events and calls
-        # `agent.interrupt()` to cancel any in-flight tool call. A turn
-        # clears it on entry so stale stop flags don't short-circuit
-        # the next prompt.
+        # Stream loop checks between events and calls `agent.interrupt()`
+        # to cancel an in-flight tool call. Cleared on turn entry so a
+        # stale flag can't short-circuit the next prompt.
         self._stop_requested = False
-        # Tool-use approval state lives in its own small helper so this
-        # class stays focused on the stream / prompt queue. The broker
-        # owns the pending-Futures dict and the `ApprovalRequest` /
-        # `ApprovalResolved` event emission; the runner just forwards
-        # `resolve_approval` from the WS handler and tells it to deny
-        # everything on stop / shutdown.
-        #
-        # The `mode_getter` closure reads the agent's live
-        # `permission_mode` so the broker can fast-path auto-allow when
-        # the mode is `bypassPermissions` (or `acceptEdits` for edit
-        # tools). Without this, a turn under bypassPermissions still
-        # parks the SDK callback on a Future — which is what made the
-        # 2026-04-24 fae8f1a8 Settings-UX run hang for 4 hours on a
-        # single Edit tool call. Closure (not stored value) so a
-        # mid-turn `set_permission_mode` flip is observed on the very
-        # next `can_use_tool` invocation.
+        # Tool-use approval state. Broker owns pending Futures and
+        # ApprovalRequest/ApprovalResolved emission; runner forwards
+        # `resolve_approval` and triggers deny-all on stop/shutdown.
+        # `mode_getter` is a closure (not a stored value) so a mid-turn
+        # `set_permission_mode` flip is observed on the very next
+        # `can_use_tool` — without it a flip to bypassPermissions
+        # wouldn't unstick a Future already parked under default mode
+        # (root cause of the 2026-04-24 fae8f1a8 Settings-UX 4hr hang).
         self._approval = ApprovalBroker(
             session_id,
             self._emit_event,
             mode_getter=lambda: self.agent.permission_mode,
         )
-        # Count of `can_use_tool` calls currently parked on a user
-        # decision. Bumped on entry to the wrapped callback (see
-        # `can_use_tool` property) and decremented in the finally.
-        # A non-zero count drives `is_awaiting_user` → sidebar red
+        # Count of `can_use_tool` parks currently awaiting a user
+        # decision. Non-zero drives `is_awaiting_user` → sidebar red
         # flash. Counter (not bool) because the SDK can stack parks
-        # — e.g. an approval prompt immediately followed by an
-        # AskUserQuestion in the same turn; both should keep the
-        # indicator lit until ALL of them resolve.
+        # (approval prompt immediately followed by AskUserQuestion in
+        # the same turn); both keep the indicator lit until all resolve.
         self._awaiting_count: int = 0
-        # Coalesces `ToolOutputDelta` → `append_tool_output` writes
-        # per `tool_call_id`. Owned by this runner's worker task; the
-        # runner just forwards `buffer` / `drop` / `flush_all` and
-        # stays oblivious to flush cadence and DB write plumbing.
+        # Coalesces `ToolOutputDelta` → `append_tool_output` writes per
+        # `tool_call_id`. Runner forwards buffer/drop/flush_all.
         self._coalescer = ToolOutputCoalescer(db, session_id)
-        # Per-tool-call keepalive ticker manager. Started from the
-        # `ToolCallStart` arm of `execute_turn`, cancelled from the
-        # `ToolCallEnd` arm and from the turn's `finally` block so an
-        # interrupted or exception-exited turn doesn't strand timers.
-        # Cadence read via `_get_progress_interval` so test
-        # monkeypatching of `TOOL_PROGRESS_INTERVAL_S` flows through.
+        # Per-tool-call keepalive ticker manager. The lambda interval-
+        # getter re-reads the module-level constant on each tick so
+        # `monkeypatch.setattr(runner_mod, "TOOL_PROGRESS_INTERVAL_S", X)`
+        # is observed on the very next sleep.
         self._progress = ProgressTickerManager(
             session_id,
             self._emit_ephemeral,
-            _get_progress_interval,
+            lambda: TOOL_PROGRESS_INTERVAL_S,
         )
-        # Monotonic timestamp of the moment the runner most recently
-        # became "quiet" — idle AND zero subscribers. The registry's
-        # reaper uses `now - _quiet_since` vs. the configured TTL to
-        # decide whether to evict. `None` means the runner is currently
-        # active on at least one axis (a turn is running or a WS is
-        # attached); initialized at construction because a just-built
-        # runner has no subscribers yet and status is idle — the ws
-        # handler flips the clock off via `subscribe()` immediately,
-        # so this initial window is effectively zero.
+        # Monotonic timestamp of the most recent "quiet" transition
+        # (idle AND zero subscribers). Reaper uses `now - _quiet_since`
+        # vs. configured TTL. `None` = active on some axis. Initialized
+        # at construction (no subscribers + idle); the ws handler flips
+        # it off via `subscribe()` immediately, so the initial window
+        # is effectively zero.
         self._quiet_since: float | None = time.monotonic()
 
     # ---- backwards-compat ticker accessors ------------------------
@@ -265,15 +216,12 @@ class SessionRunner:
 
     @property
     def is_awaiting_user(self) -> bool:
-        """True iff the runner is currently parked inside a
-        `can_use_tool` callback, waiting for a user decision. Covers
-        both the native tool-use permission path and the
-        AskUserQuestion flow, because both ride the approval broker
-        and flow through the wrapped `can_use_tool` below. Drives the
-        sidebar's red-flashing "look at this now" indicator — distinct
-        from `is_running`, which stays true across the whole turn
-        including the park itself.
-        """
+        """True iff parked inside `can_use_tool`, awaiting a user
+        decision. Covers both native tool-use approval and the
+        AskUserQuestion flow (both ride the approval broker through
+        the wrapped callback below). Drives the sidebar's red-flashing
+        indicator — distinct from `is_running`, which stays true
+        across the whole turn including the park."""
         return self._awaiting_count > 0
 
     async def submit_prompt(
@@ -286,19 +234,17 @@ class SessionRunner:
         sequentially — if a turn is already in flight, this one waits.
 
         `attachments` is the sidecar list from the composer's
-        `[File N]` tokens (see `agent/_attachments.py`); None or empty
-        means a plain text prompt and is queued as a raw string so
-        attachment-free submits keep the historical queue shape. With
-        attachments, the prompt is wrapped in `_Submit` so the worker
-        can persist the sidecar and substitute paths for the SDK.
+        `[File N]` tokens. None/empty queues a plain string (preserving
+        the historical attachment-free queue shape); with attachments
+        the prompt is wrapped in `_Submit` so the worker persists the
+        sidecar and substitutes paths for the SDK.
 
-        If the session has `max_budget_usd` set and `total_cost_usd`
-        has already met or exceeded it, the prompt is refused with a
-        wire `ErrorEvent` instead of being queued. The SDK's
-        `max_budget_usd` advisory only fires *during* a turn once
-        cost accrues, so without this pre-check a user who's past
-        their cap can kick off another turn that runs to completion
-        before the advisory bites. Fail-closed at the gate."""
+        Refuses with an `ErrorEvent` if the session's `max_budget_usd`
+        is set and `total_cost_usd` has met or exceeded it. The SDK's
+        own advisory only fires during a turn once cost accrues, so
+        without this pre-check a user past their cap could kick off
+        another turn that runs to completion. Fail-closed at the gate.
+        """
         from bearings.agent.events import ErrorEvent
 
         row = await store.get_session(self.db, self.session_id)
@@ -324,19 +270,15 @@ class SessionRunner:
 
     async def set_permission_mode(self, mode: Any) -> None:
         """Update the SDK's permission mode AND retro-apply it to any
-        approval already parked on a user decision.
+        approval already parked. Forwarding to the SDK alone isn't
+        enough — the SDK only consults the new mode on the *next*
+        `can_use_tool`, so a flip to bypassPermissions while a modal
+        is on screen would still strand the user. The broker clears
+        parked Futures per the accept-edits/bypass matrix and emits
+        `approval_resolved` so mirroring tabs drop their modals too.
 
-        Forwarding to the SDK is not enough on its own: the SDK only
-        consults the new mode the *next* time it calls `can_use_tool`,
-        so a user who flips the header selector to `bypassPermissions`
-        while a modal is on screen would still be stuck clicking the
-        modal. Handing the new mode to the broker lets it clear the
-        current Future per the accept-edits / bypass matrix and emits
-        `approval_resolved` so every mirroring tab drops its modal too.
-
-        Persists the choice to `sessions.permission_mode` (migration
-        0012) so a browser reload or socket drop restores the same
-        mode instead of silently dropping to 'default'."""
+        Persists to `sessions.permission_mode` (migration 0012) so a
+        browser reload or socket drop restores the same mode."""
         self.agent.set_permission_mode(mode)
         if isinstance(mode, str):
             await self._approval.resolve_for_mode(mode)
@@ -375,18 +317,11 @@ class SessionRunner:
     @property
     def can_use_tool(self) -> Any:
         """Callback bound onto `AgentSession.can_use_tool` by
-        `ws_agent._build_runner`. Forwarding property so callers don't
-        need to know a broker exists; the runner remains the single
-        public surface the WS layer talks to.
-
-        Wraps the broker's callback so each entry/exit broadcasts an
-        updated `runner_state` frame to every connected sidebar. The
-        sidebar reads `awaiting_user` off that frame and flips the
-        session's indicator to the red-flashing "needs attention"
-        state for the duration of the park. The broker itself remains
-        ignorant of the broadcast — this keeps the approval protocol
-        transport-agnostic and avoids a second code path to coordinate
-        with the AskUserQuestion work parked in approval_broker.py."""
+        `ws_agent._build_runner`. Wraps the broker's callback so each
+        entry/exit broadcasts a `runner_state` frame — the sidebar
+        reads `awaiting_user` off that frame and flips the red-flashing
+        "needs attention" indicator. The broker stays transport-
+        agnostic."""
         broker_cb = self._approval.can_use_tool
 
         async def wrapped(tool_name: Any, tool_input: Any, context: Any) -> Any:
@@ -424,57 +359,23 @@ class SessionRunner:
         updated_input: dict[str, object] | None = None,
     ) -> None:
         """WS → broker forwarder. Kept on the runner so the WS handler
-        has one object to hold (runner), not two (runner + broker).
-        `updated_input` is the UI-collected override the SDK will pass
-        to the tool under an allow decision — see `ApprovalBroker.resolve`
-        for the AskUserQuestion motivation."""
+        holds one object, not two. `updated_input` is the UI-collected
+        override the SDK passes to the tool on allow — see
+        `ApprovalBroker.resolve` for the AskUserQuestion motivation."""
         await self._approval.resolve(request_id, decision, reason, updated_input)
+
+    # ---- subscriber lifecycle (bodies in `runner_subscribers.py`) -
 
     async def subscribe(
         self, since_seq: int = 0
     ) -> tuple[asyncio.Queue[_Envelope], list[_Envelope]]:
-        """Register a subscriber queue and return buffered events with
-        seq > since_seq for replay. Reconnecting clients pass the last
-        seq they saw; fresh clients pass 0 to replay the whole window.
-
-        Queue is bounded by `SUBSCRIBER_QUEUE_MAX` — see `_emit_event`
-        for the back-pressure / eviction policy."""
-        queue: asyncio.Queue[_Envelope] = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_MAX)
-        self._subscribers.add(queue)
-        # A WS is attached — not quiet anymore. Clearing unconditionally
-        # is simpler than checking prior state; the idle→running path
-        # clears it too.
-        self._quiet_since = None
-        replay = [env for env in self._event_log if env.seq > since_seq]
-        return queue, replay
+        return await runner_subscribers.subscribe(self, since_seq)
 
     def unsubscribe(self, queue: asyncio.Queue[_Envelope]) -> None:
-        self._subscribers.discard(queue)
-        # If the last WS just walked away and no turn is in flight, the
-        # reaper clock starts now. If a turn is still running, wait for
-        # the worker's idle transition to start the clock — we don't
-        # want to evict a runner that's actively producing events even
-        # though its client left.
-        if self._status == "idle" and not self._subscribers:
-            self._quiet_since = time.monotonic()
-
-    # ---- reaper hook ----------------------------------------------
+        runner_subscribers.unsubscribe(self, queue)
 
     def should_reap(self, now: float, ttl_seconds: float) -> bool:
-        """Does this runner qualify for idle eviction?
-
-        True iff it's currently quiet (idle, no subscribers) AND has
-        been quiet for at least `ttl_seconds`. The registry reaper
-        calls this under its lock; the runner itself does not take
-        action on eviction — that's the registry's job (pop + shutdown).
-        """
-        if self._status != "idle":
-            return False
-        if self._subscribers:
-            return False
-        if self._quiet_since is None:
-            return False
-        return (now - self._quiet_since) >= ttl_seconds
+        return runner_subscribers.should_reap(self, now, ttl_seconds)
 
     # ---- event fan-out --------------------------------------------
     #
@@ -490,9 +391,9 @@ class SessionRunner:
         await emit_ephemeral(self, event)
 
 
-# Re-export for tests that historically reach for `runner._persist_assistant_turn`.
-# The active call sites moved to `bearings.agent.persist.persist_assistant_turn`;
-# this alias keeps any external introspection working.
+# Backwards-compat alias for tests that reach for
+# `runner._persist_assistant_turn`. Active call sites moved to
+# `bearings.agent.persist.persist_assistant_turn`.
 from bearings.agent.persist import (  # noqa: E402, F401
     persist_assistant_turn as _persist_assistant_turn,
 )
