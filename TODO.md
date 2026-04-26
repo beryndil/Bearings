@@ -1007,6 +1007,44 @@ it then. Do not exercise the historical checklists as-is.
   done. Wave 3 (LLM-classifier-driven shape decision) tracked
   separately under the research entry below.
 
+  **Wave 1 (L5.1, the four "built on existing primitives" actions
+  from the recommended-first-wave list below) shipped 2026-04-26**
+  — `❝ QUOTE` (composer pre-fill with the reply quoted line-by-line
+  via `> ` prefix, reuses the same `bearings:composer-prefill`
+  event channel as `ℹ MORE` and regenerate), `⌗ CODE` (extracts
+  fenced backtick blocks from the reply with one regex and writes
+  them concatenated to the clipboard via `copyText`; auto-hidden
+  when the reply has no fenced blocks so it never offers an empty
+  copy), `⤓ SAVE` (builds a turn-scoped JSON export client-side —
+  `{session, messages: [user, assistant], tool_calls}` matching
+  the `/api/sessions/{id}/export` shape filtered to one assistant
+  message; `LiveToolCall` epoch-ms fields are round-tripped to ISO
+  via `Date#toISOString` so the saved file matches what the server
+  would emit; blob → anchor download with `bearings-turn-<sid8>-
+  <mid8>.json` naming), `⤴ TOOLS` (purely-internal handler — the
+  target tool-work `<details>` lives in the same `MessageTurn`
+  component, so no parent plumbing is needed; click flips
+  `details.open = true` and `scrollIntoView({block: 'start'})`,
+  hidden when `toolCalls.length === 0`). All four are pure UI —
+  no backend routes, no DB changes, no migrations. The action row
+  now reads `[ℹ MORE] [❝ QUOTE] [＋ SPAWN] [✂ TLDR] [⚔ CRIT]
+  [⌗ CODE] [⤓ SAVE] [⤴ TOOLS] [⎘ COPY]`; row container gained
+  `flex-wrap gap-x-3 gap-y-1` so it degrades gracefully on narrow
+  panes instead of clipping behind the inspector splitter.
+  Coverage: 19 new frontend tests in `MessageTurn.test.ts` (5 each
+  for QUOTE / CODE / SAVE matching the spawn-button visibility /
+  click contract, plus 4 for TOOLS including a `scrollIntoView`
+  prototype-stub guard since jsdom doesn't implement it). Files
+  touched: `frontend/src/lib/components/MessageTurn.svelte`
+  (props + visibility gates + `<details>` ref binding +
+  `jumpToToolCalls` local handler + `hasCodeBlocks` derive),
+  `frontend/src/lib/components/Conversation.svelte`
+  (`onQuoteReply` / `onCopyCodeOnly` / `onExportTurn` handlers
+  with `extractCodeBlocks` regex extractor, threaded through to
+  MessageTurn alongside the existing wiring),
+  `frontend/src/lib/components/MessageTurn.test.ts`. Pre-Wave-3,
+  no sub-agent dependency, ships independently.
+
   Dave's primary ask: alongside Copy (existing) and
   More Info (logged above), add a button that takes the *output of
   the current assistant turn only* (not the whole session) and

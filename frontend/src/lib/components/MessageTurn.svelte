@@ -52,6 +52,31 @@
      * its label badge based on the action's catalog entry; no modal
      * code change needed). */
     onCritique?: (msg: Message) => void;
+    /** L5.1 / Wave 1 lane 1 — `❝ QUOTE` button. Pre-fills the
+     * composer with the assistant reply quoted line-by-line (`> `
+     * prefix per line) followed by a blank line so Dave can build a
+     * follow-up that explicitly references the prior reply. Same
+     * `bearings:composer-prefill` event channel as `ℹ MORE` and
+     * regenerate; the parent owns the dispatch. Renders on every
+     * finished assistant reply (not gated on isLatestAssistant) —
+     * quoting an older reply is useful when chasing a thread. */
+    onQuoteReply?: (msg: Message) => void;
+    /** L5.1 / Wave 1 lane 2 — `⌗ CODE` button. Strips prose and
+     * concatenates fenced code blocks from the reply, then writes
+     * the result to the clipboard. Auto-hides when the reply has no
+     * fenced blocks (the button would be inert otherwise). Parent
+     * owns the clipboard write so the existing `copyText` toast
+     * machinery can apply. */
+    onCopyCodeOnly?: (msg: Message) => void;
+    /** L5.1 / Wave 1 lane 3 — `⤓ SAVE` button. Builds a turn-scoped
+     * JSON export — session metadata + the user prompt + the
+     * assistant reply + the tool calls owned by this assistant
+     * message — and triggers a browser download. Useful for
+     * sharing a single reply without dumping the whole session.
+     * Parent assembles the payload (it has access to
+     * `sessions.selected` and the matching turn from the store);
+     * MessageTurn just fires the callback. */
+    onExportTurn?: (msg: Message) => void;
     /** Slice 4: bulk-select mode. When `bulkMode` is true the header
      * renders a checkbox in place of the ordinary role tag and the
      * context-menu action is still wired — right-click while in bulk
@@ -96,6 +121,9 @@
     onSpawn,
     onTldr,
     onCritique,
+    onQuoteReply,
+    onCopyCodeOnly,
+    onExportTurn,
     bulkMode = false,
     selectedIds,
     onToggleSelect,
@@ -205,6 +233,31 @@
     e.preventDefault();
     onToggleSelect?.(msg, e.shiftKey);
   }
+
+  /** L5.1 — `⌗ CODE` button visibility gate. The button is inert when
+   * there are no fenced code blocks to copy, so we hide it. The same
+   * heuristic the extractor uses (matched pair of triple-backticks)
+   * decides visibility — keeping detection and extraction in lockstep
+   * means the button never offers a "copy" that yields an empty
+   * clipboard write. Tilde fences are intentionally out of scope for
+   * v0; agent output uses backticks ~exclusively. */
+  const FENCED_CODE_RE = /```[ \t]*[\w+#-]*[ \t]*\n[\s\S]*?```/;
+  const hasCodeBlocks = $derived(
+    assistant !== null && FENCED_CODE_RE.test(assistant.content)
+  );
+
+  /** L5.1 — `⤴ TOOLS` jump target. Bound on the tool-work `<details>`
+   * so the button can pop the disclosure open and scroll the user
+   * straight to it. Only rendered when `toolCalls.length > 0`, so the
+   * binding is always live whenever the button itself is visible.
+   * Falsy default until Svelte mounts the element. */
+  let toolWorkDetails: HTMLDetailsElement | undefined = $state();
+
+  function jumpToToolCalls(): void {
+    if (!toolWorkDetails) return;
+    toolWorkDetails.open = true;
+    toolWorkDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 </script>
 
 {#if user}
@@ -282,6 +335,8 @@
        expand/collapse flash on every tool call. User clicks to peek;
        state changes leave `open` alone. -->
   <details
+    bind:this={toolWorkDetails}
+    data-testid="tool-work-details"
     class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1"
   >
     <summary
@@ -424,7 +479,12 @@
       <span class="inline-block animate-pulse">▍</span>
     {/if}
     {#if assistant}
-      <div class="mt-2 flex justify-end gap-3">
+      <!-- Action row. flex-wrap so the row degrades gracefully on
+           narrow panes; without it the buttons would clip behind the
+           inspector splitter. Wave 1 (L5.1) added Quote / Code /
+           Save / Tools alongside the existing More / Spawn / TLDR /
+           Crit / Copy set. -->
+      <div class="mt-2 flex flex-wrap justify-end gap-x-3 gap-y-1">
         {#if isLatestAssistant && !isStreaming && onMoreInfo}
           <button
             type="button"
@@ -435,6 +495,22 @@
             onclick={() => onMoreInfo(assistant!)}
           >
             ℹ more
+          </button>
+        {/if}
+        {#if !isStreaming && onQuoteReply}
+          <!-- L5.1 / Wave 1 lane 1. Companion to ℹ MORE: pre-fills
+               the composer, but with the reply quoted instead of a
+               canned "elaborate" prompt. Renders on every finished
+               turn so Dave can quote-reply against an older row. -->
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Quote this reply into the composer"
+            title="Pre-fill composer with this reply quoted line-by-line"
+            data-testid="quote-reply-button"
+            onclick={() => onQuoteReply(assistant!)}
+          >
+            ❝ quote
           </button>
         {/if}
         {#if !isStreaming && onSpawn}
@@ -487,6 +563,58 @@
             onclick={() => onCritique(assistant!)}
           >
             ⚔ crit
+          </button>
+        {/if}
+        {#if !isStreaming && onCopyCodeOnly && hasCodeBlocks}
+          <!-- L5.1 / Wave 1 lane 2. Auto-hidden when the reply has
+               no fenced code blocks — see `hasCodeBlocks` derive,
+               which uses the same regex as the parent's extractor
+               so visibility tracks "extraction would yield content."
+               Distinct from `⎘ COPY` which copies the entire reply
+               (prose + code together). -->
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Copy only the fenced code blocks from this reply"
+            title="Strip prose, copy concatenated code blocks to clipboard"
+            data-testid="copy-code-button"
+            onclick={() => onCopyCodeOnly(assistant!)}
+          >
+            ⌗ code
+          </button>
+        {/if}
+        {#if !isStreaming && onExportTurn}
+          <!-- L5.1 / Wave 1 lane 3. Builds a turn-scoped JSON
+               export and triggers a browser download. The parent
+               handler is what actually assembles the payload — it
+               has access to session metadata and the matching turn
+               from the conversation store. -->
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Download this turn as JSON"
+            title="Save this turn (user + assistant + tool calls) to a JSON file"
+            data-testid="export-turn-button"
+            onclick={() => onExportTurn(assistant!)}
+          >
+            ⤓ save
+          </button>
+        {/if}
+        {#if !isStreaming && toolCalls.length > 0}
+          <!-- L5.1 / Wave 1 lane 4. Scrolls to + opens the tool-
+               work `<details>` block above. Local handler — the
+               target lives in the same component, so no parent
+               plumbing is needed. Hidden when there are no tool
+               calls (the target wouldn't render). -->
+          <button
+            type="button"
+            class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
+            aria-label="Jump to tool calls for this reply"
+            title="Open the tool-work block and scroll to it"
+            data-testid="jump-tools-button"
+            onclick={jumpToToolCalls}
+          >
+            ⤴ tools
           </button>
         {/if}
         <button

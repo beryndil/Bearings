@@ -146,6 +146,100 @@
     replyActions.start('critique', msg);
   }
 
+  /** L5.1 / Wave 1 lane 1 — `❝ QUOTE` action. Pre-fills the composer
+   * with the assistant reply quoted line-by-line, followed by a blank
+   * line so Dave's cursor lands on a fresh line for the follow-up.
+   * Reuses the same `bearings:composer-prefill` event channel as the
+   * regenerate / more-info actions; the composer owns the textarea
+   * focus side effect in one place. No backend work — pure UI. */
+  function onQuoteReply(msg: api.Message): void {
+    const sid = sessions.selectedId;
+    if (!sid) return;
+    const quoted = msg.content
+      .split('\n')
+      .map((line) => `> ${line}`)
+      .join('\n');
+    window.dispatchEvent(
+      new CustomEvent('bearings:composer-prefill', {
+        detail: { sessionId: sid, text: `${quoted}\n\n` }
+      })
+    );
+  }
+
+  /** L5.1 / Wave 1 lane 2 — `⌗ CODE` action. Pulls the fenced code
+   * blocks out of the reply, concatenates them with a blank line
+   * between, and copies the result to the clipboard. Reuses the same
+   * `copyText` toast machinery as the full-reply COPY button so the
+   * user gets the same "✓ copied" confirmation. The button is
+   * auto-hidden when the reply has no fenced blocks (see
+   * `hasCodeBlocks` in MessageTurn) so this handler only ever fires
+   * with content available. */
+  const FENCED_CODE_RE = /```[ \t]*[\w+#-]*[ \t]*\n([\s\S]*?)```/g;
+  function extractCodeBlocks(content: string): string {
+    const blocks: string[] = [];
+    let m: RegExpExecArray | null;
+    FENCED_CODE_RE.lastIndex = 0;
+    while ((m = FENCED_CODE_RE.exec(content)) !== null) {
+      blocks.push(m[1].replace(/\n+$/, ''));
+    }
+    return blocks.join('\n\n');
+  }
+  async function onCopyCodeOnly(msg: api.Message): Promise<void> {
+    const code = extractCodeBlocks(msg.content);
+    if (!code) return;
+    if (!(await copyText(code))) return;
+    copiedMsgId = msg.id;
+    setTimeout(() => {
+      if (copiedMsgId === msg.id) copiedMsgId = null;
+    }, 1500);
+  }
+
+  /** L5.1 / Wave 1 lane 3 — `⤓ SAVE` action. Builds a turn-scoped
+   * JSON export — session metadata + the user prompt + the assistant
+   * reply + the tool calls owned by this assistant message — and
+   * triggers a browser download. Built client-side from data already
+   * loaded into the conversation store; no backend round-trip
+   * required. The shape mirrors the existing per-session
+   * `/api/sessions/{id}/export` (snake_case fields) so a saved turn
+   * looks like a one-turn slice of a session export. */
+  function onExportTurn(msg: api.Message): void {
+    const session = sessions.selected;
+    if (!session) return;
+    const turn = turns.find((t) => t.assistant?.id === msg.id);
+    if (!turn) return;
+    const messages: api.Message[] = [];
+    if (turn.user) messages.push(turn.user);
+    if (turn.assistant) messages.push(turn.assistant);
+    const tool_calls = turn.toolCalls.map((tc) => ({
+      id: tc.id,
+      session_id: session.id,
+      message_id: tc.messageId,
+      name: tc.name,
+      input: JSON.stringify(tc.input),
+      output: tc.output,
+      error: tc.error,
+      ok: tc.ok,
+      // LiveToolCall stores epoch-ms; the wire/store shape is ISO
+      // strings. Round-trip via Date so the saved file matches what
+      // the server would emit for the same turn.
+      started_at: new Date(tc.startedAt).toISOString(),
+      finished_at:
+        tc.finishedAt !== null ? new Date(tc.finishedAt).toISOString() : null
+    }));
+    const payload = { session, messages, tool_calls };
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bearings-turn-${session.id.slice(0, 8)}-${msg.id.slice(0, 8)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Defer revoke so Chrome can complete the download dispatch.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
   // Persistent reorg-audit dividers (Slice 5). Fetched on session
   // switch + on `updated_at` bumps so a move from the other end also
   // invalidates the list on refocus.
@@ -398,6 +492,9 @@
             {onSpawn}
             {onTldr}
             {onCritique}
+            {onQuoteReply}
+            {onCopyCodeOnly}
+            {onExportTurn}
             isLatestAssistant={item.turn.key === latestAssistantTurnKey}
             bulkMode={bulk.active}
             selectedIds={bulk.selectedIds}

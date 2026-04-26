@@ -492,6 +492,244 @@ describe('MessageTurn (tool-call rows)', () => {
   });
 });
 
+describe('MessageTurn (quote-reply button)', () => {
+  // L5.1 / Wave 1 lane 1. `❝ QUOTE` mirrors `＋ SPAWN`'s visibility
+  // contract — every finished assistant reply, latest or historical,
+  // hidden during streaming and when no `onQuoteReply` handler is
+  // wired. The actual quote-prefix logic lives in Conversation.svelte;
+  // MessageTurn only forwards the click.
+  it('renders ❝ QUOTE on a finished assistant reply when onQuoteReply is wired', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onQuoteReply: vi.fn() })
+    );
+    const btn = queryByTestId('quote-reply-button');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toContain('❝');
+    expect(btn!.textContent!.toLowerCase()).toContain('quote');
+  });
+
+  it('renders ❝ QUOTE even on non-latest turns', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onQuoteReply: vi.fn(), isLatestAssistant: false })
+    );
+    expect(queryByTestId('quote-reply-button')).not.toBeNull();
+  });
+
+  it('hides ❝ QUOTE while the turn is still streaming', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onQuoteReply: vi.fn(), isStreaming: true })
+    );
+    expect(queryByTestId('quote-reply-button')).toBeNull();
+  });
+
+  it('hides ❝ QUOTE when no onQuoteReply handler is provided', () => {
+    const { queryByTestId } = render(MessageTurn, baseProps());
+    expect(queryByTestId('quote-reply-button')).toBeNull();
+  });
+
+  it('clicking ❝ QUOTE fires onQuoteReply with the assistant message', async () => {
+    const onQuoteReply = vi.fn();
+    const { getByTestId } = render(MessageTurn, baseProps({ onQuoteReply }));
+    await fireEvent.click(getByTestId('quote-reply-button'));
+    expect(onQuoteReply).toHaveBeenCalledTimes(1);
+    expect(onQuoteReply.mock.calls[0][0].id).toBe('a-1');
+    expect(onQuoteReply.mock.calls[0][0].role).toBe('assistant');
+  });
+});
+
+describe('MessageTurn (copy-code-only button)', () => {
+  // L5.1 / Wave 1 lane 2. `⌗ CODE` is the only Wave-1 button with a
+  // content-conditional visibility gate — it auto-hides when the
+  // reply has no fenced code blocks, so the button never offers an
+  // empty clipboard write. Detection regex matches the parent's
+  // extractor regex so visibility tracks "extraction would yield
+  // content."
+  const replyWithCode =
+    'Here is the answer:\n\n```python\nprint("hello")\n```\n\nThat works.';
+  const replyWithoutCode = 'Just prose, no code blocks at all.';
+
+  it('renders ⌗ CODE when assistant content has fenced code blocks', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        onCopyCodeOnly: vi.fn(),
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+      })
+    );
+    const btn = queryByTestId('copy-code-button');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent!.toLowerCase()).toContain('code');
+  });
+
+  it('hides ⌗ CODE when assistant content has no fenced code blocks', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        onCopyCodeOnly: vi.fn(),
+        assistant: msg({
+          id: 'a-1',
+          role: 'assistant',
+          content: replyWithoutCode
+        })
+      })
+    );
+    expect(queryByTestId('copy-code-button')).toBeNull();
+  });
+
+  it('hides ⌗ CODE while streaming even when content has code', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        onCopyCodeOnly: vi.fn(),
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode }),
+        isStreaming: true
+      })
+    );
+    expect(queryByTestId('copy-code-button')).toBeNull();
+  });
+
+  it('hides ⌗ CODE when no onCopyCodeOnly handler is provided', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+      })
+    );
+    expect(queryByTestId('copy-code-button')).toBeNull();
+  });
+
+  it('clicking ⌗ CODE fires onCopyCodeOnly with the assistant message', async () => {
+    const onCopyCodeOnly = vi.fn();
+    const { getByTestId } = render(
+      MessageTurn,
+      baseProps({
+        onCopyCodeOnly,
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+      })
+    );
+    await fireEvent.click(getByTestId('copy-code-button'));
+    expect(onCopyCodeOnly).toHaveBeenCalledTimes(1);
+    expect(onCopyCodeOnly.mock.calls[0][0].id).toBe('a-1');
+  });
+});
+
+describe('MessageTurn (export-turn button)', () => {
+  // L5.1 / Wave 1 lane 3. `⤓ SAVE` mirrors the standard visibility
+  // contract — every finished assistant reply, hidden during
+  // streaming and when no handler is wired. The blob-download
+  // mechanics live in Conversation.svelte; MessageTurn just fires
+  // the callback so the parent can build the JSON payload from
+  // session metadata + the matching turn.
+  it('renders ⤓ SAVE on a finished assistant reply when onExportTurn is wired', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onExportTurn: vi.fn() })
+    );
+    const btn = queryByTestId('export-turn-button');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toContain('⤓');
+    expect(btn!.textContent!.toLowerCase()).toContain('save');
+  });
+
+  it('hides ⤓ SAVE while the turn is still streaming', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ onExportTurn: vi.fn(), isStreaming: true })
+    );
+    expect(queryByTestId('export-turn-button')).toBeNull();
+  });
+
+  it('hides ⤓ SAVE when no onExportTurn handler is provided', () => {
+    const { queryByTestId } = render(MessageTurn, baseProps());
+    expect(queryByTestId('export-turn-button')).toBeNull();
+  });
+
+  it('clicking ⤓ SAVE fires onExportTurn with the assistant message', async () => {
+    const onExportTurn = vi.fn();
+    const { getByTestId } = render(MessageTurn, baseProps({ onExportTurn }));
+    await fireEvent.click(getByTestId('export-turn-button'));
+    expect(onExportTurn).toHaveBeenCalledTimes(1);
+    expect(onExportTurn.mock.calls[0][0].id).toBe('a-1');
+  });
+});
+
+describe('MessageTurn (jump-to-tools button)', () => {
+  // L5.1 / Wave 1 lane 4. `⤴ TOOLS` is the only Wave-1 button whose
+  // handler is internal to MessageTurn — the target `<details>` lives
+  // in the same component, so no parent plumbing is needed. Visibility
+  // gates on `toolCalls.length > 0` because the target wouldn't render
+  // otherwise. Click expands the details and scrolls it into view.
+  function call(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+    return {
+      id: 'tc-1',
+      messageId: 'a-1',
+      name: 'Read',
+      input: { path: '/tmp/x' },
+      output: 'ok',
+      error: null,
+      ok: true,
+      startedAt: 0,
+      finishedAt: 1,
+      outputTruncated: false,
+      lastProgressMs: null,
+      ...overrides
+    };
+  }
+
+  it('renders ⤴ TOOLS when the turn has tool calls', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ toolCalls: [call()] })
+    );
+    const btn = queryByTestId('jump-tools-button');
+    expect(btn).not.toBeNull();
+    expect(btn!.textContent).toContain('⤴');
+    expect(btn!.textContent!.toLowerCase()).toContain('tools');
+  });
+
+  it('hides ⤴ TOOLS when the turn has no tool calls', () => {
+    const { queryByTestId } = render(MessageTurn, baseProps({ toolCalls: [] }));
+    expect(queryByTestId('jump-tools-button')).toBeNull();
+  });
+
+  it('hides ⤴ TOOLS while the turn is still streaming', () => {
+    const { queryByTestId } = render(
+      MessageTurn,
+      baseProps({ toolCalls: [call()], isStreaming: true })
+    );
+    expect(queryByTestId('jump-tools-button')).toBeNull();
+  });
+
+  it('clicking ⤴ TOOLS opens the tool-work details element', async () => {
+    // jsdom doesn't implement scrollIntoView — stub it on the
+    // prototype so the click handler can fire end-to-end without
+    // throwing. The behavioral assertion is that `.open` flips to
+    // true; the smooth-scroll is nice-to-have UX.
+    const scrollSpy = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollSpy
+    });
+    try {
+      const { getByTestId } = render(
+        MessageTurn,
+        baseProps({ toolCalls: [call()] })
+      );
+      const details = getByTestId('tool-work-details') as HTMLDetailsElement;
+      expect(details.open).toBe(false);
+      await fireEvent.click(getByTestId('jump-tools-button'));
+      expect(details.open).toBe(true);
+      expect(scrollSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      // @ts-expect-error — clean up the prototype patch.
+      delete HTMLElement.prototype.scrollIntoView;
+    }
+  });
+});
+
 describe('MessageTurn (critique button)', () => {
   // L4.3.3 / Wave 2 lane 3. The `⚔ CRIT` button mirrors `✂ TLDR`'s
   // visibility contract: every finished assistant reply, every turn
