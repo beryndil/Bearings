@@ -115,17 +115,26 @@ def build_csp(*, script_hashes: Sequence[str] = ()) -> str:
 
 
 def csp_from_static_dir(static_dir: Path) -> str:
-    """Read `static_dir/index.html`, hash its inline scripts, and build
-    the CSP. If the file is missing (e.g. the server is running without
-    a built frontend bundle) returns `build_csp()` with no script
-    hashes — the document won't load anyway, but the API surface still
-    gets the same baseline.
+    """Hash inline scripts from every `*.html` in `static_dir` and build
+    the CSP. SvelteKit's static adapter emits multiple HTML entry
+    points (`index.html` for `/`, `200.html` for the SPA fallback,
+    plus any standalone routes like `vault.html`), and each one
+    carries its own hydration bootstrap with a slightly different
+    third inline script. Hashing only `index.html` left hard-refresh
+    on `/sessions/<id>` (served from `200.html`) blocked by CSP — the
+    bug this function exists to prevent. If no HTML files are present
+    (server running without a built bundle) returns `build_csp()` with
+    no script hashes.
     """
-    index = static_dir / "index.html"
-    if not index.exists():
-        return build_csp()
-    html = index.read_text(encoding="utf-8")
-    return build_csp(script_hashes=compute_inline_script_hashes(html))
+    hashes: list[str] = []
+    seen: set[str] = set()
+    for html_path in sorted(static_dir.glob("*.html")):
+        html = html_path.read_text(encoding="utf-8")
+        for h in compute_inline_script_hashes(html):
+            if h not in seen:
+                seen.add(h)
+                hashes.append(h)
+    return build_csp(script_hashes=hashes)
 
 
 _BASE_HEADERS: dict[str, str] = {

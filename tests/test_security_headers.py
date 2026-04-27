@@ -32,6 +32,7 @@ from bearings.api.middleware import (
     _INLINE_SCRIPT_RE,
     build_csp,
     compute_inline_script_hashes,
+    csp_from_static_dir,
     install_global_exception_handler,
 )
 
@@ -70,24 +71,34 @@ def test_csp_allows_localhost_websockets(client: TestClient) -> None:
     assert "ws://[::1]:*" in csp
 
 
-def test_csp_permits_bundle_inline_scripts(client: TestClient) -> None:
-    """The audit-shipped CSP omitted `script-src` and fell through to
-    `default-src 'self'`, which forbids inline scripts — that broke
-    SvelteKit's hydration bootstrap (3 inline <script> tags the SPA
-    can't run without). This regression test fetches the served `/`
-    document and asserts every inline script it contains is permitted
-    by the response's CSP `script-src` directive. If a future build
-    introduces a new inline script the server hasn't been restarted
-    to pick up, this test catches it before the SPA goes dark."""
-    resp = client.get("/")
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/",
+        "/sessions/abc",
+        "/vault.html",
+    ],
+)
+def test_csp_permits_bundle_inline_scripts(client: TestClient, path: str) -> None:
+    """SvelteKit's static adapter emits multiple HTML entry points
+    (`index.html` for `/`, `200.html` for the SPA fallback used by
+    deep-linked routes like `/sessions/<id>`, plus standalone
+    `vault.html`). Each carries its own hydration bootstrap with a
+    different third inline script, so the CSP must hash them all.
+    Hashing only `index.html` left hard-refresh on `/sessions/<id>`
+    blocked by CSP — the document loaded but its third script was
+    rejected, so the SPA never hydrated. This parametrised test
+    fetches each entry point and asserts every inline script is
+    permitted by the response's CSP."""
+    resp = client.get(path)
     if resp.status_code == 404:
         pytest.skip("frontend bundle not built into web/dist; nothing to check")
     assert resp.status_code == 200
     csp = resp.headers.get("Content-Security-Policy", "")
     hashes = compute_inline_script_hashes(resp.text)
-    assert hashes, "served index.html has no inline scripts to verify"
+    assert hashes, f"served {path} has no inline scripts to verify"
     for digest in hashes:
-        assert f"'{digest}'" in csp, f"inline script {digest} not allowed by CSP"
+        assert f"'{digest}'" in csp, f"inline script {digest} at {path} not in CSP"
 
 
 def test_compute_inline_script_hashes_skips_external_scripts() -> None:
@@ -125,6 +136,52 @@ def test_build_csp_omits_script_src_when_no_hashes() -> None:
 def test_build_csp_includes_provided_hashes() -> None:
     csp = build_csp(script_hashes=["sha256-abc", "sha256-def"])
     assert "script-src 'self' 'sha256-abc' 'sha256-def'" in csp
+
+
+def test_csp_from_static_dir_unions_hashes_across_html_entry_points(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    """SvelteKit emits `index.html` + `200.html` (SPA fallback) + any
+    standalone routes (e.g. `vault.html`), and each has its own
+    hydration bootstrap. `csp_from_static_dir` must hash inline
+    scripts across every `*.html` in the dir and dedupe — otherwise
+    the entry point not chosen for hashing serves with a CSP that
+    rejects its own scripts."""
+    static_dir = tmp_path  # type: ignore[assignment]
+    (static_dir / "index.html").write_text(  # type: ignore[attr-defined]
+        "<script>shared()</script><script>indexOnly()</script>",
+        encoding="utf-8",
+    )
+    (static_dir / "200.html").write_text(  # type: ignore[attr-defined]
+        "<script>shared()</script><script>fallbackOnly()</script>",
+        encoding="utf-8",
+    )
+    (static_dir / "vault.html").write_text(  # type: ignore[attr-defined]
+        "<script>shared()</script><script>vaultOnly()</script>",
+        encoding="utf-8",
+    )
+    csp = csp_from_static_dir(static_dir)  # type: ignore[arg-type]
+    expected = [
+        compute_inline_script_hashes("<script>shared()</script>")[0],
+        compute_inline_script_hashes("<script>indexOnly()</script>")[0],
+        compute_inline_script_hashes("<script>fallbackOnly()</script>")[0],
+        compute_inline_script_hashes("<script>vaultOnly()</script>")[0],
+    ]
+    for digest in expected:
+        assert f"'{digest}'" in csp, f"{digest} missing from unioned CSP"
+    # Dedupe: `shared` should appear exactly once even though three
+    # files contributed it.
+    assert csp.count(f"'{expected[0]}'") == 1
+
+
+def test_csp_from_static_dir_handles_missing_dir(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    """Server running with no built frontend → no HTML files → fall
+    back to the no-`script-src` baseline."""
+    csp = csp_from_static_dir(tmp_path)  # type: ignore[arg-type]
+    assert "script-src" not in csp
+    assert "default-src 'self'" in csp
 
 
 def test_no_hsts_header(client: TestClient) -> None:
