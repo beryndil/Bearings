@@ -90,37 +90,30 @@ def _truncated_notice(full_len: int) -> str:
     )
 
 
+def _error_envelope(text: str) -> dict[str, Any]:
+    """Wrap an error message in the MCP tool-result error envelope.
+
+    All `_format_*` helpers route through this so the response shape
+    stays identical across error variants and the SDK consistently
+    surfaces them as tool errors instead of plain text content."""
+    return {"content": [{"type": "text", "text": text}], "is_error": True}
+
+
 def _format_not_found(tool_use_id: str) -> dict[str, Any]:
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    f"bearings: no tool call found with id {tool_use_id!r}. "
-                    "The id must come verbatim from a prior tool_use in this "
-                    "session — it is NOT a Bearings DB primary key. If you "
-                    "just made the call, wait until after ToolCallEnd."
-                ),
-            }
-        ],
-        "is_error": True,
-    }
+    return _error_envelope(
+        f"bearings: no tool call found with id {tool_use_id!r}. "
+        "The id must come verbatim from a prior tool_use in this "
+        "session — it is NOT a Bearings DB primary key. If you "
+        "just made the call, wait until after ToolCallEnd."
+    )
 
 
 def _format_wrong_session(tool_use_id: str) -> dict[str, Any]:
-    return {
-        "content": [
-            {
-                "type": "text",
-                "text": (
-                    f"bearings: tool call {tool_use_id!r} belongs to a "
-                    "different session. Only tool calls from THIS session "
-                    "are retrievable via bearings__get_tool_output."
-                ),
-            }
-        ],
-        "is_error": True,
-    }
+    return _error_envelope(
+        f"bearings: tool call {tool_use_id!r} belongs to a "
+        "different session. Only tool calls from THIS session "
+        "are retrievable via bearings__get_tool_output."
+    )
 
 
 def _format_no_output(tool_use_id: str, row: dict[str, Any]) -> dict[str, Any]:
@@ -129,96 +122,79 @@ def _format_no_output(tool_use_id: str, row: dict[str, Any]) -> dict[str, Any]:
     # modes deserve different user-facing text so the model knows
     # whether a retry would help.
     if row.get("finished_at") is None:
-        msg = (
+        return _error_envelope(
             f"bearings: tool call {tool_use_id!r} has not finished yet. "
             "Wait for ToolCallEnd on this id, then retry."
         )
-    else:
-        msg = (
-            f"bearings: tool call {tool_use_id!r} completed but stored no "
-            "output (empty body or error-only result). Check the `error` "
-            "field in the conversation if present."
+    return _error_envelope(
+        f"bearings: tool call {tool_use_id!r} completed but stored no "
+        "output (empty body or error-only result). Check the `error` "
+        "field in the conversation if present."
+    )
+
+
+_GET_TOOL_OUTPUT_DESC = (
+    "Retrieve the FULL persisted output of a prior tool call in "
+    "this Bearings session. Use when a previous tool output was "
+    "truncated by the Bearings tool-output cap and you need the "
+    "complete text. Accepts a tool_use_id from any prior tool_use "
+    "block in this session. Returns the full output as text (or "
+    "an error message if the id is unknown or still running)."
+)
+
+
+async def _retrieve_tool_output(
+    args: dict[str, Any],
+    session_id: str,
+    db_getter: DbGetter,
+) -> dict[str, Any]:
+    """Body of ``bearings__get_tool_output``, factored out so unit
+    tests can invoke this directly without the SDK registry."""
+    tool_use_id = str(args.get("tool_use_id") or "").strip()
+    if not tool_use_id:
+        return _error_envelope(
+            "bearings: tool_use_id is required and must be the id string "
+            "from a prior tool_use block."
         )
-    return {"content": [{"type": "text", "text": msg}], "is_error": True}
+    db = db_getter()
+    if db is None:
+        # Defensive: AgentSession only wires this server when db is not
+        # None. Preserved for unit tests that stub without persistence.
+        return _error_envelope(
+            "bearings: DB not wired to this session, tool-output retrieval is unavailable."
+        )
+    try:
+        row = await store.get_tool_call(db, tool_use_id)
+    except Exception:  # noqa: BLE001 — surface to model, not raise
+        log.exception("bearings.get_tool_output: DB lookup failed for %s", tool_use_id)
+        return _error_envelope(
+            "bearings: DB error retrieving the tool output. "
+            "Retry once; if it persists, ask the user."
+        )
+    if row is None:
+        return _format_not_found(tool_use_id)
+    if row.get("session_id") != session_id:
+        return _format_wrong_session(tool_use_id)
+    body = row.get("output")
+    if not body:
+        return _format_no_output(tool_use_id, row)
+    if len(body) > _GET_TOOL_OUTPUT_RETURN_CAP:
+        body = body[:_GET_TOOL_OUTPUT_RETURN_CAP] + _truncated_notice(len(body))
+    return {"content": [{"type": "text", "text": body}]}
 
 
 def _build_get_tool_output(session_id: str, db_getter: DbGetter) -> Any:
-    """Factory for the ``bearings__get_tool_output`` tool. Split out
-    so the closure captures only what the handler needs — tests that
-    assert handler shape can construct one without touching the SDK
-    decorator's global registry."""
+    """Factory for the ``bearings__get_tool_output`` tool.
 
-    @tool(
-        "get_tool_output",
-        (
-            "Retrieve the FULL persisted output of a prior tool call in "
-            "this Bearings session. Use when a previous tool output was "
-            "truncated by the Bearings tool-output cap and you need the "
-            "complete text. Accepts a tool_use_id from any prior tool_use "
-            "block in this session. Returns the full output as text (or "
-            "an error message if the id is unknown or still running)."
-        ),
-        {"tool_use_id": str},
-    )
+    Split out so the closure captures only what the handler needs —
+    tests that assert handler shape can construct one without touching
+    the SDK decorator's global registry. The actual retrieval logic
+    lives in ``_retrieve_tool_output`` so it stays unit-testable
+    without going through the @tool wrapper."""
+
+    @tool("get_tool_output", _GET_TOOL_OUTPUT_DESC, {"tool_use_id": str})
     async def get_tool_output(args: dict[str, Any]) -> dict[str, Any]:
-        tool_use_id = str(args.get("tool_use_id") or "").strip()
-        if not tool_use_id:
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "bearings: tool_use_id is required and must be "
-                            "the id string from a prior tool_use block."
-                        ),
-                    }
-                ],
-                "is_error": True,
-            }
-        db = db_getter()
-        if db is None:
-            # Should not happen in production — AgentSession only wires
-            # this server when `db is not None`. Defensive for unit
-            # tests that may stub a session without persistence.
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "bearings: DB not wired to this session, "
-                            "tool-output retrieval is unavailable."
-                        ),
-                    }
-                ],
-                "is_error": True,
-            }
-        try:
-            row = await store.get_tool_call(db, tool_use_id)
-        except Exception:  # noqa: BLE001 — surface to model, not raise
-            log.exception("bearings.get_tool_output: DB lookup failed for %s", tool_use_id)
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": (
-                            "bearings: DB error retrieving the tool output. "
-                            "Retry once; if it persists, ask the user."
-                        ),
-                    }
-                ],
-                "is_error": True,
-            }
-        if row is None:
-            return _format_not_found(tool_use_id)
-        if row.get("session_id") != session_id:
-            return _format_wrong_session(tool_use_id)
-        body = row.get("output")
-        if not body:
-            return _format_no_output(tool_use_id, row)
-        full_len = len(body)
-        if full_len > _GET_TOOL_OUTPUT_RETURN_CAP:
-            body = body[:_GET_TOOL_OUTPUT_RETURN_CAP] + _truncated_notice(full_len)
-        return {"content": [{"type": "text", "text": body}]}
+        return await _retrieve_tool_output(args, session_id, db_getter)
 
     return get_tool_output
 
