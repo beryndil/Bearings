@@ -118,111 +118,103 @@ async def maybe_replay_orphaned_prompt(runner: SessionRunner) -> None:
     )
 
 
-async def run_worker(runner: SessionRunner) -> None:
-    """Main worker loop: replay any orphaned prompt, then drain the
-    queue one turn at a time until `_Shutdown` arrives."""
-    # Recover orphaned prompts from prior-crash / prior-restart. Must
-    # run before the first `get()` so the replayed prompt is the first
-    # turn this worker executes — any real user prompt submitted after
-    # reconnect naturally queues behind it.
-    await maybe_replay_orphaned_prompt(runner)
-    while True:
-        item = await runner._prompts.get()
-        if isinstance(item, _Shutdown):
-            return
-        attachments: list[dict[str, Any]] | None
-        if isinstance(item, _Replay):
-            prompt = item.prompt
-            attachments = item.attachments
-            persist_user = False
-        elif isinstance(item, _Submit):
-            prompt = item.prompt
-            attachments = item.attachments
-            persist_user = True
-        else:
-            prompt = item
-            attachments = None
-            persist_user = True
-        runner._status = "running"
-        # A turn is live — not quiet regardless of subscriber count.
-        # Clear here rather than spread the condition through every
-        # status mutation site.
-        runner._quiet_since = None
-        runner._stop_requested = False
-        # Bump updated_at the moment the runner starts work so the
-        # sidebar floats this session to the top immediately — not
-        # after MessageComplete lands. Covers the replay-path too:
-        # `_Replay` skips `insert_message`, so without this touch the
-        # sort wouldn't move on a resumed orphan prompt. DB hiccup
-        # here must not abort the turn — swallow.
+def _decode_queue_item(
+    item: Any,
+) -> tuple[str, list[dict[str, Any]] | None, bool] | None:
+    """Unpack a prompt-queue item into (prompt, attachments,
+    persist_user). Returns `None` when the item is `_Shutdown` so
+    the caller can break the loop.
+
+    `_Replay` skips persistence (the user message is already in the
+    DB from the prior crash); `_Submit` is the normal new-prompt
+    shape; bare strings are the legacy submit shape and are treated
+    as a fresh user submission with no attachments."""
+    if isinstance(item, _Shutdown):
+        return None
+    if isinstance(item, _Replay):
+        return item.prompt, item.attachments, False
+    if isinstance(item, _Submit):
+        return item.prompt, item.attachments, True
+    return item, None, True
+
+
+async def _mark_turn_starting(runner: SessionRunner) -> None:
+    """Flip runner state to running, bump updated_at, broadcast.
+
+    A turn is live — not quiet regardless of subscriber count, so
+    `_quiet_since` clears unconditionally. Bumps `updated_at` the
+    moment work starts so the sidebar floats this session to the top
+    immediately rather than after MessageComplete lands; covers the
+    replay path too (orphan-prompt resume skips `insert_message`).
+    Swallows DB hiccups — a touch failure must not abort the turn.
+    Publishes the upsert AFTER `touch_session` so the payload
+    carries the bumped timestamp."""
+    runner._status = "running"
+    runner._quiet_since = None
+    runner._stop_requested = False
+    try:
+        await store.touch_session(runner.db, runner.session_id)
+    except aiosqlite.Error:
+        log.exception("runner %s: touch_session on turn-start failed", runner.session_id)
+    await publish_session_upsert(runner._sessions_broker, runner.db, runner.session_id)
+    runner._publish_runner_state()
+
+
+async def _run_one_turn(
+    runner: SessionRunner,
+    prompt: str,
+    attachments: list[dict[str, Any]] | None,
+    persist_user: bool,
+) -> None:
+    """Execute one turn with the error-pending latch wrapped around it.
+
+    On crash, latch `error_pending=True` so the sidebar surfaces the
+    red indicator without the user having to open the conversation
+    to find it. On success (or by a subsequent clean turn) the latch
+    clears. DB errors on the latch/clear are swallowed — missing the
+    latch is a worse UX than the current (non-existent) state but
+    not data loss. The `idle` upsert at the end carries any cost /
+    message_count / error_pending transitions from
+    `persist_assistant_turn` in one fan-out."""
+    turn_ok = False
+    try:
+        await execute_turn(runner, prompt, persist_user=persist_user, attachments=attachments)
+        turn_ok = True
+    except Exception as exc:
+        log.exception("runner %s: turn failed", runner.session_id)
+        await runner._emit_event(ErrorEvent(session_id=runner.session_id, message=str(exc)))
         try:
-            await store.touch_session(runner.db, runner.session_id)
+            await store.set_session_error_pending(runner.db, runner.session_id, pending=True)
         except aiosqlite.Error:
-            log.exception(
-                "runner %s: touch_session on turn-start failed",
-                runner.session_id,
-            )
-        # Phase-2 broadcast: every connected sidebar sees the
-        # updated_at bump + the running badge without waiting for the
-        # poll tick. Publish AFTER touch_session so the upsert payload
-        # carries the bumped timestamp.
+            log.exception("runner %s: failed to latch error_pending", runner.session_id)
+    finally:
+        runner._status = "idle"
+        if not runner._subscribers:
+            runner._quiet_since = time.monotonic()
+        if turn_ok:
+            try:
+                await store.set_session_error_pending(runner.db, runner.session_id, pending=False)
+            except aiosqlite.Error:
+                log.exception("runner %s: failed to clear error_pending", runner.session_id)
         await publish_session_upsert(runner._sessions_broker, runner.db, runner.session_id)
         runner._publish_runner_state()
-        turn_ok = False
-        try:
-            await execute_turn(
-                runner,
-                prompt,
-                persist_user=persist_user,
-                attachments=attachments,
-            )
-            turn_ok = True
-        except Exception as exc:
-            log.exception("runner %s: turn failed", runner.session_id)
-            await runner._emit_event(ErrorEvent(session_id=runner.session_id, message=str(exc)))
-            # Latch the red-flashing error state onto the session row
-            # so the sidebar surfaces the crash without the user
-            # having to open the conversation to find it. Cleared on
-            # the next successful MessageComplete by the `execute_turn`
-            # path below, or implicitly by a subsequent successful
-            # turn in this same loop. Swallow DB errors — missing the
-            # latch just means the sidebar indicator doesn't light,
-            # which is a worse UX than the current (non-existent)
-            # state but not a data loss.
-            try:
-                await store.set_session_error_pending(runner.db, runner.session_id, pending=True)
-            except aiosqlite.Error:
-                log.exception(
-                    "runner %s: failed to latch error_pending",
-                    runner.session_id,
-                )
-        finally:
-            runner._status = "idle"
-            # If nobody's watching, start the reaper clock. A connected
-            # subscriber keeps the clock off until it unsubscribes.
-            if not runner._subscribers:
-                runner._quiet_since = time.monotonic()
-            # A clean turn clears any stale error_pending latched by an
-            # earlier crash on this session — the red dot disappears
-            # the moment the user's retry lands a successful reply.
-            # Kept inside the finally so an exception-free turn still
-            # gets the clear before we broadcast the idle upsert.
-            if turn_ok:
-                try:
-                    await store.set_session_error_pending(
-                        runner.db, runner.session_id, pending=False
-                    )
-                except aiosqlite.Error:
-                    log.exception(
-                        "runner %s: failed to clear error_pending",
-                        runner.session_id,
-                    )
-            # Broadcast idle so the sidebar clears the running ping
-            # and picks up any cost / message_count / completed bumps
-            # (plus the error_pending transition above) from
-            # `persist_assistant_turn` in one upsert.
-            await publish_session_upsert(runner._sessions_broker, runner.db, runner.session_id)
-            runner._publish_runner_state()
+
+
+async def run_worker(runner: SessionRunner) -> None:
+    """Main worker loop: replay any orphaned prompt, then drain the
+    queue one turn at a time until `_Shutdown` arrives.
+
+    Orphan-replay must run before the first `get()` so the replayed
+    prompt is the first turn this worker executes — any real user
+    prompt submitted after reconnect naturally queues behind it."""
+    await maybe_replay_orphaned_prompt(runner)
+    while True:
+        decoded = _decode_queue_item(await runner._prompts.get())
+        if decoded is None:
+            return
+        prompt, attachments, persist_user = decoded
+        await _mark_turn_starting(runner)
+        await _run_one_turn(runner, prompt, attachments, persist_user)
 
 
 async def execute_turn(  # noqa: C901
