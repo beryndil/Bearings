@@ -6,6 +6,113 @@ belongs here. Shipped work lives in `CHANGELOG.md` (and in
 this file — which contained per-version shipped ledgers — is preserved
 verbatim at `TODO-archive-2026-04-22.md` next to this file.
 
+---
+
+## Root-cause: why `mcp__bearings__bash` denied under `bypassPermissions` — 2026-04-27
+
+Surfaced from audit item #520 executor (this commit). The defensive
+broadening of `tool_deny_callback.py` ensures we no longer silently halt
+when ANY tool gets denied, but the upstream root cause of the deny on
+`mcp__bearings__bash` is still unresolved.
+
+**Reference incident.** Audit item #396 executor
+`84c58b1448f543209895038f4f680aab`, 2026-04-27 16:50:16. Permission mode
+`bypassPermissions` (verified DB + runner). `curl -X PATCH` via
+`mcp__bearings__bash` denied with the SDK's canonical rejection text in
+51ms — too fast for a human click; auto-deny somewhere upstream of our
+`ApprovalBroker`.
+
+**Hypothesis ranking** (highest probability first, established by #520
+investigation):
+
+1. **Project `.claude/settings.json` permission merge.** The project
+   declares only `permissions.allow=[Edit(.../Bearings/**),
+   Write(.../Bearings/**)]` with no `defaultMode`. The Claude Code
+   settings merger may produce an effective `ask` default for tools
+   NOT in the project allow list, even when global settings carry
+   `defaultMode=bypassPermissions`. The deny would land BEFORE
+   `can_use_tool` fires, bypassing our broker entirely.
+2. **PreToolUse hook with unexpected matcher behavior.** None of the
+   wired hooks (`gsd-prompt-guard`, `check-careful`, `check-freeze`,
+   `lockout.py`) have a matcher that should fire on
+   `mcp__bearings__bash` (the `Bash` matcher is case-sensitive
+   substring per Anthropic docs and would not match the lowercase
+   `bash` in the MCP tool name). Verify Anthropic's actual matcher
+   semantics in the v2.1.119 SDK before ruling this out.
+3. **Bearings broker race.** WS-set bypass might not have propagated
+   to `agent.permission_mode` by the time the broker's `mode_getter`
+   runs. Lower probability — the mode-aware fast-path is well-tested
+   and the deny was instantaneous, not racing a mode change.
+
+**Reproduction recipe** (for the next executor on this item):
+
+1. Temp-rename `/home/beryndil/Projects/Bearings/.claude/settings.json`.
+2. Spawn a fresh Bearings executor with `permission_mode=bypassPermissions`.
+3. Have it attempt the same `curl -X PATCH http://127.0.0.1:8787/...`
+   via `mcp__bearings__bash`.
+4. If the deny disappears, root is hypothesis 1 (settings merge).
+5. If the deny persists, add `import sys; print(...)` at the top of
+   each `~/.claude/hooks/*.{sh,py,js}` PreToolUse hook recording the
+   tool name + matcher, reproduce, observe which hook fires (if any).
+6. If neither reveals it, the root may live upstream in Anthropic's
+   SDK / Claude Code v2.1.119 — flag-and-move-on with documented
+   hypothesis and link to whatever issue tracker we file there.
+
+**Files NOT to touch** (preserved from #520 plug):
+`src/bearings/agent/approval_broker.py` — the broker is correct, the
+deny doesn't go through it. Only modify if reproduction proves
+otherwise.
+
+**Defense-in-depth already shipped.** #520 generalized the BLOCKED
+callback synthesis to fire on ANY tool deny via either the lockout
+prefix OR the SDK's canonical rejection signature, so the silent-halt
+class is closed regardless of where the root lives. This TODO is
+about understanding why the deny happens at all, not about preventing
+the audit-stall consequence.
+
+---
+
+## Synth-gate cross-check on executor callbacks — 2026-04-27
+
+Surfaced from the Godmode-audit research session, 2026-04-27. Implements
+the Bearings-specific case of `~/.claude/rules/synth-gate.md`.
+
+**Task.** Add an independent verification step in the orchestrator's
+executor-callback handler so a `DONE` / `DONE_WITH_CONCERNS` status from an
+executor is not trusted at face value before the master checklist advances.
+
+**Why.** Today the orchestrator parses the status sigil out of the executor's
+prompt-POST body and toggles the master item based on the string alone (per
+`~/.claude/rules/executor-handoff-on-pressure.md` §"Orchestrator playbook").
+A buggy, partial, or garbled executor can claim DONE while the corresponding
+children of the master item are still unchecked — leaving the audit trail
+silently corrupted. No cross-check exists today.
+
+**Cross-check shape.** Before the orchestrator advances:
+- Fetch the master item's children via
+  `GET /api/sessions/<MASTER_ID>/checklist?parent_item_id=<ITEM_ID>`.
+- Confirm every child the executor claimed to tick is actually checked
+  on disk. (Required for `DONE`. For `DONE_WITH_CONCERNS`, same check
+  plus the concern note must be persisted in master `notes`.)
+- If mismatch: do NOT advance the item. Log the discrepancy in master
+  `notes` via PATCH. Surface the gap to Dave (in the orchestrator
+  session's stream) so he can adjudicate. Do NOT auto-toggle.
+
+**Files most likely.** `src/bearings/api/sessions.py` (the prompt-receiver
+that processes status callbacks; check for the orchestrator-side branch).
+Also consider whether the cross-check belongs in the orchestrator's worker
+loop instead of the API route — the worker has clean access to the master
+state and is the natural place to enforce a pre-toggle invariant.
+
+**Verification.** Add a regression test that simulates an executor posting
+`DONE` to the orchestrator while the master item's children are still
+unchecked. Assert the orchestrator does NOT toggle the master item and that
+a discrepancy line lands in master `notes`.
+
+**Defer reason.** Surfaced from Godmode-audit research session 2026-04-27.
+Dave is at his weekly cap on Anthropic plan; not free to spend executor
+turns on this now. Pick up next week.
+
 Known gap: 15 shipped versions (v0.3.0–5, v0.3.8–12, v0.4.0–1,
 v0.5.0–1) exist in the archive's "## vX.Y.Z — shipped" sections but
 are missing from `CHANGELOG.md`. Backfill is logged at

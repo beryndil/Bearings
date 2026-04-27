@@ -39,10 +39,10 @@ from bearings.agent.events import (
     ToolOutputDelta,
     TurnReplayed,
 )
-from bearings.agent.lockout_callback import maybe_post_lockout_callback
 from bearings.agent.persist import persist_assistant_turn
 from bearings.agent.runner_types import _Replay, _Shutdown, _Submit
 from bearings.agent.sessions_broker import publish_session_upsert
+from bearings.agent.tool_deny_callback import maybe_post_tool_deny_callback
 from bearings.db import store
 
 if TYPE_CHECKING:
@@ -377,14 +377,16 @@ async def execute_turn(  # noqa: C901
                         await runner._emit_event(
                             Token(session_id=runner.session_id, text=injection)
                         )
-                    # Audit item #519: when the global lockout hook
-                    # denies a write-class tool, the SDK's deny tail
-                    # halts an autonomous executor silently. Synthesize
-                    # a BLOCKED callback to the orchestrator so the
-                    # audit doesn't stall. Helper short-circuits cheap
-                    # on the common (non-deny) path; see
-                    # `bearings.agent.lockout_callback` for the contract.
-                    await maybe_post_lockout_callback(
+                    # Audit items #519 + #520: when ANY tool gets denied
+                    # — by the global lockout hook (`[lockout] ` prefix)
+                    # OR by Anthropic's permission gate (SDK canonical
+                    # rejection text) — the SDK's deny tail halts an
+                    # autonomous executor silently. Synthesize a BLOCKED
+                    # callback to the orchestrator so the audit doesn't
+                    # stall. Helper short-circuits cheap on the common
+                    # (non-deny) path; see
+                    # `bearings.agent.tool_deny_callback` for the contract.
+                    await maybe_post_tool_deny_callback(
                         runner,
                         tool_name=start_name,
                         ok=event.ok,
