@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, TYPE_CHECKING, Any
 
 import tomli_w
 from websockets.asyncio.client import connect as ws_connect
@@ -130,12 +130,17 @@ def _ensure_firefox_ssb_profile() -> Path:
     return profile_dir
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="bearings")
-    parser.add_argument("--version", action="version", version=f"bearings {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
+# Argparse's `_SubParsersAction` is only subscriptable at type-check
+# time; runtime evaluation of `_SubParsersAction[ArgumentParser]`
+# raises TypeError. Guard the alias behind TYPE_CHECKING so mypy /
+# editors see the parameterized form while runtime gets the bare class.
+if TYPE_CHECKING:
+    _SubParsers = argparse._SubParsersAction[argparse.ArgumentParser]
+else:
+    _SubParsers = argparse._SubParsersAction
 
-    sub.add_parser("serve", help="Run the FastAPI server")
+
+def _add_init_parser(sub: _SubParsers) -> None:
     init = sub.add_parser("init", help="Initialize config + database on disk")
     init.add_argument(
         "--profile",
@@ -152,6 +157,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+
+def _add_window_parser(sub: _SubParsers) -> None:
     window = sub.add_parser(
         "window",
         help="Open the UI in a standalone browser window (Firefox preferred, Chromium fallback)",
@@ -183,6 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+
+def _add_send_parser(sub: _SubParsers) -> None:
     send = sub.add_parser("send", help="Send a one-shot prompt to an agent session")
     send.add_argument("--session", required=True, help="Session id")
     send.add_argument("--host", default=None, help="Server host (default: from config)")
@@ -201,6 +210,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     send.add_argument("message", help="Prompt text")
 
+
+def _add_here_parser(sub: _SubParsers) -> None:
     here = sub.add_parser(
         "here",
         help="Per-directory `.bearings/` context (init, check).",
@@ -224,6 +235,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target directory (default: current working directory)",
     )
 
+
+def _add_pending_parser(sub: _SubParsers) -> None:
     pending = sub.add_parser(
         "pending",
         help="Manage in-flight operations in .bearings/pending.toml",
@@ -257,8 +270,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="Target directory (default: current working directory)",
     )
 
-    _todo_register(sub)
 
+def _add_gc_parser(sub: _SubParsers) -> None:
     gc = sub.add_parser(
         "gc",
         help="Garbage-collect on-disk state (uploads, etc.).",
@@ -291,6 +304,24 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+
+def build_parser() -> argparse.ArgumentParser:
+    """Top-level argparse builder for the `bearings` CLI.
+
+    Each subcommand parser is wired by a focused `_add_*_parser`
+    helper so this function stays a flat registration table — when a
+    new subcommand lands, add the helper above and one line here."""
+    parser = argparse.ArgumentParser(prog="bearings")
+    parser.add_argument("--version", action="version", version=f"bearings {__version__}")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("serve", help="Run the FastAPI server")
+    _add_init_parser(sub)
+    _add_window_parser(sub)
+    _add_send_parser(sub)
+    _add_here_parser(sub)
+    _add_pending_parser(sub)
+    _todo_register(sub)
+    _add_gc_parser(sub)
     return parser
 
 
