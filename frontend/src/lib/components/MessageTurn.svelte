@@ -7,6 +7,7 @@
   import { linkify } from '$lib/linkify';
   import { preferences } from '$lib/stores/preferences.svelte';
   import { scrollBehavior } from '$lib/utils/motion';
+  import { formatDuration } from '$lib/utils/datetime';
   import CollapsibleBody from './CollapsibleBody.svelte';
 
   type Props = {
@@ -191,13 +192,17 @@
     // `nowMs`; the server's monotonic number from `tool_progress`
     // keepalives prevents the readout from freezing. See reducer
     // `tool_progress` case and TODO.md silence-gap entry.
+    //
+    // Output formatting is centralized in `formatDuration` (§32).
+    // `'integer'` precision preserves the legacy live-ticker shape
+    // (`5s, 6s, 7s`) — tenths-of-a-second on a once-per-second
+    // ticker reads as false precision because the fractional digit
+    // is always `.0` between ticks. Inspector uses the default
+    // `'tenths'` precision because finished tool calls actually
+    // benefit from sub-second resolution.
     const localMs = Math.max(0, nowMs - startedAt);
     const effectiveMs = Math.max(localMs, lastProgressMs ?? 0);
-    const s = Math.floor(effectiveMs / 1000);
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `${m}m${rem.toString().padStart(2, '0')}s`;
+    return formatDuration(effectiveMs, 'integer');
   }
 
   function callMarker(ok: boolean | null): { glyph: string; cls: string } {

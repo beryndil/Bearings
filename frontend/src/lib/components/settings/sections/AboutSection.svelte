@@ -28,6 +28,7 @@
   import SettingsLink from '../SettingsLink.svelte';
   import BearingsMark from '../../icons/BearingsMark.svelte';
   import { fetchVersion, type VersionInfo } from '$lib/api/version';
+  import { formatAbsolute } from '$lib/utils/datetime';
 
   const COFFEE_URL = 'https://hardknocks.university/developer.html';
   const TAGLINE = 'Localhost web UI for Claude Code agent sessions.';
@@ -38,13 +39,15 @@
   /** Format the `build` token (nanosecond mtime) as a local
    * timestamp. `null` (no dist directory — dev) → 'dev build'.
    * Unparseable input → 'unknown'; the API contract promises a
-   * numeric string but we don't trust silently. */
+   * numeric string but we don't trust silently. Routes through
+   * `formatAbsolute` so the timezone / locale overrides on the
+   * Appearance settings apply here too (§32). */
   function formatBuild(build: string | null): string {
     if (build === null) return 'dev build';
     const ns = Number(build);
     if (!Number.isFinite(ns) || ns <= 0) return 'unknown';
     const ms = Math.floor(ns / 1_000_000);
-    return new Date(ms).toLocaleString();
+    return formatAbsolute(new Date(ms).toISOString());
   }
 
   $effect(() => {

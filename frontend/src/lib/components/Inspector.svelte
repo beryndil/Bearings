@@ -3,6 +3,7 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { getSystemPrompt, type SystemPrompt } from '$lib/api';
   import { stickToBottom } from '$lib/actions/autoscroll';
+  import { formatDuration } from '$lib/utils/datetime';
 
   function callMarker(ok: boolean | null): { glyph: string; cls: string } {
     if (ok === null) return { glyph: '●', cls: 'text-amber-400' };
@@ -10,11 +11,12 @@
     return { glyph: '✗', cls: 'text-rose-400' };
   }
 
-  function formatDuration(ms: number): string {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-
+  /** Tool-call elapsed for the Inspector. Routes through the
+   * centralized `formatDuration` (§32) so the post-completion shape
+   * matches the live ticker in `MessageTurn` and the badge in any
+   * future surface. `running` placeholder stays — the centralized
+   * helper renders an empty string for negative / NaN, but a
+   * still-running call legitimately has no duration to format yet. */
   function elapsed(startedAt: number, finishedAt: number | null): string {
     if (finishedAt === null) return 'running';
     return formatDuration(finishedAt - startedAt);

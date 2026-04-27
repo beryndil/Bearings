@@ -140,18 +140,25 @@ export function formatRelative(
 
 /** Format a duration in milliseconds as a compact human label.
  * Sub-second → "850ms"; under a minute → "12s" or "12.3s" depending
- * on caller's `precision` choice; under an hour → "5m07s"; over an
- * hour → "2h15m". Used for tool-call elapsed and timing badges,
- * where the legacy formatters varied between `MessageTurn` and
- * `Inspector` — this consolidates both. */
-export function formatDuration(ms: number): string {
+ * on `precision`; under an hour → "5m07s"; over an hour → "2h15m".
+ *
+ * `precision` controls the sub-minute fractional digits:
+ *   - `'tenths'` (default): "1.2s" — useful for finished calls where
+ *     sub-second resolution distinguishes a fast tool from a slow one
+ *     (Inspector's existing behavior).
+ *   - `'integer'`: "1s" — useful for live-ticking elapsed displays
+ *     where the tenths digit is always `.0` mid-tick and reads as
+ *     false precision (MessageTurn's existing behavior).
+ * Minute-and-up rendering is the same regardless of `precision`. */
+export function formatDuration(
+  ms: number,
+  precision: 'tenths' | 'integer' = 'tenths'
+): string {
   if (!Number.isFinite(ms) || ms < 0) return '';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   const totalSec = Math.floor(ms / 1000);
   if (totalSec < 60) {
-    // Inspector previously rendered 1.2s for under-minute values; the
-    // tenths-of-second precision is genuinely useful at that scale
-    // (you can see a 1.2s call vs a 4.8s call). Keep it.
+    if (precision === 'integer') return `${totalSec}s`;
     return `${(ms / 1000).toFixed(1)}s`;
   }
   if (totalSec < 3600) {

@@ -10,6 +10,7 @@
   import type { PendingOperationTarget } from '$lib/context-menu/types';
   import { pending } from '$lib/stores/pending.svelte';
   import type { PendingOperation } from '$lib/api/pending';
+  import { formatRelative } from '$lib/utils/datetime';
 
   type Props = {
     op: PendingOperation;
@@ -26,18 +27,14 @@
     description: op.description
   });
 
-  function ageLabel(iso: string): string {
-    const started = Date.parse(iso);
-    if (Number.isNaN(started)) return '';
-    const seconds = Math.floor((Date.now() - started) / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 48) return `${hours}h`;
-    const days = Math.floor(hours / 24);
-    return `${days}d`;
-  }
+  /** Pending-op age uses the centralized `formatRelative` (§32). The
+   * legacy compact form ("5m" vs. the Intl-standard "5 minutes ago")
+   * is widened by ~20px in the badge but reads correctly across
+   * locales — Japanese gets "5分前" rather than the locale-blind
+   * "5m". Called inline in the template so each re-render of the
+   * row (driven by `pending.refresh()` replacing the `ops` array
+   * every 30s) picks up a fresh `Date.now()` for the delta —
+   * matches the legacy `ageLabel` re-evaluation cadence. */
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -50,7 +47,7 @@
   <div class="flex-1 min-w-0">
     <div class="flex items-baseline gap-2">
       <span class="text-xs font-medium text-slate-100 truncate">{op.name}</span>
-      <span class="text-[10px] text-slate-500">{ageLabel(op.started)}</span>
+      <span class="text-[10px] text-slate-500">{formatRelative(op.started)}</span>
     </div>
     {#if op.description}
       <p class="text-[11px] text-slate-400 line-clamp-2">{op.description}</p>

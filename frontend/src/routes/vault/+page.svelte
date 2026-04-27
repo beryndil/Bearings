@@ -28,6 +28,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import * as api from '$lib/api';
+  import { formatAbsolute } from '$lib/utils/datetime';
   import { renderMarkdown } from '$lib/render';
 
   let index = $state<api.VaultIndex | null>(null);
@@ -127,16 +128,14 @@
     searchError = null;
   }
 
+  /** mtime is seconds-since-epoch from the backend `routes_vault.py`
+   * doc index. Convert to an ISO string and route through the
+   * centralized formatter so locale + timezone overrides apply
+   * (§32). Empty / zero stays an em-dash to keep the row readable
+   * when the index hasn't been built yet. */
   function formatMtime(ts: number): string {
     if (!ts) return '—';
-    const d = new Date(ts * 1000);
-    return d.toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatAbsolute(new Date(ts * 1000).toISOString());
   }
 
   function formatSize(bytes: number): string {

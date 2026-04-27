@@ -188,10 +188,17 @@ describe('formatDuration', () => {
     expect(formatDuration(999)).toBe('999ms');
   });
 
-  it('renders sub-minute values in seconds with one decimal', () => {
+  it('renders sub-minute values in seconds with one decimal by default', () => {
     expect(formatDuration(1000)).toBe('1.0s');
     expect(formatDuration(1500)).toBe('1.5s');
     expect(formatDuration(59_900)).toBe('59.9s');
+  });
+
+  it("renders integer seconds when precision is 'integer'", () => {
+    expect(formatDuration(1000, 'integer')).toBe('1s');
+    expect(formatDuration(1500, 'integer')).toBe('1s');
+    expect(formatDuration(45_900, 'integer')).toBe('45s');
+    expect(formatDuration(59_999, 'integer')).toBe('59s');
   });
 
   it('renders sub-hour values as MmSSs', () => {

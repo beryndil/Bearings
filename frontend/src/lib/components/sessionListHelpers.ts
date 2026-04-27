@@ -6,6 +6,7 @@
  */
 
 import type { Session, Tag } from '$lib/api';
+import { formatAbsolute } from '$lib/utils/datetime';
 
 /** Resolve the four-state sidebar indicator for a session row.
  *
@@ -52,12 +53,13 @@ export function indicatorState(
   return null;
 }
 
+/** Format a session row's "updated_at" timestamp for the sidebar.
+ * Routes through the centralized `formatAbsolute` so locale + tz
+ * overrides apply consistently across the app (§32). Falls back to
+ * the raw ISO string on parse failure — the legacy behavior — so a
+ * malformed wire payload doesn't render as empty in the row. */
 export function formatTimestamp(ts: string): string {
-  try {
-    return new Date(ts).toLocaleString();
-  } catch {
-    return ts;
-  }
+  return formatAbsolute(ts) || ts;
 }
 
 export function costClass(session: Session): string {

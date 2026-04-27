@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ReorgAudit } from '$lib/api';
+  import { formatAbsolute } from '$lib/utils/datetime';
 
   // Slice 5 of the Session Reorg plan
   // (`~/.claude/plans/sparkling-triaging-otter.md`). Inline divider
@@ -32,13 +33,11 @@
 
   const targetLabel = $derived(audit.target_title_snapshot ?? '(untitled)');
 
-  function formatTimestamp(ts: string): string {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return ts;
-    }
-  }
+  /** Audit-row stamp uses the centralized `formatAbsolute` so locale
+   * and timezone overrides flow through (§32). Empty-string fallback
+   * gives the row a deterministic shape if the wire timestamp is
+   * malformed. */
+  const stamp = $derived(formatAbsolute(audit.created_at) || audit.created_at);
 
   function onClickTarget() {
     if (!audit.target_session_id || !onJumpTo) return;
@@ -74,7 +73,7 @@
         "{targetLabel}" (deleted session)
       </span>
     {/if}
-    · <span class="font-mono">{formatTimestamp(audit.created_at)}</span>
+    · <span class="font-mono">{stamp}</span>
   </span>
   <div class="flex-1 border-t border-dashed border-slate-800"></div>
 </div>
