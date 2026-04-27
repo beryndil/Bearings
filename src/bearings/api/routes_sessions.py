@@ -35,58 +35,99 @@ router = APIRouter(
 )
 
 
-@router.post("", response_model=SessionOut)
-async def create_session(body: SessionCreate, request: Request) -> SessionOut:
-    # v0.2.13: require ≥1 tag on every externally-created session.
-    # Tags carry the project-like defaults + memories, so a tag-less
-    # session has no context hooks at all — guard rail against that.
+async def _validate_create_session_body(conn: Any, body: SessionCreate, title: str) -> None:
+    """Reject SessionCreate payloads that violate the v0.2.13
+    tag-required and v0.20.6 non-whitespace-title invariants, and
+    pre-validate every tag id exists so we don't half-create with
+    broken tag attachments.
+
+    Pydantic typing already 422s a missing or null `title`; the
+    whitespace check catches `""` and `"   "` which Pydantic
+    accepts. Tag-less sessions have no project defaults / memories
+    wired, so the gate is a hard 400."""
     if not body.tag_ids:
         raise HTTPException(
             status_code=400,
             detail="at least one tag_id is required (sessions must be tagged)",
         )
-    # v0.20.6: title is required and must be non-whitespace. Pydantic
-    # types `title: str` so `null` and missing-field already 422 at the
-    # boundary; this catches `""` and `"   "` which Pydantic accepts.
-    title = body.title.strip()
     if not title:
         raise HTTPException(
             status_code=400,
             detail="title is required (whitespace-only is invalid)",
         )
-    conn = request.app.state.db
-    # Validate every tag exists before inserting the session — avoids a
-    # partial state where the session row is created but some tags fail
-    # to attach.
     for tag_id in body.tag_ids:
         if await store.get_tag(conn, tag_id) is None:
             raise HTTPException(status_code=400, detail=f"tag_id {tag_id} does not exist")
-    # Fill in the global per-session cap from config when the caller
-    # didn't pass one. Explicit `0` or any other value is honored
-    # verbatim — operator knows best for that specific session.
-    # `None` + config default `None` keeps today's uncapped behavior.
-    # 2026-04-21 security audit §7.
-    settings = request.app.state.settings
-    budget = body.max_budget_usd
-    if budget is None:
-        budget = settings.agent.default_max_budget_usd
-    # working_dir resolution. Caller-supplied wins. When absent the
-    # route falls back to the profile's `workspace_root` (per-session
-    # sandbox subdir, `safe` profile) or the legacy
-    # `settings.agent.working_dir` default. We pre-create the sandbox
-    # subdir so the agent's first tool call doesn't trip on a missing
-    # cwd. 2026-04-21 security audit §5 (workspace sandboxing).
+
+
+def _resolve_create_session_budget(body: SessionCreate, settings: Any) -> float | None:
+    """Apply the global per-session budget cap from
+    `agent.default_max_budget_usd` when the caller didn't pass one
+    (2026-04-21 security audit §7). Explicit values — even `0` —
+    are honored verbatim; the operator knows best for that session.
+    `None` + config default `None` keeps today's uncapped behavior."""
+    if body.max_budget_usd is None:
+        default: float | None = settings.agent.default_max_budget_usd
+        return default
+    return body.max_budget_usd
+
+
+def _resolve_create_session_working_dir(body: SessionCreate, settings: Any) -> tuple[str, bool]:
+    """Resolve `working_dir` and whether to set up a sandbox subdir.
+
+    Caller-supplied wins. When absent and the active profile sets
+    `workspace_root` (`safe` profile, 2026-04-21 audit §5), the
+    second tuple element is True so the caller can rewrite the row
+    with `<workspace_root>/<session_id>` after `create_session`
+    mints the id. Otherwise we fall through to the legacy
+    `settings.agent.working_dir` default."""
     requested_dir = (body.working_dir or "").strip()
-    workspace_root = settings.agent.workspace_root
-    use_sandbox = not requested_dir and workspace_root is not None
     if requested_dir:
-        working_dir = requested_dir
-    elif workspace_root is None:
-        working_dir = str(settings.agent.working_dir)
-    else:
-        # Provisional path; the per-session subdir gets the real
-        # session_id appended after `create_session` mints it.
-        working_dir = str(settings.agent.working_dir)
+        return requested_dir, False
+    legacy_default = str(settings.agent.working_dir)
+    if settings.agent.workspace_root is None:
+        return legacy_default, False
+    return legacy_default, True
+
+
+async def _finalize_new_session(
+    conn: Any,
+    session_id: str,
+    body: SessionCreate,
+    sandbox_workspace_root: Any | None,
+) -> None:
+    """Post-insert wiring for a new session.
+
+    Sandbox subdir creation runs only when `_resolve_..._working_dir`
+    flagged it — keeps the per-session subdir mkdir off the default
+    code path. Severity invariant (migration 0021): every session
+    carries exactly one severity tag — `ensure_default_severity` is
+    a silent no-op when the caller passed one in `tag_ids` or when
+    the user has deleted/renamed the default ('Low').
+
+    Checklist-kind sessions carry a 1:1 `checklists` row; failing
+    here leaves the session row behind, which is acceptable (the
+    user can retry the checklist body endpoint) and simpler than
+    an explicit rollback."""
+    if sandbox_workspace_root is not None:
+        sandbox_dir = sandbox_workspace_root / session_id
+        sandbox_dir.mkdir(parents=True, exist_ok=True)
+        await store.set_working_dir(conn, session_id, str(sandbox_dir))
+    for tag_id in body.tag_ids:
+        await store.attach_tag(conn, session_id, tag_id)
+    await store.ensure_default_severity(conn, session_id)
+    if body.kind == "checklist":
+        await store.create_checklist(conn, session_id)
+
+
+@router.post("", response_model=SessionOut)
+async def create_session(body: SessionCreate, request: Request) -> SessionOut:
+    conn = request.app.state.db
+    settings = request.app.state.settings
+    title = body.title.strip()
+    await _validate_create_session_body(conn, body, title)
+    budget = _resolve_create_session_budget(body, settings)
+    working_dir, use_sandbox = _resolve_create_session_working_dir(body, settings)
     row = await store.create_session(
         conn,
         working_dir=working_dir,
@@ -96,32 +137,11 @@ async def create_session(body: SessionCreate, request: Request) -> SessionOut:
         max_budget_usd=budget,
         kind=body.kind,
     )
-    if use_sandbox:
-        assert workspace_root is not None  # narrowed by use_sandbox
-        sandbox_dir = workspace_root / row["id"]
-        sandbox_dir.mkdir(parents=True, exist_ok=True)
-        await store.set_working_dir(conn, row["id"], str(sandbox_dir))
-    for tag_id in body.tag_ids:
-        await store.attach_tag(conn, row["id"], tag_id)
-    # Severity invariant (migration 0021): every session carries exactly
-    # one severity tag. If the caller passed one explicitly in tag_ids
-    # the `attach_tag` loop already landed it; otherwise auto-attach
-    # the default ('Low'). Silent no-op if the user has deleted /
-    # renamed the default — the session lands without a visible
-    # severity, matching the "physical law, not DB constraint" design.
-    await store.ensure_default_severity(conn, row["id"])
-    # Checklist-kind sessions carry a 1:1 companion row. Create it in
-    # the same request so a freshly-minted checklist session is
-    # immediately addressable via `/api/sessions/{id}/checklist` — no
-    # half-built state where the session exists but the checklist
-    # doesn't. `create_checklist` commits; a failure here leaves the
-    # session row behind, which is acceptable (user can retry the
-    # checklist body endpoint) and simpler than an explicit rollback.
-    if body.kind == "checklist":
-        await store.create_checklist(conn, row["id"])
+    sandbox_root = settings.agent.workspace_root if use_sandbox else None
+    await _finalize_new_session(conn, row["id"], body, sandbox_root)
     metrics.sessions_created.inc()
-    # Re-fetch so the returned row carries any updated_at bump from
-    # the attach step, for frontend sort consistency.
+    # Re-fetch so the returned row carries any updated_at bump from the
+    # attach step, for frontend sort consistency.
     refreshed = await store.get_session(conn, row["id"])
     assert refreshed is not None
     # Broadcast to every open sidebar so a second tab sees the new
