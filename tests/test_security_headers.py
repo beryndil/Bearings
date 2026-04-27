@@ -34,6 +34,8 @@ from bearings.api.middleware import (
     compute_inline_script_hashes,
     csp_from_static_dir,
     install_global_exception_handler,
+    install_security_headers,
+    static_csp_provider,
 )
 
 _BASELINE_HEADERS = {
@@ -182,6 +184,81 @@ def test_csp_from_static_dir_handles_missing_dir(
     csp = csp_from_static_dir(tmp_path)  # type: ignore[arg-type]
     assert "script-src" not in csp
     assert "default-src 'self'" in csp
+
+
+def test_install_security_headers_recomputes_csp_on_static_dir_change(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    """A frontend rebuild while the server is running must not lock
+    the UI out. `static_csp_provider` is consulted per request, so
+    edits to the static dir's HTML propagate without a server restart.
+
+    Regression for 2026-04-27: the CSP was snapshotted at app start.
+    A subsequent `npm run build` rewrote `index.html`'s third inline
+    script, the new hash never made it into the allowlist, and
+    SvelteKit's hydration bootstrap was blocked — the sidebar
+    rendered empty because the SPA never started its first
+    `/api/sessions` fetch.
+    """
+    import os
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    static_dir = tmp_path  # type: ignore[assignment]
+    index_html = static_dir / "index.html"  # type: ignore[attr-defined]
+    index_html.write_text(
+        "<script>shared()</script><script>oldScript()</script>",
+        encoding="utf-8",
+    )
+
+    app = FastAPI()
+    install_security_headers(app, csp=static_csp_provider(static_dir))  # type: ignore[arg-type]
+
+    @app.get("/probe")
+    async def probe() -> dict[str, str]:
+        return {"ok": "1"}
+
+    old_hash = compute_inline_script_hashes("<script>oldScript()</script>")[0]
+    new_hash = compute_inline_script_hashes("<script>newScript()</script>")[0]
+
+    with TestClient(app) as c:
+        first_csp = c.get("/probe").headers.get("Content-Security-Policy", "")
+    assert f"'{old_hash}'" in first_csp, "initial CSP should pin the original script"
+    assert f"'{new_hash}'" not in first_csp
+
+    # Simulate a rebuild. Bump mtime explicitly so the cache key
+    # changes regardless of filesystem mtime resolution.
+    index_html.write_text(
+        "<script>shared()</script><script>newScript()</script>",
+        encoding="utf-8",
+    )
+    stat = index_html.stat()
+    os.utime(index_html, ns=(stat.st_mtime_ns + 1_000_000_000,) * 2)
+
+    with TestClient(app) as c:
+        second_csp = c.get("/probe").headers.get("Content-Security-Policy", "")
+    assert f"'{new_hash}'" in second_csp, "rebuilt CSP must include the new script's hash"
+    assert f"'{old_hash}'" not in second_csp, "rebuilt CSP must drop the stale hash"
+
+
+def test_install_security_headers_accepts_static_csp_string() -> None:
+    """The string form of `csp=` still works for callers that don't
+    serve a frontend (API-only embeddings, tests). Per-request
+    resolution is gated on the callable form."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    install_security_headers(app, csp="default-src 'self'; img-src data:")
+
+    @app.get("/probe")
+    async def probe() -> dict[str, str]:
+        return {"ok": "1"}
+
+    with TestClient(app) as c:
+        csp = c.get("/probe").headers.get("Content-Security-Policy", "")
+    assert csp == "default-src 'self'; img-src data:"
 
 
 def test_no_hsts_header(client: TestClient) -> None:

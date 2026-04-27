@@ -137,6 +137,42 @@ def csp_from_static_dir(static_dir: Path) -> str:
     return build_csp(script_hashes=hashes)
 
 
+def static_csp_provider(static_dir: Path) -> Callable[[], str]:
+    """Return a CSP factory that tracks `static_dir`'s HTML files.
+
+    The factory is consulted per request by `install_security_headers`.
+    Cache key is the tuple of `(name, mtime_ns, size)` for every
+    `*.html` in the dir — adding, removing, or rebuilding any entry
+    point invalidates and forces a recompute.
+
+    This fixes the failure mode where the CSP is snapshotted at app
+    construction, the frontend is rebuilt later, and the served HTML's
+    new inline-script hashes don't appear in the stale allowlist —
+    SvelteKit's hydration bootstrap is then blocked by CSP and the
+    SPA never starts. Per-request resolution lets `npm run build`
+    take effect without a server restart.
+
+    The cache is cleared before each insert: only the latest CSP is
+    retained, so repeated rebuilds don't accumulate dead entries.
+    """
+    cache: dict[tuple[tuple[str, int, int], ...], str] = {}
+
+    def provider() -> str:
+        key = tuple(
+            sorted(
+                (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in static_dir.glob("*.html")
+            )
+        )
+        cached = cache.get(key)
+        if cached is None:
+            cached = csp_from_static_dir(static_dir)
+            cache.clear()
+            cache[key] = cached
+        return cached
+
+    return provider
+
+
 _BASE_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -144,13 +180,19 @@ _BASE_HEADERS: dict[str, str] = {
 }
 
 
-def install_security_headers(app: FastAPI, *, csp: str | None = None) -> None:
+def install_security_headers(app: FastAPI, *, csp: str | Callable[[], str] | None = None) -> None:
     """Wire the security-headers middleware onto `app`.
 
     Applies to every HTTP response, including the ones FastAPI
     synthesizes for HTTPException and the sanitized 500 below
     (middleware wraps the exception-handler stack). WebSocket
     handshakes are not affected — see module docstring.
+
+    `csp` may be a fixed string (snapshot once, never changes) or a
+    callable that returns the current CSP (consulted per request).
+    Callers serving the SvelteKit bundle should pass the callable
+    form via `static_csp_provider`, so a frontend rebuild propagates
+    without a server restart.
 
     `setdefault` is used rather than direct assignment so a specific
     route that legitimately needs a different value (e.g. a future
@@ -159,7 +201,14 @@ def install_security_headers(app: FastAPI, *, csp: str | None = None) -> None:
     exists; the posture is defensive against later additions.
     """
 
-    headers = {**_BASE_HEADERS, "Content-Security-Policy": csp or build_csp()}
+    csp_provider: Callable[[], str]
+    if callable(csp):
+        csp_provider = csp
+    else:
+        fixed_csp = csp if csp is not None else build_csp()
+
+        def csp_provider() -> str:  # noqa: E306
+            return fixed_csp
 
     @app.middleware("http")
     async def add_security_headers(
@@ -167,8 +216,9 @@ def install_security_headers(app: FastAPI, *, csp: str | None = None) -> None:
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         response = await call_next(request)
-        for header, value in headers.items():
+        for header, value in _BASE_HEADERS.items():
             response.headers.setdefault(header, value)
+        response.headers.setdefault("Content-Security-Policy", csp_provider())
         return response
 
 

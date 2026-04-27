@@ -43,9 +43,9 @@ from bearings.api import (
     ws_sessions,
 )
 from bearings.api.middleware import (
-    csp_from_static_dir,
     install_global_exception_handler,
     install_security_headers,
+    static_csp_provider,
 )
 from bearings.config import Settings, load_settings
 from bearings.db.store import init_db
@@ -256,13 +256,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # trigger middleware build, so order with the route registrations
     # below is irrelevant in practice, but installing here keeps the
     # security wiring co-located with app construction.
-    # CSP is built from the inline-script hashes in the served
-    # `index.html` so SvelteKit's hydration bootstrap can run without
-    # weakening the policy to `script-src 'unsafe-inline'`. Computed
-    # once at app construction; a frontend rebuild requires a server
-    # restart to pick up new hashes (same lifecycle as the rest of the
-    # served bundle).
-    install_security_headers(app, csp=csp_from_static_dir(STATIC_DIR))
+    # CSP is built from the inline-script hashes in the served HTML so
+    # SvelteKit's hydration bootstrap can run without weakening the
+    # policy to `script-src 'unsafe-inline'`. The provider is consulted
+    # per request and recomputes whenever a `*.html` file in the static
+    # dir changes (mtime + size keyed). This means `npm run build`
+    # while the server is running takes effect on the next request
+    # instead of locking the UI out until a manual restart — the
+    # 2026-04-27 incident the regression test in
+    # tests/test_security_headers.py pins down.
+    install_security_headers(app, csp=static_csp_provider(STATIC_DIR))
     install_global_exception_handler(app)
 
     app.include_router(routes_health.router, prefix="/api")
