@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any
 
@@ -567,106 +567,121 @@ def _check_bind_auth_interlock(cfg: Settings) -> str | None:
     )
 
 
+def _handle_serve_command(args: argparse.Namespace) -> int:
+    """Run the FastAPI server via uvicorn after the bind/auth
+    interlock check (2026-04-21 security audit §6).
+
+    Bearings has no TLS of its own; reverse-proxy users terminate
+    upstream. So "public interface + no token" is equivalent to
+    handing every LAN device a shell on this account. Fail at
+    startup rather than discover it from access logs later."""
+    import uvicorn
+
+    cfg = load_settings()
+    interlock_error = _check_bind_auth_interlock(cfg)
+    if interlock_error is not None:
+        print(interlock_error, file=sys.stderr)
+        return 2
+    if cfg.profile.show_banner:
+        _print_profile_banner(cfg, fh=sys.stdout)
+    uvicorn.run(
+        "bearings.server:create_app",
+        factory=True,
+        host=cfg.server.host,
+        port=cfg.server.port,
+        log_level="info",
+    )
+    return 0
+
+
+def _handle_init_command(args: argparse.Namespace) -> int:
+    """Materialize config + DB paths, then optionally apply the
+    profile in `--profile`. Surfaces the auto-generated auth token
+    so the operator can wire it into a browser bookmark / shell alias
+    before the banner-on-serve reveals it again."""
+    cfg = load_settings()
+    cfg.ensure_paths()
+    if args.profile is not None:
+        _write_profile(cfg.config_file, args.profile)
+        print(f"profile '{args.profile}' written to {cfg.config_file}")
+        cfg = load_settings()  # reload so the printed summary reflects the write
+    print(f"config ready at {cfg.config_file}")
+    print(f"database path {cfg.storage.db_path}")
+    if args.profile is not None:
+        if cfg.auth.enabled and cfg.auth.token:
+            print(f"auth token: {cfg.auth.token}")
+        print()
+        _print_profile_banner(cfg, fh=sys.stdout)
+    return 0
+
+
+def _handle_window_command(args: argparse.Namespace) -> int:
+    """Launch the UI in a standalone-style browser window. Validates
+    the --plain / --profile flag exclusivity, autodetects a browser
+    on PATH when --browser is absent, and surfaces a paste-ready
+    fallback URL when no supported browser can be located."""
+    if args.plain and args.profile_path is not None:
+        print(
+            "bearings window: --plain and --profile are mutually exclusive.",
+            file=sys.stderr,
+        )
+        return 2
+    cfg = load_settings()
+    host = args.host or cfg.server.host
+    port = args.port or cfg.server.port
+    url = f"http://{host}:{port}/"
+    browser = args.browser or find_browser()
+    if browser is None:
+        print(
+            "bearings window: no supported browser found on PATH.\n"
+            "  Install one of: "
+            + ", ".join(SUPPORTED_BROWSERS)
+            + "\n  …or pass --browser /path/to/binary.\n"
+            f"  You can also open {url} in your default browser.",
+            file=sys.stderr,
+        )
+        return 1
+    launch_app_window(browser, url, plain=args.plain, profile_path=args.profile_path)
+    print(f"bearings window: opened {url} via {browser}", file=sys.stderr)
+    return 0
+
+
+def _handle_send_command(args: argparse.Namespace) -> int:
+    """Send a one-shot prompt over the agent WS, streaming events to
+    stdout. The token resolution mirrors the WS auth helpers — config
+    token used only when auth is enabled."""
+    cfg = load_settings()
+    host = args.host or cfg.server.host
+    port = args.port or cfg.server.port
+    token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
+    query = f"?token={token}" if token else ""
+    url = f"ws://{host}:{port}/ws/sessions/{args.session}{query}"
+    return asyncio.run(_run_send(url, args.message, sys.stdout, pretty=args.format == "pretty"))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    """Dispatch the parsed CLI command to its per-subcommand handler.
+
+    Adding a new subcommand: wire the parser in `build_parser()`,
+    add a `_handle_*_command` (or reuse the existing `_run_*`
+    helpers for the directory/checklist subtrees), and register the
+    pair below. Unknown commands return exit `1` so a future parser
+    drift surfaces visibly rather than silently no-op'ing."""
     args = build_parser().parse_args(argv)
-
-    if args.command == "serve":
-        import uvicorn
-
-        cfg = load_settings()
-        # 2026-04-21 security audit §6: refuse to expose Bearings on a
-        # non-loopback interface with no auth gate. Bearings has no
-        # TLS of its own (yet — reverse-proxy users terminate upstream),
-        # so "public interface + no token" is equivalent to handing
-        # every LAN device a shell on this account. Fail at startup
-        # rather than discover it from access logs later.
-        interlock_error = _check_bind_auth_interlock(cfg)
-        if interlock_error is not None:
-            print(interlock_error, file=sys.stderr)
-            return 2
-        if cfg.profile.show_banner:
-            _print_profile_banner(cfg, fh=sys.stdout)
-        uvicorn.run(
-            "bearings.server:create_app",
-            factory=True,
-            host=cfg.server.host,
-            port=cfg.server.port,
-            log_level="info",
-        )
-        return 0
-
-    if args.command == "init":
-        cfg = load_settings()
-        cfg.ensure_paths()
-        if args.profile is not None:
-            _write_profile(cfg.config_file, args.profile)
-            print(f"profile '{args.profile}' written to {cfg.config_file}")
-            cfg = load_settings()  # reload so the printed summary reflects the write
-        print(f"config ready at {cfg.config_file}")
-        print(f"database path {cfg.storage.db_path}")
-        if args.profile is not None:
-            # Surface the auto-generated token so the operator can wire
-            # it into their browser bookmark / shell alias before the
-            # banner-on-serve reveals it again.
-            if cfg.auth.enabled and cfg.auth.token:
-                print(f"auth token: {cfg.auth.token}")
-            print()
-            _print_profile_banner(cfg, fh=sys.stdout)
-        return 0
-
-    if args.command == "window":
-        if args.plain and args.profile_path is not None:
-            print(
-                "bearings window: --plain and --profile are mutually exclusive.",
-                file=sys.stderr,
-            )
-            return 2
-        cfg = load_settings()
-        host = args.host or cfg.server.host
-        port = args.port or cfg.server.port
-        url = f"http://{host}:{port}/"
-        browser = args.browser or find_browser()
-        if browser is None:
-            print(
-                "bearings window: no supported browser found on PATH.\n"
-                "  Install one of: "
-                + ", ".join(SUPPORTED_BROWSERS)
-                + "\n  …or pass --browser /path/to/binary.\n"
-                f"  You can also open {url} in your default browser.",
-                file=sys.stderr,
-            )
-            return 1
-        launch_app_window(
-            browser,
-            url,
-            plain=args.plain,
-            profile_path=args.profile_path,
-        )
-        print(f"bearings window: opened {url} via {browser}", file=sys.stderr)
-        return 0
-
-    if args.command == "send":
-        cfg = load_settings()
-        host = args.host or cfg.server.host
-        port = args.port or cfg.server.port
-        token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
-        query = f"?token={token}" if token else ""
-        url = f"ws://{host}:{port}/ws/sessions/{args.session}{query}"
-        return asyncio.run(_run_send(url, args.message, sys.stdout, pretty=args.format == "pretty"))
-
-    if args.command == "here":
-        return _run_here(args)
-
-    if args.command == "pending":
-        return _run_pending(args)
-
-    if args.command == "todo":
-        return _todo_dispatch(args)
-
-    if args.command == "gc":
-        return _run_gc(args)
-
-    return 1
+    handlers: dict[str, Callable[[argparse.Namespace], int]] = {
+        "serve": _handle_serve_command,
+        "init": _handle_init_command,
+        "window": _handle_window_command,
+        "send": _handle_send_command,
+        "here": _run_here,
+        "pending": _run_pending,
+        "todo": _todo_dispatch,
+        "gc": _run_gc,
+    }
+    handler = handlers.get(args.command)
+    if handler is None:
+        return 1
+    return handler(args)
 
 
 def _resolve_dir(raw: str | None) -> Path:
