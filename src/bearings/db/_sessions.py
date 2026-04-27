@@ -261,32 +261,23 @@ async def delete_session(conn: aiosqlite.Connection, session_id: str) -> bool:
     return cursor.rowcount > 0
 
 
-async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) -> dict[str, Any]:
-    """Restore a session from the v0.1.30 export shape
-    ({session, messages, tool_calls}). Generates fresh ids for the
-    session, every message, and every tool call — preserves content,
-    role, thinking, timestamps, and the message↔tool-call relationship
-    through an id-remap table. Returns the new session row.
+async def _insert_imported_session(
+    conn: aiosqlite.Connection,
+    src_session: dict[str, Any],
+    new_session_id: str,
+    created_at: str,
+    now: str,
+) -> None:
+    """Insert the sessions row for an import.
 
-    Does not copy `total_cost_usd` forward — the new session starts at
-    zero (restores don't count as spend). `updated_at` is stamped to
-    the import time so the imported session lands at the top of the
-    sidebar sort."""
-    src_session = payload.get("session") or {}
-    src_messages = payload.get("messages") or []
-    src_tool_calls = payload.get("tool_calls") or []
-
-    new_session_id = _new_id()
-    now = _now()
-    created_at = str(src_session.get("created_at") or now)
-    # `closed_at` round-trips so an export of a closed session restores
-    # closed; `None` on payloads predating the column is the open default.
-    # `kind` defaults to 'chat' for payloads predating migration 0016;
-    # a bogus value falls back to 'chat' rather than failing the whole
-    # import (imports predate the feature for the vast majority of
-    # backups). Checklist bodies aren't in the v0.1.30 export shape yet
-    # — when they land, the importer will need a companion `checklists`
-    # insert here.
+    `closed_at` round-trips so an export of a closed session restores
+    closed; `None` on payloads predating the column is the open
+    default. `kind` defaults to 'chat' for payloads predating migration
+    0016; a bogus value falls back to 'chat' rather than failing the
+    whole import (imports predate the feature for the vast majority of
+    backups). Checklist bodies aren't in the v0.1.30 export shape yet —
+    when they land, the importer will need a companion `checklists`
+    insert alongside this one."""
     raw_kind = str(src_session.get("kind") or "chat")
     kind = raw_kind if raw_kind in _VALID_SESSION_KINDS else "chat"
     await conn.execute(
@@ -308,6 +299,14 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
         ),
     )
 
+
+async def _insert_imported_messages(
+    conn: aiosqlite.Connection,
+    new_session_id: str,
+    src_messages: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Insert each imported message under a fresh id and return a map
+    from old ids to new ones so tool_calls can rewire `message_id`."""
     msg_id_map: dict[str, str] = {}
     for m in src_messages:
         old_id = str(m.get("id") or "")
@@ -326,7 +325,19 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
                 str(m.get("created_at") or _now()),
             ),
         )
+    return msg_id_map
 
+
+async def _insert_imported_tool_calls(
+    conn: aiosqlite.Connection,
+    new_session_id: str,
+    src_tool_calls: list[dict[str, Any]],
+    msg_id_map: dict[str, str],
+) -> None:
+    """Insert each imported tool call under a fresh id, rewiring its
+    `message_id` through the import's id-remap table. A tool call
+    whose source message wasn't in the export ends up with `None`
+    rather than a dangling reference."""
     for tc in src_tool_calls:
         old_msg_id = tc.get("message_id")
         new_msg_id = msg_id_map.get(str(old_msg_id)) if old_msg_id else None
@@ -348,6 +359,29 @@ async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) ->
             ),
         )
 
+
+async def import_session(conn: aiosqlite.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    """Restore a session from the v0.1.30 export shape
+    ({session, messages, tool_calls}). Generates fresh ids for the
+    session, every message, and every tool call — preserves content,
+    role, thinking, timestamps, and the message↔tool-call relationship
+    through an id-remap table. Returns the new session row.
+
+    Does not copy `total_cost_usd` forward — the new session starts at
+    zero (restores don't count as spend). `updated_at` is stamped to
+    the import time so the imported session lands at the top of the
+    sidebar sort."""
+    src_session = payload.get("session") or {}
+    new_session_id = _new_id()
+    now = _now()
+    created_at = str(src_session.get("created_at") or now)
+    await _insert_imported_session(conn, src_session, new_session_id, created_at, now)
+    msg_id_map = await _insert_imported_messages(
+        conn, new_session_id, payload.get("messages") or []
+    )
+    await _insert_imported_tool_calls(
+        conn, new_session_id, payload.get("tool_calls") or [], msg_id_map
+    )
     await conn.commit()
     row = await get_session(conn, new_session_id)
     assert row is not None
