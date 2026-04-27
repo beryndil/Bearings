@@ -70,39 +70,42 @@ CODE_SESSION_KIND_UNSUPPORTED = 4400
 RUNNABLE_KINDS = {"chat", "checklist"}
 
 
-async def build_runner(app: Any, session_id: str) -> SessionRunner:
-    """Construct a SessionRunner wired to app-scoped state. Used as
-    the factory passed into `RunnerRegistry.get_or_create`
-    (`bearings.agent.registry`) — keeps all the FastAPI-specific wiring
-    out of the runner module.
-
-    Public (was `_build_runner` until v0.21.0) because the prompt-injection
-    HTTP route (`POST /api/sessions/{id}/prompt`) needs the same factory
-    to lazily spawn a runner when an external caller dispatches into a
-    session that hasn't been opened in a tab yet."""
-    conn = app.state.db
+async def _resolve_session_for_runner(conn: Any, session_id: str) -> dict[str, Any]:
+    """Fetch the session row and re-check that the kind can spawn a
+    runner. Defense in depth: the WS handler already rejects unrunnable
+    session kinds before reaching the factory, but if a future caller
+    (imports, migrations, tests) skips that gate, fail loudly here
+    rather than spawning an SDK subprocess that has nothing to do."""
     row = await store.get_session(conn, session_id)
     assert row is not None, "caller must verify the session exists first"
-    # Defense in depth: the WS handler already rejects unrunnable
-    # session kinds before reaching the runner factory. If a future
-    # caller (imports, migrations, tests) skips that gate, fail loudly
-    # here rather than spawning an SDK subprocess that has nothing to
-    # do.
     if row.get("kind", "chat") not in RUNNABLE_KINDS:
         raise ValueError(
             f"cannot build runner for session kind={row.get('kind')!r}; "
             f"runnable kinds: {sorted(RUNNABLE_KINDS)!r}"
         )
-    agent_cfg = app.state.settings.agent
-    # Restore the user's last PermissionMode (migration 0012) so a
-    # browser reload or socket drop doesn't silently roll them back
-    # to 'default'. NULL in the DB → fall back to the profile's
-    # `default_permission_mode` (today's behavior: still None → SDK
-    # default). The DB value wins so a user who flipped to plan mode
-    # before reload doesn't get re-asked.
-    persisted_mode = row.get("permission_mode")
-    permission_mode = persisted_mode or agent_cfg.default_permission_mode
-    agent = AgentSession(
+    return row
+
+
+def _build_agent_session(
+    session_id: str,
+    row: dict[str, Any],
+    agent_cfg: Any,
+    conn: Any,
+) -> AgentSession:
+    """Translate a DB row + agent config into an AgentSession.
+
+    Restores `permission_mode` from the DB (migration 0012) so a
+    browser reload doesn't silently roll a user back to 'default';
+    NULL in the DB falls back to the profile's
+    `default_permission_mode`. Wires the permission-profile gates
+    from the 2026-04-21 security audit §5 (setting_sources +
+    inherit_*) and the token-cost plan Waves 2–3 switches from
+    `enumerated-inventing-ullman.md` (tool_output_cap_chars,
+    enable_*) — `AgentCfg` defaults reproduce the recommended
+    shipping state. `setting_sources` is snapshotted to a fresh
+    list so a per-session mutation can't leak into config."""
+    permission_mode = row.get("permission_mode") or agent_cfg.default_permission_mode
+    return AgentSession(
         session_id,
         row["working_dir"],
         row["model"],
@@ -111,36 +114,27 @@ async def build_runner(app: Any, session_id: str) -> SessionRunner:
         sdk_session_id=row.get("sdk_session_id"),
         permission_mode=permission_mode,
         thinking=_thinking_config(agent_cfg.thinking),
-        # Permission-profile gates (2026-04-21 security audit §5).
-        # `power-user` profile leaves these at today's defaults so the
-        # `ClaudeAgentOptions` payload is byte-identical to pre-toggle-
-        # layer behavior. `safe` profile flips them so a session under
-        # Bearings starts with no `~/.claude` settings inherit, no MCP
-        # inherit, no hook inherit. We snapshot setting_sources to a
-        # fresh list so a per-session mutation can't leak into config.
         setting_sources=list(agent_cfg.setting_sources)
         if agent_cfg.setting_sources is not None
         else None,
         inherit_mcp_servers=agent_cfg.inherit_mcp_servers,
         inherit_hooks=agent_cfg.inherit_hooks,
-        # Token-cost plan Waves 2–3 (plan
-        # `~/.claude/plans/enumerated-inventing-ullman.md`): tool-output
-        # cap advisory, Bearings MCP server, PreCompact steering, and
-        # opt-in researcher sub-agent. All four defaults in
-        # `AgentCfg` reproduce the plan's recommended shipping state;
-        # flip individual knobs in config.toml to experiment.
         tool_output_cap_chars=agent_cfg.tool_output_cap_chars,
         enable_bearings_mcp=agent_cfg.enable_bearings_mcp,
         enable_precompact_steering=agent_cfg.enable_precompact_steering,
         enable_researcher_subagent=agent_cfg.enable_researcher_subagent,
     )
 
-    # Cross-runner prompt dispatcher (audit item #519). Closure over
-    # `app` so the lockout-deny callback path can lazy-spawn the
-    # orchestrator's runner via the registry — same in-process route
-    # `POST /api/sessions/{id}/prompt` takes, just without the HTTP
-    # hop. Defined here (not on the runner) so the runner module
-    # never imports `api.*` and the agent → api circular stays broken.
+
+def _make_prompt_dispatcher(app: Any) -> Any:
+    """Build the cross-runner prompt dispatcher (audit item #519).
+
+    Closure over `app` so the lockout-deny callback path can lazy-spawn
+    the orchestrator's runner via the registry — same in-process route
+    `POST /api/sessions/{id}/prompt` takes, just without the HTTP hop.
+    Defined here (not on the runner) so the runner module never
+    imports `api.*` and the agent → api circular stays broken."""
+
     async def _dispatch_prompt(target_id: str, content: str) -> None:
         registry = app.state.runners
         target_runner = await registry.get_or_create(
@@ -148,6 +142,22 @@ async def build_runner(app: Any, session_id: str) -> SessionRunner:
         )
         await target_runner.submit_prompt(content)
 
+    return _dispatch_prompt
+
+
+async def build_runner(app: Any, session_id: str) -> SessionRunner:
+    """Construct a SessionRunner wired to app-scoped state.
+
+    Used as the factory passed into `RunnerRegistry.get_or_create`
+    (`bearings.agent.registry`) — keeps all the FastAPI-specific
+    wiring out of the runner module. Public (was `_build_runner`
+    until v0.21.0) because the prompt-injection HTTP route
+    (`POST /api/sessions/{id}/prompt`) needs the same factory to
+    lazily spawn a runner when an external caller dispatches into a
+    session that hasn't been opened in a tab yet."""
+    conn = app.state.db
+    row = await _resolve_session_for_runner(conn, session_id)
+    agent = _build_agent_session(session_id, row, app.state.settings.agent, conn)
     runner = SessionRunner(
         session_id,
         agent,
@@ -161,7 +171,7 @@ async def build_runner(app: Any, session_id: str) -> SessionRunner:
         # off settings (not snapshotted) so a config edit + reload
         # picks up new roots on the next runner construction.
         artifacts_cfg=app.state.settings.artifacts,
-        prompt_dispatch=_dispatch_prompt,
+        prompt_dispatch=_make_prompt_dispatcher(app),
     )
     # Late-bind the approval callback: the SDK's `can_use_tool` hook
     # parks futures on the runner, but the runner only exists after
