@@ -23,7 +23,28 @@ import {
   type PaletteEntry,
   type TargetResolver
 } from './palette-resolver';
+import type { Action, ActionSection } from './types';
 import type { Session } from '$lib/api';
+
+/** Minimal valid {@link Action} for palette tests that exercise
+ *  ranking/filtering only. The `handler` is a no-op because these
+ *  suites never invoke it — the rank/filter logic reads
+ *  `entry.id` / `entry.label` / `entry.section` only. Building a real
+ *  Action (instead of `as any`) keeps the test honest about the
+ *  contract: if the type ever grows a new required field, the test
+ *  breaks loud rather than silently masking it via `any`. */
+function fakeAction(
+  id: string,
+  label: string,
+  section: ActionSection
+): Action {
+  return {
+    id,
+    label,
+    section,
+    handler: () => {}
+  };
+}
 
 function fakeSession(overrides: Partial<Session> = {}): Session {
   return {
@@ -146,8 +167,7 @@ describe('rankEntry', () => {
       label,
       section: 'copy',
       target: { type: 'session', id: 'x' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      action: { id, label, section: 'copy', handler: () => {} } as any,
+      action: fakeAction(id, label, 'copy'),
       disabledReason: null,
       advanced: false
     };
@@ -195,8 +215,7 @@ describe('filterEntries', () => {
       label: 'Pin session',
       section: 'organize',
       target: { type: 'session', id: 'x' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      action: {} as any,
+      action: fakeAction('session.pin', 'Pin session', 'organize'),
       disabledReason: null,
       advanced: false
     },
@@ -205,8 +224,11 @@ describe('filterEntries', () => {
       label: 'Open in editor',
       section: 'navigate',
       target: { type: 'session', id: 'x' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      action: {} as any,
+      action: fakeAction(
+        'session.open_in.editor',
+        'Open in editor',
+        'navigate'
+      ),
       disabledReason: null,
       advanced: false
     },
@@ -215,8 +237,7 @@ describe('filterEntries', () => {
       label: 'Copy session title',
       section: 'copy',
       target: { type: 'session', id: 'x' },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      action: {} as any,
+      action: fakeAction('session.copy_title', 'Copy session title', 'copy'),
       disabledReason: null,
       advanced: false
     }

@@ -7,7 +7,8 @@
     "dev": "vite dev",
     "build": "node ../scripts/stamp-frontend-version.mjs && vite build && node ../scripts/sync-dist.mjs",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node ../scripts/check-no-any.mjs",
+    "check:no-any": "node ../scripts/check-no-any.mjs",
     "test": "vitest run"
   },
   "devDependencies": {
