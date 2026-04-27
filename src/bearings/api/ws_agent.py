@@ -134,6 +134,20 @@ async def build_runner(app: Any, session_id: str) -> SessionRunner:
         enable_precompact_steering=agent_cfg.enable_precompact_steering,
         enable_researcher_subagent=agent_cfg.enable_researcher_subagent,
     )
+
+    # Cross-runner prompt dispatcher (audit item #519). Closure over
+    # `app` so the lockout-deny callback path can lazy-spawn the
+    # orchestrator's runner via the registry — same in-process route
+    # `POST /api/sessions/{id}/prompt` takes, just without the HTTP
+    # hop. Defined here (not on the runner) so the runner module
+    # never imports `api.*` and the agent → api circular stays broken.
+    async def _dispatch_prompt(target_id: str, content: str) -> None:
+        registry = app.state.runners
+        target_runner = await registry.get_or_create(
+            target_id, factory=lambda sid: build_runner(app, sid)
+        )
+        await target_runner.submit_prompt(content)
+
     runner = SessionRunner(
         session_id,
         agent,
@@ -147,6 +161,7 @@ async def build_runner(app: Any, session_id: str) -> SessionRunner:
         # off settings (not snapshotted) so a config edit + reload
         # picks up new roots on the next runner construction.
         artifacts_cfg=app.state.settings.artifacts,
+        prompt_dispatch=_dispatch_prompt,
     )
     # Late-bind the approval callback: the SDK's `can_use_tool` hook
     # parks futures on the runner, but the runner only exists after

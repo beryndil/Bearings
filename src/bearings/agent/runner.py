@@ -32,6 +32,7 @@ import asyncio
 import logging
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aiosqlite
@@ -62,12 +63,23 @@ from bearings.db import store
 
 log = logging.getLogger(__name__)
 
+# Cross-runner prompt dispatch: `(target_session_id, content) -> None`.
+# Wired by `bearings.api.ws_agent.build_runner` to a closure that
+# lazy-spawns a runner via the registry and calls `submit_prompt`,
+# mirroring the in-process path of `POST /api/sessions/{id}/prompt`.
+# Today's only consumer is `bearings.agent.lockout_callback`, which
+# synthesizes a BLOCKED callback to an executor's orchestrator on a
+# lockout-hook deny (audit item #519). Kept generic so future
+# cross-runner messaging can ride the same hook.
+PromptDispatch = Callable[[str, str], Awaitable[None]]
+
 # Re-exported for backwards compatibility — tests, `ws_agent`, and
 # downstream callers import these names from `bearings.agent.runner`.
 __all__ = [
     "RING_MAX",
     "SUBSCRIBER_QUEUE_MAX",
     "TOOL_PROGRESS_INTERVAL_S",
+    "PromptDispatch",
     "RunnerStatus",
     "SessionRunner",
     "_Envelope",
@@ -91,12 +103,19 @@ class SessionRunner:
         *,
         sessions_broker: SessionsBroker | None = None,
         artifacts_cfg: ArtifactsCfg | None = None,
+        prompt_dispatch: PromptDispatch | None = None,
     ) -> None:
         self.session_id = session_id
         self.agent = agent
         self.db = db
         # Sessions pubsub (None ok — publish helpers no-op on None).
         self._sessions_broker = sessions_broker
+        # Cross-runner prompt dispatcher (audit item #519). None in unit
+        # tests that skip the full app wiring; production `build_runner`
+        # always provides one. Consumed by `lockout_callback` to wake
+        # an orchestrator when this executor's tool call gets denied by
+        # the global lockout hook.
+        self._prompt_dispatch = prompt_dispatch
         # Phase-1 File Display settings; consumed by `_artifacts.py`'s
         # auto-register hook. None disables auto-register cleanly.
         self._artifacts_cfg = artifacts_cfg
