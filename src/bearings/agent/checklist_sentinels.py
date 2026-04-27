@@ -207,145 +207,133 @@ class ParsedSentinels:
     item_blocked: ItemBlocked | None = None
 
 
-def parse(text: str) -> ParsedSentinels:
-    """Scan `text` for checklist sentinels and return what was found.
-
-    The parser walks line-by-line. State machine has three modes:
-
-    - **normal**: looking for any sentinel marker line.
-    - **handoff**: accumulating plug lines until `HANDOFF_END`.
-    - **followup**: accumulating label lines until `FOLLOWUP_END`.
-
-    An unterminated block (mode != normal at end of input) is
-    discarded — we do not emit a partial handoff or followup. See the
-    module docstring for the rationale.
-    """
-    result = ParsedSentinels()
-
-    # Agents very rarely emit CRLF, but normalize defensively — a
-    # CR at end-of-line would break the exact-match equality tests
-    # below. Splitlines() handles CRLF / LF / standalone CR uniformly.
-    lines = text.splitlines()
+@dataclass
+class _ParseState:
+    """Mutable scanner state for `parse()`. Lives between line-level
+    handlers so the dispatcher functions can read/mutate `mode` and
+    `buffer` without threading them through every call signature."""
 
     mode: str = "normal"
-    buffer: list[str] = []
+    buffer: list[str] = field(default_factory=list)
     pending_blocking: bool = False
     pending_item_blocked_category: str | None = None
 
-    for line in lines:
-        stripped = line.strip()
-        if mode == "normal":
-            if stripped == DONE_MARKER:
-                result.item_done = True
-                continue
-            if stripped == HANDOFF_START:
-                mode = "handoff"
-                buffer = []
-                continue
-            if stripped.startswith(ITEM_BLOCKED_START_PREFIX) and (
-                stripped == ITEM_BLOCKED_START_PREFIX
-                or stripped[len(ITEM_BLOCKED_START_PREFIX)] in (" ", "\t")
-            ):
-                # The start line looks like
-                # `CHECKLIST_ITEM_BLOCKED category=physical_action`.
-                # The `category=` attribute is required and must be
-                # one of the five whitelisted enum values. Anything
-                # else is malformed and the block is skipped — the
-                # driver then keeps the agent working rather than
-                # accept a blocked-flag we can't classify.
-                #
-                # Guard the prefix check so `CHECKLIST_ITEM_BLOCKED_END`
-                # (a future stray line in normal mode) doesn't match
-                # the start prefix and open a new block. The character
-                # immediately after the prefix must be whitespace or
-                # end-of-line; `_END` would put `_` there and we'd
-                # correctly fall through.
-                category = _parse_item_blocked_start(stripped)
-                if category is None:
-                    continue
-                mode = "item_blocked"
-                buffer = []
-                pending_item_blocked_category = category
-                continue
-            if stripped == BLOCKED_START:
-                # CHECKLIST_BLOCKED is sugar for CHECKLIST_FOLLOWUP
-                # block=yes — same downstream effect (driver creates
-                # a blocking child item, recurses), with a name the
-                # agent reaches for when stuck. The body lines until
-                # CHECKLIST_BLOCKED_END become the child label, the
-                # same way the followup body becomes the followup
-                # label.
-                mode = "blocked"
-                buffer = []
-                continue
-            if stripped.startswith(FOLLOWUP_START_PREFIX):
-                # The start line looks like
-                # `CHECKLIST_FOLLOWUP block=yes` — the attribute is
-                # required. Anything we can't parse as block=yes|no
-                # is treated as malformed and the block is skipped.
-                blocking = _parse_followup_start(stripped)
-                if blocking is None:
-                    # Malformed start. Stay in normal mode so a
-                    # later well-formed block in the same message
-                    # is still picked up.
-                    continue
-                mode = "followup"
-                buffer = []
-                pending_blocking = blocking
-                continue
-            # Any other line in normal mode is agent prose and is
-            # ignored by the parser.
-            continue
-        if mode == "handoff":
-            if stripped == HANDOFF_END:
-                result.handoff_plug = "\n".join(buffer)
-                mode = "normal"
-                buffer = []
-                continue
-            # Preserve the line verbatim (not stripped) so the plug
-            # keeps the agent's indentation. The markers are the
-            # only lines the parser is strict about.
-            buffer.append(line)
-            continue
-        if mode == "followup":
-            if stripped == FOLLOWUP_END:
-                label = "\n".join(buffer).strip()
-                if label:
-                    result.followups.append(Followup(label=label, blocking=pending_blocking))
-                mode = "normal"
-                buffer = []
-                continue
-            buffer.append(line)
-            continue
-        if mode == "blocked":
-            if stripped == BLOCKED_END:
-                label = "\n".join(buffer).strip()
-                if label:
-                    # Always blocking — that's the whole point of the
-                    # CHECKLIST_BLOCKED sentinel. No `block=` attribute
-                    # to parse since the keyword carries the semantics.
-                    result.followups.append(Followup(label=label, blocking=True))
-                mode = "normal"
-                buffer = []
-                continue
-            buffer.append(line)
-            continue
-        if mode == "item_blocked":
-            if stripped == ITEM_BLOCKED_END:
-                parsed = _finalize_item_blocked(buffer, pending_item_blocked_category)
-                if parsed is not None:
-                    result.item_blocked = parsed
-                mode = "normal"
-                buffer = []
-                pending_item_blocked_category = None
-                continue
-            buffer.append(line)
-            continue
 
-    # Unterminated block → discard. Resolve item_done vs handoff_plug
-    # and item_done vs item_blocked in favor of done (matches the
-    # existing `done` > `handoff` rule — done wins because it's the
-    # most committal claim).
+def _reset_to_normal(state: _ParseState) -> None:
+    """Drop block state and return to scanning for new markers."""
+    state.mode = "normal"
+    state.buffer = []
+    state.pending_blocking = False
+    state.pending_item_blocked_category = None
+
+
+def _looks_like_item_blocked_start(stripped: str) -> bool:
+    """True when the line is a `CHECKLIST_ITEM_BLOCKED ...` start.
+
+    Guards the prefix check so `CHECKLIST_ITEM_BLOCKED_END` (a future
+    stray line in normal mode) doesn't match the start prefix and
+    open a new block — the character immediately after the prefix
+    must be whitespace or end-of-line."""
+    if not stripped.startswith(ITEM_BLOCKED_START_PREFIX):
+        return False
+    return stripped == ITEM_BLOCKED_START_PREFIX or stripped[len(ITEM_BLOCKED_START_PREFIX)] in (
+        " ",
+        "\t",
+    )
+
+
+def _handle_normal_line(stripped: str, result: ParsedSentinels, state: _ParseState) -> None:
+    """Detect markers in normal mode: DONE, HANDOFF/BLOCKED/
+    ITEM_BLOCKED/FOLLOWUP block-starts. Malformed starts (unparseable
+    `category=` / `block=`) are silently skipped — staying in normal
+    mode lets a later well-formed block in the same message land."""
+    if stripped == DONE_MARKER:
+        result.item_done = True
+        return
+    if stripped == HANDOFF_START:
+        state.mode = "handoff"
+        state.buffer = []
+        return
+    if _looks_like_item_blocked_start(stripped):
+        category = _parse_item_blocked_start(stripped)
+        if category is None:
+            return
+        state.mode = "item_blocked"
+        state.buffer = []
+        state.pending_item_blocked_category = category
+        return
+    if stripped == BLOCKED_START:
+        # CHECKLIST_BLOCKED is sugar for CHECKLIST_FOLLOWUP block=yes
+        # with the body becoming the child label.
+        state.mode = "blocked"
+        state.buffer = []
+        return
+    if stripped.startswith(FOLLOWUP_START_PREFIX):
+        blocking = _parse_followup_start(stripped)
+        if blocking is None:
+            return
+        state.mode = "followup"
+        state.buffer = []
+        state.pending_blocking = blocking
+
+
+def _handle_block_line(
+    stripped: str,
+    line: str,
+    result: ParsedSentinels,
+    state: _ParseState,
+) -> None:
+    """Either finalize the current block on its END marker or append
+    the verbatim line to the buffer. Verbatim (unstripped) preserves
+    agent indentation in plugs and labels — the markers are the only
+    lines the parser is strict about."""
+    if state.mode == "handoff" and stripped == HANDOFF_END:
+        result.handoff_plug = "\n".join(state.buffer)
+        _reset_to_normal(state)
+        return
+    if state.mode == "followup" and stripped == FOLLOWUP_END:
+        label = "\n".join(state.buffer).strip()
+        if label:
+            result.followups.append(Followup(label=label, blocking=state.pending_blocking))
+        _reset_to_normal(state)
+        return
+    if state.mode == "blocked" and stripped == BLOCKED_END:
+        label = "\n".join(state.buffer).strip()
+        if label:
+            # Always blocking — that's the whole point of the
+            # CHECKLIST_BLOCKED sentinel.
+            result.followups.append(Followup(label=label, blocking=True))
+        _reset_to_normal(state)
+        return
+    if state.mode == "item_blocked" and stripped == ITEM_BLOCKED_END:
+        parsed = _finalize_item_blocked(state.buffer, state.pending_item_blocked_category)
+        if parsed is not None:
+            result.item_blocked = parsed
+        _reset_to_normal(state)
+        return
+    state.buffer.append(line)
+
+
+def parse(text: str) -> ParsedSentinels:
+    """Scan `text` for checklist sentinels and return what was found.
+
+    The parser walks line-by-line. State machine has five modes:
+    `normal` (looking for marker lines), `handoff`, `followup`,
+    `blocked`, `item_blocked` (each accumulating body until its END
+    marker). An unterminated block at end of input is discarded — we
+    do not emit a partial sentinel. `splitlines()` normalizes
+    CRLF/LF/CR uniformly so the marker equality tests below are
+    safe regardless of line endings."""
+    result = ParsedSentinels()
+    state = _ParseState()
+    for line in text.splitlines():
+        stripped = line.strip()
+        if state.mode == "normal":
+            _handle_normal_line(stripped, result, state)
+        else:
+            _handle_block_line(stripped, line, result, state)
+    # Resolve item_done vs handoff_plug and item_done vs item_blocked
+    # in favor of done — most-committal claim wins.
     if result.item_done and result.handoff_plug is not None:
         result.handoff_plug = None
     if result.item_done and result.item_blocked is not None:
