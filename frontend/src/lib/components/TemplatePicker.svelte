@@ -18,8 +18,7 @@
    * intentional so the button doesn't look bolted on.
    */
 
-  import { agent } from '$lib/agent.svelte';
-  import { sessions } from '$lib/stores/sessions.svelte';
+  import { goto } from '$app/navigation';
   import { templates } from '$lib/stores/templates.svelte';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
   import BearingsMark from '$lib/components/icons/BearingsMark.svelte';
@@ -70,8 +69,10 @@
     const created = await templates.instantiate(id);
     if (!created) return;
     uiActions.templatePickerOpen = false;
-    sessions.select(created.id);
-    await agent.connect(created.id);
+    // URL-driven selection: navigate to the new session and let
+    // /sessions/[id]/+page.svelte handle select + agent.connect on
+    // mount. `templates.instantiate` already unshifts the row.
+    void goto(`/sessions/${encodeURIComponent(created.id)}`);
   }
 
   async function onDelete(e: MouseEvent, id: string) {

@@ -4,16 +4,12 @@ import { tags } from '$lib/stores/tags.svelte';
 
 const STORAGE_KEY = 'bearings:selectedSessionId';
 
-function readStoredId(): string | null {
-  if (typeof localStorage === 'undefined') return null;
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
 function writeStoredId(id: string | null): void {
+  // The store still writes the last-selected id to localStorage on
+  // every `select()` so the root `/` route can restore it as the
+  // "open the app and see what I was last looking at" reflex.
+  // Reads happen in `(app)/+page.svelte` directly; the store no
+  // longer reads back here because the URL is the source of truth.
   if (typeof localStorage === 'undefined') return;
   try {
     if (id === null) localStorage.removeItem(STORAGE_KEY);
@@ -105,10 +101,14 @@ class SessionStore {
     this.filter = filter;
     try {
       this.list = await api.listSessions(filter);
-      const stored = readStoredId();
-      if (stored && this.list.some((s) => s.id === stored) && this.selectedId === null) {
-        this.selectedId = stored;
-      }
+      // Note: pre-§28 this method auto-seeded `selectedId` from
+      // localStorage when the stored id was in the list and nothing
+      // was selected. With URL routing the URL is the source of
+      // truth — `(app)/+page.svelte` (root `/`) handles the
+      // "remembered last session" redirect explicitly so the URL
+      // and `selectedId` stay aligned. Restoring here would bypass
+      // the URL and leave the address bar pointing at `/` while
+      // the conversation pane shows a session.
     } catch (e) {
       this.error = e instanceof Error ? e.message : String(e);
     } finally {

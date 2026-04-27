@@ -1,15 +1,32 @@
 <script lang="ts">
-  import '../app.css';
-  import { onMount } from 'svelte';
+  /**
+   * Shell layout for the chat / checklist surface — sidebar, draggable
+   * panes, modals, boot. Lives at the `(app)` group so /vault keeps its
+   * own bare layout (no sidebar / inspector noise around the doc
+   * viewer).
+   *
+   * The grid's middle cell is rendered by the page component
+   * (`{@render children?.()}` below). Two pages plug into that slot:
+   *  - `(app)/+page.svelte` — root `/`; renders an empty state or
+   *    redirects to a remembered session.
+   *  - `(app)/sessions/[id]/+page.svelte` — `/sessions/<id>`; reads
+   *    `params.id`, syncs it into `sessions.selectedId`, drives
+   *    `agent.connect`, and renders Conversation or ChecklistView.
+   *
+   * Boot (auth → tags → sessions → ws connect → version watcher) lives
+   * here rather than per-page so navigating between `/` and
+   * `/sessions/<id>` doesn't tear down and re-establish the WebSocket
+   * connection or re-fetch the session list.
+   */
+  import '../../app.css';
+  import { onMount, type Snippet } from 'svelte';
   import AuthGate from '$lib/components/AuthGate.svelte';
   import CheatSheet from '$lib/components/CheatSheet.svelte';
-  import ChecklistView from '$lib/components/ChecklistView.svelte';
   import CommandPalette from '$lib/components/context-menu/CommandPalette.svelte';
   import ConfirmDialog from '$lib/components/context-menu/ConfirmDialog.svelte';
   import ContextMenu from '$lib/components/context-menu/ContextMenu.svelte';
   import StubToastHost from '$lib/components/context-menu/StubToastHost.svelte';
   import UndoToastHost from '$lib/components/context-menu/UndoToastHost.svelte';
-  import Conversation from '$lib/components/Conversation.svelte';
   import Inspector from '$lib/components/Inspector.svelte';
   import PendingOpsCard from '$lib/components/pending/PendingOpsCard.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
@@ -24,6 +41,8 @@
   import { tags } from '$lib/stores/tags.svelte';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
   import { versionWatcher } from '$lib/stores/version_watcher.svelte';
+
+  let { children }: { children?: Snippet } = $props();
 
   let booted = $state(false);
 
@@ -83,13 +102,11 @@
         agent.sessionId !== null && sessions.running.has(agent.sessionId)
     });
     void versionWatcher.init();
-    // v0.5.2: checklist sessions also connect — the ChecklistView
-    // hosts an embedded chat panel and the backend runner accepts
-    // kind='checklist' since the `checklist_overview` prompt layer
-    // landed. No more kind-skip; both kinds take the same boot path.
-    if (sessions.selectedId) {
-      await agent.connect(sessions.selectedId);
-    }
+    // The agent-connect call previously made here moved to the
+    // /sessions/[id]/+page.svelte route component — selection is now
+    // URL-driven, not localStorage-driven. The root page handles the
+    // "user landed on /" case by either redirecting to the remembered
+    // session or rendering an empty-state pane.
   }
 
   onMount(async () => {
@@ -324,11 +341,7 @@
       {panes.left > 0 ? '◂' : '▸'}
     </button>
   </div>
-  {#if sessions.selected?.kind === 'checklist'}
-    <ChecklistView />
-  {:else}
-    <Conversation />
-  {/if}
+  {@render children?.()}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.types import Scope
 
@@ -91,7 +92,32 @@ class _BundleStaticFiles(StaticFiles):
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        response = await super().get_response(path, scope)
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # SPA fallback for dynamic SvelteKit routes (e.g. /sessions/<id>)
+            # that aren't prerendered to per-route HTML. adapter-static emits
+            # `200.html` as the SPA shell; serving it on any 404 GET that
+            # doesn't look like a static asset hands control to the SvelteKit
+            # client router, which then drives the page from the URL params.
+            #
+            # The "looks like an asset" heuristic — path contains a `.` and
+            # isn't a known SPA route depth — is intentional: a missing
+            # `_app/immutable/whatever.js` should still 404 (it indicates a
+            # stale bundle reference that should fail loudly), while a
+            # request to `/sessions/abc-123` falls through to the SPA shell.
+            if exc.status_code == 404 and self._should_serve_spa_fallback(path):
+                try:
+                    fallback = await super().get_response("200.html", scope)
+                except StarletteHTTPException:
+                    # No fallback file built (e.g. dev environment with a
+                    # stale bundle pre-dating the adapter config change).
+                    # Surface the original 404 rather than mask it with a
+                    # second swallowed error.
+                    raise exc from None
+                fallback.headers["Cache-Control"] = "no-cache, must-revalidate"
+                return fallback
+            raise
         if path.startswith("_app/immutable/"):
             response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         else:
@@ -100,6 +126,43 @@ class _BundleStaticFiles(StaticFiles):
             # the browser checks back with us before reusing.
             response.headers["Cache-Control"] = "no-cache, must-revalidate"
         return response
+
+    # Backend mount-points the StaticFiles catchall is layered behind.
+    # An unknown URL under any of these prefixes is a real 404 from
+    # the backend (or a missing endpoint), NOT a SvelteKit client
+    # route — so the SPA fallback must NOT mask it. Listed here as a
+    # tuple so a future router addition (e.g. `/internal/...`) just
+    # needs the prefix appended.
+    _BACKEND_PREFIXES: tuple[str, ...] = ("api/", "ws/", "metrics")
+
+    @staticmethod
+    def _should_serve_spa_fallback(path: str) -> bool:
+        """Decide whether a 404 from the static mount should fall through
+        to the SPA shell rather than propagate as a real 404.
+
+        Returns True for routes that look like SvelteKit client-router
+        targets (no file extension, no underscore-prefixed asset
+        directory, not under a backend mount prefix). Returns False
+        for static asset misses, backend 404s, and well-known paths
+        so a stale bundle reference / missing endpoint still surfaces
+        as a hard 404 instead of being silently masked by the SPA
+        shell HTML.
+        """
+        # Asset directories adapter-static / SvelteKit emit. A miss inside
+        # any of these is a real bug (stale reference, broken build), not
+        # a route the SPA can recover from.
+        if path.startswith("_app/") or path.startswith(".well-known/"):
+            return False
+        # Backend mount points — never SPA-route territory.
+        for prefix in _BundleStaticFiles._BACKEND_PREFIXES:
+            if path.startswith(prefix):
+                return False
+        # Anything with a file extension is treated as an asset request.
+        # Routes are extension-less by SvelteKit convention.
+        last_segment = path.rsplit("/", 1)[-1]
+        if "." in last_segment:
+            return False
+        return True
 
 
 @asynccontextmanager

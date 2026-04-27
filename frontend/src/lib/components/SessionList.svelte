@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { billing } from '$lib/stores/billing.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { sessionSelection } from '$lib/stores/session_selection.svelte';
@@ -96,8 +97,10 @@
       const keep = sessions.list.filter((s) => !created.some((c) => c.id === s.id));
       sessions.list = [...created.reverse(), ...keep];
       const focus = created[0]; // the last one imported (after reverse)
-      sessions.select(focus.id);
-      await agent.connect(focus.id);
+      // Navigate to the freshly-imported session — the URL→state
+      // sync in /sessions/[id]/+page.svelte calls `select` and
+      // `agent.connect` once the route mounts.
+      void goto(`/sessions/${encodeURIComponent(focus.id)}`);
     }
     if (failures.length > 0) {
       importError = failures.map((f) => `${f.name}: ${f.error}`).join('; ');
@@ -258,18 +261,16 @@
       sessionSelection.selectRange(id, orderedVisibleIds);
       return;
     }
-    // Plain click: collapse any multi-selection, then navigate.
+    // Plain click: collapse any multi-selection, then navigate. The
+    // URL is the source of truth — `goto` triggers
+    // `(app)/sessions/[id]/+page.svelte`, which mirrors `params.id`
+    // into `sessions.selectedId`, fires `markViewed`, and connects
+    // the agent. Skipping the goto for the no-op case (clicking the
+    // already-selected row) keeps the browser history clean and
+    // avoids a needless WebSocket re-handshake.
     if (sessionSelection.hasSelection) sessionSelection.clear();
-    sessions.select(id);
-    // Clear the "finished but unviewed" amber dot for this session.
-    // Fire-and-forget: the optimistic path in `markViewed` updates the
-    // local row synchronously so the dot goes away immediately.
-    void sessions.markViewed(id);
-    // v0.5.2: both chat and checklist sessions run an agent loop.
-    // Checklist sessions host an embedded chat panel in ChecklistView
-    // and the backend's `checklist_overview` prompt layer injects the
-    // list's state into every turn.
-    await agent.connect(id);
+    if (sessions.selectedId === id) return;
+    void goto(`/sessions/${encodeURIComponent(id)}`);
   }
 
   async function onDelete(e: MouseEvent, id: string) {

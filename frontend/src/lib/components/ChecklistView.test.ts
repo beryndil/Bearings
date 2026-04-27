@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { goto } from '$app/navigation';
 import type { Session } from '$lib/api';
 import { agent } from '$lib/agent.svelte';
 import { checklists } from '$lib/stores/checklists.svelte';
@@ -10,6 +11,7 @@ import ChecklistView from './ChecklistView.svelte';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.mocked(goto).mockClear();
   sessions.list = [];
   sessions.selectedId = null;
   checklists.reset();
@@ -203,24 +205,22 @@ const PAIRED_CHAT_SESSION: Session = {
 };
 
 describe('ChecklistView paired-chat affordance', () => {
-  it('clicking "Work on this" spawns a paired chat and selects it', async () => {
+  it('clicking "Work on this" spawns a paired chat and navigates to its URL', async () => {
     queueResponses([
       { ok: true, body: CHECKLIST_WITH_ONE_ITEM },
       { ok: true, body: PAIRED_CHAT_SESSION }
     ]);
-    const connectSpy = vi.spyOn(agent, 'connect').mockResolvedValue();
     const { getByRole } = render(ChecklistView);
     await waitFor(() => expect(checklists.current?.items.length).toBe(1));
     const btn = getByRole('button', { name: /Work on Install deps/ });
     await fireEvent.click(btn);
-    await waitFor(() => expect(sessions.selectedId).toBe('chat-1'));
-    // The newly-spawned chat must be in the sidebar list and the
-    // agent runner must have been asked to connect. (The checklist
-    // store itself is reset right after select() because the effect
-    // detects `kind === 'chat'` — so the pairing pointer survives
-    // in the sidebar's session row, not the checklist store.)
-    expect(sessions.list.some((s) => s.id === 'chat-1')).toBe(true);
-    expect(connectSpy).toHaveBeenCalledWith('chat-1');
+    // §28 deep-link routing: ChecklistView no longer wires
+    // sessions.select / agent.connect itself — it navigates to the
+    // chat's URL and /sessions/[id]/+page.svelte handles the rest.
+    await waitFor(() =>
+      expect(sessions.list.some((s) => s.id === 'chat-1')).toBe(true)
+    );
+    await waitFor(() => expect(goto).toHaveBeenCalledWith('/sessions/chat-1'));
   });
 
   it('renders paired-chat link affordance once the item is paired', async () => {
@@ -359,18 +359,18 @@ describe('ChecklistView Slice 4.1', () => {
     expect(link!.className).toMatch(/text-sky-400/);
   });
 
-  it('clicking the paired-chat link selects that session', async () => {
+  it('clicking the paired-chat link navigates to that session', async () => {
     queueResponses([{ ok: true, body: CHECKLIST_WITH_PAIRED_ITEM }]);
     sessions.list = [session(), PAIRED_CHAT_SESSION];
-    const connectSpy = vi.spyOn(agent, 'connect').mockResolvedValue();
     const { container } = render(ChecklistView);
     await waitFor(() => expect(checklists.current?.items.length).toBe(1));
     const link = container.querySelector(
       '[data-testid="paired-chat-link"]'
     ) as HTMLButtonElement;
     await fireEvent.click(link);
-    await waitFor(() => expect(sessions.selectedId).toBe('chat-1'));
-    expect(connectSpy).toHaveBeenCalledWith('chat-1');
+    // §28 deep-link routing: ChecklistView's link handler navigates
+    // and the route component owns select + agent.connect.
+    await waitFor(() => expect(goto).toHaveBeenCalledWith('/sessions/chat-1'));
   });
 
   // --- autonomous-run UI ------------------------------------------

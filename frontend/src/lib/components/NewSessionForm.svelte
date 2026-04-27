@@ -1,9 +1,9 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { tags } from '$lib/stores/tags.svelte';
   import { preferences } from '$lib/stores/preferences.svelte';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
-  import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import { contextmenu } from '$lib/actions/contextmenu';
   import FolderPicker from './FolderPicker.svelte';
@@ -167,22 +167,16 @@
     kind = 'chat';
     for (const id of ids) tags.bumpCount(id, +1);
     open = false;
-    // Select THEN connect — same order as TemplatePicker.onPickNew. If
-    // we only call agent.connect, sessions.selectedId stays on the old
-    // session, the UI doesn't navigate, and the user clicks the new
-    // row in the sidebar to follow the agent — which then re-fires
-    // sessions.select + agent.connect. The second close → reconnect
-    // races with the first WS still completing its open handshake; the
-    // agent.state can land stuck mid-transition (idle / connecting /
-    // closed) and the composer's `disabled={... || agent.state !==
-    // 'open'}` keeps the textarea unresponsive until a hard refresh
-    // re-runs the boot. Selecting first means the row is already
-    // current when connect runs, so no second connect ever fires.
-    sessions.select(created.id);
-    // v0.5.2: both kinds connect — ChecklistView's embedded chat
-    // panel relies on the agent WS being attached to the checklist
-    // session for its overview layer to fire.
-    await agent.connect(created.id);
+    // URL-driven selection: navigate to the new session's deep-link.
+    // /sessions/[id]/+page.svelte's URL→state effect runs once the
+    // route mounts, calling `sessions.select(id)` (no-op — `create`
+    // already selected) and `agent.connect(id)` exactly once. The
+    // single-fire guarantee fixes the legacy race that used to keep
+    // the composer disabled until a hard refresh: prior code called
+    // connect explicitly here, then the user's "click the new row"
+    // re-fired select+connect, and the second close→reconnect raced
+    // with the first WS handshake mid-flight.
+    void goto(`/sessions/${encodeURIComponent(created.id)}`);
   }
 </script>
 

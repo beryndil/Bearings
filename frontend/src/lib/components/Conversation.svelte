@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import { conversation } from '$lib/stores/conversation.svelte';
   import { replyActions } from '$lib/stores/replyActions.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
@@ -79,7 +80,7 @@
   const reorg = new ReorgController({ exitBulkMode: () => bulk.clear() });
 
   function onJumpToAuditTarget(targetId: string): void {
-    sessions.select(targetId);
+    void goto(`/sessions/${encodeURIComponent(targetId)}`);
   }
 
   async function onCopyMessage(msg: api.Message): Promise<void> {
@@ -107,16 +108,20 @@
   }
 
   /** L4.3.1 — `＋ SPAWN` action. Forwards to the store, which POSTs
-   * `/api/sessions/{parent}/spawn_from_reply/{message_id}`, unshifts
-   * the returned row, and selects it. The conversation pane swaps to
-   * the new session via the existing `sessions.selected` reactive
-   * chain. We deliberately don't await — the user wants immediate
-   * feedback and the store handles error surfacing through
-   * `sessions.error`. */
-  function onSpawn(msg: api.Message): void {
+   * `/api/sessions/{parent}/spawn_from_reply/{message_id}` and
+   * unshifts the returned row. We then navigate to the new session's
+   * deep-link URL so /sessions/[id]/+page.svelte handles select +
+   * agent.connect via its URL→state effect. The store still sets
+   * `selectedId` optimistically (so the row highlights immediately
+   * even if the route mount races the unshift), and the route's
+   * idempotent select call is a no-op when the id already matches. */
+  async function onSpawn(msg: api.Message): Promise<void> {
     const sid = msg.session_id;
     if (!sid) return;
-    void sessions.spawnFromReply(sid, msg.id);
+    const spawned = await sessions.spawnFromReply(sid, msg.id);
+    if (spawned) {
+      void goto(`/sessions/${encodeURIComponent(spawned.id)}`);
+    }
   }
 
   /** L4.3.2 — `✂ TLDR` action. Hands the assistant message to the

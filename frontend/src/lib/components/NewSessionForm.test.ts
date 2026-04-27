@@ -1,16 +1,17 @@
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { goto } from "$app/navigation";
 import type { Tag } from "$lib/api";
 import { sessions } from "$lib/stores/sessions.svelte";
 import { tags } from "$lib/stores/tags.svelte";
 import { preferences } from "$lib/stores/preferences.svelte";
-import { agent } from "$lib/agent.svelte";
 import NewSessionForm from "./NewSessionForm.svelte";
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.mocked(goto).mockClear();
   sessions.list = [];
   sessions.selectedId = null;
   tags.list = [];
@@ -87,7 +88,7 @@ describe("NewSessionForm kind toggle", () => {
     expect(queryByText("Model")).toBeNull();
   });
 
-  it("posts kind=checklist and opens an agent connection on submit", async () => {
+  it("posts kind=checklist and navigates to the new session's URL on submit", async () => {
     const stub = queueResponses([
       {
         ok: true,
@@ -112,9 +113,14 @@ describe("NewSessionForm kind toggle", () => {
         },
       },
     ]);
-    const connectSpy = vi.spyOn(agent, "connect").mockResolvedValue();
 
-    const { getByRole } = render(NewSessionForm, { open: true });
+    const { getByRole, getByLabelText } = render(NewSessionForm, {
+      open: true,
+    });
+    // v0.20.6 made title required at the API boundary — fill it in
+    // so the submit button isn't disabled.
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await fireEvent.input(titleInput, { target: { value: "Daisy fixture" } });
     await fireEvent.click(getByRole("radio", { name: /Checklist/ }));
     await fireEvent.click(getByRole("button", { name: /Create session/ }));
 
@@ -122,79 +128,17 @@ describe("NewSessionForm kind toggle", () => {
     const [, init] = stub.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.kind).toBe("checklist");
-    // v0.5.2: checklist sessions now open the WS so the embedded
-    // chat panel in ChecklistView can stream turns — the runner
-    // accepts checklist kinds and the checklist_overview prompt
-    // layer grounds every turn in the list's current state.
-    expect(connectSpy).toHaveBeenCalledWith("sess-new");
-  });
-
-  it("selects the new session before connecting so the UI navigates to it", async () => {
-    // Regression: NewSessionForm used to call agent.connect without
-    // first calling sessions.select. The agent talked to the new
-    // session, but the UI stayed on the old one — the user clicked
-    // the new row to follow, which fired sessions.select + a SECOND
-    // agent.connect, racing the close/reconnect against the still-
-    // opening first WS. Fallout: agent.state could land stuck mid-
-    // transition and the composer's `disabled={... || agent.state
-    // !== 'open'}` kept the textarea unresponsive until a hard
-    // refresh re-ran the boot. The fix is the same select-then-
-    // connect order TemplatePicker uses.
-    queueResponses([
-      {
-        ok: true,
-        body: {
-          id: "sess-select-first",
-          created_at: "2026-04-26T00:00:00+00:00",
-          updated_at: "2026-04-26T00:00:00+00:00",
-          working_dir: "/tmp",
-          model: "claude-opus-4-7",
-          title: null,
-          description: null,
-          max_budget_usd: null,
-          total_cost_usd: 0,
-          message_count: 0,
-          session_instructions: null,
-          permission_mode: null,
-          last_context_pct: null,
-          last_context_tokens: null,
-          last_context_max: null,
-          closed_at: null,
-          kind: "chat",
-          checklist_item_id: null,
-        },
-      },
-    ]);
-    // Capture call order — sessions.select must precede agent.connect
-    // so the row is current before the WS reconnect runs.
-    const order: string[] = [];
-    const selectSpy = vi.spyOn(sessions, "select").mockImplementation((id) => {
-      order.push(`select:${id}`);
-    });
-    const connectSpy = vi
-      .spyOn(agent, "connect")
-      .mockImplementation(async (id) => {
-        order.push(`connect:${id}`);
-      });
-
-    const { getByRole } = render(NewSessionForm, { open: true });
-    await fireEvent.click(getByRole("button", { name: /Create session/ }));
-
+    // §28 deep-link routing: the form navigates to /sessions/<id>
+    // and the route component handles select + agent.connect via
+    // its URL→state effect. Single goto means single connect — the
+    // legacy double-fire race that motivated the prior "select-
+    // before-connect" assertion is structurally impossible now.
     await waitFor(() =>
-      expect(connectSpy).toHaveBeenCalledWith("sess-select-first"),
+      expect(goto).toHaveBeenCalledWith("/sessions/sess-new"),
     );
-    expect(selectSpy).toHaveBeenCalledWith("sess-select-first");
-    // Select must happen before connect — the order is what matters,
-    // not the exact call count (a downstream reactive effect may also
-    // call select once the new session row lands in the list, which
-    // is benign because select-with-same-id is idempotent).
-    const firstSelect = order.indexOf("select:sess-select-first");
-    const firstConnect = order.indexOf("connect:sess-select-first");
-    expect(firstSelect).toBeGreaterThanOrEqual(0);
-    expect(firstConnect).toBeGreaterThan(firstSelect);
   });
 
-  it("chat submission still opens the agent connection", async () => {
+  it("chat submission also navigates to the new session's URL", async () => {
     const stub = queueResponses([
       {
         ok: true,
@@ -220,15 +164,20 @@ describe("NewSessionForm kind toggle", () => {
         },
       },
     ]);
-    const connectSpy = vi.spyOn(agent, "connect").mockResolvedValue();
 
-    const { getByRole } = render(NewSessionForm, { open: true });
+    const { getByRole, getByLabelText } = render(NewSessionForm, {
+      open: true,
+    });
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await fireEvent.input(titleInput, { target: { value: "Daisy fixture" } });
     await fireEvent.click(getByRole("button", { name: /Create session/ }));
 
     await waitFor(() => expect(stub).toHaveBeenCalledTimes(1));
     const [, init] = stub.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(init.body));
     expect(body.kind).toBe("chat");
-    await waitFor(() => expect(connectSpy).toHaveBeenCalledWith("sess-chat"));
+    await waitFor(() =>
+      expect(goto).toHaveBeenCalledWith("/sessions/sess-chat"),
+    );
   });
 });

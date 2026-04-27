@@ -26,11 +26,11 @@
    */
 
   import { onDestroy } from 'svelte';
+  import { goto } from '$app/navigation';
   import type { AutoRunStatus, ChecklistItem } from '$lib/api';
   import { getAutoRun, startAutoRun, stopAutoRun } from '$lib/api/checklists';
   import { checklists } from '$lib/stores/checklists.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
-  import { agent } from '$lib/agent.svelte';
   import ChecklistChat from '$lib/components/ChecklistChat.svelte';
 
   const selected = $derived(sessions.selected);
@@ -176,29 +176,24 @@
 
   /** Spawn-or-navigate handler for the per-item "Work on this"
    * button. Idempotent on the server — a double-click lands on the
-   * same chat session. We select the target session after spawning
-   * so the right pane swaps to the Conversation view on the same
-   * click; the conversation store picks it up via the existing
-   * `sessions.selected` derivation. */
+   * same chat session. After the spawn we navigate to the chat's
+   * deep-link URL; /sessions/[id]/+page.svelte's URL→state effect
+   * runs once the route mounts, calling sessions.select +
+   * agent.connect exactly once. */
   async function handleWorkOnThis(itemId: number) {
     const chat = await checklists.spawnChat(itemId);
     if (!chat) return;
     sessions.list = [chat, ...sessions.list.filter((s) => s.id !== chat.id)];
-    sessions.select(chat.id);
-    await agent.connect(chat.id);
+    void goto(`/sessions/${encodeURIComponent(chat.id)}`);
   }
 
   /** Jump to an already-paired chat. Separate from `handleWorkOnThis`
    * because we skip the spawn call — the session exists and is in
-   * `sessions.list`. Connects the agent so the Conversation view
-   * streams events on arrival (no-op when the session is closed —
-   * `agent.connect` rejects closed sessions up front). */
-  async function handleOpenPairedChat(chatId: string) {
-    sessions.select(chatId);
-    const target = sessions.list.find((s) => s.id === chatId);
-    if (target && !target.closed_at) {
-      await agent.connect(chatId);
-    }
+   * `sessions.list`. Navigation flows through the URL: the route
+   * component handles select + agent.connect (and skips connect for
+   * closed sessions on its own — `agent.connect` rejects them). */
+  function handleOpenPairedChat(chatId: string) {
+    void goto(`/sessions/${encodeURIComponent(chatId)}`);
   }
 
   /** Manual close/reopen toggle for the checklist session itself.

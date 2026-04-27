@@ -14,9 +14,18 @@ export default defineConfig({
     // throws.
     conditions: ['browser'],
     // SvelteKit injects the `$lib` alias at build time; for vitest
-    // we resolve it manually so component imports work.
+    // we resolve it manually so component imports work. The `$app/*`
+    // synthetic modules (only available under the SvelteKit dev/build
+    // pipeline) get aliased to local stubs so production code that
+    // imports `goto` from `$app/navigation` or `page` from
+    // `$app/stores` resolves under jsdom — see src/test-stubs/app/.
     alias: {
-      $lib: path.resolve(__dirname, 'src/lib')
+      $lib: path.resolve(__dirname, 'src/lib'),
+      '$app/navigation': path.resolve(
+        __dirname,
+        'src/test-stubs/app/navigation.ts'
+      ),
+      '$app/stores': path.resolve(__dirname, 'src/test-stubs/app/stores.ts')
     }
   },
   test: {
