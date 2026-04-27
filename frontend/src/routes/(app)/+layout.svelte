@@ -21,6 +21,7 @@
   import '../../app.css';
   import { onMount, type Snippet } from 'svelte';
   import AuthGate from '$lib/components/AuthGate.svelte';
+  import BackendStatusBanner from '$lib/components/BackendStatusBanner.svelte';
   import CheatSheet from '$lib/components/CheatSheet.svelte';
   import CommandPalette from '$lib/components/context-menu/CommandPalette.svelte';
   import ConfirmDialog from '$lib/components/context-menu/ConfirmDialog.svelte';
@@ -306,6 +307,7 @@
 </script>
 
 <AuthGate />
+<BackendStatusBanner />
 <CheatSheet />
 <ContextMenu />
 <CommandPalette />

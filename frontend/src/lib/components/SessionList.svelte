@@ -7,6 +7,7 @@
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
   import type { ContextTarget } from '$lib/context-menu/types';
+  import DataView from '$lib/components/DataView.svelte';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
@@ -305,9 +306,6 @@
 
   <NewSessionForm bind:open={uiActions.newSessionOpen} />
 
-  {#if sessions.error}
-    <p class="text-xs text-rose-400">{sessions.error}</p>
-  {/if}
   {#if importProgress}
     <p class="text-xs text-emerald-300">
       Importing {importProgress.done} of {importProgress.total}…
@@ -343,20 +341,30 @@
 
   {#if searchQuery.trim()}
     <!-- SidebarSearch renders its own results list above. -->
-  {:else if sessions.loading && sessions.list.length === 0}
-    <p class="text-slate-500 text-sm">Loading…</p>
-  {:else if sessions.list.length === 0}
-    <p class="text-slate-500 text-sm">No sessions yet.</p>
   {:else}
-    {#if sessions.openList.length > 0}
-      <ul class="flex flex-col gap-1">
-        {#each sessions.openList as session (session.id)}
-          {@render sessionRow(session)}
-        {/each}
-      </ul>
-    {:else}
-      <p class="text-slate-500 text-sm">No open sessions.</p>
-    {/if}
+    <!-- §9 wrapper: skeleton on first load, error+retry on fetch
+         failure, "No sessions yet." on empty. The retry path calls
+         `sessions.refresh(tags.filter)` so the same filter the user
+         last applied is re-tried — otherwise a retry would silently
+         drop their tag selection. -->
+    <DataView
+      loading={sessions.loading && sessions.list.length === 0}
+      error={sessions.error}
+      isEmpty={sessions.list.length === 0}
+      onRetry={() => sessions.refresh(tags.filter)}
+      emptyLabel="No sessions yet."
+      loadingLabel="Loading sessions"
+    >
+      {#if sessions.openList.length > 0}
+        <ul class="flex flex-col gap-1">
+          {#each sessions.openList as session (session.id)}
+            {@render sessionRow(session)}
+          {/each}
+        </ul>
+      {:else}
+        <p class="text-slate-500 text-sm">No open sessions.</p>
+      {/if}
+    </DataView>
 
     {#if sessionSelection.hasSelection}
       <!-- Selection footer: sticky reminder that bulk mode is active.

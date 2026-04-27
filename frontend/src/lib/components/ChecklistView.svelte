@@ -32,6 +32,7 @@
   import { checklists } from '$lib/stores/checklists.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import ChecklistChat from '$lib/components/ChecklistChat.svelte';
+  import DataView from '$lib/components/DataView.svelte';
 
   const selected = $derived(sessions.selected);
 
@@ -483,11 +484,22 @@
     <ChecklistChat />
   {/if}
 
-  {#if checklists.loading}
-    <p class="px-4 py-6 text-sm text-slate-400">Loading checklist…</p>
-  {:else if checklists.error}
-    <p class="px-4 py-6 text-sm text-rose-400">Error: {checklists.error}</p>
-  {:else if checklists.current}
+  <!-- §9 wrapper: skeleton on first load, error+retry on fetch
+       failure. `isEmpty` is intentionally false — a checklist with
+       zero items still needs its notes textarea and add-input
+       controls visible so the user can populate it; "Nothing to
+       show" copy here would be wrong. The inner `{#if
+       checklists.current}` guard keeps the body from rendering
+       during the mount-before-first-load microtick. -->
+  <DataView
+    class="flex flex-1 min-h-0 flex-col"
+    loading={checklists.loading}
+    error={checklists.error}
+    isEmpty={false}
+    onRetry={selected ? () => checklists.load(selected.id) : undefined}
+    loadingLabel="Loading checklist"
+  >
+    {#if checklists.current}
     <div class="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 py-4">
       <label class="flex flex-col gap-1 text-sm">
         <span class="text-slate-400">Notes</span>
@@ -633,7 +645,8 @@
         >
       </form>
     </div>
-  {:else}
-    <p class="px-4 py-6 text-sm text-slate-400">No checklist loaded.</p>
-  {/if}
+    {:else}
+      <p class="px-4 py-6 text-sm text-slate-400">No checklist loaded.</p>
+    {/if}
+  </DataView>
 </section>

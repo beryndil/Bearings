@@ -28,6 +28,7 @@
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
   import * as api from '$lib/api';
+  import DataView from '$lib/components/DataView.svelte';
   import { formatAbsolute } from '$lib/utils/datetime';
   import { renderMarkdown } from '$lib/render';
 
@@ -248,11 +249,19 @@
         />
       </div>
       <div class="min-h-0 flex-1 overflow-y-auto">
-        {#if loadingIndex && !index}
-          <p class="px-4 py-6 text-sm text-slate-500">Loading…</p>
-        {:else if indexError}
-          <p class="px-4 py-6 text-sm text-rose-400">{indexError}</p>
-        {:else if searchHits !== null}
+        <!-- §9 wrapper for the index list. Search results take over
+             the same pane when the user issues a query — that branch
+             handles its own error/empty inline because search has its
+             own lifecycle. The DataView covers the index lifecycle
+             only: skeleton on first load, retry on fetch failure. -->
+        <DataView
+          loading={loadingIndex && !index}
+          error={indexError}
+          isEmpty={false}
+          onRetry={() => loadIndex()}
+          loadingLabel="Loading vault index"
+        >
+        {#if searchHits !== null}
           <section class="px-2 py-2">
             <header class="px-2 pb-2 text-xs uppercase text-slate-500">
               {searchHits.length} hit{searchHits.length === 1 ? '' : 's'}
@@ -314,40 +323,54 @@
             {/each}
           </ul>
         {/if}
+        </DataView>
       </div>
     </aside>
 
     <main class="min-w-0 flex-1 overflow-y-auto bg-slate-900">
-      {#if doc}
-        <article class="mx-auto max-w-4xl px-8 py-6">
-          <header class="mb-6 border-b border-slate-800 pb-4">
-            <h2 class="text-2xl font-semibold text-slate-100">
-              {doc.title ?? doc.slug}
-            </h2>
-            <div class="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
-              <span class="rounded bg-slate-800 px-2 py-0.5 font-mono">
-                {doc.kind}
-              </span>
-              <span>{formatMtime(doc.mtime)}</span>
-              <span>{formatSize(doc.size)}</span>
-              <span class="font-mono text-slate-600">{doc.path}</span>
-            </div>
-          </header>
-          <!-- renderMarkdown DOMPurifies before returning; the HTML
-               here is trusted output from the shared renderer. -->
-          <div class="prose prose-invert max-w-none">
-            {@html renderedBody}
+      <!-- §9 wrapper for the doc pane. `isEmpty` here is the
+           "no doc selected yet" state — semantically a prompt to
+           pick one, not an "out of items" empty. The custom
+           emptySnippet replaces the default copy with the
+           pick-from-sidebar prompt. Retry re-runs the last loadDoc
+           call if a path is selected; with no selection the retry
+           button is hidden (onRetry undefined). -->
+      <DataView
+        class="h-full"
+        loading={loadingDoc && !doc}
+        error={docError}
+        isEmpty={!doc && !loadingDoc && !docError}
+        onRetry={selectedPath ? () => loadDoc(selectedPath!) : undefined}
+        loadingLabel="Loading document"
+      >
+        {#snippet emptySnippet()}
+          <div class="flex h-full items-center justify-center text-slate-500">
+            <p class="text-sm">Pick a doc from the sidebar to read it.</p>
           </div>
-        </article>
-      {:else if loadingDoc}
-        <p class="px-8 py-6 text-sm text-slate-500">Loading doc…</p>
-      {:else if docError}
-        <p class="px-8 py-6 text-sm text-rose-400">{docError}</p>
-      {:else}
-        <div class="flex h-full items-center justify-center text-slate-500">
-          <p class="text-sm">Pick a doc from the sidebar to read it.</p>
-        </div>
-      {/if}
+        {/snippet}
+        {#if doc}
+          <article class="mx-auto max-w-4xl px-8 py-6">
+            <header class="mb-6 border-b border-slate-800 pb-4">
+              <h2 class="text-2xl font-semibold text-slate-100">
+                {doc.title ?? doc.slug}
+              </h2>
+              <div class="mt-1 flex flex-wrap gap-3 text-xs text-slate-500">
+                <span class="rounded bg-slate-800 px-2 py-0.5 font-mono">
+                  {doc.kind}
+                </span>
+                <span>{formatMtime(doc.mtime)}</span>
+                <span>{formatSize(doc.size)}</span>
+                <span class="font-mono text-slate-600">{doc.path}</span>
+              </div>
+            </header>
+            <!-- renderMarkdown DOMPurifies before returning; the HTML
+                 here is trusted output from the shared renderer. -->
+            <div class="prose prose-invert max-w-none">
+              {@html renderedBody}
+            </div>
+          </article>
+        {/if}
+      </DataView>
     </main>
   </div>
 </div>
