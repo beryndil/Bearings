@@ -257,29 +257,28 @@ async def _forward_events(websocket: WebSocket, queue: asyncio.Queue[_Envelope])
             return
 
 
-@router.websocket("/ws/sessions/{session_id}")
-async def agent_ws(websocket: WebSocket, session_id: str) -> None:
-    # Echo the bearer-subprotocol marker when the client offered it so
-    # browsers can deliver the token off-URL. `None` keeps today's
-    # behavior for CLI (`bearings send`, query-string token) and for
-    # clients that don't opt in. Never echoes `bearer.<tok>`; see
-    # `ws_accept_subprotocol` in `bearings.api.auth`.
+async def _accept_and_validate_session(
+    websocket: WebSocket, session_id: str
+) -> dict[str, Any] | None:
+    """Run the connection-handshake gates and resolve the session row.
+
+    Echoes the bearer-subprotocol marker when the client offered it so
+    browsers can deliver the token off-URL. Origin check runs before
+    auth so a cross-origin attacker can't probe the auth error to
+    distinguish configured-vs-unconfigured servers. Returns the session
+    row on success; closes the socket with the appropriate code and
+    returns `None` on any reject."""
     await websocket.accept(subprotocol=ws_accept_subprotocol(websocket))
-    # Origin check runs before auth so a cross-origin attacker can't
-    # probe the auth error to distinguish configured-vs-unconfigured
-    # servers. Both close before any subscription is registered.
     if not check_ws_origin(websocket):
         await websocket.close(code=CODE_FORBIDDEN_ORIGIN, reason="origin not allowed")
-        return
+        return None
     if not check_ws_auth(websocket):
         await websocket.close(code=CODE_UNAUTHORIZED)
-        return
-    app = websocket.app
-    conn = app.state.db
-    row = await store.get_session(conn, session_id)
+        return None
+    row = await store.get_session(websocket.app.state.db, session_id)
     if row is None:
         await websocket.close(code=CODE_SESSION_NOT_FOUND)
-        return
+        return None
     if row.get("kind", "chat") not in RUNNABLE_KINDS:
         # Future non-runnable kinds land here. Close loud so the bug
         # is obvious if a frontend ever tries to connect to a kind
@@ -288,30 +287,22 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
             code=CODE_SESSION_KIND_UNSUPPORTED,
             reason="session kind does not support agent attachment",
         )
-        return
+        return None
+    return row
 
-    since_seq = _parse_since_seq(websocket)
-    registry = app.state.runners
-    runner = await registry.get_or_create(session_id, factory=lambda sid: build_runner(app, sid))
-    # Directory Context System (v0.6.1): stamp the `history.jsonl`
-    # start marker and kick off stale-state revalidation. Idempotent —
-    # safe to call on every reconnect; the runner gates internally so
-    # the start marker lands exactly once per runner lifetime.
-    await runner.note_directory_context_start()
-    queue, replay = await runner.subscribe(since_seq)
 
-    metrics.ws_active_connections.inc()
-    app.state.active_ws.add(websocket)
+async def _send_initial_runner_status(
+    websocket: WebSocket, runner: SessionRunner, session_id: str
+) -> bool:
+    """Push the ground-truth runner-status snapshot as the first frame.
 
-    # Ground-truth status snapshot sent as the first frame on every
-    # connection. After a server restart the new runner's ring buffer
-    # is empty, so a client that disconnected mid-turn never receives
-    # a `message_complete` — `streamingActive` would stay true forever.
-    # This frame lets the client reconcile: if it thought a turn was
-    # live but the runner is idle, it's safe to clear the streaming
-    # fringe and refresh from DB (the old runner's shutdown path
-    # persisted the partial). Sent before replay so the client has a
-    # known starting point before the event stream resumes.
+    After a server restart the new runner's ring buffer is empty, so a
+    client that disconnected mid-turn never receives a
+    `message_complete` — `streamingActive` would stay true forever.
+    This frame lets the client reconcile: if it thought a turn was
+    live but the runner is idle, it's safe to clear the streaming
+    fringe and refresh from DB. Returns False if the socket died
+    mid-send so the caller can short-circuit to cleanup."""
     try:
         await _send_frame(
             websocket,
@@ -323,111 +314,155 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
             },
         )
     except (WebSocketDisconnect, RuntimeError):
-        runner.unsubscribe(queue)
-        app.state.active_ws.discard(websocket)
-        metrics.ws_active_connections.dec()
-        return
+        return False
+    return True
 
-    # Replay next so the client sees missed events in order before any
-    # live frame arrives. Use the envelope's pre-encoded wire form so
-    # a reconnecting tab doesn't pay N × orjson encode for the replay
-    # window.
+
+async def _replay_buffered_events(websocket: WebSocket, replay: list[_Envelope]) -> bool:
+    """Push each replay envelope's pre-encoded wire form to the socket.
+
+    Sent before live frames so the client sees missed events in order.
+    Using `env.wire` skips per-send orjson encode — a reconnecting tab
+    doesn't pay N × encode for the replay window. Returns False on
+    disconnect so the caller can short-circuit to cleanup."""
     for env in replay:
         try:
             await websocket.send_text(env.wire)
         except (WebSocketDisconnect, RuntimeError):
-            runner.unsubscribe(queue)
-            app.state.active_ws.discard(websocket)
-            metrics.ws_active_connections.dec()
-            return
+            return False
+    return True
 
+
+def _parse_prompt_attachments(raw: Any) -> list[dict[str, Any]]:
+    """Filter the composer's `[File N]` sidecar payload to well-formed
+    entries. The client sends raw dicts — we drop anything missing the
+    expected `(n: int, path: str)` pair so a malformed payload can't
+    crash the runner. A missing key upstream just means a plain-text
+    prompt with no attachments."""
+    if not isinstance(raw, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for entry in raw:
+        if (
+            isinstance(entry, dict)
+            and isinstance(entry.get("n"), int)
+            and isinstance(entry.get("path"), str)
+        ):
+            result.append(
+                {
+                    "n": entry["n"],
+                    "path": entry["path"],
+                    "filename": str(entry.get("filename", "")),
+                    "size_bytes": int(entry.get("size_bytes", 0)),
+                }
+            )
+    return result
+
+
+async def _handle_set_permission_mode(
+    websocket: WebSocket,
+    app: Any,
+    runner: SessionRunner,
+    session_id: str,
+    payload: dict[str, Any],
+) -> None:
+    """Profile-gated permission-mode flip.
+
+    Refuses `bypassPermissions` escalation when the active config
+    disallows it. Today's default (and `power-user`/`workstation`
+    profiles) leaves `allow_bypass_permissions=True`, so the refusal
+    only bites under the `safe` profile or an operator who opted in.
+    Silent ignore + a wire `error` so the UI knows the click did
+    nothing instead of appearing to succeed; the event reducer
+    surfaces `error` events as a transient toast.
+
+    On the allow branch the call is awaited because the runner also
+    retro-applies the new mode to any parked approval (see the
+    broker's `resolve_for_mode` matrix) — awaiting ensures any
+    `approval_resolved` fan-out lands before the next inbound frame."""
+    mode = payload.get("mode")
+    allow_bypass = app.state.settings.agent.allow_bypass_permissions
+    if mode == "bypassPermissions" and not allow_bypass:
+        await _send_frame(
+            websocket,
+            {
+                "type": "error",
+                "session_id": session_id,
+                "message": ("bypassPermissions disabled by active permission profile"),
+            },
+        )
+        return
+    await runner.set_permission_mode(mode or None)
+
+
+async def _handle_approval_response(runner: SessionRunner, payload: dict[str, Any]) -> None:
+    """Resolve a pending `can_use_tool` future.
+
+    Unknown / already-resolved ids are no-ops inside the runner, so two
+    tabs racing to answer the same modal is safe. `updated_input` is
+    the UI-collected override the SDK will hand to the tool
+    (AskUserQuestion answers ride here). Non-dict values are dropped —
+    we never want a malformed payload to clobber the tool's actual
+    input."""
+    request_id = payload.get("request_id")
+    decision = payload.get("decision")
+    reason = payload.get("reason")
+    updated_input = payload.get("updated_input")
+    if isinstance(request_id, str) and decision in ("allow", "deny"):
+        await runner.resolve_approval(
+            request_id,
+            decision,
+            reason if isinstance(reason, str) else None,
+            updated_input if isinstance(updated_input, dict) else None,
+        )
+
+
+async def _dispatch_ws_message(
+    websocket: WebSocket,
+    app: Any,
+    runner: SessionRunner,
+    session_id: str,
+    payload: dict[str, Any],
+) -> None:
+    """Route one inbound control frame to the appropriate handler.
+
+    Unknown message types are silently ignored — keeps the protocol
+    forward-compatible the same way it was pre-refactor."""
+    msg_type = payload.get("type")
+    if msg_type == "prompt":
+        prompt = str(payload.get("content", ""))
+        attachments = _parse_prompt_attachments(payload.get("attachments"))
+        await runner.submit_prompt(prompt, attachments=attachments or None)
+    elif msg_type == "stop":
+        await runner.request_stop()
+    elif msg_type == "set_permission_mode":
+        await _handle_set_permission_mode(websocket, app, runner, session_id, payload)
+    elif msg_type == "approval_response":
+        await _handle_approval_response(runner, payload)
+
+
+async def _run_receive_loop(
+    websocket: WebSocket,
+    app: Any,
+    runner: SessionRunner,
+    session_id: str,
+    queue: asyncio.Queue[_Envelope],
+) -> None:
+    """Spawn the outbound forwarder, then drive the inbound control
+    loop until disconnect. The forwarder is cancelled on exit so the
+    runner's subscriber queue stops receiving fan-out attempts the
+    moment the socket dies. WebSocketDisconnect is the normal exit
+    path (the runner keeps running — that's the point of this whole
+    refactor); other exceptions get logged so a misbehaving message
+    handler is visible without taking the whole server down."""
     forwarder = asyncio.create_task(
         _forward_events(websocket, queue), name=f"ws-forward:{session_id}"
     )
     try:
         while True:
             payload = await websocket.receive_json()
-            msg_type = payload.get("type")
-            if msg_type == "prompt":
-                prompt = str(payload.get("content", ""))
-                # Optional sidecar from the composer's `[File N]`
-                # attachment flow. The client sends raw dicts — we
-                # filter to well-formed entries so a malformed payload
-                # can't crash the runner, and a missing key just means
-                # "plain-text prompt, no attachments."
-                raw_attachments = payload.get("attachments")
-                attachments: list[dict[str, Any]] = []
-                if isinstance(raw_attachments, list):
-                    for entry in raw_attachments:
-                        if (
-                            isinstance(entry, dict)
-                            and isinstance(entry.get("n"), int)
-                            and isinstance(entry.get("path"), str)
-                        ):
-                            attachments.append(
-                                {
-                                    "n": entry["n"],
-                                    "path": entry["path"],
-                                    "filename": str(entry.get("filename", "")),
-                                    "size_bytes": int(entry.get("size_bytes", 0)),
-                                }
-                            )
-                await runner.submit_prompt(prompt, attachments=attachments or None)
-            elif msg_type == "stop":
-                await runner.request_stop()
-            elif msg_type == "set_permission_mode":
-                mode = payload.get("mode")
-                # Profile gate: refuse `bypassPermissions` escalation
-                # when the active config disallows it. Today's default
-                # (and `power-user`/`workstation` profiles) leaves
-                # `allow_bypass_permissions=True`, so the refusal only
-                # bites under the `safe` profile or an operator who
-                # opted in manually. Silent ignore + a wire `error` so
-                # the UI knows the click did nothing instead of
-                # appearing to succeed; the event reducer surfaces
-                # `error` events as a transient toast.
-                allow_bypass = app.state.settings.agent.allow_bypass_permissions
-                if mode == "bypassPermissions" and not allow_bypass:
-                    await _send_frame(
-                        websocket,
-                        {
-                            "type": "error",
-                            "session_id": session_id,
-                            "message": ("bypassPermissions disabled by active permission profile"),
-                        },
-                    )
-                else:
-                    # Async now because the runner also retro-applies
-                    # the new mode to any parked approval (see the
-                    # broker's `resolve_for_mode` matrix). Await so an
-                    # `approval_resolved` fan-out gets on the wire
-                    # before we consider ourselves ready for the next
-                    # frame.
-                    await runner.set_permission_mode(mode or None)
-            elif msg_type == "approval_response":
-                # Resolves a pending `can_use_tool` future. Unknown /
-                # already-resolved ids are no-ops inside the runner, so
-                # two tabs racing to answer the same modal is safe.
-                # `updated_input` is the UI-collected override the SDK
-                # will hand to the tool (AskUserQuestion answers ride
-                # here). Non-dict values are dropped — we never want a
-                # malformed payload to clobber the tool's actual input.
-                request_id = payload.get("request_id")
-                decision = payload.get("decision")
-                reason = payload.get("reason")
-                updated_input = payload.get("updated_input")
-                if isinstance(request_id, str) and decision in ("allow", "deny"):
-                    await runner.resolve_approval(
-                        request_id,
-                        decision,
-                        reason if isinstance(reason, str) else None,
-                        updated_input if isinstance(updated_input, dict) else None,
-                    )
-            # Unknown message types are ignored — keeps the protocol
-            # forward-compatible the same way it was pre-refactor.
+            await _dispatch_ws_message(websocket, app, runner, session_id, payload)
     except WebSocketDisconnect:
-        # Normal disconnect. The runner keeps running; that's the
-        # point of this whole refactor.
         pass
     except Exception:
         log.exception("ws %s: unexpected error in receive loop", session_id)
@@ -437,6 +472,40 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
             await forwarder
         except (asyncio.CancelledError, Exception):
             pass
+
+
+@router.websocket("/ws/sessions/{session_id}")
+async def agent_ws(websocket: WebSocket, session_id: str) -> None:
+    """Top-level subscriber for an agent session.
+
+    Disconnect doesn't stop the agent — the runner keeps going, and a
+    reconnect with `?since_seq=N` replays anything that arrived while
+    the client was away. Orchestrates the handshake, subscription,
+    initial state snapshot, replay window, and the inbound/outbound
+    loops; helpers carry the per-block detail."""
+    row = await _accept_and_validate_session(websocket, session_id)
+    if row is None:
+        return
+    app = websocket.app
+    since_seq = _parse_since_seq(websocket)
+    runner = await app.state.runners.get_or_create(
+        session_id, factory=lambda sid: build_runner(app, sid)
+    )
+    # Directory Context System (v0.6.1): stamp `history.jsonl` start
+    # marker + kick off stale-state revalidation. Idempotent on every
+    # reconnect; the runner gates internally so the start marker lands
+    # exactly once per runner lifetime.
+    await runner.note_directory_context_start()
+    queue, replay = await runner.subscribe(since_seq)
+    metrics.ws_active_connections.inc()
+    app.state.active_ws.add(websocket)
+    try:
+        if not await _send_initial_runner_status(websocket, runner, session_id):
+            return
+        if not await _replay_buffered_events(websocket, replay):
+            return
+        await _run_receive_loop(websocket, app, runner, session_id, queue)
+    finally:
         runner.unsubscribe(queue)
         app.state.active_ws.discard(websocket)
         metrics.ws_active_connections.dec()
