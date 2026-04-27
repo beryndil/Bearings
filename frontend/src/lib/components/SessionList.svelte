@@ -1,22 +1,20 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { billing } from '$lib/stores/billing.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import { sessionSelection } from '$lib/stores/session_selection.svelte';
   import { tags } from '$lib/stores/tags.svelte';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
-  import { contextmenu } from '$lib/actions/contextmenu';
   import type { ContextTarget } from '$lib/context-menu/types';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
-  import PendingOpsBadge from '$lib/components/pending/PendingOpsBadge.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
   import TagFilterPanel from '$lib/components/TagFilterPanel.svelte';
-  import TemplatePicker from '$lib/components/TemplatePicker.svelte';
-  import SeverityShield from '$lib/components/icons/SeverityShield.svelte';
-  import TagIcon from '$lib/components/icons/TagIcon.svelte';
+  import SessionListClosedGroup from './SessionListClosedGroup.svelte';
+  import SessionListHeader from './SessionListHeader.svelte';
+  import SessionListItem from './SessionListItem.svelte';
+  import { indicatorState } from './sessionListHelpers.js';
   import { scrollBehavior } from '$lib/utils/motion';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
@@ -24,11 +22,11 @@
   let showSettings = $state(false);
 
   // Deep-link entry: a fresh page load with `?settings=<id>` should
-  // open the Settings dialog and land on the named section. The
-  // shell (SettingsShell.svelte) reads the param itself for the
-  // initial `activeId`; this just flips the dialog's `open` flag so
-  // the URL anchor works as a real shareable deep-link, not just a
-  // mid-session "remember which pane I was on" sticky.
+  // open the Settings dialog and land on the named section. The shell
+  // (SettingsShell.svelte) reads the param itself for the initial
+  // `activeId`; this just flips the dialog's `open` flag so the URL
+  // anchor works as a real shareable deep-link, not just a mid-session
+  // "remember which pane I was on" sticky.
   $effect(() => {
     if (typeof window === 'undefined') return;
     const params = new URL(window.location.href).searchParams;
@@ -55,8 +53,8 @@
   let asideEl: HTMLElement | undefined = $state();
   // Baseline so the mount-time run of the effect (which reads the
   // current tick) doesn't fire a gratuitous scroll. Only real tick
-  // increments from this point forward trigger the scroll.
-  // `?.scrollTo?.` also shrugs off jsdom, which doesn't implement it.
+  // increments from this point forward trigger the scroll. `?.scrollTo?.`
+  // also shrugs off jsdom, which doesn't implement it.
   let lastSeenScrollTick = sessions.scrollTick;
   $effect(() => {
     const t = sessions.scrollTick;
@@ -97,8 +95,8 @@
       const keep = sessions.list.filter((s) => !created.some((c) => c.id === s.id));
       sessions.list = [...created.reverse(), ...keep];
       const focus = created[0]; // the last one imported (after reverse)
-      // Navigate to the freshly-imported session — the URL→state
-      // sync in /sessions/[id]/+page.svelte calls `select` and
+      // Navigate to the freshly-imported session — the URL→state sync
+      // in /sessions/[id]/+page.svelte calls `select` and
       // `agent.connect` once the route mounts.
       void goto(`/sessions/${encodeURIComponent(focus.id)}`);
     }
@@ -174,27 +172,16 @@
     rename.draft = '';
   }
 
-  function onRenameKey(e: KeyboardEvent) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commitRename();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      cancelRename();
-    }
-  }
-
   // Boot (auth + session refresh) is owned by +page.svelte so the auth
   // gate can block API calls until a token is supplied.
 
-  // Re-fetch the session list whenever any filter axis changes.
-  // Initial boot in +page.svelte happens before the first effect
-  // settles, so this only fires on subsequent filter edits. The key
-  // encodes both axes — general-tag selection and severity selection —
-  // so adding/removing either triggers a refresh without a user also
-  // having to touch the other axis. General-tag combination is always
-  // OR now (v0.7.4), so there's no separate `mode` component to key
-  // off of.
+  // Re-fetch the session list whenever any filter axis changes. Initial
+  // boot in +page.svelte happens before the first effect settles, so
+  // this only fires on subsequent filter edits. The key encodes both
+  // axes — general-tag selection and severity selection — so adding/
+  // removing either triggers a refresh without a user also having to
+  // touch the other axis. General-tag combination is always OR now
+  // (v0.7.4), so there's no separate `mode` component to key off of.
   let filterKey = $derived(
     `${tags.selected.join(',')}|${tags.selectedSeverity.join(',')}`
   );
@@ -207,13 +194,13 @@
   });
 
   // v0.7.4: severity counts in the sidebar are scoped to the current
-  // general-tag selection, so each change to `tags.selected` needs
-  // a tag refresh to pull the updated counts from the server.
-  // Severity selection doesn't feed into this — severity counts are
-  // independent of severity selection (the count would otherwise
-  // collapse to the sum of selected severities, which is
-  // meaningless). Keyed off the general selection only to avoid a
-  // wasteful refresh when severity alone toggles.
+  // general-tag selection, so each change to `tags.selected` needs a
+  // tag refresh to pull the updated counts from the server. Severity
+  // selection doesn't feed into this — severity counts are independent
+  // of severity selection (the count would otherwise collapse to the
+  // sum of selected severities, which is meaningless). Keyed off the
+  // general selection only to avoid a wasteful refresh when severity
+  // alone toggles.
   let generalSelectionKey = $derived(tags.selected.join(','));
   let lastGeneralKey = '';
   $effect(() => {
@@ -264,10 +251,10 @@
     // Plain click: collapse any multi-selection, then navigate. The
     // URL is the source of truth — `goto` triggers
     // `(app)/sessions/[id]/+page.svelte`, which mirrors `params.id`
-    // into `sessions.selectedId`, fires `markViewed`, and connects
-    // the agent. Skipping the goto for the no-op case (clicking the
-    // already-selected row) keeps the browser history clean and
-    // avoids a needless WebSocket re-handshake.
+    // into `sessions.selectedId`, fires `markViewed`, and connects the
+    // agent. Skipping the goto for the no-op case (clicking the
+    // already-selected row) keeps the browser history clean and avoids
+    // a needless WebSocket re-handshake.
     if (sessionSelection.hasSelection) sessionSelection.clear();
     if (sessions.selectedId === id) return;
     void goto(`/sessions/${encodeURIComponent(id)}`);
@@ -285,95 +272,6 @@
     if (agent.sessionId === id) agent.close();
     await sessions.remove(id);
   }
-
-  /** Resolve the four-state sidebar indicator for a session row.
-   *
-   *   'red'    — look at it now. Runner is parked on a user decision
-   *              (tool-use approval OR AskUserQuestion) OR the last
-   *              turn errored and hasn't been cleared by a subsequent
-   *              successful turn (server-side `error_pending` latch).
-   *              Clears the moment the user submits the pending
-   *              answer or a later turn completes without crashing.
-   *   'orange' — the agent is actively working a turn that isn't
-   *              currently parked on a decision. Clears when the turn
-   *              ends.
-   *   'green'  — a turn finished while the user was elsewhere and
-   *              hasn't been viewed yet. Drives the "new output
-   *              waiting for you" signal (re-added per Dave's call
-   *              after watching the three-state version run —
-   *              recency-by-sort-order wasn't enough to spot freshly-
-   *              finished sessions at a glance). Clears the moment
-   *              the user focuses the row (`markViewed` bumps
-   *              `last_viewed_at`).
-   *   null     — nothing to signal. Session is idle and caught up,
-   *              or closed.
-   *
-   * Priority (red > orange > green > null): the "look at this now"
-   * signal pre-empts everything; running pre-empts unviewed because
-   * an in-flight turn is about to produce new unviewed output anyway
-   * and the orange ping already tells Dave a turn is landing.
-   */
-  function indicatorState(
-    session: api.Session
-  ): 'red' | 'orange' | 'green' | null {
-    if (sessions.awaiting.has(session.id)) return 'red';
-    if (session.error_pending) return 'red';
-    if (sessions.running.has(session.id)) return 'orange';
-    // Green = finished, waiting to be viewed. Needs both a completion
-    // timestamp (the session ever finished a turn) AND either no view
-    // stamp or a view stamp that precedes the completion.
-    if (session.last_completed_at) {
-      if (!session.last_viewed_at) return 'green';
-      if (session.last_completed_at > session.last_viewed_at) return 'green';
-    }
-    return null;
-  }
-
-  function formatTimestamp(ts: string): string {
-    try {
-      return new Date(ts).toLocaleString();
-    } catch {
-      return ts;
-    }
-  }
-
-  function costClass(session: api.Session): string {
-    const cap = session.max_budget_usd;
-    if (cap == null || cap <= 0) return 'text-slate-600';
-    const ratio = session.total_cost_usd / cap;
-    if (ratio >= 1) return 'text-rose-400';
-    if (ratio >= 0.8) return 'text-amber-400';
-    return 'text-slate-600';
-  }
-
-  /** Resolve a session's `tag_ids` into the in-memory tag rows so the
-   * medallion row can pull color + group without a per-row fetch.
-   * Returns `null` for any id the tag store hasn't loaded yet —
-   * filtered out at the callsite. */
-  function tagsFor(session: api.Session): api.Tag[] {
-    const byId = new Map(tags.list.map((t) => [t.id, t]));
-    const ids = session.tag_ids ?? [];
-    const out: api.Tag[] = [];
-    for (const id of ids) {
-      const hit = byId.get(id);
-      if (hit) out.push(hit);
-    }
-    return out;
-  }
-
-  /** Split a session's tag list into the severity slot (one tag or
-   * null) and the ordered general-tag list. Severity lookup is by
-   * `tag_group` — the exactly-one invariant is enforced server-side
-   * so we don't re-check here. */
-  function medallionData(session: api.Session): {
-    severity: api.Tag | null;
-    general: api.Tag[];
-  } {
-    const resolved = tagsFor(session);
-    const severity = resolved.find((t) => t.tag_group === 'severity') ?? null;
-    const general = resolved.filter((t) => t.tag_group !== 'severity');
-    return { severity, general };
-  }
 </script>
 
 <Settings bind:open={showSettings} />
@@ -387,55 +285,12 @@
   ondragleave={onDragLeave}
   ondrop={onDrop}
 >
-  <div class="flex items-center justify-between gap-2">
-    <h2 class="text-xs uppercase tracking-wider text-slate-400">Sessions</h2>
-    <div class="flex items-center gap-1">
-      <button
-        type="button"
-        class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
-        aria-label="Import session from JSON"
-        title="Import a session.json file"
-        onclick={() => importInput?.click()}
-      >
-        ⇡
-      </button>
-      <input
-        type="file"
-        accept="application/json,.json"
-        multiple
-        class="hidden"
-        bind:this={importInput}
-        onchange={onImportFile}
-      />
-      <PendingOpsBadge />
-      <TemplatePicker />
-      <a
-        href="/vault"
-        class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
-        aria-label="Open vault (plans + TODOs)"
-        title="Open vault — browse plans and TODO.md files"
-        data-testid="vault-link"
-      >
-        📚
-      </a>
-      <button
-        type="button"
-        class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
-        aria-label="Open settings"
-        onclick={() => (showSettings = true)}
-      >
-        ⚙
-      </button>
-      <button
-        type="button"
-        class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
-        onclick={() => uiActions.toggleNewSession()}
-        aria-label="Toggle new session form"
-      >
-        {uiActions.newSessionOpen ? 'Cancel' : '+ New'}
-      </button>
-    </div>
-  </div>
+  <SessionListHeader
+    onImportClick={() => importInput?.click()}
+    onSettingsClick={() => (showSettings = true)}
+    onImportFileChange={onImportFile}
+    bindImportInput={(el) => (importInput = el)}
+  />
 
   {#if dragging}
     <div
@@ -467,181 +322,23 @@
   {/if}
 
   {#snippet sessionRow(session: api.Session)}
-    {@const medals = medallionData(session)}
-    {@const isBulkSelected = sessionSelection.ids.has(session.id)}
-    {@const indicator = indicatorState(session)}
-    <li
-      class="group flex items-stretch gap-1 rounded hover:bg-slate-800 {sessions.selectedId ===
-      session.id
-        ? 'bg-slate-800'
-        : ''} {isBulkSelected ? 'ring-1 ring-emerald-500/60 bg-slate-800/80' : ''}"
-      use:contextmenu={{ target: rowTarget(session.id) }}
-      data-multi-selected={isBulkSelected ? 'true' : 'false'}
-    >
-      <button
-        type="button"
-        class="flex-1 min-w-0 text-left px-2 py-1 rounded-l"
-        onclick={(e) => onSelect(session.id, e)}
-        ondblclick={(e) => startRename(e, session)}
-      >
-        {#if rename.id === session.id}
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            type="text"
-            class="w-full bg-slate-950 rounded px-1 py-0.5 text-xs
-              border border-slate-700 focus:outline-none focus:border-emerald-600"
-            bind:value={rename.draft}
-            onkeydown={onRenameKey}
-            onblur={commitRename}
-            onclick={(e) => e.stopPropagation()}
-            autofocus
-            placeholder="Session title"
-          />
-        {:else}
-          <!-- Three-row grid: col 1 reserves space for the activity
-               indicator so rows 2–3 indent cleanly under the title.
-               Row 1: [indicator | title … severity shield].
-               Row 2: [—        | general tag icons + working_dir].
-               Row 3: [—        | updated_at … cost].
-               Col 1 is 1.25rem (20 px) so a 10 px dot has enough
-               whitespace on either side to read as a deliberate
-               indicator rather than a stray pixel. Sized up from
-               0.75rem × 6 px after the original pill was visually
-               swallowed by the selected-row slate highlight. -->
-          <div
-            class="grid grid-cols-[1.25rem_1fr] gap-x-1 text-xs"
-            title="Double-click to rename"
-          >
-            <!-- Row 1, Col 1: activity indicator slot. Width is
-                 always reserved so titles align whether or not an
-                 indicator is showing. Two states share the same ping
-                 geometry — only the color differs — so the animation
-                 rhythm reads identically for "working" and "look at
-                 this now"; color carries the meaning. -->
-            <div class="row-start-1 col-start-1 flex items-center justify-center">
-              {#if indicator === 'red'}
-                <!-- Red flashing: needs attention now. Covers both
-                     "runner parked on approval/AskUserQuestion" (live
-                     axis from sessions.awaiting) and "last turn
-                     errored" (latched server-side on error_pending).
-                     Clears only when the real problem resolves — user
-                     submits the pending answer, or a subsequent turn
-                     completes without crashing. -->
-                <span
-                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
-                  aria-label="Needs attention now"
-                  title="Needs attention — agent is waiting on you, or the last turn errored"
-                  data-testid="indicator-red"
-                >
-                  <span
-                    class="absolute inline-flex h-full w-full rounded-full
-                      bg-red-400 opacity-60 animate-ping"
-                  ></span>
-                  <span
-                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"
-                  ></span>
-                </span>
-              {:else if indicator === 'orange'}
-                <!-- Orange flashing: agent is actively working a turn
-                     and not parked on a user decision. -->
-                <span
-                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
-                  aria-label="Agent is working"
-                  title="Agent is working — you can switch away and come back"
-                  data-testid="indicator-orange"
-                >
-                  <span
-                    class="absolute inline-flex h-full w-full rounded-full
-                      bg-orange-400 opacity-60 animate-ping"
-                  ></span>
-                  <span
-                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"
-                  ></span>
-                </span>
-              {:else if indicator === 'green'}
-                <!-- Green solid: turn finished while the user was
-                     elsewhere, output waiting to be read. Solid, not
-                     flashing — it's a passive "new here" signal, not
-                     a call to action like red. Cleared when the user
-                     focuses the row (markViewed bumps last_viewed_at). -->
-                <span
-                  class="relative inline-flex h-2.5 w-2.5 shrink-0"
-                  aria-label="Finished — new output waiting"
-                  title="Finished — new output waiting to be viewed"
-                  data-testid="indicator-green"
-                >
-                  <span
-                    class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
-                  ></span>
-                </span>
-              {/if}
-            </div>
-
-            <!-- Row 1, Col 2: title with severity shield pinned to
-                 the right edge. The checklist marker stays inline
-                 with the title so ☑ still reads as a type badge. -->
-            <div class="row-start-1 col-start-2 flex items-center gap-1 min-w-0">
-              {#if session.kind === 'checklist'}
-                <span
-                  class="text-slate-500 shrink-0"
-                  aria-label="Checklist session"
-                  title="Checklist session">☑</span
-                >
-              {/if}
-              <span class="min-w-0 truncate flex-1">
-                {session.title ?? session.model}
-              </span>
-              <SeverityShield
-                color={medals.severity?.color ?? null}
-                title={medals.severity?.name ?? 'No severity'}
-                size={11}
-              />
-            </div>
-
-            <!-- Row 2, Col 2: general-group tag icons ("what project
-                 are we on") followed by the working_dir path. -->
-            <div
-              class="row-start-2 col-start-2 flex items-center gap-1 min-w-0"
-              data-testid="medallion-row"
-            >
-              {#each medals.general as tag (tag.id)}
-                <TagIcon color={tag.color} title={tag.name} size={11} />
-              {/each}
-              <span class="text-[10px] text-slate-500 font-mono truncate min-w-0">
-                {session.working_dir}
-              </span>
-            </div>
-
-            <!-- Row 3, Col 2: timestamp + optional cost. -->
-            <div
-              class="row-start-3 col-start-2 text-[10px] flex
-                justify-between items-baseline gap-2"
-            >
-              <span class="text-slate-600">
-                {formatTimestamp(session.updated_at)}
-              </span>
-              {#if !billing.showTokens && session.total_cost_usd > 0}
-                <span class="font-mono {costClass(session)}">
-                  ${session.total_cost_usd.toFixed(4)}
-                </span>
-              {/if}
-            </div>
-          </div>
-        {/if}
-      </button>
-      <button
-        type="button"
-        class="px-1.5 text-[11px] transition {confirm.id === session.id
-          ? 'text-rose-400 font-medium'
-          : 'text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100'}"
-        aria-label={confirm.id === session.id
-          ? 'Confirm delete session'
-          : 'Delete session'}
-        onclick={(e) => onDelete(e, session.id)}
-      >
-        {confirm.id === session.id ? 'Confirm?' : '✕'}
-      </button>
-    </li>
+    <SessionListItem
+      {session}
+      selected={sessions.selectedId === session.id}
+      bulkSelected={sessionSelection.ids.has(session.id)}
+      indicator={indicatorState(session, sessions.awaiting, sessions.running)}
+      confirming={confirm.id === session.id}
+      renaming={rename.id === session.id}
+      renameDraft={rename.draft}
+      allTags={tags.list}
+      contextTarget={rowTarget(session.id)}
+      {onSelect}
+      {onDelete}
+      onStartRename={startRename}
+      onCommitRename={commitRename}
+      onCancelRename={cancelRename}
+      onRenameDraftChange={(draft) => (rename.draft = draft)}
+    />
   {/snippet}
 
   {#if searchQuery.trim()}
@@ -687,31 +384,12 @@
     {/if}
 
     {#if sessions.closedList.length > 0}
-      <div class="mt-2 border-t border-slate-800 pt-1">
-        <button
-          type="button"
-          class="w-full flex items-center justify-between px-1 py-0.5 text-[11px]
-            uppercase tracking-wider text-slate-400 hover:text-slate-200"
-          aria-expanded={!closedCollapsed}
-          aria-controls="closed-sessions-group"
-          onclick={() => (closedCollapsed = !closedCollapsed)}
-          data-testid="closed-group-toggle"
-        >
-          <span>Closed ({sessions.closedList.length})</span>
-          <span aria-hidden="true">{closedCollapsed ? '▸' : '▾'}</span>
-        </button>
-        {#if !closedCollapsed}
-          <ul
-            id="closed-sessions-group"
-            class="flex flex-col gap-0.5 mt-1"
-            data-testid="closed-sessions-list"
-          >
-            {#each sessions.closedList as session (session.id)}
-              {@render sessionRow(session)}
-            {/each}
-          </ul>
-        {/if}
-      </div>
+      <SessionListClosedGroup
+        closedList={sessions.closedList}
+        collapsed={closedCollapsed}
+        onToggle={() => (closedCollapsed = !closedCollapsed)}
+        {sessionRow}
+      />
     {/if}
   {/if}
 </aside>
