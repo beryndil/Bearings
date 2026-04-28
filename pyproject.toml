@@ -26,7 +26,11 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     # Lint + format (single tool replaces flake8/black/isort).
-    "ruff~=0.7",
+    # Pinned exactly to match `.pre-commit-config.yaml` ruff-pre-commit rev — the
+    # two MUST stay in lockstep (ruff's formatter rules drift across minor
+    # versions, so a `~=` compatible-release pin would silently mask gate
+    # failures any time uv resolves a newer minor than the pre-commit hook).
+    "ruff==0.15.12",
     # Strict type-checking — no Any escape hatches per coding-standards.
     "mypy~=1.13",
     # Test runner + async support for FastAPI/aiosqlite.

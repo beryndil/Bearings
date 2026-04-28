@@ -155,9 +155,9 @@ async def test_fresh_boot_creates_all_tables(database_path: Path) -> None:
         await load_schema(connection)
         tables = await _list_user_tables(connection)
 
-    assert (
-        tables == EXPECTED_TABLES
-    ), f"unexpected tables: missing={EXPECTED_TABLES - tables}, extra={tables - EXPECTED_TABLES}"
+    assert tables == EXPECTED_TABLES, (
+        f"unexpected tables: missing={EXPECTED_TABLES - tables}, extra={tables - EXPECTED_TABLES}"
+    )
 
 
 async def test_fresh_boot_seeds_seven_default_system_rules(
@@ -215,9 +215,9 @@ async def test_messages_has_routing_and_usage_columns_per_spec(
 
     for column, expected_type in EXPECTED_MESSAGES_ROUTING_COLUMNS.items():
         assert column in column_types, f"messages.{column} missing"
-        assert (
-            column_types[column] == expected_type
-        ), f"messages.{column} has type {column_types[column]!r}, expected {expected_type!r}"
+        assert column_types[column] == expected_type, (
+            f"messages.{column} has type {column_types[column]!r}, expected {expected_type!r}"
+        )
 
 
 async def test_foreign_keys_pragma_is_on_after_bootstrap(
