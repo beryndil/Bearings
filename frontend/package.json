@@ -7,7 +7,7 @@
     "dev": "vite dev",
     "build": "node ../scripts/stamp-frontend-version.mjs && vite build && node ../scripts/sync-dist.mjs",
     "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node ../scripts/check-no-any.mjs",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node ../scripts/check-no-any.mjs && prettier --check .",
     "check:no-any": "node ../scripts/check-no-any.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
