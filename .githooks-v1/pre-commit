@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Bearings v1 pre-commit hook (manually installed).
+#
+# Pre-commit's `pre-commit install` refuses to write into a hooks dir when
+# `core.hooksPath` is set (its safety guardrail). We deliberately set
+# `core.hooksPath` per-worktree to isolate this worktree's hooks from the
+# v0.17.x worktree that shares the same parent .git directory. So this
+# shim is hand-rolled to match what `pre-commit install` would have
+# produced.
+#
+# Anything more than this thin invocation belongs in
+# `.pre-commit-config.yaml`, not here.
+set -euo pipefail
+
+readonly REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+readonly INSTALL_PYTHON="${REPO_ROOT}/.venv/bin/python"
+
+if [[ ! -x "${INSTALL_PYTHON}" ]]; then
+    echo "[pre-commit shim] No venv at ${INSTALL_PYTHON}." >&2
+    echo "[pre-commit shim] Run 'uv sync --extra dev' from ${REPO_ROOT}." >&2
+    exit 1
+fi
+
+cd "${REPO_ROOT}"
+exec "${INSTALL_PYTHON}" -m pre_commit hook-impl \
+    --config=.pre-commit-config.yaml \
+    --hook-type=pre-commit \
+    --hook-dir "$(dirname "$0")" \
+    -- "$@"

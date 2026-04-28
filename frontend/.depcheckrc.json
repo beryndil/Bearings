@@ -1,0 +1,17 @@
+{
+  "ignores": [
+    "depcheck",
+    "ts-prune",
+    "knip",
+    "svelte-check",
+    "@types/node",
+    "prettier",
+    "prettier-plugin-svelte",
+    "eslint",
+    "eslint-config-prettier",
+    "eslint-plugin-svelte",
+    "@typescript-eslint/eslint-plugin",
+    "@typescript-eslint/parser"
+  ],
+  "skip-missing": false
+}

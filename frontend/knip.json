@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/**/+{page,layout,server,error}.{ts,svelte}", "src/**/main.ts"],
+  "project": ["src/**/*.{ts,svelte}"],
+  "ignore": ["build/**", "dist/**", ".svelte-kit/**"],
+  "ignoreDependencies": [
+    "// Allowlist: tools wired through pre-commit but not imported from source.",
+    "depcheck",
+    "ts-prune"
+  ]
+}

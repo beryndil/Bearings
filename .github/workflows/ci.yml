@@ -1,0 +1,185 @@
+# CI for Bearings v1 rebuild — runs every gate referenced by the master
+# checklist's Done-when criteria. Anything that fails here is also caught by
+# `pre-commit run --all-files` locally; CI is the network of last resort.
+#
+# Job split rationale:
+#   - backend: the 8 backend tools, ordered cheapest-first so signal arrives
+#     before pytest's heavier I/O.
+#   - frontend: only fires when frontend sources land (item 2.1+); skips
+#     cleanly today because frontend/ is config-only.
+#   - links: lychee against repo markdown.
+#   - pre-commit: belt-and-braces — runs the full pre-commit set the same
+#     way local devs do, catching wiring drift between this YAML and
+#     .pre-commit-config.yaml.
+
+name: CI
+
+on:
+  push:
+    branches: [v1-rebuild]
+  pull_request:
+    branches: [v1-rebuild]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.7"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  backend:
+    name: Backend gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dev dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+      - name: mypy --strict
+        run: uv run mypy src tests
+
+      - name: vulture (with allowlist)
+        run: uv run vulture src tests config/allowlists/vulture.txt
+
+      - name: radon (cyclomatic complexity ≤ 10)
+        run: uv run radon cc -s -n B src
+
+      - name: interrogate (docstring coverage ≥ 80%)
+        run: uv run interrogate -c pyproject.toml
+
+      - name: codespell
+        run: uv run codespell --toml pyproject.toml
+
+      - name: pytest with coverage
+        run: uv run pytest -q --cov=bearings --cov-report=term-missing
+
+      - name: pip-audit (CVEs)
+        run: uv run pip-audit --strict .
+
+  frontend:
+    name: Frontend gates
+    runs-on: ubuntu-latest
+    # Frontend gates skip cleanly when frontend/src has no real sources yet
+    # (item 0.1 state). The 'changes' step decides whether to install.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect real frontend sources
+        id: detect
+        run: |
+          if find frontend/src -type f \( -name '*.ts' -o -name '*.svelte' \) | grep -q .; then
+            echo "have_sources=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have_sources=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/src has no .ts/.svelte sources yet — skipping frontend gates (item 2.1 will activate them)."
+          fi
+
+      - name: Set up Node
+        if: steps.detect.outputs.have_sources == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm install
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: eslint
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run lint
+
+      - name: prettier --check
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: svelte-check
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run check
+
+      - name: knip
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run knip
+
+      - name: ts-prune
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run ts-prune
+
+      - name: depcheck
+        if: steps.detect.outputs.have_sources == 'true'
+        working-directory: frontend
+        run: npm run depcheck
+
+  links:
+    name: Lychee (dead-link check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --max-retries 1 --timeout 10 './**/*.md'
+          fail: true
+
+  pre-commit:
+    name: Pre-commit (all hooks, full files)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dev dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Run pre-commit on all files
+        # Frontend hooks no-op cleanly because frontend/node_modules is absent
+        # and the wrapper script handles that path; lychee no-ops because the
+        # binary isn't installed in this job (the dedicated 'links' job covers
+        # it).
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+  systemd-unit:
+    name: systemd unit verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: systemd-analyze verify
+        # Verify the user-unit shape against systemd's parser. Failures here
+        # would mean the unit file would refuse to load on a real machine.
+        run: systemd-analyze verify --user --recursive-errors=yes config/bearings-v1.service

@@ -1,0 +1,23 @@
+# Vulture allowlist — dead-code false positives that we deliberately keep.
+#
+# Format: one symbol or whitelist-snippet per entry. Lines starting with `#`
+# are comments and MUST justify the entry. Subsequent executors update this
+# file carefully; the auditor checks that every new entry has a justification
+# line directly above it.
+#
+# Vulture confidence threshold: 80% (set in pyproject.toml [tool.vulture]).
+# Allowlist invocation:
+#     uv run vulture src tests config/allowlists/vulture.txt
+#
+# At item 0.1 the codebase is a scaffolding stub. Entries below are the
+# minimum needed to keep `uv run vulture` clean against the bootstrap.
+
+# ---------------------------------------------------------------------------
+# Public package metadata exposed for downstream tooling and tests.
+# Vulture cannot see imports across the package boundary into wheels/sdists.
+_.__version__
+
+# ---------------------------------------------------------------------------
+# CLI entry point declared in [project.scripts] (`bearings = bearings.cli:main`).
+# Vulture has no awareness of pyproject's console_scripts table.
+_.main

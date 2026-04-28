@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# uv / virtualenv
+.venv/
+venv/
+.python-version
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Pre-commit caches (the .githooks-v1/pre-commit shim itself IS tracked).
+.pre-commit-cache/
+.githooks-v1/*.sample
+.githooks-v1/*.legacy
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/dist/
+
+# Local data + secrets
+.env
+.env.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db

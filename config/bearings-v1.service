@@ -1,0 +1,58 @@
+# systemd user-unit for the Bearings v1 rebuild.
+#
+# Installed (manually, by Dave) at:
+#     ~/.config/systemd/user/bearings-v1.service
+#
+# Activated with:
+#     systemctl --user daemon-reload
+#     systemctl --user enable --now bearings-v1.service
+#
+# Concurrent run with v0.17.x:
+#   * v0.17.x lives at /home/beryndil/Projects/Bearings, port 8787,
+#     DB ~/.local/share/bearings/, unit `bearings.service`.
+#   * v1 (this unit) lives at /home/beryndil/Projects/Bearings-v1, port 8788,
+#     DB ~/.local/share/bearings-v1/, unit `bearings-v1.service`.
+#
+# At item 0.1 the FastAPI app does not exist yet (lands in items 1.1+).
+# This unit is therefore a verifiable shape: `systemd-analyze verify` passes,
+# but `systemctl --user start` will exit non-zero with a clean ExecStart-not-
+# found error until item 1.10 ("Misc API") wires the ASGI entry point.
+
+[Unit]
+Description=Bearings v1 (localhost web UI for Claude Code agent sessions)
+Documentation=file:///home/beryndil/.claude/plans/bearings-v1-rebuild.md
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/beryndil/Projects/Bearings-v1
+# Bind explicitly to localhost — Bearings is single-user / localhost only
+# per the project CLAUDE.md.
+ExecStart=/usr/bin/uv run uvicorn bearings.api.app:app --host 127.0.0.1 --port 8788
+Restart=on-failure
+RestartSec=2s
+
+# Hardening — start permissive enough to not break uv's venv resolution but
+# tight enough to fail audit-cleanly later. Tighten further in item 1.10
+# when the actual API surface lands.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/bearings-v1 %h/.cache/bearings-v1
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bearings-v1
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,198 @@
+# Pre-commit configuration for Bearings v1 rebuild.
+#
+# Wires the full 12-tool stack from `~/.claude/plans/bearings-v1-rebuild.md`
+# §"Tooling matrix":
+#   Backend (8): ruff (lint+format), mypy, pytest, vulture, radon,
+#                interrogate, codespell, pip-audit
+#   Frontend (6): eslint, prettier, svelte-check, knip, ts-prune, depcheck
+#   Repo-wide (1): lychee
+# Plus the branch-verifier hook (Done-when criterion #10) that rejects
+# commits to any branch other than `v1-rebuild`.
+#
+# Frontend hooks are gated to only fire when frontend files change AND
+# `frontend/node_modules` exists. Item 2.1 (SvelteKit scaffolding) will
+# install node_modules and effectively turn these gates on for real.
+
+minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  # ---------------------------------------------------------------------------
+  # Branch-verifier — Done-when #10. Always runs first so a wrong-branch commit
+  # fails before any other tool burns CPU.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: branch-verifier
+        name: Reject commits on branches other than v1-rebuild
+        entry: scripts/branch-verifier.sh
+        language: system
+        always_run: true
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Ruff (lint + format)
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Mypy (strict, configured in pyproject.toml)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict
+        entry: uv run mypy
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        args: ["src", "tests"]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Pytest (smoke run; full coverage in CI)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest -q
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Vulture (dead-code, with allowlist)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: vulture
+        name: vulture (dead Python code)
+        entry: uv run vulture src tests config/allowlists/vulture.txt
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # ---------------------------------------------------------------------------
+  # Backend — Radon (cyclomatic complexity ≤ 10 per function)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: radon
+        name: radon cc -n B (warn on complexity ≥ 11)
+        # `-n B` => fail on any block rated below B (i.e. C or worse, which
+        # corresponds to cyclomatic complexity ≥ 11 per coding-standards.md).
+        entry: uv run radon cc -s -n B src
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Interrogate (docstring coverage ≥ 80% on public API)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: interrogate
+        name: interrogate (docstring coverage)
+        entry: uv run interrogate -c pyproject.toml
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  # ---------------------------------------------------------------------------
+  # Backend — Codespell
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: codespell
+        name: codespell
+        entry: uv run codespell --toml pyproject.toml
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # ---------------------------------------------------------------------------
+  # Backend — pip-audit (CVEs in declared dependencies)
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: pip-audit
+        name: pip-audit (CVEs in declared deps)
+        # Audit the project at the current path; --strict turns missing-metadata
+        # warnings into errors so we don't silently skip packages.
+        entry: uv run pip-audit --strict .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # ---------------------------------------------------------------------------
+  # Frontend — gated on frontend/node_modules existing (item 2.1 lights them up).
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: frontend-eslint
+        name: eslint (frontend)
+        entry: scripts/frontend-tools.sh lint
+        language: system
+        files: ^frontend/.*\.(ts|svelte|js|cjs|mjs)$
+        pass_filenames: false
+
+      - id: frontend-prettier
+        name: prettier --check (frontend)
+        entry: scripts/frontend-tools.sh format:check
+        language: system
+        files: ^frontend/.*\.(ts|svelte|js|cjs|mjs|json|css|md)$
+        pass_filenames: false
+
+      - id: frontend-svelte-check
+        name: svelte-check (frontend)
+        entry: scripts/frontend-tools.sh check
+        language: system
+        files: ^frontend/.*\.(ts|svelte)$
+        pass_filenames: false
+
+      - id: frontend-knip
+        name: knip (dead exports + unused deps)
+        entry: scripts/frontend-tools.sh knip
+        language: system
+        files: ^frontend/.*\.(ts|svelte|json)$
+        pass_filenames: false
+
+      - id: frontend-ts-prune
+        name: ts-prune (dead TS exports)
+        entry: scripts/frontend-tools.sh ts-prune
+        language: system
+        files: ^frontend/.*\.ts$
+        pass_filenames: false
+
+      - id: frontend-depcheck
+        name: depcheck (unused npm deps)
+        entry: scripts/frontend-tools.sh depcheck
+        language: system
+        files: ^frontend/(package\.json|.*\.(ts|svelte|js))$
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
+  # Repo-wide — lychee (dead links in markdown). Pinned image digest
+  # avoidance: pre-commit's docker hook is heavy; instead we run lychee from
+  # the local install path if available, otherwise skip with a notice. CI
+  # installs lychee via the lycheeverse/lychee-action job.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: lychee
+        name: lychee (dead links in markdown)
+        entry: scripts/run-lychee.sh
+        language: system
+        files: \.md$
+        pass_filenames: true
