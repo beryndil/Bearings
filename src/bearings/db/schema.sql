@@ -342,6 +342,92 @@ CREATE INDEX IF NOT EXISTS idx_quota_snapshots_captured_at
     ON quota_snapshots(captured_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- checkpoints — Bearings' user-facing named-snapshot checkpoints.
+--
+-- Per docs/architecture-v1.md §5 #12, the rebuild keeps Bearings' own
+-- checkpoint table rather than the SDK's `enable_file_checkpointing`
+-- automatic-write primitive ("the semantics differ enough that conflating
+-- them costs more than it saves"). The user creates a checkpoint
+-- intentionally via the `/checkpoint` slash command (per
+-- docs/behavior/chat.md §"Slash commands in the composer") which inserts
+-- a labelled gutter mark; per docs/behavior/context-menus.md
+-- §"Checkpoint (gutter chip)" the primary action on that mark is
+-- `checkpoint.fork` (creates a new session sharing history up to this
+-- point) — there is intentionally no "restore overwrite current session"
+-- action in v1 behavior.
+--
+-- The `message_id` FK ties the checkpoint to the assistant message at
+-- which the gutter chip renders. ON DELETE CASCADE on both FKs means a
+-- session deletion (or a message deletion in a future-edit scenario)
+-- removes the checkpoint without leaving a dangling reference.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id                       TEXT    PRIMARY KEY,
+    session_id               TEXT    NOT NULL,
+    message_id               TEXT    NOT NULL,
+    label                    TEXT    NOT NULL,
+    created_at               TEXT    NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_session_id_created_at
+    ON checkpoints(session_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_checkpoints_message_id
+    ON checkpoints(message_id);
+
+-- ---------------------------------------------------------------------------
+-- templates — pre-baked session-config presets the user picks via the
+-- template picker (`t` keyboard chord per docs/behavior/keyboard-shortcuts.md
+-- §"Create" or via the `session.save_as_template` action on a session row
+-- per docs/behavior/context-menus.md §"Session row").
+--
+-- Per docs/behavior/chat.md the new-session dialog accepts a template
+-- selection that pre-populates the form. The fields below are the
+-- routing-relevant fields (per docs/model-routing-v1-spec.md §App A:
+-- executor model + advisor model + advisor max uses + effort) plus the
+-- permission profile + the optional system-prompt baseline + the working
+-- directory default + a JSON-encoded tag-name array.
+--
+-- Tags are persisted as a JSON array of names (resolved to tag ids when
+-- the template is applied) rather than a join table because: (a) the tag
+-- set on a template is a small (≤10) immutable list, (b) the API layer at
+-- item 1.10 reads templates back as a single SELECT, and (c) tag names
+-- can change after the template was authored — the resolution-on-apply
+-- path naturally tolerates a renamed tag (it lands as a new tag).
+-- Validation of the JSON shape lives in the dataclass `__post_init__`,
+-- not the SQL CHECK, since SQLite's JSON1 extension availability varies
+-- across drivers (aiosqlite ≥ 0.20 has it but the rebuild does not depend
+-- on it for a non-load-bearing column).
+--
+-- Routing-relevant fields use the same vocabulary the spec writes rules
+-- in (`KNOWN_EXECUTOR_MODELS`, `KNOWN_EFFORT_LEVELS`,
+-- `PERMISSION_PROFILE_NAMES` from `config/constants.py`); the
+-- application-side validator enforces the alphabet at the API boundary
+-- (item 1.10) and at template-creation time (this item). Schema-side we
+-- declare them NOT NULL with sensible defaults so a template row is never
+-- partially populated.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS templates (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                     TEXT    NOT NULL UNIQUE,
+    description              TEXT,
+    model                    TEXT    NOT NULL,
+    advisor_model            TEXT,
+    advisor_max_uses         INTEGER NOT NULL DEFAULT 5,
+    effort_level             TEXT    NOT NULL DEFAULT 'auto',
+    permission_profile       TEXT    NOT NULL DEFAULT 'standard',
+    system_prompt_baseline   TEXT,
+    working_dir_default      TEXT,
+    tag_names_json           TEXT    NOT NULL DEFAULT '[]',
+    created_at               TEXT    NOT NULL,
+    updated_at               TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_templates_name
+    ON templates(name);
+
+-- ---------------------------------------------------------------------------
 -- Default system_routing_rules seed.
 --
 -- Verbatim from docs/model-routing-v1-spec.md §3 default rule table.

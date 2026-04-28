@@ -57,6 +57,12 @@ EXPECTED_TABLES = frozenset(
         "tag_routing_rules",
         "system_routing_rules",
         "quota_snapshots",
+        # Item 1.3 additions — Bearings' own checkpoint table (arch §5
+        # #12 keeps Bearings' named-snapshot checkpoints rather than
+        # the SDK ``enable_file_checkpointing`` automatic-write
+        # primitive) and the templates table (arch §1.1.3).
+        "checkpoints",
+        "templates",
     }
 )
 

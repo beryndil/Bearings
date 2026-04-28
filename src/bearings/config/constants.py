@@ -362,6 +362,52 @@ CHECKLIST_DRIVER_MAX_FOLLOWUP_DEPTH: Final[int] = 3
 # days (default 7)").
 BEARINGS_TODO_RECENT_DEFAULT_DAYS: Final[int] = 7
 
+# ---------------------------------------------------------------------------
+# Checkpoints + templates (item 1.3; arch §1.1.3 db/checkpoints.py +
+# db/templates.py; arch §5 #12 — Bearings owns its named-snapshot
+# checkpoints rather than the SDK ``enable_file_checkpointing``
+# automatic-write-snapshot primitive; behavior surfaces in
+# ``docs/behavior/chat.md`` §"Slash commands in the composer" /``
+# docs/behavior/context-menus.md`` §"Checkpoint (gutter chip)" / §"Session
+# row" ``session.save_as_template``).
+# ---------------------------------------------------------------------------
+
+# Per-session ceiling on stored checkpoints. The behavior docs do not
+# mandate a retention policy; this constant is the runtime-tunable
+# default the API layer (item 1.10) enforces when ``checkpoints.create``
+# would push a session past the cap. Chosen high enough that a
+# disciplined user almost never bumps into it (typical session has 1-5
+# checkpoints) yet low enough that a runaway client cannot bloat the DB.
+MAX_CHECKPOINTS_PER_SESSION: Final[int] = 50
+
+# Default label applied when the user invokes the ``/checkpoint`` slash
+# command without an explicit label. The ``{n}`` placeholder is the
+# 1-indexed ordinal of the checkpoint within the session (filled by the
+# DB helper at create time); per ``docs/behavior/chat.md`` §"Slash
+# commands" the label is what surfaces in the gutter chip the user
+# right-clicks on per ``docs/behavior/context-menus.md`` §"Checkpoint".
+DEFAULT_CHECKPOINT_LABEL_TEMPLATE: Final[str] = "Checkpoint {n}"
+
+# Maximum length the API layer accepts on a checkpoint label / template
+# name / template description. Caps protect the WS frame and the gutter
+# chip's render width without quoting a UI-pixel number; chosen to be
+# generous (a typical label is ≤40 chars) but bounded.
+CHECKPOINT_LABEL_MAX_LENGTH: Final[int] = 200
+TEMPLATE_NAME_MAX_LENGTH: Final[int] = 200
+TEMPLATE_DESCRIPTION_MAX_LENGTH: Final[int] = 1000
+
+# Default template field values when a user creates a template via the
+# ``session.save_as_template`` context-menu action without overriding
+# the routing/permission fields. Mirror the spec §3 default routing
+# rule (priority 1000, ``always`` match, sonnet+opus advisor, auto
+# effort) and the standard permission profile, so a "save current as
+# template" with no edits produces a workhorse-default preset.
+DEFAULT_TEMPLATE_MODEL: Final[str] = "sonnet"
+DEFAULT_TEMPLATE_ADVISOR_MODEL: Final[str | None] = "opus"
+DEFAULT_TEMPLATE_ADVISOR_MAX_USES: Final[int] = 5
+DEFAULT_TEMPLATE_EFFORT_LEVEL: Final[str] = "auto"
+DEFAULT_TEMPLATE_PERMISSION_PROFILE: Final[str] = "standard"
+
 
 # Self-consistency: every profile that appears in the resolution tables
 # below must also appear in :data:`PERMISSION_PROFILE_NAMES`, and every
@@ -384,11 +430,18 @@ __all__ = [
     "CHECKLIST_DRIVER_MAX_ITEMS_PER_RUN",
     "CHECKLIST_DRIVER_MAX_LEGS_PER_ITEM",
     "CHECKLIST_DRIVER_PRESSURE_HANDOFF_THRESHOLD_PCT",
+    "CHECKPOINT_LABEL_MAX_LENGTH",
     "DEFAULT_ADVISOR_MAX_USES_HAIKU",
     "DEFAULT_ADVISOR_MAX_USES_SONNET",
+    "DEFAULT_CHECKPOINT_LABEL_TEMPLATE",
     "DEFAULT_DB_PATH",
     "DEFAULT_HOST",
     "DEFAULT_PORT",
+    "DEFAULT_TEMPLATE_ADVISOR_MAX_USES",
+    "DEFAULT_TEMPLATE_ADVISOR_MODEL",
+    "DEFAULT_TEMPLATE_EFFORT_LEVEL",
+    "DEFAULT_TEMPLATE_MODEL",
+    "DEFAULT_TEMPLATE_PERMISSION_PROFILE",
     "DEFAULT_TOOL_OUTPUT_CAP_CHARS",
     "EFFORT_LEVEL_TO_SDK",
     "EXECUTOR_FALLBACK_MODEL",
@@ -399,6 +452,7 @@ __all__ = [
     "KNOWN_ROUTING_SOURCES",
     "KNOWN_SDK_PERMISSION_MODES",
     "KNOWN_SDK_SETTING_SOURCES",
+    "MAX_CHECKPOINTS_PER_SESSION",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
     "OVERRIDE_RATE_WINDOW_DAYS",
@@ -421,6 +475,8 @@ __all__ = [
     "STREAM_TRUNCATION_MARKER_TEMPLATE",
     "TCP_PORT_MAX",
     "TCP_PORT_MIN",
+    "TEMPLATE_DESCRIPTION_MAX_LENGTH",
+    "TEMPLATE_NAME_MAX_LENGTH",
     "TOOL_PROGRESS_INTERVAL",
     "TOOL_PROGRESS_INTERVAL_S",
     "USAGE_HEADROOM_WINDOW",
