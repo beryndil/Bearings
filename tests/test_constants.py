@@ -110,6 +110,74 @@ def test_bearings_todo_recent_default_days() -> None:
     assert constants.BEARINGS_TODO_RECENT_DEFAULT_DAYS == 7
 
 
+def test_known_executor_models_contains_short_names() -> None:
+    """Spec §App A — short-name vocabulary the routing layer accepts."""
+    assert "sonnet" in constants.KNOWN_EXECUTOR_MODELS
+    assert "haiku" in constants.KNOWN_EXECUTOR_MODELS
+    assert "opus" in constants.KNOWN_EXECUTOR_MODELS
+    assert "opusplan" in constants.KNOWN_EXECUTOR_MODELS
+    assert constants.EXECUTOR_MODEL_FULL_ID_PREFIX == "claude-"
+
+
+def test_known_effort_levels_match_spec() -> None:
+    """Spec §App A — auto / low / medium / high / xhigh."""
+    assert frozenset({"auto", "low", "medium", "high", "xhigh"}) == constants.KNOWN_EFFORT_LEVELS
+
+
+def test_known_routing_sources_match_spec() -> None:
+    """Spec §App A — seven RoutingDecision.source enum values."""
+    expected = {
+        "tag_rule",
+        "system_rule",
+        "default",
+        "manual",
+        "quota_downgrade",
+        "manual_override_quota",
+        "unknown_legacy",
+    }
+    assert frozenset(expected) == constants.KNOWN_ROUTING_SOURCES
+
+
+def test_known_sdk_permission_modes_match_sdk() -> None:
+    """SDK ``permission_mode`` literal alphabet (context7 query, arch §5)."""
+    assert (
+        frozenset({"default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"})
+        == constants.KNOWN_SDK_PERMISSION_MODES
+    )
+
+
+def test_known_sdk_setting_sources_match_sdk() -> None:
+    """SDK ``setting_sources`` literal alphabet (context7 query)."""
+    assert frozenset({"user", "project", "local"}) == constants.KNOWN_SDK_SETTING_SOURCES
+
+
+def test_permission_profile_tables_self_consistent() -> None:
+    """Each preset name appears in every resolution table; resolved
+    SDK modes are all members of ``KNOWN_SDK_PERMISSION_MODES``."""
+    assert set(constants.PERMISSION_PROFILE_TO_SDK_MODE) == constants.PERMISSION_PROFILE_NAMES
+    assert set(constants.PERMISSION_PROFILE_ALLOWED_TOOLS) == constants.PERMISSION_PROFILE_NAMES
+    assert set(constants.PERMISSION_PROFILE_DISALLOWED_TOOLS) == constants.PERMISSION_PROFILE_NAMES
+    assert (
+        set(constants.PERMISSION_PROFILE_TO_SDK_MODE.values())
+        <= constants.KNOWN_SDK_PERMISSION_MODES
+    )
+
+
+def test_permission_profile_resolution_table_values() -> None:
+    """Restricted asks for everything; standard auto-edits; expanded bypass."""
+    assert constants.PERMISSION_PROFILE_TO_SDK_MODE["restricted"] == "default"
+    assert constants.PERMISSION_PROFILE_TO_SDK_MODE["standard"] == "acceptEdits"
+    assert constants.PERMISSION_PROFILE_TO_SDK_MODE["expanded"] == "bypassPermissions"
+
+
+def test_restricted_profile_disallows_side_effecting_tools() -> None:
+    """RESTRICTED carries explicit denies on Bash / Write / Edit."""
+    denies = constants.PERMISSION_PROFILE_DISALLOWED_TOOLS["restricted"]
+    assert "Bash" in denies
+    assert "Write" in denies
+    assert "Edit" in denies
+
+
 def test_all_public_names_have_final_annotations() -> None:
     """Every name in ``__all__`` carries a ``Final[...]`` annotation.
 

@@ -169,6 +169,115 @@ PRESSURE_INJECT_THRESHOLD_PCT: Final[float] = 70.0
 DEFAULT_TOOL_OUTPUT_CAP_CHARS: Final[int] = 8000
 
 # ---------------------------------------------------------------------------
+# Session module vocabulary (arch §4.1, §4.8; SDK shapes verified via
+# context7 ``/anthropics/claude-agent-sdk-python`` queried 2026-04-28)
+# ---------------------------------------------------------------------------
+
+# Canonical short-name executor models the routing layer accepts as
+# ``RoutingDecision.executor_model`` (spec §App A). Long-form SDK model
+# IDs (e.g. ``claude-sonnet-4-5``) are accepted via the
+# ``EXECUTOR_MODEL_FULL_ID_PREFIX`` test below; the two together cover
+# both the user-facing vocabulary in tag rules and the SDK pinning the
+# rebuild does in ``agent/options.py:build_options`` (item 1.2). The
+# ``opusplan`` short name is the spec §1 alias the resolution stage
+# applies when ``executor=opus`` and the user has not explicitly typed
+# ``opus`` (per spec §1 "executor=opus → resolve to opusplan unless
+# explicitly typed 'opus'").
+KNOWN_EXECUTOR_MODELS: Final[frozenset[str]] = frozenset({"sonnet", "haiku", "opus", "opusplan"})
+
+# A ``RoutingDecision.executor_model`` whose value starts with this
+# prefix is accepted as a full SDK model ID without further short-name
+# enumeration; the SDK resolves it. This is the boundary-validator side
+# of arch §5 #4 "future SDK literal addition is a one-line table edit".
+EXECUTOR_MODEL_FULL_ID_PREFIX: Final[str] = "claude-"
+
+# Effort labels the spec writes routing rules in (spec §App A
+# ``effort_level``). The translation to SDK ``effort`` literal lives
+# already in ``EFFORT_LEVEL_TO_SDK`` above; this set is the validator
+# input alphabet.
+KNOWN_EFFORT_LEVELS: Final[frozenset[str]] = frozenset({"auto", "low", "medium", "high", "xhigh"})
+
+# ``RoutingDecision.source`` valid values (spec §App A enum). The seven
+# values cover every shape ``agent/routing.py:evaluate`` (item 1.8) and
+# ``agent/quota.py:apply_quota_guard`` (item 1.8) can produce, plus the
+# ``unknown_legacy`` carrier per spec §5 "Backfill for legacy data".
+KNOWN_ROUTING_SOURCES: Final[frozenset[str]] = frozenset(
+    {
+        "tag_rule",
+        "system_rule",
+        "default",
+        "manual",
+        "quota_downgrade",
+        "manual_override_quota",
+        "unknown_legacy",
+    }
+)
+
+# SDK ``permission_mode`` literal alphabet, per
+# ``claude_agent_sdk.ClaudeAgentOptions`` (context7 query
+# ``/anthropics/claude-agent-sdk-python`` 2026-04-28). Note both
+# ``dontAsk`` and ``auto`` are valid current literals; v0.17.x predates
+# both. ``AgentSession.set_permission_mode`` (arch §2.1 + §5 #9)
+# validates against this set before forwarding to the live client.
+KNOWN_SDK_PERMISSION_MODES: Final[frozenset[str]] = frozenset(
+    {"default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"}
+)
+
+# SDK ``setting_sources`` literal alphabet (context7 query as above —
+# the SDK accepts ``"user"``, ``"project"``, ``"local"``).
+# ``SessionConfig`` validates each entry of its ``setting_sources``
+# tuple against this set.
+KNOWN_SDK_SETTING_SOURCES: Final[frozenset[str]] = frozenset({"user", "project", "local"})
+
+# Permission-profile presets — Bearings' own abstraction layered on top
+# of SDK ``permission_mode`` + ``allowed_tools`` + ``disallowed_tools``.
+# The three presets cover the three mid-level postures: read-only
+# inspection (RESTRICTED), normal day-to-day editing (STANDARD), and
+# fully autonomous (EXPANDED). Profile names are user-facing strings;
+# the ``PermissionProfile`` enum in ``agent/session.py`` mirrors them.
+PERMISSION_PROFILE_NAMES: Final[frozenset[str]] = frozenset({"restricted", "standard", "expanded"})
+
+# Profile → SDK ``permission_mode`` resolution table. The table values
+# are validated against ``KNOWN_SDK_PERMISSION_MODES`` by an init-time
+# self-check in ``agent/session.py``.
+PERMISSION_PROFILE_TO_SDK_MODE: Final[dict[str, str]] = {
+    "restricted": "default",
+    "standard": "acceptEdits",
+    "expanded": "bypassPermissions",
+}
+
+# Profile → SDK ``allowed_tools`` allowance. ``RESTRICTED`` allows
+# read-only inspection tools only; ``STANDARD`` adds the everyday
+# write/edit/bash set; ``EXPANDED`` is empty because under
+# ``bypassPermissions`` the allowlist is moot — every tool is
+# auto-approved at the SDK boundary. Tuples are immutable; the resolver
+# in ``agent/session.py`` casts to ``list`` only at the SDK boundary.
+PERMISSION_PROFILE_ALLOWED_TOOLS: Final[dict[str, tuple[str, ...]]] = {
+    "restricted": ("Read", "Glob", "Grep", "WebFetch", "WebSearch"),
+    "standard": (
+        "Read",
+        "Write",
+        "Edit",
+        "Glob",
+        "Grep",
+        "Bash",
+        "WebFetch",
+        "WebSearch",
+        "Task",
+    ),
+    "expanded": (),
+}
+
+# Profile → SDK ``disallowed_tools`` deny list. Only ``RESTRICTED``
+# carries explicit denies; the other two profiles delegate to the
+# permission_mode (acceptEdits / bypassPermissions).
+PERMISSION_PROFILE_DISALLOWED_TOOLS: Final[dict[str, tuple[str, ...]]] = {
+    "restricted": ("Bash", "Write", "Edit"),
+    "standard": (),
+    "expanded": (),
+}
+
+# ---------------------------------------------------------------------------
 # Structural validation bounds (well-known facts; not spec-derived)
 # ---------------------------------------------------------------------------
 
@@ -216,6 +325,19 @@ CHECKLIST_DRIVER_MAX_FOLLOWUP_DEPTH: Final[int] = 3
 BEARINGS_TODO_RECENT_DEFAULT_DAYS: Final[int] = 7
 
 
+# Self-consistency: every profile that appears in the resolution tables
+# below must also appear in :data:`PERMISSION_PROFILE_NAMES`, and every
+# resolved SDK mode must be a member of :data:`KNOWN_SDK_PERMISSION_MODES`.
+# Asserting at import time means a future hand-edit cannot drift one of
+# the four parallel tables silently — an inconsistent mapping fails
+# ``import bearings.config.constants`` itself, which the linter and the
+# test runner both pick up before any downstream logic executes.
+assert set(PERMISSION_PROFILE_TO_SDK_MODE) == PERMISSION_PROFILE_NAMES
+assert set(PERMISSION_PROFILE_ALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
+assert set(PERMISSION_PROFILE_DISALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
+assert set(PERMISSION_PROFILE_TO_SDK_MODE.values()) <= KNOWN_SDK_PERMISSION_MODES
+
+
 __all__ = [
     "ADVISOR_TOOL_BETA_HEADER",
     "BEARINGS_TODO_RECENT_DEFAULT_DAYS",
@@ -231,12 +353,22 @@ __all__ = [
     "DEFAULT_TOOL_OUTPUT_CAP_CHARS",
     "EFFORT_LEVEL_TO_SDK",
     "EXECUTOR_FALLBACK_MODEL",
+    "EXECUTOR_MODEL_FULL_ID_PREFIX",
     "HISTORY_PRIME_MAX_CHARS",
+    "KNOWN_EFFORT_LEVELS",
+    "KNOWN_EXECUTOR_MODELS",
+    "KNOWN_ROUTING_SOURCES",
+    "KNOWN_SDK_PERMISSION_MODES",
+    "KNOWN_SDK_SETTING_SOURCES",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
     "OVERRIDE_RATE_WINDOW_DAYS",
     "PCT_MAX",
     "PCT_MIN",
+    "PERMISSION_PROFILE_ALLOWED_TOOLS",
+    "PERMISSION_PROFILE_DISALLOWED_TOOLS",
+    "PERMISSION_PROFILE_NAMES",
+    "PERMISSION_PROFILE_TO_SDK_MODE",
     "PRESSURE_INJECT_THRESHOLD_PCT",
     "QUOTA_BAR_RED_PCT",
     "QUOTA_BAR_YELLOW_PCT",
