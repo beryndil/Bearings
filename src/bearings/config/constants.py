@@ -408,6 +408,61 @@ DEFAULT_TEMPLATE_ADVISOR_MAX_USES: Final[int] = 5
 DEFAULT_TEMPLATE_EFFORT_LEVEL: Final[str] = "auto"
 DEFAULT_TEMPLATE_PERMISSION_PROFILE: Final[str] = "standard"
 
+# ---------------------------------------------------------------------------
+# Tags + tag memories (item 1.4; arch §1.1.3 ``db/tags.py`` +
+# ``db/memories.py``; arch §1.1.5 ``web/routes/tags.py`` +
+# ``web/routes/memories.py``; behavior surfaces in ``docs/behavior/chat.md``
+# §"When the user creates a chat", ``docs/behavior/checklists.md``
+# §"…inherits the checklist's working directory, model, and tags",
+# ``docs/behavior/context-menus.md`` §"Tag (sidebar tag chip in the filter
+# panel)" + §"Tag chip (attached to a session, …)"). Spec §App A pins the
+# allowed alphabet for ``tags.default_model`` (mirrors templates' validator
+# in ``db/templates.py``).
+# ---------------------------------------------------------------------------
+
+# Tag-name maximum length. Tag names surface as sidebar filter chips and
+# inside the new-session-dialog tag picker (per ``docs/behavior/chat.md``
+# §"When the user creates a chat"); the cap is generous enough for the
+# slash-namespaced names the rebuild's test fixtures use
+# (``bearings/architect`` ≈ 18 chars) and for arbitrary user labels,
+# while bounded so the tag-picker dropdown doesn't try to render a
+# pathological name. Mirrors :data:`TEMPLATE_NAME_MAX_LENGTH` for
+# consistency across user-facing label fields.
+TAG_NAME_MAX_LENGTH: Final[int] = 200
+
+# Tag-color maximum length. Colors are user-supplied free-text per the
+# ``tags.color`` schema column (no CHECK constraint at the schema level
+# — the color field is purely cosmetic and validation is the API
+# layer's job). Cap chosen long enough for ``rgba(...)`` / ``oklch(...)``
+# strings without needing a CSS parser at the wire boundary; short
+# enough that an absurd value can't bloat the row.
+TAG_COLOR_MAX_LENGTH: Final[int] = 64
+
+# Tag-group separator. The schema does not declare a separate
+# ``tag_groups`` table; tag groups are expressed by slash-namespacing
+# the tag name (``<group>/<name>``). The separator is a single character
+# so the group prefix is unambiguous and a bare name (no separator) is
+# treated as the unnamed/default group. Decided-and-documented per the
+# item-1.4 done-when's "tag groups" requirement: the schema landed in
+# 0.4 with no group column, so the rebuild adopts the slash-namespace
+# convention already in test fixtures (``bearings/architect``,
+# ``bearings/exec``).
+TAG_GROUP_SEPARATOR: Final[str] = "/"
+
+# Tag-memory title maximum length. Titles surface in the memories editor
+# UI (per ``docs/behavior/vault.md`` cross-reference) as a one-line
+# summary above the body editor; same cap as tag names so the two label
+# surfaces share a single character budget.
+TAG_MEMORY_TITLE_MAX_LENGTH: Final[int] = 200
+
+# Tag-memory body maximum length. Memories are system-prompt fragments
+# (per arch §1.1.3 — "tag memories as system-prompt fragments that the
+# prompt assembler reads per turn"); the cap bounds any single fragment
+# so a runaway memory cannot saturate the prompt-prime budget
+# :data:`HISTORY_PRIME_MAX_CHARS` upstream. Chosen at half of that
+# budget so up to two large memories can coexist.
+TAG_MEMORY_BODY_MAX_LENGTH: Final[int] = 30_000
+
 
 # Self-consistency: every profile that appears in the resolution tables
 # below must also appear in :data:`PERMISSION_PROFILE_NAMES`, and every
@@ -473,6 +528,11 @@ __all__ = [
     "STREAM_MAX_DELTA_CHARS",
     "STREAM_MAX_TOOL_OUTPUT_CHARS",
     "STREAM_TRUNCATION_MARKER_TEMPLATE",
+    "TAG_COLOR_MAX_LENGTH",
+    "TAG_GROUP_SEPARATOR",
+    "TAG_MEMORY_BODY_MAX_LENGTH",
+    "TAG_MEMORY_TITLE_MAX_LENGTH",
+    "TAG_NAME_MAX_LENGTH",
     "TCP_PORT_MAX",
     "TCP_PORT_MIN",
     "TEMPLATE_DESCRIPTION_MAX_LENGTH",

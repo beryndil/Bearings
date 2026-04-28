@@ -1,30 +1,39 @@
-"""Minimal FastAPI app factory for item 1.2.
+"""FastAPI app factory.
 
 Per ``docs/architecture-v1.md`` §1.1.5 ``web/app.py`` is the
-``create_app(settings) -> FastAPI`` factory wiring lifespan + every
-route module + the static-bundle mount. Item 1.2 (this item) lays the
-**streaming-only** version — just the per-session WebSocket handler
-mounted at ``/ws/sessions/{session_id}``. REST routes / settings
-loading / lifespan / static mount land in items 1.4+.
+``create_app(...) -> FastAPI`` factory wiring lifespan + every route
+module + the static-bundle mount. Item 1.2 laid the streaming-only
+WebSocket surface; item 1.4 adds the tags + memories REST routes.
+Future items (1.5+) extend with sessions / messages / checklists /
+templates routes; the factory's signature stays additive.
 
-The factory accepts an optional :class:`RunnerFactory` so tests can
-inject a fake runner; production callers (item 1.3+ ``cli/serve.py``)
-will pass an :class:`bearings.web.runner_factory.InProcessRunnerRegistry`
-constructed from the FastAPI ``app.state``.
+Connection wiring
+-----------------
+
+The tags + memories route modules read a long-lived
+:class:`aiosqlite.Connection` off ``app.state.db_connection``. Tests
+inject a freshly-bootstrapped connection directly; production callers
+(item 1.5+ ``cli/serve.py``) attach via FastAPI's lifespan event so
+the connection lives for the app's lifetime and is closed at shutdown.
+The factory accepts the connection as an optional argument so the
+existing streaming-only test surface keeps working unchanged.
 
 References:
 
 * ``docs/architecture-v1.md`` §1.1.5 — web layer responsibilities.
-* ``docs/behavior/tool-output-streaming.md`` — observable
-  WS subscriber lifecycle.
+* ``docs/behavior/tool-output-streaming.md`` — observable WS
+  subscriber lifecycle.
 """
 
 from __future__ import annotations
 
+import aiosqlite
 from fastapi import FastAPI, WebSocket
 
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
+from bearings.web.routes.memories import router as memories_router
+from bearings.web.routes.tags import router as tags_router
 from bearings.web.runner_factory import build_in_process_factory
 from bearings.web.streaming import SINCE_SEQ_QUERY_PARAM, serve_session_stream
 
@@ -33,15 +42,21 @@ def create_app(
     *,
     runner_factory: RunnerFactory | None = None,
     heartbeat_interval_s: float = STREAM_HEARTBEAT_INTERVAL_S,
+    db_connection: aiosqlite.Connection | None = None,
 ) -> FastAPI:
-    """Construct the streaming-only FastAPI app.
+    """Construct the FastAPI app.
 
-    ``runner_factory`` defaults to a fresh in-process registry so
-    each app has its own runner fleet — important for parallel test
-    runs that must not share runner state.
+    ``runner_factory`` defaults to a fresh in-process registry so each
+    app has its own runner fleet — important for parallel test runs
+    that must not share runner state.
 
     ``heartbeat_interval_s`` is exposed for tests that want a short
     interval; production callers should leave the default.
+
+    ``db_connection`` enables the tags + memories REST routes. If
+    ``None`` the routers are still mounted but every handler returns
+    503 (per :func:`bearings.web.routes.tags._db`); this matches the
+    streaming-only contract item 1.2 ships under.
     """
     if heartbeat_interval_s <= 0:
         raise ValueError(f"heartbeat_interval_s must be > 0 (got {heartbeat_interval_s})")
@@ -49,6 +64,7 @@ def create_app(
     app = FastAPI()
     app.state.runner_factory = factory
     app.state.heartbeat_interval_s = heartbeat_interval_s
+    app.state.db_connection = db_connection
 
     @app.websocket("/ws/sessions/{session_id}")
     async def stream_endpoint(websocket: WebSocket, session_id: str) -> None:
@@ -70,6 +86,8 @@ def create_app(
             heartbeat_interval_s=heartbeat_interval_s,
         )
 
+    app.include_router(tags_router)
+    app.include_router(memories_router)
     return app
 
 
