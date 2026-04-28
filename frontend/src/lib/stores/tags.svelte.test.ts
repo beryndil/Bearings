@@ -36,7 +36,7 @@ function tag(overrides: Partial<Tag> = {}): Tag {
     default_working_dir: null,
     default_model: null,
     tag_group: 'general',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -58,7 +58,7 @@ function queueResponses(queue: Fake[]): void {
         },
         async text() {
           return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-        }
+        },
       };
     })
   );
@@ -84,7 +84,7 @@ describe('tags store', () => {
     const created = tag({ id: 2, name: 'bug-repro' });
     queueResponses([
       { ok: true, body: created }, // POST /api/tags
-      { ok: true, body: [created] } // GET /api/tags refresh
+      { ok: true, body: [created] }, // GET /api/tags refresh
     ]);
     const result = await tags.create({ name: 'bug-repro' });
     expect(result?.id).toBe(2);
@@ -210,7 +210,7 @@ describe('tags store', () => {
       tag({ id: 1, tag_group: 'general' }),
       tag({ id: 2, tag_group: 'general' }),
       tag({ id: 8, tag_group: 'severity' }),
-      tag({ id: 9, tag_group: 'severity' })
+      tag({ id: 9, tag_group: 'severity' }),
     ];
     tags.selectedSeverity = [9];
     tags.selectAllGeneral();
@@ -228,7 +228,7 @@ describe('tags store', () => {
       tag({ id: 1, tag_group: 'general' }),
       tag({ id: 2, tag_group: 'general' }),
       tag({ id: 8, tag_group: 'severity' }),
-      tag({ id: 9, tag_group: 'severity' })
+      tag({ id: 9, tag_group: 'severity' }),
     ];
     tags.selectAll();
     expect(tags.selected).toEqual([1, 2]);
@@ -256,7 +256,7 @@ describe('tags store', () => {
       tag({ id: 1, name: 'infra', tag_group: 'general', sort_order: 0 }),
       tag({ id: 2, name: 'Blocker', tag_group: 'severity', sort_order: 1 }),
       tag({ id: 3, name: 'Low', tag_group: 'severity', sort_order: 4 }),
-      tag({ id: 4, name: 'docs', tag_group: 'general', sort_order: 0 })
+      tag({ id: 4, name: 'docs', tag_group: 'general', sort_order: 0 }),
     ];
     expect(tags.generalList.map((t) => t.id)).toEqual([1, 4]);
     // Severity list sorted by sort_order so Blocker precedes Low.
@@ -295,10 +295,7 @@ describe('tags store', () => {
   });
 
   it('remove drops selection in both axes for the removed tag', async () => {
-    tags.list = [
-      tag({ id: 1, tag_group: 'general' }),
-      tag({ id: 9, tag_group: 'severity' })
-    ];
+    tags.list = [tag({ id: 1, tag_group: 'general' }), tag({ id: 9, tag_group: 'severity' })];
     tags.selected = [1];
     tags.selectedSeverity = [9];
     queueResponses([{ ok: true, status: 204, body: '' }]);

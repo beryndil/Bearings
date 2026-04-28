@@ -50,7 +50,7 @@ const EMPTY_PREFS: CachedPrefs = {
   default_model: null,
   default_working_dir: null,
   notify_on_complete: false,
-  updated_at: ''
+  updated_at: '',
 };
 
 function readCache(): CachedPrefs | null {
@@ -180,7 +180,7 @@ class PreferencesStore {
       default_model: prefs.default_model,
       default_working_dir: prefs.default_working_dir,
       notify_on_complete: prefs.notify_on_complete,
-      updated_at: prefs.updated_at
+      updated_at: prefs.updated_at,
     };
     writeCache(this.row);
     this.applyTheme();
@@ -257,10 +257,7 @@ class PreferencesStore {
    * promise rejects with the underlying error so per-row primitives
    * surface their own error pill *and* the dialog footer reflects
    * the global state via `lastSaveStatus`. */
-  async update(
-    patch: api.PreferencesPatch,
-    fetchImpl: typeof fetch = fetch
-  ): Promise<void> {
+  async update(patch: api.PreferencesPatch, fetchImpl: typeof fetch = fetch): Promise<void> {
     if (this.savedFadeTimer) {
       clearTimeout(this.savedFadeTimer);
       this.savedFadeTimer = null;
@@ -281,7 +278,7 @@ class PreferencesStore {
     } catch (err) {
       this.lastSaveStatus = {
         kind: 'error',
-        error: err instanceof Error ? err.message : String(err)
+        error: err instanceof Error ? err.message : String(err),
       };
       throw err;
     }

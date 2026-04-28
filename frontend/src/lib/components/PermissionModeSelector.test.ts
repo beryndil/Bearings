@@ -14,16 +14,15 @@ const agentStub: {
   state: 'open',
   setPermissionMode: (mode: string) => {
     setPermissionMode(mode);
-    agentStub.permissionMode =
-      mode as typeof agentStub.permissionMode;
+    agentStub.permissionMode = mode as typeof agentStub.permissionMode;
     return true;
-  }
+  },
 };
 
 vi.mock('$lib/agent.svelte', () => ({
   get agent() {
     return agentStub;
-  }
+  },
 }));
 
 // Imported after vi.mock so the component picks up the mocked module.
@@ -42,12 +41,7 @@ describe('PermissionModeSelector', () => {
     const { getByTestId } = render(PermissionModeSelector);
     const select = getByTestId('permission-mode-select') as HTMLSelectElement;
     const values = Array.from(select.options).map((o) => o.value);
-    expect(values).toEqual([
-      'default',
-      'plan',
-      'acceptEdits',
-      'bypassPermissions'
-    ]);
+    expect(values).toEqual(['default', 'plan', 'acceptEdits', 'bypassPermissions']);
   });
 
   it('reflects the current permission mode as the selected option', () => {

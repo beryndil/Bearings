@@ -3,7 +3,7 @@
 
   let {
     value = $bindable(''),
-    placeholder = 'click to choose…'
+    placeholder = 'click to choose…',
   }: { value?: string; placeholder?: string } = $props();
 
   let picking = $state(false);
@@ -21,7 +21,7 @@
     try {
       const result = await pickDirectory({
         start: value.trim() || null,
-        title: 'Select working directory'
+        title: 'Select working directory',
       });
       if (result.cancelled) return;
       if (result.path) value = result.path;
@@ -36,8 +36,8 @@
 <div class="flex flex-col gap-1">
   <button
     type="button"
-    class="w-full text-left rounded bg-slate-950 border border-slate-800 hover:border-slate-600
-      px-2 py-2 text-sm font-mono truncate disabled:opacity-60"
+    class="w-full truncate rounded border border-slate-800 bg-slate-950 px-2
+      py-2 text-left font-mono text-sm hover:border-slate-600 disabled:opacity-60"
     class:text-slate-200={value}
     class:text-slate-500={!value}
     onclick={openPicker}

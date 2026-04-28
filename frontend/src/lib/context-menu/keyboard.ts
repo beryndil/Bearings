@@ -51,7 +51,7 @@ export type KeyboardState = {
 export const INITIAL_STATE: KeyboardState = {
   focusedIndex: -1,
   submenuOpen: false,
-  submenuFocusedIndex: -1
+  submenuFocusedIndex: -1,
 };
 
 export type FSMEvent =
@@ -83,22 +83,14 @@ export type FSMResult = {
  * input — never mutated. If the event produces no visible change,
  * the same state is returned (but no referential-identity guarantee).
  */
-export function reduce(
-  state: KeyboardState,
-  event: FSMEvent,
-  items: ItemsSnapshot
-): FSMResult {
+export function reduce(state: KeyboardState, event: FSMEvent, items: ItemsSnapshot): FSMResult {
   if (state.submenuOpen) {
     return reduceSubmenu(state, event, items);
   }
   return reduceMain(state, event, items);
 }
 
-function reduceMain(
-  state: KeyboardState,
-  event: FSMEvent,
-  items: ItemsSnapshot
-): FSMResult {
+function reduceMain(state: KeyboardState, event: FSMEvent, items: ItemsSnapshot): FSMResult {
   const main = items.main;
   switch (event.type) {
     case 'ArrowDown': {
@@ -126,9 +118,9 @@ function reduceMain(
         state: {
           ...state,
           submenuOpen: true,
-          submenuFocusedIndex: firstFocusable(items.submenu)
+          submenuFocusedIndex: firstFocusable(items.submenu),
         },
-        effect: { type: 'openSubmenu', parentIndex: idx }
+        effect: { type: 'openSubmenu', parentIndex: idx },
       };
     }
     case 'ArrowLeft':
@@ -144,14 +136,14 @@ function reduceMain(
           state: {
             ...state,
             submenuOpen: true,
-            submenuFocusedIndex: firstFocusable(items.submenu)
+            submenuFocusedIndex: firstFocusable(items.submenu),
           },
-          effect: { type: 'openSubmenu', parentIndex: idx }
+          effect: { type: 'openSubmenu', parentIndex: idx },
         };
       }
       return {
         state,
-        effect: { type: 'activate', list: 'main', index: idx }
+        effect: { type: 'activate', list: 'main', index: idx },
       };
     }
     case 'Escape':
@@ -161,11 +153,7 @@ function reduceMain(
   }
 }
 
-function reduceSubmenu(
-  state: KeyboardState,
-  event: FSMEvent,
-  items: ItemsSnapshot
-): FSMResult {
+function reduceSubmenu(state: KeyboardState, event: FSMEvent, items: ItemsSnapshot): FSMResult {
   const submenu = items.submenu;
   switch (event.type) {
     case 'ArrowDown': {
@@ -187,7 +175,7 @@ function reduceSubmenu(
     case 'ArrowLeft':
       return {
         state: { ...state, submenuOpen: false, submenuFocusedIndex: -1 },
-        effect: { type: 'closeSubmenu' }
+        effect: { type: 'closeSubmenu' },
       };
     case 'ArrowRight':
       // Max two submenu levels — no deeper nesting.
@@ -199,7 +187,7 @@ function reduceSubmenu(
       if (!item || item.disabled || item.hasSubmenu) return { state };
       return {
         state,
-        effect: { type: 'activate', list: 'submenu', index: idx }
+        effect: { type: 'activate', list: 'submenu', index: idx },
       };
     }
     case 'Escape':
@@ -208,7 +196,7 @@ function reduceSubmenu(
       // closes the whole menu.
       return {
         state: { ...state, submenuOpen: false, submenuFocusedIndex: -1 },
-        effect: { type: 'closeSubmenu' }
+        effect: { type: 'closeSubmenu' },
       };
     case 'Mnemonic':
       return mnemonicJump(state, event.char, submenu, 'submenu');
@@ -217,11 +205,7 @@ function reduceSubmenu(
 
 /** Next focusable index wrapping past the ends; skips disabled. When
  * every item is disabled (or the list is empty) returns `from`. */
-function advance(
-  items: readonly FSMItem[],
-  from: number,
-  step: 1 | -1
-): number {
+function advance(items: readonly FSMItem[], from: number, step: 1 | -1): number {
   const n = items.length;
   if (n === 0) return -1;
   // If nothing is focused, ArrowDown seeds the first focusable and
@@ -286,24 +270,20 @@ function mnemonicJump(
         state: {
           ...nextState,
           submenuOpen: true,
-          submenuFocusedIndex: -1
+          submenuFocusedIndex: -1,
         },
-        effect: { type: 'openSubmenu', parentIndex: target }
+        effect: { type: 'openSubmenu', parentIndex: target },
       };
     }
     return {
       state: nextState,
-      effect: { type: 'activate', list, index: target }
+      effect: { type: 'activate', list, index: target },
     };
   }
   // Cycle: find the next match strictly after the current focus.
-  const current =
-    list === 'main' ? state.focusedIndex : state.submenuFocusedIndex;
-  const next =
-    matches.find((m) => m > current) ?? matches[0]!;
+  const current = list === 'main' ? state.focusedIndex : state.submenuFocusedIndex;
+  const next = matches.find((m) => m > current) ?? matches[0]!;
   const nextState =
-    list === 'main'
-      ? { ...state, focusedIndex: next }
-      : { ...state, submenuFocusedIndex: next };
+    list === 'main' ? { ...state, focusedIndex: next } : { ...state, submenuFocusedIndex: next };
   return { state: nextState };
 }

@@ -10,23 +10,23 @@
     {
       value: 'default',
       label: 'Ask',
-      hint: 'Prompt before every tool call (safest).'
+      hint: 'Prompt before every tool call (safest).',
     },
     {
       value: 'plan',
       label: 'Plan',
-      hint: 'Read-only planning — edits and writes are blocked.'
+      hint: 'Read-only planning — edits and writes are blocked.',
     },
     {
       value: 'acceptEdits',
       label: 'Auto-edit',
-      hint: 'Allow Edit/Write without prompting. Other tools still prompt.'
+      hint: 'Allow Edit/Write without prompting. Other tools still prompt.',
     },
     {
       value: 'bypassPermissions',
       label: 'Bypass',
-      hint: 'Allow every tool call without prompting. Use with care.'
-    }
+      hint: 'Allow every tool call without prompting. Use with care.',
+    },
   ];
 
   /** Tone per mode. Deliberately escalates: slate → sky → amber → rose
@@ -46,9 +46,7 @@
     }
   }
 
-  const current = $derived(
-    OPTIONS.find((o) => o.value === agent.permissionMode) ?? OPTIONS[0]
-  );
+  const current = $derived(OPTIONS.find((o) => o.value === agent.permissionMode) ?? OPTIONS[0]);
 
   function onChange(e: Event): void {
     const next = (e.currentTarget as HTMLSelectElement).value as PermissionMode;
@@ -59,10 +57,10 @@
 <label class="relative inline-flex items-center">
   <span class="sr-only">Permission mode</span>
   <select
-    class="appearance-none text-[10px] uppercase tracking-wider pl-2 pr-6 py-1
-      rounded border cursor-pointer
-      disabled:opacity-50 disabled:cursor-not-allowed
-      focus:outline-none focus:ring-1 focus:ring-slate-400
+    class="cursor-pointer appearance-none rounded border py-1 pl-2 pr-6
+      text-[10px] uppercase tracking-wider
+      focus:outline-none focus:ring-1
+      focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-50
       {toneClass(agent.permissionMode)}"
     value={agent.permissionMode}
     onchange={onChange}
@@ -75,8 +73,5 @@
       <option value={opt.value}>{opt.label}</option>
     {/each}
   </select>
-  <span
-    class="pointer-events-none absolute right-1.5 text-[8px]"
-    aria-hidden="true">▾</span
-  >
+  <span class="pointer-events-none absolute right-1.5 text-[8px]" aria-hidden="true">▾</span>
 </label>

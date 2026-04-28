@@ -48,11 +48,7 @@ function lookup(id: string): api.Session | null {
 /** Post to `/api/shell/open` for the given kind. Translates backend
  * 400 ("shell.<kind>_command not configured") into a stub toast
  * naming the exact config key so Dave can drop it into his TOML. */
-async function dispatchOpenIn(
-  kind: api.ShellKind,
-  actionId: string,
-  path: string
-): Promise<void> {
+async function dispatchOpenIn(kind: api.ShellKind, actionId: string, path: string): Promise<void> {
   try {
     await api.openShell(kind, path);
   } catch (err) {
@@ -61,17 +57,13 @@ async function dispatchOpenIn(
       actionId,
       reason: msg.includes('shell.')
         ? `Configure ${msg} in config.toml`
-        : `Shell dispatch failed: ${msg}`
+        : `Shell dispatch failed: ${msg}`,
     });
   }
 }
 
 /** Build one `session.open_in.<kind>` entry with a live handler. */
-function openInItem(
-  kind: api.ShellKind,
-  label: string,
-  mnemonic: string
-): Action {
+function openInItem(kind: api.ShellKind, label: string, mnemonic: string): Action {
   const id = `session.open_in.${kind}`;
   return {
     id,
@@ -84,7 +76,7 @@ function openInItem(
       const row = lookup(t.id);
       if (!row) return;
       await dispatchOpenIn(kind, id, row.working_dir);
-    }
+    },
   };
 }
 
@@ -113,7 +105,7 @@ function changeModelItem(model: string): Action {
       const row = lookup(t.id);
       if (row && row.model === model) return `Already on ${model}`;
       return null;
-    }
+    },
   };
 }
 
@@ -144,7 +136,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookup(t.id);
       return row ? !row.pinned : false;
-    }
+    },
   },
   {
     id: 'session.unpin',
@@ -161,7 +153,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookup(t.id);
       return row ? row.pinned : false;
-    }
+    },
   },
   {
     id: 'session.archive',
@@ -177,7 +169,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
         message: 'Session archived',
         inverse: async () => {
           await sessions.reopen(t.id);
-        }
+        },
       });
     },
     requires: (target) => {
@@ -185,7 +177,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookup(t.id);
       return row ? !row.closed_at : false;
-    }
+    },
   },
   {
     id: 'session.reopen',
@@ -202,7 +194,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookup(t.id);
       return row ? !!row.closed_at : false;
-    }
+    },
   },
   {
     id: 'session.change_model',
@@ -212,14 +204,14 @@ export const SESSION_ACTIONS: readonly Action[] = [
     // The leaf is a no-op — clicking the parent just opens the
     // submenu. Phase 2's keyboard FSM drives expansion from here.
     handler: () => {},
-    submenu: KNOWN_MODELS.map((m) => changeModelItem(m))
+    submenu: KNOWN_MODELS.map((m) => changeModelItem(m)),
   },
   {
     id: 'session.duplicate',
     label: 'Duplicate',
     section: 'create',
     handler: () => notYetImplemented('session.duplicate'),
-    disabled: () => 'Duplicate lands in Phase 4a.3'
+    disabled: () => 'Duplicate lands in Phase 4a.3',
   },
   {
     id: 'session.save_as_template',
@@ -245,7 +237,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!name) {
         stubStore.show({
           actionId: 'session.save_as_template',
-          reason: 'Template name cannot be empty'
+          reason: 'Template name cannot be empty',
         });
         return;
       }
@@ -253,15 +245,15 @@ export const SESSION_ACTIONS: readonly Action[] = [
         name,
         working_dir: row.working_dir,
         model: row.model,
-        tag_ids: [...(row.tag_ids ?? [])]
+        tag_ids: [...(row.tag_ids ?? [])],
       });
       if (!created) {
         stubStore.show({
           actionId: 'session.save_as_template',
-          reason: templates.error ?? 'Failed to save template'
+          reason: templates.error ?? 'Failed to save template',
         });
       }
-    }
+    },
   },
   {
     id: 'session.fork.from_last_message',
@@ -278,7 +270,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (conversation.sessionId !== t.id) {
         stubStore.show({
           actionId: 'session.fork.from_last_message',
-          reason: 'Open the session first so its last message is known'
+          reason: 'Open the session first so its last message is known',
         });
         return;
       }
@@ -287,7 +279,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!last) {
         stubStore.show({
           actionId: 'session.fork.from_last_message',
-          reason: 'Session has no messages yet'
+          reason: 'Session has no messages yet',
         });
         return;
       }
@@ -305,7 +297,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookup(t.id);
       return !!row;
-    }
+    },
   },
   {
     id: 'session.copy_id',
@@ -316,7 +308,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       const t = asSession(target);
       if (!t) return;
       await writeClipboard(t.id);
-    }
+    },
   },
   {
     id: 'session.copy_title',
@@ -328,7 +320,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
       const row = lookup(t.id);
       if (!row) return;
       await writeClipboard(row.title ?? row.model);
-    }
+    },
   },
   {
     id: 'session.copy_share_link',
@@ -336,7 +328,7 @@ export const SESSION_ACTIONS: readonly Action[] = [
     section: 'copy',
     advanced: true,
     handler: () => notYetImplemented('session.copy_share_link'),
-    disabled: () => 'Share links land in v0.10.x'
+    disabled: () => 'Share links land in v0.10.x',
   },
   {
     id: 'session.delete',
@@ -358,8 +350,8 @@ export const SESSION_ACTIONS: readonly Action[] = [
         onConfirm: async () => {
           if (agent.sessionId === t.id) agent.close();
           await sessions.remove(t.id);
-        }
+        },
       });
-    }
-  }
+    },
+  },
 ];

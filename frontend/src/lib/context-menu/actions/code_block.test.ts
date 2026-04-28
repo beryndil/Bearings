@@ -17,7 +17,7 @@ const BLOCK: ContextTarget = {
   text: 'print("hi")\n',
   language: 'python',
   sessionId: 's-1',
-  messageId: 'm-1'
+  messageId: 'm-1',
 };
 
 const UNKNOWN_LANG: ContextTarget = {
@@ -25,7 +25,7 @@ const UNKNOWN_LANG: ContextTarget = {
   text: 'echo hi\n',
   language: null,
   sessionId: null,
-  messageId: null
+  messageId: null,
 };
 
 describe('code_block.ts — action-ID stability', () => {
@@ -35,7 +35,7 @@ describe('code_block.ts — action-ID stability', () => {
       'code_block.copy',
       'code_block.copy_with_fence',
       'code_block.open_in.editor',
-      'code_block.save_to_file'
+      'code_block.save_to_file',
     ]);
   });
 
@@ -62,9 +62,7 @@ describe('code_block.ts — action-ID stability', () => {
 
   it('copy_with_fence is advanced (Shift-right-click) and copy is not', () => {
     const copy = CODE_BLOCK_ACTIONS.find((a) => a.id === 'code_block.copy');
-    const fenced = CODE_BLOCK_ACTIONS.find(
-      (a) => a.id === 'code_block.copy_with_fence'
-    );
+    const fenced = CODE_BLOCK_ACTIONS.find((a) => a.id === 'code_block.copy_with_fence');
     expect(copy?.advanced).toBeFalsy();
     expect(fenced?.advanced).toBe(true);
   });
@@ -73,9 +71,7 @@ describe('code_block.ts — action-ID stability', () => {
     // The null-language path picks the bare ``` fence. Crashing here
     // would mean right-clicking a plain pre-formatted block (no fence
     // tag) in advanced mode throws.
-    const fenced = CODE_BLOCK_ACTIONS.find(
-      (a) => a.id === 'code_block.copy_with_fence'
-    );
+    const fenced = CODE_BLOCK_ACTIONS.find((a) => a.id === 'code_block.copy_with_fence');
     expect(fenced).toBeDefined();
     // Don't actually exercise the clipboard write — the action's
     // disabled predicate is what we care about here. Just confirm the

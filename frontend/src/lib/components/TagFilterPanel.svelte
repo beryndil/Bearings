@@ -21,25 +21,27 @@
 {#snippet generalTagRow(tag: Tag, pinned: boolean)}
   {@const selected = tags.selected.includes(tag.id)}
   <li
-    class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}"
+    class="group flex items-stretch rounded hover:bg-slate-800 {selected
+      ? 'bg-emerald-900/60'
+      : ''}"
     use:contextmenu={{ target: { type: 'tag', id: tag.id } }}
   >
     <button
       type="button"
-      class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs
-        text-left transition {selected ? 'text-emerald-200' : 'text-slate-300'}"
+      class="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 py-0.5 text-left
+        text-xs transition {selected ? 'text-emerald-200' : 'text-slate-300'}"
       aria-pressed={selected}
       title="Click to filter by this tag · Shift+click to add to the selection"
       onclick={(e) => tags.selectGeneral(tag.id, { additive: e.shiftKey })}
     >
-      <span class="flex items-center gap-1 min-w-0">
+      <span class="flex min-w-0 items-center gap-1">
         <TagIcon color={tag.color} title={tag.name} size={11} />
         {#if pinned}
           <span class="text-amber-400" aria-label="pinned">★</span>
         {/if}
         <span class="truncate">{tag.name}</span>
       </span>
-      <span class="text-[10px] font-mono tabular-nums inline-flex items-baseline gap-1">
+      <span class="inline-flex items-baseline gap-1 font-mono text-[10px] tabular-nums">
         <span class={tag.open_session_count > 0 ? 'text-emerald-400' : 'text-slate-500'}>
           {tag.open_session_count}
         </span>
@@ -48,8 +50,8 @@
     </button>
     <button
       type="button"
-      class="px-1 text-[11px] text-slate-500 hover:text-slate-200
-        opacity-0 group-hover:opacity-100"
+      class="px-1 text-[11px] text-slate-500 opacity-0
+        hover:text-slate-200 group-hover:opacity-100"
       aria-label={`Edit tag ${tag.name}`}
       title="Edit tag (memory, defaults)"
       onclick={(e) => openEdit(tag.id, e)}
@@ -78,13 +80,13 @@
   >
     <button
       type="button"
-      class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs
-        text-left transition {noneSelected ? 'text-emerald-200' : 'text-slate-400'}"
+      class="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 py-0.5 text-left
+        text-xs transition {noneSelected ? 'text-emerald-200' : 'text-slate-400'}"
       aria-pressed={noneSelected}
       title="Sessions with no severity tag attached · Shift+click to add to the selection"
       onclick={(e) => tags.selectSeverity(SEVERITY_NONE_ID, { additive: e.shiftKey })}
     >
-      <span class="flex items-center gap-1 min-w-0">
+      <span class="flex min-w-0 items-center gap-1">
         <!-- color=null renders the dim slate fallback shield, which
              visually matches the "no severity" state as it appears
              next to session titles in the sidebar. -->
@@ -98,22 +100,24 @@
 {#snippet severityTagRow(tag: Tag)}
   {@const selected = tags.selectedSeverity.includes(tag.id)}
   <li
-    class="group flex items-stretch rounded hover:bg-slate-800 {selected ? 'bg-emerald-900/60' : ''}"
+    class="group flex items-stretch rounded hover:bg-slate-800 {selected
+      ? 'bg-emerald-900/60'
+      : ''}"
     use:contextmenu={{ target: { type: 'tag', id: tag.id } }}
   >
     <button
       type="button"
-      class="flex-1 min-w-0 flex items-center justify-between gap-1.5 px-2 py-0.5 text-xs
-        text-left transition {selected ? 'text-emerald-200' : 'text-slate-300'}"
+      class="flex min-w-0 flex-1 items-center justify-between gap-1.5 px-2 py-0.5 text-left
+        text-xs transition {selected ? 'text-emerald-200' : 'text-slate-300'}"
       aria-pressed={selected}
       title="Click to filter by this severity · Shift+click to add to the selection"
       onclick={(e) => tags.selectSeverity(tag.id, { additive: e.shiftKey })}
     >
-      <span class="flex items-center gap-1 min-w-0">
+      <span class="flex min-w-0 items-center gap-1">
         <SeverityShield color={tag.color} title={tag.name} size={11} />
         <span class="truncate">{tag.name}</span>
       </span>
-      <span class="text-[10px] font-mono tabular-nums inline-flex items-baseline gap-1">
+      <span class="inline-flex items-baseline gap-1 font-mono text-[10px] tabular-nums">
         <span class={tag.open_session_count > 0 ? 'text-emerald-400' : 'text-slate-500'}>
           {tag.open_session_count}
         </span>
@@ -122,8 +126,8 @@
     </button>
     <button
       type="button"
-      class="px-1 text-[11px] text-slate-500 hover:text-slate-200
-        opacity-0 group-hover:opacity-100"
+      class="px-1 text-[11px] text-slate-500 opacity-0
+        hover:text-slate-200 group-hover:opacity-100"
       aria-label={`Edit severity tag ${tag.name}`}
       title="Edit severity (color, name)"
       onclick={(e) => openEdit(tag.id, e)}
@@ -145,15 +149,15 @@
          session" and None ≡ "show nothing", so these are also the
          fast way to flip the sidebar between full-view and empty. -->
     <div
-      class="w-full flex items-center justify-between px-1 py-0.5 text-xs
+      class="flex w-full items-center justify-between px-1 py-0.5 text-xs
         uppercase tracking-wider text-slate-400"
     >
       <span>Tags</span>
       <div class="flex items-center gap-1 normal-case tracking-normal">
         <button
           type="button"
-          class="px-1.5 py-0.5 rounded text-[11px] text-slate-300
-            hover:text-slate-100 hover:bg-slate-800"
+          class="rounded px-1.5 py-0.5 text-[11px] text-slate-300
+            hover:bg-slate-800 hover:text-slate-100"
           onclick={() => tags.selectAll()}
           data-testid="tag-panel-all"
           title="Select every tag across both axes (show every session)"
@@ -162,8 +166,8 @@
         </button>
         <button
           type="button"
-          class="px-1.5 py-0.5 rounded text-[11px] text-slate-300
-            hover:text-slate-100 hover:bg-slate-800"
+          class="rounded px-1.5 py-0.5 text-[11px] text-slate-300
+            hover:bg-slate-800 hover:text-slate-100"
           onclick={() => tags.clearAll()}
           data-testid="tag-panel-none"
           title="Clear both general and severity selections (show nothing)"
@@ -186,7 +190,7 @@
             {@render generalTagRow(tag, true)}
           {/each}
           {#if pinned.length > 0 && unpinned.length > 0}
-            <li class="h-px bg-slate-800 my-1" aria-hidden="true"></li>
+            <li class="my-1 h-px bg-slate-800" aria-hidden="true"></li>
           {/if}
           {#each unpinned as tag (tag.id)}
             {@render generalTagRow(tag, false)}
@@ -195,10 +199,8 @@
 
         {#if tags.severityList.length > 0}
           <!-- HR divider between the two tag groups. -->
-          <hr class="border-0 border-t border-slate-800 my-1" aria-hidden="true" />
-          <h3 class="px-1 text-[10px] uppercase tracking-wider text-slate-500">
-            Severity
-          </h3>
+          <hr class="my-1 border-0 border-t border-slate-800" aria-hidden="true" />
+          <h3 class="px-1 text-[10px] uppercase tracking-wider text-slate-500">Severity</h3>
           <ul class="flex flex-col gap-0.5" data-testid="severity-list">
             {#each tags.severityList as tag (tag.id)}
               {@render severityTagRow(tag)}
@@ -214,10 +216,10 @@
          when expanded (points up into the body it collapses) and
          `▾` when collapsed (points down toward what would be
          revealed). Persists to localStorage via the store. -->
-    <hr class="border-0 border-t border-slate-800 my-1" aria-hidden="true" />
+    <hr class="my-1 border-0 border-t border-slate-800" aria-hidden="true" />
     <button
       type="button"
-      class="w-full flex items-center justify-between px-1 py-0.5 text-[10px]
+      class="flex w-full items-center justify-between px-1 py-0.5 text-[10px]
         uppercase tracking-wider text-slate-500 hover:text-slate-200"
       aria-expanded={!tags.panelCollapsed}
       aria-controls="tag-filter-panel-body"
@@ -245,8 +247,8 @@
     {#if tags.hasFilter}
       <button
         type="button"
-        class="flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700
-          px-1.5 py-0.5 text-[11px] text-slate-300"
+        class="flex items-center gap-1 rounded bg-slate-800 px-1.5
+          py-0.5 text-[11px] text-slate-300 hover:bg-slate-700"
         onclick={() => tags.clearSelection()}
       >
         <span>{tags.selected.length} tag{tags.selected.length === 1 ? '' : 's'}</span>
@@ -256,8 +258,8 @@
     {#if tags.hasSeverityFilter}
       <button
         type="button"
-        class="flex items-center gap-1 rounded bg-slate-800 hover:bg-slate-700
-          px-1.5 py-0.5 text-[11px] text-slate-300"
+        class="flex items-center gap-1 rounded bg-slate-800 px-1.5
+          py-0.5 text-[11px] text-slate-300 hover:bg-slate-700"
         onclick={() => tags.clearSeveritySelection()}
       >
         <span>

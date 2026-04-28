@@ -23,7 +23,7 @@
     connectionLabel,
     copyText,
     messagesAsMarkdown,
-    pressureClass
+    pressureClass,
   } from '$lib/utils/conversation-ui';
   import BearingsMark from './icons/BearingsMark.svelte';
   import ContextMeter from './ContextMeter.svelte';
@@ -37,7 +37,7 @@
     onToggleBulk,
     onOpenMerge,
     onOpenAnalyze,
-    onEditSession
+    onEditSession,
   }: {
     bulkMode: boolean;
     onToggleBulk: () => void;
@@ -86,7 +86,7 @@
     try {
       const dump = await api.exportSession(sid);
       const blob = new Blob([JSON.stringify(dump, null, 2)], {
-        type: 'application/json'
+        type: 'application/json',
       });
       const url = URL.createObjectURL(blob);
       const day = new Date().toISOString().slice(0, 10).replaceAll('-', '');
@@ -182,9 +182,7 @@
     // isn't in the store (e.g. fresh page load, sidebar still
     // loading), skip this pass and the effect reruns when the list
     // updates.
-    const parent = sessions.list.find(
-      (s) => s.kind === 'checklist' && s.id !== sid
-    );
+    const parent = sessions.list.find((s) => s.kind === 'checklist' && s.id !== sid);
     // Fallback path: fetch the item + checklist so the breadcrumb
     // still renders even when the parent isn't in the sidebar yet.
     // Use the item's `checklist_id` (== parent session id) so we
@@ -194,9 +192,7 @@
       // we care about. In practice the sidebar carries the parent
       // for any recently-opened paired chat, so this rarely fans
       // out beyond one call.
-      const candidates = parent
-        ? [parent]
-        : sessions.list.filter((s) => s.kind === 'checklist');
+      const candidates = parent ? [parent] : sessions.list.filter((s) => s.kind === 'checklist');
       for (const cand of candidates) {
         try {
           const checklist = await api.getChecklist(cand.id);
@@ -206,7 +202,7 @@
               parentId: cand.id,
               parentTitle: cand.title ?? '(untitled checklist)',
               itemId: match.id,
-              itemLabel: match.label
+              itemLabel: match.label,
             };
             resolvedFor = key;
             return;
@@ -285,7 +281,7 @@
   });
 </script>
 
-<header class="border-b border-slate-800 px-4 py-3 flex items-baseline justify-between">
+<header class="flex items-baseline justify-between border-b border-slate-800 px-4 py-3">
   <div class="min-w-0">
     {#if pairedCrumb}
       <nav
@@ -305,7 +301,7 @@
         <span class="max-w-[24ch] truncate text-slate-300">{pairedCrumb.itemLabel}</span>
       </nav>
     {/if}
-    <h1 class="text-lg font-medium flex items-center gap-2">
+    <h1 class="flex items-center gap-2 text-lg font-medium">
       <!-- Permanent brand mark. Spins reactively while the agent is
            connecting, a response is streaming, or the per-session REST
            bundle is still in flight after a click. The logo IS the
@@ -407,7 +403,7 @@
         <FeedbackButton />
       {/if}
     </h1>
-    <p class="text-xs font-mono truncate text-slate-500">
+    <p class="truncate font-mono text-xs text-slate-500">
       {#if sessions.selected}
         {sessions.selected.model} · {sessions.selected.working_dir} ·
         {#if billing.showTokens}
@@ -425,9 +421,7 @@
           </span>
         {/if}
         {#if sessions.selected.message_count > 0}
-          · {sessions.selected.message_count} msg{sessions.selected.message_count === 1
-            ? ''
-            : 's'}
+          · {sessions.selected.message_count} msg{sessions.selected.message_count === 1 ? '' : 's'}
         {/if}
         {#if conversation.contextUsage}
           · <ContextMeter context={conversation.contextUsage} />
@@ -437,11 +431,11 @@
       {/if}
     </p>
     {#if sessions.selected && sessionTags.length > 0}
-      <ul class="flex flex-wrap gap-1 mt-1.5" aria-label="Session tags">
+      <ul class="mt-1.5 flex flex-wrap gap-1" aria-label="Session tags">
         {#each sessionTags as tag (tag.id)}
           <li
             class="inline-flex items-center gap-1 rounded bg-slate-800 px-1.5 py-0.5
-              text-[10px] font-mono text-slate-300"
+              font-mono text-[10px] text-slate-300"
             title={tag.default_working_dir || tag.default_model
               ? `defaults: ${tag.default_working_dir ?? ''} ${tag.default_model ?? ''}`.trim()
               : tag.name}
@@ -467,7 +461,7 @@
       -->
       <p
         bind:this={descriptionEl}
-        class="text-xs text-slate-400 mt-1 whitespace-pre-wrap break-words
+        class="mt-1 whitespace-pre-wrap break-words text-xs text-slate-400
           {descriptionExpanded ? '' : 'line-clamp-3 max-h-[3.75rem] overflow-hidden'}"
         data-testid="session-description"
         data-expanded={descriptionExpanded ? 'true' : 'false'}
@@ -477,8 +471,8 @@
       {#if descriptionOverflows}
         <button
           type="button"
-          class="text-[10px] uppercase tracking-wider text-slate-500
-            hover:text-slate-300 mt-0.5"
+          class="mt-0.5 text-[10px] uppercase tracking-wider
+            text-slate-500 hover:text-slate-300"
           onclick={() => (descriptionExpanded = !descriptionExpanded)}
           data-testid="description-toggle"
           aria-expanded={descriptionExpanded}
@@ -494,8 +488,8 @@
       {#if agent.stopPendingStartedAt === null}
         <button
           type="button"
-          class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
-            bg-rose-900 text-rose-200 hover:bg-rose-800"
+          class="rounded bg-rose-900 px-2 py-1 text-[10px] uppercase
+            tracking-wider text-rose-200 hover:bg-rose-800"
           onclick={() => agent.stop()}
           title="Stop the in-flight stream"
         >
@@ -506,12 +500,12 @@
       {/if}
     {/if}
     <span
-      class="text-[10px] uppercase tracking-wider px-2 py-1 rounded
+      class="rounded px-2 py-1 text-[10px] uppercase tracking-wider
         {agent.state === 'open'
-          ? 'bg-emerald-900 text-emerald-300'
-          : agent.state === 'connecting'
-            ? 'bg-amber-900 text-amber-300'
-            : 'bg-slate-800 text-slate-400'}"
+        ? 'bg-emerald-900 text-emerald-300'
+        : agent.state === 'connecting'
+          ? 'bg-amber-900 text-amber-300'
+          : 'bg-slate-800 text-slate-400'}"
     >
       {connectionLabel(agent.state, agent.reconnectDelayMs, agent.lastCloseCode)}
     </span>

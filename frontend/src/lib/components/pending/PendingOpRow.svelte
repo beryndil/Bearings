@@ -24,7 +24,7 @@
     name: op.name,
     directory,
     command: op.command,
-    description: op.description
+    description: op.description,
   });
 
   /** Pending-op age uses the centralized `formatRelative` (§32). The
@@ -44,24 +44,24 @@
   use:contextmenu={{ target }}
   data-testid="pending-op-row"
 >
-  <div class="flex-1 min-w-0">
+  <div class="min-w-0 flex-1">
     <div class="flex items-baseline gap-2">
-      <span class="text-xs font-medium text-slate-100 truncate">{op.name}</span>
+      <span class="truncate text-xs font-medium text-slate-100">{op.name}</span>
       <span class="text-[10px] text-slate-500">{formatRelative(op.started)}</span>
     </div>
     {#if op.description}
-      <p class="text-[11px] text-slate-400 line-clamp-2">{op.description}</p>
+      <p class="line-clamp-2 text-[11px] text-slate-400">{op.description}</p>
     {/if}
     {#if op.command}
-      <code class="text-[10px] text-slate-500 font-mono truncate block">
+      <code class="block truncate font-mono text-[10px] text-slate-500">
         $ {op.command}
       </code>
     {/if}
   </div>
   <button
     type="button"
-    class="text-[10px] rounded bg-emerald-700/60 hover:bg-emerald-600 px-1.5 py-0.5
-      text-emerald-100"
+    class="rounded bg-emerald-700/60 px-1.5 py-0.5 text-[10px] text-emerald-100
+      hover:bg-emerald-600"
     onclick={() => void pending.resolve(directory, op.name)}
     title="Mark resolved"
     data-testid="pending-op-resolve"
@@ -70,8 +70,8 @@
   </button>
   <button
     type="button"
-    class="text-[10px] rounded bg-slate-800 hover:bg-rose-700/70 px-1.5 py-0.5
-      text-slate-300 hover:text-rose-100"
+    class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300
+      hover:bg-rose-700/70 hover:text-rose-100"
     onclick={() => void pending.dismiss(directory, op.name)}
     title="Dismiss"
     data-testid="pending-op-dismiss"

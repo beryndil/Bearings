@@ -31,13 +31,7 @@
     onDismiss: () => void;
   };
 
-  const {
-    message,
-    warnings = [],
-    windowMs = 30_000,
-    onUndo,
-    onDismiss
-  }: Props = $props();
+  const { message, warnings = [], windowMs = 30_000, onUndo, onDismiss }: Props = $props();
 
   const startedAt = Date.now();
   let remaining = $state(30);
@@ -87,16 +81,16 @@
 
 {#if !done}
   <div
-    class="fixed bottom-4 right-4 z-50 rounded-lg border border-slate-700 bg-slate-900
-      shadow-2xl px-4 py-3 flex flex-col gap-2 max-w-sm"
+    class="fixed bottom-4 right-4 z-50 flex max-w-sm flex-col gap-2
+      rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 shadow-2xl"
     role="status"
     aria-live="polite"
     data-testid="reorg-undo-toast"
   >
     {#if warnings.length > 0}
       <ul
-        class="text-[11px] text-amber-300 border border-amber-500/40 bg-amber-500/10
-          rounded px-2 py-1 space-y-0.5"
+        class="space-y-0.5 rounded border border-amber-500/40 bg-amber-500/10
+          px-2 py-1 text-[11px] text-amber-300"
         data-testid="reorg-undo-warnings"
       >
         {#each warnings as warning (warning.code + warning.message)}
@@ -107,12 +101,12 @@
       </ul>
     {/if}
     <div class="flex items-center gap-3">
-      <span class="text-xs text-slate-200 flex-1">
+      <span class="flex-1 text-xs text-slate-200">
         {message}
       </span>
       <button
         type="button"
-        class="text-xs text-amber-300 hover:text-amber-200 font-medium disabled:opacity-50"
+        class="text-xs font-medium text-amber-300 hover:text-amber-200 disabled:opacity-50"
         onclick={runUndo}
         disabled={undoing}
         data-testid="reorg-undo-button"
@@ -121,7 +115,7 @@
       </button>
       <button
         type="button"
-        class="text-slate-500 hover:text-slate-300 text-xs"
+        class="text-xs text-slate-500 hover:text-slate-300"
         aria-label="Dismiss undo toast"
         onclick={dismiss}
       >

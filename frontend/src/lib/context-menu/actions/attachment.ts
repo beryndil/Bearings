@@ -35,7 +35,7 @@ async function shellOpen(actionId: string, kind: ShellKind, path: string): Promi
   } catch (err) {
     stubStore.show({
       actionId,
-      reason: err instanceof Error ? err.message : String(err)
+      reason: err instanceof Error ? err.message : String(err),
     });
   }
 }
@@ -50,7 +50,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       const t = asAttachment(target);
       if (!t) return;
       await writeClipboard(t.path);
-    }
+    },
   },
   {
     id: 'attachment.copy_filename',
@@ -60,7 +60,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       const t = asAttachment(target);
       if (!t) return;
       await writeClipboard(t.filename);
-    }
+    },
   },
   {
     id: 'attachment.open_in.editor',
@@ -71,7 +71,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       const t = asAttachment(target);
       if (!t) return;
       await shellOpen('attachment.open_in.editor', 'editor', t.path);
-    }
+    },
   },
   {
     id: 'attachment.open_in.file_explorer',
@@ -82,7 +82,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       const t = asAttachment(target);
       if (!t) return;
       await shellOpen('attachment.open_in.file_explorer', 'file_explorer', t.path);
-    }
+    },
   },
   {
     id: 'attachment.remove',
@@ -98,9 +98,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       // chip can sit anywhere in the DOM and the listener doesn't
       // care which slot fired it.
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(
-          new CustomEvent('bearings:attachment-remove', { detail: { n: t.n } })
-        );
+        window.dispatchEvent(new CustomEvent('bearings:attachment-remove', { detail: { n: t.n } }));
       }
     },
     disabled: (target) => {
@@ -109,9 +107,7 @@ export const ATTACHMENT_ACTIONS: readonly Action[] = [
       // Post-send chips have a real messageId — those bytes are
       // already in a sent turn and removing the chip would desync
       // the transcript from the sdk_session_id history.
-      return t.messageId !== null
-        ? 'Already sent — open the message context-menu to manage'
-        : null;
-    }
-  }
+      return t.messageId !== null ? 'Already sent — open the message context-menu to manage' : null;
+    },
+  },
 ];

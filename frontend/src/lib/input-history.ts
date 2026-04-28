@@ -60,7 +60,7 @@ export function prevHistory(
     return {
       state: { index: newest, stashedDraft: currentDraft },
       text: entries[newest],
-      changed: true
+      changed: true,
     };
   }
   if (state.index === 0) {
@@ -73,7 +73,7 @@ export function prevHistory(
   return {
     state: { ...state, index: nextIndex },
     text: entries[nextIndex],
-    changed: true
+    changed: true,
   };
 }
 
@@ -97,7 +97,7 @@ export function nextHistory(
   return {
     state: { ...state, index: nextIndex },
     text: entries[nextIndex],
-    changed: true
+    changed: true,
   };
 }
 

@@ -41,7 +41,7 @@ describe('SETTINGS_SECTIONS', () => {
       'help',
       'notifications',
       'privacy',
-      'profile'
+      'profile',
     ]);
   });
 

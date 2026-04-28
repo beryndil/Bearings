@@ -89,7 +89,7 @@ export function updateChecklist(
   return jsonFetch<Checklist>(fetchImpl, `/api/sessions/${sessionId}/checklist`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch)
+    body: JSON.stringify(patch),
   });
 }
 
@@ -101,7 +101,7 @@ export function createItem(
   return jsonFetch<ChecklistItem>(fetchImpl, `/api/sessions/${sessionId}/checklist/items`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -117,7 +117,7 @@ export function updateItem(
     {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(patch)
+      body: JSON.stringify(patch),
     }
   );
 }
@@ -134,7 +134,7 @@ export function toggleItem(
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ checked })
+      body: JSON.stringify({ checked }),
     }
   );
 }
@@ -145,7 +145,7 @@ export function deleteItem(
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
   return voidFetch(fetchImpl, `/api/sessions/${sessionId}/checklist/items/${itemId}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }
 
@@ -159,7 +159,7 @@ export function reorderItems(
   return jsonFetch<ReorderResult>(fetchImpl, `/api/sessions/${sessionId}/checklist/reorder`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ item_ids: itemIds })
+    body: JSON.stringify({ item_ids: itemIds }),
   });
 }
 
@@ -193,7 +193,7 @@ export function spawnPairedChat(
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }
   );
 }
@@ -207,10 +207,7 @@ export function getPairedChat(
   itemId: number,
   fetchImpl: typeof fetch = fetch
 ): Promise<Session> {
-  return jsonFetch<Session>(
-    fetchImpl,
-    `/api/sessions/${sessionId}/checklist/items/${itemId}/chat`
-  );
+  return jsonFetch<Session>(fetchImpl, `/api/sessions/${sessionId}/checklist/items/${itemId}/chat`);
 }
 
 // --- autonomous runner ----------------------------------------------
@@ -285,7 +282,7 @@ export function startAutoRun(
   return jsonFetch<AutoRunStatus>(fetchImpl, `/api/sessions/${sessionId}/checklist/run`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -301,11 +298,8 @@ export function getAutoRun(
 
 /** Stop a running driver AND forget a finished one in a single call.
  * Idempotent: 204 whether there was a live driver or not. */
-export function stopAutoRun(
-  sessionId: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
+export function stopAutoRun(sessionId: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   return voidFetch(fetchImpl, `/api/sessions/${sessionId}/checklist/run`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }

@@ -8,7 +8,7 @@ afterEach(cleanup);
 describe('TokenMeter', () => {
   it('renders an em-dash placeholder while totals are null', () => {
     const { getByLabelText } = render(TokenMeter, {
-      props: { totals: null }
+      props: { totals: null },
     });
     expect(getByLabelText('Loading token totals').textContent).toBe('—');
   });
@@ -20,9 +20,9 @@ describe('TokenMeter', () => {
           input_tokens: 12_300,
           output_tokens: 4_560,
           cache_read_tokens: 80_000,
-          cache_creation_tokens: 20_000
-        }
-      }
+          cache_creation_tokens: 20_000,
+        },
+      },
     });
     // Input/output use k suffix; cache is the sum (80k + 20k = 100k).
     const text = getByLabelText('Token usage summary').textContent ?? '';
@@ -39,9 +39,9 @@ describe('TokenMeter', () => {
           input_tokens: 1_200_000,
           output_tokens: 0,
           cache_read_tokens: 0,
-          cache_creation_tokens: 0
-        }
-      }
+          cache_creation_tokens: 0,
+        },
+      },
     });
     const text = getByLabelText('Token usage summary').textContent ?? '';
     expect(text).toContain('1.2M in');
@@ -54,9 +54,9 @@ describe('TokenMeter', () => {
           input_tokens: 0,
           output_tokens: 0,
           cache_read_tokens: 0,
-          cache_creation_tokens: 0
-        }
-      }
+          cache_creation_tokens: 0,
+        },
+      },
     });
     const text = getByLabelText('Token usage summary').textContent ?? '';
     // All three slots read "0" with no k/M suffix.
@@ -72,10 +72,10 @@ describe('TokenMeter', () => {
           input_tokens: 1_000,
           output_tokens: 2_000,
           cache_read_tokens: 500,
-          cache_creation_tokens: 500
+          cache_creation_tokens: 500,
         },
-        compact: true
-      }
+        compact: true,
+      },
     });
     const text = getByLabelText('Token usage summary').textContent ?? '';
     expect(text).not.toContain('in');

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  connectionLabel,
-  messagesAsMarkdown,
-  pressureClass
-} from './conversation-ui';
+import { connectionLabel, messagesAsMarkdown, pressureClass } from './conversation-ui';
 
 describe('pressureClass', () => {
   it('returns slate when no cap is set', () => {
@@ -32,7 +28,7 @@ describe('connectionLabel', () => {
     ['idle', 'idle'],
     ['connecting', 'connecting…'],
     ['open', 'connected'],
-    ['error', 'error']
+    ['error', 'error'],
   ] as const)('renders %s as "%s"', (state, label) => {
     expect(connectionLabel(state, null, null)).toBe(label);
   });
@@ -48,7 +44,7 @@ describe('messagesAsMarkdown', () => {
           role: 'user',
           content: 'hi',
           thinking: null,
-          created_at: 't'
+          created_at: 't',
         },
         {
           id: 'b',
@@ -56,8 +52,8 @@ describe('messagesAsMarkdown', () => {
           role: 'assistant',
           content: 'hello',
           thinking: null,
-          created_at: 't'
-        }
+          created_at: 't',
+        },
       ])
     ).toBe('## user\n\nhi\n\n## assistant\n\nhello');
   });

@@ -51,55 +51,55 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Profile',
     description: 'How you appear in your own conversations.',
     weight: 10,
-    component: ProfileSection
+    component: ProfileSection,
   },
   {
     id: 'appearance',
     label: 'Appearance',
     description: 'Theme and visual density.',
     weight: 20,
-    component: AppearanceSection
+    component: AppearanceSection,
   },
   {
     id: 'defaults',
     label: 'Defaults',
     description: 'What new sessions start with.',
     weight: 30,
-    component: DefaultsSection
+    component: DefaultsSection,
   },
   {
     id: 'notifications',
     label: 'Notifications',
     description: 'When Bearings is allowed to interrupt you.',
     weight: 40,
-    component: NotificationsSection
+    component: NotificationsSection,
   },
   {
     id: 'auth',
     label: 'Authentication',
     description: 'Server access token. Stays on this device.',
     weight: 50,
-    component: AuthSection
+    component: AuthSection,
   },
   {
     id: 'privacy',
     label: 'Privacy',
     description: 'What Bearings collects, where your data lives.',
     weight: 60,
-    component: PrivacySection
+    component: PrivacySection,
   },
   {
     id: 'help',
     label: 'Help',
     description: 'Keyboard shortcuts, README, and documentation.',
     weight: 70,
-    component: HelpSection
+    component: HelpSection,
   },
   {
     id: 'about',
     label: 'About',
     description: 'Version and build information.',
     weight: 80,
-    component: AboutSection
-  }
+    component: AboutSection,
+  },
 ].sort((a, b) => a.weight - b.weight);

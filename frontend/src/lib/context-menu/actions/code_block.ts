@@ -44,7 +44,7 @@ export const CODE_BLOCK_ACTIONS: readonly Action[] = [
       const t = asCodeBlock(target);
       if (!t) return;
       await writeClipboard(t.text);
-    }
+    },
   },
   {
     id: 'code_block.copy_with_fence',
@@ -56,15 +56,14 @@ export const CODE_BLOCK_ACTIONS: readonly Action[] = [
       const t = asCodeBlock(target);
       if (!t) return;
       await writeClipboard(withFence(t.text, t.language));
-    }
+    },
   },
   {
     id: 'code_block.save_to_file',
     label: 'Save to file…',
     section: 'edit',
     handler: () => {},
-    disabled: () =>
-      'Save-to-tempfile needs a new shell primitive (v0.10.x)'
+    disabled: () => 'Save-to-tempfile needs a new shell primitive (v0.10.x)',
   },
   {
     id: 'code_block.open_in.editor',
@@ -72,7 +71,6 @@ export const CODE_BLOCK_ACTIONS: readonly Action[] = [
     section: 'edit',
     advanced: true,
     handler: () => {},
-    disabled: () =>
-      'Open-in-editor needs the tempfile primitive (v0.10.x)'
-  }
+    disabled: () => 'Open-in-editor needs the tempfile primitive (v0.10.x)',
+  },
 ];

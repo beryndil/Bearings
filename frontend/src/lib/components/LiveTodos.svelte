@@ -175,10 +175,10 @@
     aria-label="Agent todo list"
   >
     <header class="flex items-center justify-between gap-2 text-slate-300">
-      <span class="font-medium uppercase tracking-wider text-[10px]">
+      <span class="text-[10px] font-medium uppercase tracking-wider">
         todos · {completed}/{total}
       </span>
-      <div class="flex items-center gap-2 min-w-0">
+      <div class="flex min-w-0 items-center gap-2">
         {#if activeLine}
           <span class="truncate text-slate-400" title={activeLine}>
             {activeLine}
@@ -191,7 +191,7 @@
                of a card that has nothing else to show. -->
           <button
             type="button"
-            class="text-slate-500 hover:text-slate-300 text-[10px] leading-none px-1 shrink-0"
+            class="shrink-0 px-1 text-[10px] leading-none text-slate-500 hover:text-slate-300"
             onclick={toggleCollapsed}
             aria-label="Expand todo list"
             aria-expanded="false"
@@ -209,19 +209,17 @@
           <li class="flex items-start gap-2">
             <span class={`mt-[1px] ${g.cls}`} aria-hidden="true">{g.mark}</span>
             <span
-              class={todo.status === 'completed'
-                ? 'text-slate-500 line-through'
-                : 'text-slate-200'}
+              class={todo.status === 'completed' ? 'text-slate-500 line-through' : 'text-slate-200'}
             >
               {todo.content}
             </span>
           </li>
         {/each}
       </ul>
-      <div class="flex justify-end mt-1">
+      <div class="mt-1 flex justify-end">
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-[10px] leading-none px-1"
+          class="px-1 text-[10px] leading-none text-slate-500 hover:text-slate-300"
           onclick={toggleCollapsed}
           aria-label="Collapse todo list"
           aria-expanded="true"

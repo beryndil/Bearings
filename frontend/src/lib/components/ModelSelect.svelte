@@ -3,7 +3,7 @@
 
   let {
     value = $bindable(''),
-    placeholder = 'claude-opus-4-7'
+    placeholder = 'claude-opus-4-7',
   }: { value?: string; placeholder?: string } = $props();
 
   const CUSTOM_SENTINEL = '__custom__';
@@ -45,8 +45,8 @@
 
 <div class="flex flex-col gap-1">
   <select
-    class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-      focus:outline-none focus:border-slate-600"
+    class="rounded border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-sm
+      focus:border-slate-600 focus:outline-none"
     value={selectValue}
     onchange={onSelectChange}
     aria-label="Model"
@@ -61,8 +61,8 @@
     <input
       bind:this={customInput}
       type="text"
-      class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-        focus:outline-none focus:border-slate-600"
+      class="rounded border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-sm
+        focus:border-slate-600 focus:outline-none"
       {placeholder}
       bind:value
       aria-label="Custom model id"

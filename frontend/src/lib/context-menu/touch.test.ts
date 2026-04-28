@@ -5,7 +5,7 @@ import {
   LONG_PRESS_MOVE_THRESHOLD_PX,
   reduceLongPress,
   type LongPressEvent,
-  type LongPressState
+  type LongPressState,
 } from './touch';
 
 /** Feed a sequence of events through the reducer and return the final
@@ -39,7 +39,7 @@ describe('reduceLongPress — arming', () => {
       { type: 'move', x: 5, y: 5 },
       { type: 'up' },
       { type: 'cancel' },
-      { type: 'timer' }
+      { type: 'timer' },
     ]);
     expect(state.phase).toBe('idle');
     expect(effects).toEqual([]);
@@ -50,7 +50,7 @@ describe('reduceLongPress — movement threshold', () => {
   it('stays armed when movement is within slop', () => {
     const { state, effects } = run([
       { type: 'down', x: 0, y: 0 },
-      { type: 'move', x: LONG_PRESS_MOVE_THRESHOLD_PX, y: 0 }
+      { type: 'move', x: LONG_PRESS_MOVE_THRESHOLD_PX, y: 0 },
     ]);
     expect(state.phase).toBe('armed');
     // Only the schedule from `down` — no cancel yet.
@@ -60,7 +60,7 @@ describe('reduceLongPress — movement threshold', () => {
   it('cancels the timer when movement exceeds slop', () => {
     const { state, effects } = run([
       { type: 'down', x: 0, y: 0 },
-      { type: 'move', x: LONG_PRESS_MOVE_THRESHOLD_PX + 1, y: 0 }
+      { type: 'move', x: LONG_PRESS_MOVE_THRESHOLD_PX + 1, y: 0 },
     ]);
     expect(state.phase).toBe('idle');
     expect(effects).toEqual([{ type: 'schedule' }, { type: 'cancel-timer' }]);
@@ -70,13 +70,13 @@ describe('reduceLongPress — movement threshold', () => {
     // 5px in each direction = ~7.07px magnitude, under the 8px slop.
     const kept = run([
       { type: 'down', x: 0, y: 0 },
-      { type: 'move', x: 5, y: 5 }
+      { type: 'move', x: 5, y: 5 },
     ]);
     expect(kept.state.phase).toBe('armed');
     // 6px in each direction = ~8.49px, over the slop.
     const dropped = run([
       { type: 'down', x: 0, y: 0 },
-      { type: 'move', x: 6, y: 6 }
+      { type: 'move', x: 6, y: 6 },
     ]);
     expect(dropped.state.phase).toBe('idle');
   });
@@ -85,7 +85,7 @@ describe('reduceLongPress — movement threshold', () => {
     const { state } = run(
       [
         { type: 'down', x: 0, y: 0 },
-        { type: 'move', x: 3, y: 0 }
+        { type: 'move', x: 3, y: 0 },
       ],
       { thresholdPx: 2 }
     );
@@ -95,19 +95,13 @@ describe('reduceLongPress — movement threshold', () => {
 
 describe('reduceLongPress — cancellation paths', () => {
   it('cancels on pointerup before timer fires', () => {
-    const { state, effects } = run([
-      { type: 'down', x: 0, y: 0 },
-      { type: 'up' }
-    ]);
+    const { state, effects } = run([{ type: 'down', x: 0, y: 0 }, { type: 'up' }]);
     expect(state.phase).toBe('idle');
     expect(effects).toEqual([{ type: 'schedule' }, { type: 'cancel-timer' }]);
   });
 
   it('cancels on pointercancel before timer fires', () => {
-    const { state, effects } = run([
-      { type: 'down', x: 0, y: 0 },
-      { type: 'cancel' }
-    ]);
+    const { state, effects } = run([{ type: 'down', x: 0, y: 0 }, { type: 'cancel' }]);
     expect(state.phase).toBe('idle');
     expect(effects).toEqual([{ type: 'schedule' }, { type: 'cancel-timer' }]);
   });
@@ -115,7 +109,7 @@ describe('reduceLongPress — cancellation paths', () => {
   it('treats a second down as a fresh start', () => {
     const { state, effects } = run([
       { type: 'down', x: 0, y: 0 },
-      { type: 'down', x: 50, y: 50 }
+      { type: 'down', x: 50, y: 50 },
     ]);
     expect(state.phase).toBe('armed');
     expect(state.startX).toBe(50);
@@ -129,20 +123,17 @@ describe('reduceLongPress — firing', () => {
     const { state, effects } = run([
       { type: 'down', x: 42, y: 99 },
       { type: 'move', x: 43, y: 99 }, // tiny jitter still within slop
-      { type: 'timer' }
+      { type: 'timer' },
     ]);
     expect(state.phase).toBe('fired');
-    expect(effects).toEqual([
-      { type: 'schedule' },
-      { type: 'fire', x: 42, y: 99 }
-    ]);
+    expect(effects).toEqual([{ type: 'schedule' }, { type: 'fire', x: 42, y: 99 }]);
   });
 
   it('does not fire if the timer arrives after a cancel', () => {
     const { state, effects } = run([
       { type: 'down', x: 0, y: 0 },
       { type: 'cancel' },
-      { type: 'timer' }
+      { type: 'timer' },
     ]);
     expect(state.phase).toBe('idle');
     // No `fire` effect — the timer event is a no-op against idle.
@@ -153,14 +144,11 @@ describe('reduceLongPress — firing', () => {
     const { state, effects } = run([
       { type: 'down', x: 0, y: 0 },
       { type: 'timer' },
-      { type: 'up' }
+      { type: 'up' },
     ]);
     expect(state.phase).toBe('idle');
     // The `up` after `fired` must NOT push a cancel-timer — the timer
     // has already fired and the caller has dropped its handle.
-    expect(effects).toEqual([
-      { type: 'schedule' },
-      { type: 'fire', x: 0, y: 0 }
-    ]);
+    expect(effects).toEqual([{ type: 'schedule' }, { type: 'fire', x: 0, y: 0 }]);
   });
 });

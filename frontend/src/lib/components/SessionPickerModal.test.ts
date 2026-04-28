@@ -39,7 +39,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -56,7 +56,7 @@ function tag(overrides: Partial<Tag> = {}): Tag {
     default_working_dir: null,
     default_model: null,
     tag_group: 'general',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -64,7 +64,7 @@ beforeEach(() => {
   sessions.list = [
     sess({ id: 'sess-a', title: 'Alpha' }),
     sess({ id: 'sess-b', title: 'Beta', working_dir: '/tmp/b' }),
-    sess({ id: 'sess-c', title: 'Gamma', model: 'claude-haiku' })
+    sess({ id: 'sess-c', title: 'Gamma', model: 'claude-haiku' }),
   ];
   tags.list = [tag({ id: 1, name: 'ship' }), tag({ id: 2, name: 'archive' })];
 });
@@ -76,7 +76,7 @@ describe('SessionPickerModal', () => {
       open: true,
       excludeIds: ['sess-a'],
       onPickExisting,
-      onCancel: () => {}
+      onCancel: () => {},
     });
     const rows = getAllByTestId('picker-row');
     expect(rows.map((r) => r.dataset.sessionId)).toEqual(['sess-b', 'sess-c']);
@@ -87,7 +87,7 @@ describe('SessionPickerModal', () => {
     const { getByTestId, getAllByTestId } = render(SessionPickerModal, {
       open: true,
       onPickExisting: () => {},
-      onCancel: () => {}
+      onCancel: () => {},
     });
     const search = getByTestId('picker-search') as HTMLInputElement;
     await fireEvent.input(search, { target: { value: 'beta' } });
@@ -101,7 +101,7 @@ describe('SessionPickerModal', () => {
       open: true,
       excludeIds: ['sess-a'],
       onPickExisting,
-      onCancel: () => {}
+      onCancel: () => {},
     });
     await fireEvent.click(getAllByTestId('picker-row')[0]);
     expect(onPickExisting).toHaveBeenCalledWith('sess-b');
@@ -112,7 +112,7 @@ describe('SessionPickerModal', () => {
     const { getByTestId } = render(SessionPickerModal, {
       open: true,
       onPickExisting: () => {},
-      onCancel
+      onCancel,
     });
     await fireEvent.keyDown(getByTestId('session-picker'), { key: 'Escape' });
     expect(onCancel).toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe('SessionPickerModal', () => {
       open: true,
       onPickExisting: () => {},
       onPickNew,
-      onCancel: () => {}
+      onCancel: () => {},
     });
     await fireEvent.click(getByTestId('picker-create-toggle'));
     // Click confirm with no title — should NOT fire, should show error.
@@ -146,7 +146,7 @@ describe('SessionPickerModal', () => {
       open: true,
       onPickExisting: () => {},
       onPickNew,
-      onCancel: () => {}
+      onCancel: () => {},
     });
     await fireEvent.click(getByTestId('picker-create-toggle'));
     const titleInput = getByTestId('picker-new-title') as HTMLInputElement;
@@ -158,7 +158,7 @@ describe('SessionPickerModal', () => {
     await fireEvent.click(getByTestId('picker-new-confirm'));
     expect(onPickNew).toHaveBeenCalledWith({
       title: 'Triage spill',
-      tag_ids: [1]
+      tag_ids: [1],
     });
   });
 
@@ -167,7 +167,7 @@ describe('SessionPickerModal', () => {
       open: true,
       allowCreate: false,
       onPickExisting: () => {},
-      onCancel: () => {}
+      onCancel: () => {},
     });
     expect(queryByTestId('picker-create-toggle')).toBeNull();
   });

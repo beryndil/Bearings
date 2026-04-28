@@ -45,18 +45,22 @@
     return `${m < 100 ? m.toFixed(1) : Math.round(m)}M`;
   }
 
-  const cacheTotal = $derived((totals?.cache_read_tokens ?? 0) + (totals?.cache_creation_tokens ?? 0));
+  const cacheTotal = $derived(
+    (totals?.cache_read_tokens ?? 0) + (totals?.cache_creation_tokens ?? 0)
+  );
 </script>
 
 {#if totals === null}
-  <span class="text-slate-600 font-mono" aria-label="Loading token totals">—</span>
+  <span class="font-mono text-slate-600" aria-label="Loading token totals">—</span>
 {:else if compact}
   <span
     class="font-mono text-slate-500"
     title="Fresh input · output · cached (read + created) tokens"
     aria-label="Token usage summary"
   >
-    {formatTokens(totals.input_tokens)}/{formatTokens(totals.output_tokens)}/{formatTokens(cacheTotal)}
+    {formatTokens(totals.input_tokens)}/{formatTokens(totals.output_tokens)}/{formatTokens(
+      cacheTotal
+    )}
   </span>
 {:else}
   <span
@@ -66,6 +70,8 @@
       `cache create ${totals.cache_creation_tokens.toLocaleString()}`}
     aria-label="Token usage summary"
   >
-    {formatTokens(totals.input_tokens)} in · {formatTokens(totals.output_tokens)} out · {formatTokens(cacheTotal)} cache
+    {formatTokens(totals.input_tokens)} in · {formatTokens(totals.output_tokens)} out · {formatTokens(
+      cacheTotal
+    )} cache
   </span>
 {/if}

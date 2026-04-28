@@ -32,6 +32,6 @@ export function stickToBottom(node: HTMLElement, _deps: unknown) {
     },
     destroy() {
       node.removeEventListener('scroll', onScroll);
-    }
+    },
   };
 }

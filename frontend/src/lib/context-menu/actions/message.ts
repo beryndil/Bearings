@@ -46,9 +46,7 @@ function lookupMessage(id: string): { content: string; role: string } | null {
  * by both user and assistant message rows. */
 function jumpToTurn(messageId: string): void {
   if (typeof document === 'undefined') return;
-  const el = document.querySelector<HTMLElement>(
-    `[data-message-id="${CSS.escape(messageId)}"]`
-  );
+  const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
   if (!el) return;
   el.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
   // A 1.5s outline pulse so the user's eye follows the scroll —
@@ -74,7 +72,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const t = asMessage(target);
       if (!t) return;
       jumpToTurn(t.id);
-    }
+    },
   },
   {
     id: 'message.copy_content',
@@ -87,7 +85,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const row = lookupMessage(t.id);
       if (!row) return;
       await writeClipboard(row.content);
-    }
+    },
   },
   {
     id: 'message.copy_as_markdown',
@@ -106,7 +104,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
         return;
       }
       await writeClipboard(row.content);
-    }
+    },
   },
   {
     id: 'message.copy_id',
@@ -117,7 +115,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const t = asMessage(target);
       if (!t) return;
       await writeClipboard(t.id);
-    }
+    },
   },
   {
     id: 'message.pin',
@@ -131,7 +129,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const nextPinned = !live.pinned;
       const patched = await api.patchMessage(t.id, { pinned: nextPinned });
       conversation.applyMessagePatch(t.sessionId, patched);
-    }
+    },
   },
   {
     id: 'message.hide_from_context',
@@ -145,10 +143,10 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       if (!live) return;
       const nextHidden = !live.hidden_from_context;
       const patched = await api.patchMessage(t.id, {
-        hidden_from_context: nextHidden
+        hidden_from_context: nextHidden,
       });
       conversation.applyMessagePatch(t.sessionId, patched);
-    }
+    },
   },
   {
     id: 'message.move_to_session',
@@ -159,7 +157,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const t = asMessage(target);
       if (!t) return;
       reorgStore.request({ kind: 'move', messageId: t.id, sessionId: t.sessionId });
-    }
+    },
   },
   {
     id: 'message.split_here',
@@ -170,7 +168,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       const t = asMessage(target);
       if (!t) return;
       reorgStore.request({ kind: 'split', messageId: t.id, sessionId: t.sessionId });
-    }
+    },
   },
   {
     id: 'message.fork.from_here',
@@ -187,7 +185,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
       if (!cp) return;
       const forked = await checkpoints.fork(t.sessionId, cp.id);
       if (forked) sessions.select(forked.id);
-    }
+    },
   },
   {
     id: 'message.regenerate',
@@ -207,15 +205,12 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('bearings:composer-prefill', {
-              detail: { sessionId: result.session.id, text: result.prompt }
+              detail: { sessionId: result.session.id, text: result.prompt },
             })
           );
         }
       } catch (err) {
-        notYetImplemented(
-          'message.regenerate',
-          err instanceof Error ? err.message : String(err)
-        );
+        notYetImplemented('message.regenerate', err instanceof Error ? err.message : String(err));
       }
     },
     disabled: (target) => {
@@ -231,7 +226,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
         (m) => m.role === 'user' && m.created_at <= live.created_at
       );
       return userExists ? null : 'No user turn at or before this message';
-    }
+    },
   },
   {
     id: 'message.regenerate.in_place',
@@ -243,8 +238,7 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
         'message.regenerate.in_place',
         'Rewrite-in-place coming in a later version. Use Regenerate (fork) for now.'
       ),
-    disabled: () =>
-      'Rewrite-in-place lands in v0.10.x+. Use Regenerate (fork) for now.'
+    disabled: () => 'Rewrite-in-place lands in v0.10.x+. Use Regenerate (fork) for now.',
   },
   {
     id: 'message.delete',
@@ -253,6 +247,6 @@ export const MESSAGE_ACTIONS: readonly Action[] = [
     destructive: true,
     advanced: true,
     handler: () => notYetImplemented('message.delete'),
-    disabled: () => 'Single-message delete lands in v0.9.2'
-  }
+    disabled: () => 'Single-message delete lands in v0.9.2',
+  },
 ];

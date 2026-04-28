@@ -54,7 +54,7 @@
     }
     window.dispatchEvent(
       new CustomEvent('bearings:composer-prefill', {
-        detail: { sessionId: targetSession, text: view.text }
+        detail: { sessionId: targetSession, text: view.text },
       })
     );
     close();
@@ -93,23 +93,25 @@
     data-testid="reply-action-modal"
   >
     <div
-      class="bg-slate-900 border border-sky-800 rounded-lg shadow-2xl w-full
-        max-w-2xl mx-4 flex flex-col max-h-[80vh]"
+      class="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col
+        rounded-lg border border-sky-800 bg-slate-900 shadow-2xl"
     >
-      <header class="px-5 py-3 border-b border-slate-800 flex items-center
-        justify-between gap-3">
+      <header
+        class="flex items-center justify-between gap-3 border-b border-slate-800
+        px-5 py-3"
+      >
         <h2
           id="reply-action-title"
-          class="text-sm font-medium text-sky-200 flex items-center gap-2"
+          class="flex items-center gap-2 text-sm font-medium text-sky-200"
         >
           <span
-            class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded
-              bg-sky-900 text-sky-200"
+            class="rounded bg-sky-900 px-1.5 py-0.5 text-[10px] uppercase
+              tracking-wider text-sky-200"
             data-testid="reply-action-label"
           >
             {view.label || view.action}
           </span>
-          <span class="text-slate-400 text-xs">Sub-agent preview</span>
+          <span class="text-xs text-slate-400">Sub-agent preview</span>
         </h2>
         <span class="text-[10px] uppercase tracking-wider text-slate-500">
           {#if view.status === 'streaming'}
@@ -125,29 +127,27 @@
       </header>
 
       <div
-        class="flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-200
-          whitespace-pre-wrap break-words font-mono"
+        class="flex-1 overflow-y-auto whitespace-pre-wrap break-words px-5 py-4
+          font-mono text-sm text-slate-200"
         data-testid="reply-action-body"
       >
         {#if view.status === 'error'}
           <p class="text-rose-300">{view.errorMessage}</p>
         {:else if view.text}
-          {view.text}{#if view.status === 'streaming'}<span
-              class="inline-block animate-pulse">▍</span
+          {view.text}{#if view.status === 'streaming'}<span class="inline-block animate-pulse"
+              >▍</span
             >{/if}
         {:else if view.status === 'streaming'}
-          <p class="text-slate-500 italic">Spawning sub-agent…</p>
+          <p class="italic text-slate-500">Spawning sub-agent…</p>
         {:else}
-          <p class="text-slate-500 italic">No content.</p>
+          <p class="italic text-slate-500">No content.</p>
         {/if}
       </div>
 
-      <footer
-        class="px-5 py-3 border-t border-slate-800 flex justify-end gap-2"
-      >
+      <footer class="flex justify-end gap-2 border-t border-slate-800 px-5 py-3">
         <button
           type="button"
-          class="px-3 py-1.5 text-xs rounded bg-slate-800 text-slate-200
+          class="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-200
             hover:bg-slate-700 disabled:opacity-50"
           onclick={onCopy}
           disabled={!view.text}
@@ -157,7 +157,7 @@
         </button>
         <button
           type="button"
-          class="px-3 py-1.5 text-xs rounded bg-slate-800 text-slate-200
+          class="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-200
             hover:bg-slate-700 disabled:opacity-50"
           onclick={onSendToComposer}
           disabled={!view.text || view.status === 'streaming'}
@@ -170,7 +170,7 @@
         </button>
         <button
           type="button"
-          class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white
+          class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white
             hover:bg-emerald-500"
           onclick={close}
           data-testid="reply-action-close"

@@ -27,7 +27,7 @@ describe('reorgStore', () => {
     expect(reorgStore.pending).toEqual({
       kind: 'move',
       messageId: 'm-1',
-      sessionId: 's-1'
+      sessionId: 's-1',
     });
   });
 

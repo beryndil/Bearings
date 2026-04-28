@@ -34,7 +34,7 @@ describe('FolderPicker', () => {
   it('shows the placeholder when value is empty', () => {
     const { getByLabelText } = render(FolderPicker, {
       value: '',
-      placeholder: 'click to choose…'
+      placeholder: 'click to choose…',
     });
     const trigger = getByLabelText('Folder path') as HTMLButtonElement;
     expect(trigger.textContent?.trim()).toBe('click to choose…');
@@ -44,7 +44,7 @@ describe('FolderPicker', () => {
     const fetchSpy = mockPickResponse({
       path: '/home/dave/Projects/Bearings',
       paths: ['/home/dave/Projects/Bearings'],
-      cancelled: false
+      cancelled: false,
     });
     vi.stubGlobal('fetch', fetchSpy);
     const { getByLabelText } = render(FolderPicker, { value: '/home/dave' });
@@ -65,7 +65,7 @@ describe('FolderPicker', () => {
     const fetchSpy = mockPickResponse({
       path: null,
       paths: [],
-      cancelled: true
+      cancelled: true,
     });
     vi.stubGlobal('fetch', fetchSpy);
     const { getByLabelText } = render(FolderPicker, { value: '/home/dave' });
@@ -83,12 +83,11 @@ describe('FolderPicker', () => {
 
   it('surfaces backend errors inline without clobbering the value', async () => {
     const fetchSpy = vi.fn(
-      async () =>
-        new Response('no native file picker available', { status: 501 })
+      async () => new Response('no native file picker available', { status: 501 })
     );
     vi.stubGlobal('fetch', fetchSpy);
     const { getByLabelText, findByTestId } = render(FolderPicker, {
-      value: '/home/dave'
+      value: '/home/dave',
     });
     await fireEvent.click(getByLabelText('Folder path'));
     const err = await findByTestId('folder-picker-error');

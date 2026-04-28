@@ -6,7 +6,7 @@
     collectPaletteEntries,
     filterEntries,
     type PaletteEntry,
-    type TargetResolver
+    type TargetResolver,
   } from '$lib/context-menu/palette-resolver';
   import { sessions } from '$lib/stores/sessions.svelte';
   import type { ActionContext, TargetType } from '$lib/context-menu/types';
@@ -94,7 +94,7 @@
     const ctx: ActionContext = {
       target: entry.target,
       event: null,
-      advanced: false
+      advanced: false,
     };
     // Close first so a handler that opens another modal (ConfirmDialog)
     // doesn't layer on top of the palette — ConfirmDialog owns the
@@ -120,8 +120,7 @@
       selectedIndex = (selectedIndex + 1) % filtered.length;
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      selectedIndex =
-        (selectedIndex - 1 + filtered.length) % filtered.length;
+      selectedIndex = (selectedIndex - 1 + filtered.length) % filtered.length;
     } else if (e.key === 'Home') {
       e.preventDefault();
       selectedIndex = 0;
@@ -139,7 +138,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/80 pt-24 px-4"
+    class="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/80 px-4 pt-24"
     data-backdrop="1"
     onmousedown={onBackdropMousedown}
     data-testid="command-palette-backdrop"
@@ -151,8 +150,8 @@
       aria-modal="true"
       aria-label="Command palette"
       tabindex="-1"
-      class="w-full max-w-xl rounded-lg border border-slate-800 bg-slate-900 shadow-2xl
-        flex flex-col overflow-hidden"
+      class="flex w-full max-w-xl flex-col overflow-hidden rounded-lg border
+        border-slate-800 bg-slate-900 shadow-2xl"
       data-testid="command-palette"
       onkeydown={onKey}
     >
@@ -161,8 +160,8 @@
           type="text"
           bind:this={queryEl}
           bind:value={palette.query}
-          class="w-full rounded bg-slate-950 border border-slate-800 px-3 py-2 text-sm
-            focus:outline-none focus:border-slate-600"
+          class="w-full rounded border border-slate-800 bg-slate-950 px-3 py-2 text-sm
+            focus:border-slate-600 focus:outline-none"
           placeholder="Run an action… (type to filter, ↑/↓ to navigate, Enter to run)"
           aria-label="Palette query"
           data-testid="command-palette-query"
@@ -178,8 +177,7 @@
         {#if filtered.length === 0}
           <li class="px-3 py-4 text-xs text-slate-500">
             {#if entries.length === 0}
-              Open a session first — the palette lists actions for the
-              currently-selected session.
+              Open a session first — the palette lists actions for the currently-selected session.
             {:else}
               No matching actions.
             {/if}
@@ -193,11 +191,11 @@
                 type="button"
                 role="option"
                 aria-selected={hi}
-                disabled={disabled}
-                class="w-full text-left px-3 py-2 border-b border-slate-800/60
-                  last:border-b-0 flex items-baseline gap-3
-                  hover:bg-slate-800 aria-selected:bg-slate-800
-                  disabled:opacity-50 disabled:cursor-not-allowed"
+                {disabled}
+                class="flex w-full items-baseline gap-3 border-b border-slate-800/60
+                  px-3 py-2 text-left last:border-b-0
+                  hover:bg-slate-800 disabled:cursor-not-allowed
+                  disabled:opacity-50 aria-selected:bg-slate-800"
                 title={entry.disabledReason ?? undefined}
                 onmousedown={(e) => {
                   // mousedown (not click) so the query input doesn't
@@ -210,7 +208,7 @@
                 data-action-id={entry.id}
                 data-disabled={disabled ? '1' : '0'}
               >
-                <span class="text-sm text-slate-200 flex-1 truncate">
+                <span class="flex-1 truncate text-sm text-slate-200">
                   {entry.label}
                   {#if entry.advanced}
                     <span class="ml-1 text-[9px] uppercase tracking-wider text-amber-400">
@@ -221,7 +219,7 @@
                 <span class="text-[10px] uppercase text-slate-500">
                   {entry.section}
                 </span>
-                <span class="text-[10px] font-mono text-slate-600 shrink-0">
+                <span class="shrink-0 font-mono text-[10px] text-slate-600">
                   {entry.id}
                 </span>
               </button>
@@ -231,14 +229,14 @@
       </ul>
 
       <footer
-        class="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500
-          flex items-center justify-between"
+        class="flex items-center justify-between border-t border-slate-800 px-3
+          py-1.5 text-[10px] text-slate-500"
       >
         <span>
           {filtered.length} / {entries.length} action{entries.length === 1 ? '' : 's'}
         </span>
         <span>
-          <kbd class="font-mono bg-slate-950 px-1 py-0.5 border border-slate-800 rounded">
+          <kbd class="rounded border border-slate-800 bg-slate-950 px-1 py-0.5 font-mono">
             Esc
           </kbd>
           to close

@@ -83,7 +83,7 @@
         description: p.suggested_session.description ?? null,
         tag_ids: [...p.suggested_session.tag_ids],
         rejected: false,
-        expanded: false
+        expanded: false,
       }));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Analyzer call failed';
@@ -164,8 +164,8 @@
             new_session: {
               title: card.title,
               description: card.description ?? null,
-              tag_ids: card.tag_ids
-            }
+              tag_ids: card.tag_ids,
+            },
           });
           if (res.session) {
             created += 1;
@@ -208,20 +208,20 @@
     data-testid="reorg-proposal-editor"
   >
     <div
-      class="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-lg border border-slate-800
-        bg-slate-900 p-5 shadow-2xl flex flex-col gap-3"
+      class="flex max-h-[85vh] w-full max-w-3xl flex-col gap-3 overflow-hidden
+        rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl"
     >
       <header class="flex items-start justify-between gap-3">
         <div>
           <h2 class="text-sm font-medium text-slate-200">Analyze & reorg session</h2>
-          <p class="text-xs text-slate-500 mt-1">
-            The analyzer proposes how this session could be split. Edit titles / tags per card,
-            then approve all to commit.
+          <p class="mt-1 text-xs text-slate-500">
+            The analyzer proposes how this session could be split. Edit titles / tags per card, then
+            approve all to commit.
           </p>
         </div>
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-sm"
+          class="text-sm text-slate-500 hover:text-slate-300"
           aria-label="Close analyzer"
           onclick={onClose}
         >
@@ -233,7 +233,7 @@
         <span class="text-slate-500">Mode:</span>
         <button
           type="button"
-          class="px-2 py-1 rounded {mode === 'heuristic'
+          class="rounded px-2 py-1 {mode === 'heuristic'
             ? 'bg-emerald-900 text-emerald-200'
             : 'bg-slate-800 text-slate-400'} hover:text-emerald-200"
           onclick={() => {
@@ -246,7 +246,7 @@
         </button>
         <button
           type="button"
-          class="px-2 py-1 rounded {mode === 'llm'
+          class="rounded px-2 py-1 {mode === 'llm'
             ? 'bg-sky-900 text-sky-200'
             : 'bg-slate-800 text-slate-400'} hover:text-sky-200"
           onclick={() => {
@@ -259,41 +259,43 @@
           LLM
         </button>
         {#if loading}
-          <span class="text-slate-500 ml-auto">analyzing…</span>
+          <span class="ml-auto text-slate-500">analyzing…</span>
         {:else if result}
-          <span class="text-slate-500 ml-auto">
+          <span class="ml-auto text-slate-500">
             {result.messages_in} messages · ran {result.mode_used}
           </span>
         {/if}
       </div>
 
       {#if error}
-        <div class="text-xs text-rose-300 bg-rose-950/40 border border-rose-900 px-2 py-1 rounded">
+        <div class="rounded border border-rose-900 bg-rose-950/40 px-2 py-1 text-xs text-rose-300">
           {error}
         </div>
       {/if}
 
       {#if result?.notes}
-        <div class="text-xs text-amber-300 bg-amber-950/30 border border-amber-900 px-2 py-1 rounded">
+        <div
+          class="rounded border border-amber-900 bg-amber-950/30 px-2 py-1 text-xs text-amber-300"
+        >
           {result.notes}
         </div>
       {/if}
 
-      <div class="flex-1 overflow-y-auto pr-1 flex flex-col gap-3">
+      <div class="flex flex-1 flex-col gap-3 overflow-y-auto pr-1">
         {#if !loading && result && cards.length === 0}
-          <p class="text-xs text-slate-500 italic">
+          <p class="text-xs italic text-slate-500">
             Analyzer didn't find any clear topical breaks — the session looks coherent.
           </p>
         {/if}
 
         {#each cards as card, i (i)}
           <article
-            class="rounded border bg-slate-950/60 px-3 py-2 flex flex-col gap-2
+            class="flex flex-col gap-2 rounded border bg-slate-950/60 px-3 py-2
               {card.rejected ? 'border-slate-800 opacity-50' : 'border-slate-700'}"
             data-testid="reorg-proposal-card"
           >
             <header class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 min-w-0">
+              <div class="flex min-w-0 items-center gap-2">
                 <span class="text-[10px] uppercase tracking-wider text-slate-500">
                   {card.message_ids.length} msgs
                 </span>
@@ -303,7 +305,9 @@
               </div>
               <button
                 type="button"
-                class="text-xs {card.rejected ? 'text-emerald-400' : 'text-rose-400'} hover:underline"
+                class="text-xs {card.rejected
+                  ? 'text-emerald-400'
+                  : 'text-rose-400'} hover:underline"
                 onclick={() => (card.rejected = !card.rejected)}
               >
                 {card.rejected ? 'Restore' : 'Reject'}
@@ -312,21 +316,21 @@
 
             <input
               type="text"
-              class="rounded bg-slate-950 border border-slate-800 px-2 py-1 text-sm
-                focus:outline-none focus:border-slate-600"
+              class="rounded border border-slate-800 bg-slate-950 px-2 py-1 text-sm
+                focus:border-slate-600 focus:outline-none"
               bind:value={card.title}
               aria-label="Proposed session title"
               disabled={card.rejected}
             />
 
-            <p class="text-[11px] text-slate-500 italic">{card.rationale}</p>
+            <p class="text-[11px] italic text-slate-500">{card.rationale}</p>
 
             {#if tags.list.length > 0}
               <div class="flex flex-wrap gap-1">
                 {#each tags.list as t (t.id)}
                   <button
                     type="button"
-                    class="text-[10px] font-mono px-1.5 py-0.5 rounded {card.tag_ids.includes(t.id)
+                    class="rounded px-1.5 py-0.5 font-mono text-[10px] {card.tag_ids.includes(t.id)
                       ? 'bg-emerald-900 text-emerald-200'
                       : 'bg-slate-800 text-slate-400'} hover:text-emerald-200"
                     onclick={() => toggleTag(card, t.id)}
@@ -340,13 +344,13 @@
 
             <button
               type="button"
-              class="text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300 self-start"
+              class="self-start text-[10px] uppercase tracking-wider text-slate-500 hover:text-slate-300"
               onclick={() => (card.expanded = !card.expanded)}
             >
               {card.expanded ? '⌃ hide ids' : '⌄ show ids'}
             </button>
             {#if card.expanded}
-              <ul class="text-[10px] font-mono text-slate-500 break-all pl-3 list-disc">
+              <ul class="list-disc break-all pl-3 font-mono text-[10px] text-slate-500">
                 {#each card.message_ids as mid (mid)}
                   <li>{mid}</li>
                 {/each}
@@ -363,15 +367,15 @@
       <footer class="flex items-center justify-end gap-2 border-t border-slate-800 pt-3">
         <button
           type="button"
-          class="text-xs px-3 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700"
+          class="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700"
           onclick={onClose}
         >
           Cancel
         </button>
         <button
           type="button"
-          class="text-xs px-3 py-1.5 rounded bg-emerald-900 text-emerald-200
-            hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          class="rounded bg-emerald-900 px-3 py-1.5 text-xs text-emerald-200
+            hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-40"
           onclick={approveAll}
           disabled={committing || pendingCommitCount() === 0 || loading}
           data-testid="reorg-approve-all"

@@ -42,7 +42,7 @@
     spin = false,
     showBackground = false,
     class: klass = '',
-    label
+    label,
   }: Props = $props();
 </script>
 

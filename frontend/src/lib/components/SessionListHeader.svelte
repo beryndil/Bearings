@@ -18,12 +18,7 @@
     bindImportInput: (el: HTMLInputElement | undefined) => void;
   }
 
-  const {
-    onImportClick,
-    onSettingsClick,
-    onImportFileChange,
-    bindImportInput
-  }: Props = $props();
+  const { onImportClick, onSettingsClick, onImportFileChange, bindImportInput }: Props = $props();
 
   let importInput: HTMLInputElement | undefined = $state();
 
@@ -37,7 +32,7 @@
   <div class="flex items-center gap-1">
     <button
       type="button"
-      class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
+      class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
       aria-label="Import session from JSON"
       title="Import a session.json file"
       onclick={onImportClick}
@@ -56,7 +51,7 @@
     <TemplatePicker />
     <a
       href="/vault"
-      class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
+      class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
       aria-label="Open vault (plans + TODOs)"
       title="Open vault — browse plans and TODO.md files"
       data-testid="vault-link"
@@ -65,7 +60,7 @@
     </a>
     <button
       type="button"
-      class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
+      class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
       aria-label="Open settings"
       onclick={onSettingsClick}
     >
@@ -73,7 +68,7 @@
     </button>
     <button
       type="button"
-      class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
+      class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
       onclick={() => uiActions.toggleNewSession()}
       aria-label="Toggle new session form"
     >

@@ -68,7 +68,7 @@ function pick(
   if (opts.multiple) params.set('multiple', 'true');
   if (opts.title) params.set('title', opts.title);
   return jsonFetch<FsPick>(fetchImpl, `/api/fs/pick?${params.toString()}`, {
-    method: 'POST'
+    method: 'POST',
   });
 }
 

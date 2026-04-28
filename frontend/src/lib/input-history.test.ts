@@ -5,7 +5,7 @@ import {
   emptyHistoryState,
   nextHistory,
   prevHistory,
-  resetHistory
+  resetHistory,
 } from './input-history';
 
 describe('input-history state machine', () => {

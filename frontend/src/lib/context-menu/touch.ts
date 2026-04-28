@@ -61,7 +61,7 @@ export type LongPressOptions = {
 export const INITIAL_LONG_PRESS_STATE: LongPressState = {
   phase: 'idle',
   startX: 0,
-  startY: 0
+  startY: 0,
 };
 
 /** Pure transition function. Returns the next state and an optional
@@ -81,7 +81,7 @@ export function reduceLongPress(
       // safer than leaving a stale timer pending.
       return {
         state: { phase: 'armed', startX: event.x, startY: event.y },
-        effect: { type: 'schedule' }
+        effect: { type: 'schedule' },
       };
     }
     case 'move': {
@@ -93,7 +93,7 @@ export function reduceLongPress(
       }
       return {
         state: INITIAL_LONG_PRESS_STATE,
-        effect: { type: 'cancel-timer' }
+        effect: { type: 'cancel-timer' },
       };
     }
     case 'up':
@@ -102,15 +102,14 @@ export function reduceLongPress(
       // `up` after `fired` is a no-op — the menu is already open, the
       // reducer returns to idle but doesn't need to cancel the timer
       // (it already fired).
-      const effect: LongPressEffect =
-        state.phase === 'armed' ? { type: 'cancel-timer' } : null;
+      const effect: LongPressEffect = state.phase === 'armed' ? { type: 'cancel-timer' } : null;
       return { state: INITIAL_LONG_PRESS_STATE, effect };
     }
     case 'timer': {
       if (state.phase !== 'armed') return { state, effect: null };
       return {
         state: { ...state, phase: 'fired' },
-        effect: { type: 'fire', x: state.startX, y: state.startY }
+        effect: { type: 'fire', x: state.startX, y: state.startY },
       };
     }
   }
@@ -229,6 +228,6 @@ export function longpress(
       node.removeEventListener('pointerup', onUp);
       node.removeEventListener('pointercancel', onCancel);
       node.removeEventListener('pointerleave', onCancel);
-    }
+    },
   };
 }

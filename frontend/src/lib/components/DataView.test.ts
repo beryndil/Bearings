@@ -16,7 +16,7 @@ describe('DataView', () => {
     const { getByTestId, queryByTestId } = render(DataViewHarness, {
       loading: false,
       error: null,
-      isEmpty: false
+      isEmpty: false,
     });
     expect(getByTestId('dataview-success').textContent).toContain('success body');
     expect(queryByTestId('dataview-loading')).toBeNull();
@@ -29,7 +29,7 @@ describe('DataView', () => {
       loading: true,
       error: null,
       isEmpty: false,
-      loadingLabel: 'Loading sessions'
+      loadingLabel: 'Loading sessions',
     });
     const node = getByTestId('dataview-loading');
     expect(node.getAttribute('aria-busy')).toBe('true');
@@ -44,7 +44,7 @@ describe('DataView', () => {
       loading: false,
       error: null,
       isEmpty: true,
-      emptyLabel: 'No sessions yet.'
+      emptyLabel: 'No sessions yet.',
     });
     const empty = getByTestId('dataview-empty');
     expect(empty.textContent?.trim()).toBe('No sessions yet.');
@@ -56,7 +56,7 @@ describe('DataView', () => {
       loading: false,
       error: 'fetch failed: network unreachable',
       isEmpty: false,
-      onRetry
+      onRetry,
     });
     const errorNode = getByTestId('dataview-error');
     expect(errorNode.getAttribute('role')).toBe('alert');
@@ -73,7 +73,7 @@ describe('DataView', () => {
     const { getByTestId, queryByTestId } = render(DataViewHarness, {
       loading: false,
       error: 'something broke',
-      isEmpty: false
+      isEmpty: false,
     });
     expect(getByTestId('dataview-error')).toBeTruthy();
     expect(queryByTestId('dataview-retry')).toBeNull();
@@ -83,7 +83,7 @@ describe('DataView', () => {
     const { getByTestId, queryByTestId } = render(DataViewHarness, {
       loading: true,
       error: 'error wins',
-      isEmpty: false
+      isEmpty: false,
     });
     expect(getByTestId('dataview-error').textContent).toContain('error wins');
     expect(queryByTestId('dataview-loading')).toBeNull();
@@ -93,7 +93,7 @@ describe('DataView', () => {
     const { getByTestId, queryByTestId } = render(DataViewHarness, {
       loading: true,
       error: null,
-      isEmpty: true
+      isEmpty: true,
     });
     expect(getByTestId('dataview-loading')).toBeTruthy();
     expect(queryByTestId('dataview-empty')).toBeNull();

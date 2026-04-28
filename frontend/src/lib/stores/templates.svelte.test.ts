@@ -23,7 +23,7 @@ function tpl(overrides: Partial<Template> = {}): Template {
     session_instructions: null,
     tag_ids: [],
     created_at: '2026-04-22T00:00:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -44,7 +44,7 @@ function session(overrides: Partial<Session> = {}): Session {
     error_pending: false,
     tag_ids: [],
     checklist_item_id: null,
-    ...overrides
+    ...overrides,
   } as Session;
 }
 
@@ -63,7 +63,7 @@ function queueResponses(queue: Fake[]): void {
         },
         async text() {
           return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-        }
+        },
       };
     })
   );
@@ -72,7 +72,7 @@ function queueResponses(queue: Fake[]): void {
 describe('templates store', () => {
   it('refresh populates the list from GET /api/templates', async () => {
     queueResponses([
-      { ok: true, body: [tpl({ id: 't-1', name: 'alpha' }), tpl({ id: 't-2', name: 'beta' })] }
+      { ok: true, body: [tpl({ id: 't-1', name: 'alpha' }), tpl({ id: 't-2', name: 'beta' })] },
     ]);
     await templates.refresh();
     expect(templates.list).toHaveLength(2);
@@ -82,7 +82,7 @@ describe('templates store', () => {
   it('refresh surfaces server errors without clobbering the prior list', async () => {
     queueResponses([
       { ok: true, body: [tpl({ id: 't-1' })] },
-      { ok: false, status: 500, body: 'boom' }
+      { ok: false, status: 500, body: 'boom' },
     ]);
     await templates.refresh();
     await templates.refresh();
@@ -94,7 +94,7 @@ describe('templates store', () => {
   it('create prepends the new template', async () => {
     queueResponses([
       { ok: true, body: [tpl({ id: 't-old' })] },
-      { ok: true, body: tpl({ id: 't-new', name: 'fresh' }) }
+      { ok: true, body: tpl({ id: 't-new', name: 'fresh' }) },
     ]);
     await templates.refresh();
     const created = await templates.create({ name: 'fresh' });
@@ -105,7 +105,7 @@ describe('templates store', () => {
   it('remove is optimistic and restores on server failure', async () => {
     queueResponses([
       { ok: true, body: [tpl({ id: 't-1' })] },
-      { ok: false, status: 500, body: 'boom' }
+      { ok: false, status: 500, body: 'boom' },
     ]);
     await templates.refresh();
     const removed = await templates.remove('t-1');
@@ -116,7 +116,7 @@ describe('templates store', () => {
   it('remove drops the row on a 204', async () => {
     queueResponses([
       { ok: true, body: [tpl({ id: 't-1' }), tpl({ id: 't-2' })] },
-      { ok: true, status: 204, body: null }
+      { ok: true, status: 204, body: null },
     ]);
     await templates.refresh();
     const removed = await templates.remove('t-1');
@@ -131,9 +131,7 @@ describe('templates store', () => {
   });
 
   it('instantiate upserts the new session into the sessions store', async () => {
-    queueResponses([
-      { ok: true, body: session({ id: 's-from-tpl' }) }
-    ]);
+    queueResponses([{ ok: true, body: session({ id: 's-from-tpl' }) }]);
     const created = await templates.instantiate('t-1', { title: 'go' });
     expect(created?.id).toBe('s-from-tpl');
     expect(sessions.list.some((s) => s.id === 's-from-tpl')).toBe(true);

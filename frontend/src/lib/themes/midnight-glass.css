@@ -43,14 +43,10 @@
  * somewhere" rather than "someone painted purple on my UI." */
 [data-theme='midnight-glass'] body {
   background-image:
-    radial-gradient(
-      900px 700px at 12% 8%,
-      rgb(var(--bearings-sky-500) / 0.45) 0%,
-      transparent 55%
-    ),
+    radial-gradient(900px 700px at 12% 8%, rgb(var(--bearings-sky-500) / 0.45) 0%, transparent 55%),
     radial-gradient(
       800px 600px at 92% 6%,
-      rgb(var(--bearings-indigo-300) / 0.30) 0%,
+      rgb(var(--bearings-indigo-300) / 0.3) 0%,
       transparent 60%
     ),
     radial-gradient(
@@ -93,15 +89,15 @@
   background-color: rgb(var(--bearings-slate-900) / 0.55) !important;
   background-image: linear-gradient(
     180deg,
-    rgb(var(--bearings-slate-700) / 0.30) 0%,
-    rgb(var(--bearings-slate-900) / 0.20) 100%
+    rgb(var(--bearings-slate-700) / 0.3) 0%,
+    rgb(var(--bearings-slate-900) / 0.2) 100%
   );
   backdrop-filter: blur(18px) saturate(160%);
   -webkit-backdrop-filter: blur(18px) saturate(160%);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
     inset 0 0 0 1px rgb(255 255 255 / 0.04),
-    inset 1px 0 0 rgb(var(--bearings-sky-500) / 0.10),
+    inset 1px 0 0 rgb(var(--bearings-sky-500) / 0.1),
     0 16px 40px -10px rgba(0, 0, 0, 0.65);
 }
 
@@ -126,7 +122,7 @@
  * `bg-slate-900` class matches. Dragzones and overlays inside the
  * section that use `bg-slate-950/60` etc. are unaffected. */
 [data-theme='midnight-glass'] section[class*='bg-slate-900'] {
-  background-color: rgb(var(--bearings-slate-900) / 0.40) !important;
+  background-color: rgb(var(--bearings-slate-900) / 0.4) !important;
   background-image: linear-gradient(
     180deg,
     rgb(var(--bearings-slate-800) / 0.25) 0%,
@@ -170,9 +166,9 @@
     rgb(var(--bearings-sky-500) / 0.04) 100%
   );
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
     inset 2px 0 8px -2px rgb(var(--bearings-sky-500) / 0.55),
-    inset 0 0 28px -10px rgb(var(--bearings-sky-500) / 0.40),
+    inset 0 0 28px -10px rgb(var(--bearings-sky-500) / 0.4),
     0 6px 18px -8px rgb(var(--bearings-sky-500) / 0.45);
 }
 
@@ -292,11 +288,7 @@
 [data-theme='midnight-glass'] button[class*='bg-sky-6'],
 [data-theme='midnight-glass'] button[class*='bg-rose-6'],
 [data-theme='midnight-glass'] button[class*='bg-rose-7'] {
-  background-image: linear-gradient(
-    180deg,
-    rgb(255 255 255 / 0.12) 0%,
-    rgb(255 255 255 / 0) 100%
-  );
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.12) 0%, rgb(255 255 255 / 0) 100%);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.12),
     0 2px 6px -2px rgba(0, 0, 0, 0.4);

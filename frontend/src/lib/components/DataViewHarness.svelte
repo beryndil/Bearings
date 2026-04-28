@@ -27,7 +27,7 @@
     onRetry,
     emptyLabel,
     loadingLabel,
-    successLabel = 'success body'
+    successLabel = 'success body',
   }: Props = $props();
 </script>
 

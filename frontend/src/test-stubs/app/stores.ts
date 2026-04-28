@@ -34,13 +34,13 @@ const initial: StubPage = {
   error: null,
   data: {},
   form: null,
-  state: {}
+  state: {},
 };
 
 const _page = writable<StubPage>(initial);
 
 export const page: Readable<StubPage> = {
-  subscribe: _page.subscribe
+  subscribe: _page.subscribe,
 };
 
 export const navigating = writable<null>(null);

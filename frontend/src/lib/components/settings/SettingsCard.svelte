@@ -25,14 +25,14 @@
 </script>
 
 <section
-  class="rounded-lg border border-slate-800 bg-slate-900/60 shadow-sm
-    flex flex-col"
+  class="flex flex-col rounded-lg border border-slate-800
+    bg-slate-900/60 shadow-sm"
   aria-labelledby={titleId}
 >
   {#if title}
     <h3
       id={titleId}
-      class="px-4 pt-3 pb-2 text-xs font-medium text-slate-400 uppercase tracking-wide"
+      class="px-4 pb-2 pt-3 text-xs font-medium uppercase tracking-wide text-slate-400"
     >
       {title}
     </h3>

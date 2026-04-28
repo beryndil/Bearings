@@ -35,12 +35,7 @@ import { pending } from '$lib/stores/pending.svelte';
 import { sessions } from '$lib/stores/sessions.svelte';
 import { uiActions } from '$lib/stores/ui_actions.svelte';
 
-export type BindingGroup =
-  | 'Create'
-  | 'Navigate'
-  | 'Focus'
-  | 'Help'
-  | 'Command palette';
+export type BindingGroup = 'Create' | 'Navigate' | 'Focus' | 'Help' | 'Command palette';
 
 export type BindingDef = {
   /** Stable id — keep alphabetical inside group, kebab-case. Used by
@@ -80,7 +75,10 @@ type ChordReq = {
 };
 
 function parseChord(chord: string): ChordReq {
-  const parts = chord.split('+').map((s) => s.trim()).filter(Boolean);
+  const parts = chord
+    .split('+')
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (parts.length === 0) throw new Error(`empty chord: ${chord}`);
   const last = parts[parts.length - 1];
   const mods = parts.slice(0, -1).map((p) => p.toLowerCase());
@@ -88,7 +86,7 @@ function parseChord(chord: string): ChordReq {
     ctrl: mods.includes('ctrl'),
     shift: mods.includes('shift'),
     alt: mods.includes('alt'),
-    key: last
+    key: last,
   };
 }
 
@@ -124,9 +122,7 @@ function isInputFocused(target: EventTarget | null): boolean {
   // body when the textarea is focused by JS rather than user click.
   const el =
     (target instanceof HTMLElement ? target : null) ??
-    (typeof document !== 'undefined'
-      ? (document.activeElement as HTMLElement | null)
-      : null);
+    (typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null);
   if (!el) return false;
   if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
   if (el.isContentEditable) return true;
@@ -147,7 +143,7 @@ async function navigateRelative(delta: number): Promise<void> {
   const idx = currentId ? list.findIndex((s) => s.id === currentId) : -1;
   let nextIdx: number;
   if (idx < 0) nextIdx = delta > 0 ? 0 : list.length - 1;
-  else nextIdx = ((idx + delta) % list.length + list.length) % list.length;
+  else nextIdx = (((idx + delta) % list.length) + list.length) % list.length;
   const next = list[nextIdx];
   if (!next) return;
   sessions.select(next.id);
@@ -195,14 +191,12 @@ function handleEscape(e: KeyboardEvent): void {
     e.preventDefault();
     return;
   }
-  const active = (typeof document !== 'undefined'
-    ? document.activeElement
-    : null) as HTMLElement | null;
+  const active = (
+    typeof document !== 'undefined' ? document.activeElement : null
+  ) as HTMLElement | null;
   if (
     active &&
-    (active.tagName === 'INPUT' ||
-      active.tagName === 'TEXTAREA' ||
-      active.isContentEditable)
+    (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
   ) {
     e.preventDefault();
     active.blur();
@@ -219,21 +213,21 @@ function buildBindings(): BindingDef[] {
       chord: 'c',
       group: 'Create',
       label: 'New chat',
-      run: () => uiActions.toggleNewSession()
+      run: () => uiActions.toggleNewSession(),
     },
     {
       id: 'create.new-chat-with-options',
       chord: 'Shift+C',
       group: 'Create',
       label: 'New chat (skip seeded defaults)',
-      run: () => uiActions.toggleNewSession({ fresh: true })
+      run: () => uiActions.toggleNewSession({ fresh: true }),
     },
     {
       id: 'create.from-template',
       chord: 't',
       group: 'Create',
       label: 'New chat from template',
-      run: () => uiActions.toggleTemplatePicker()
+      run: () => uiActions.toggleTemplatePicker(),
     },
 
     // Navigate
@@ -242,14 +236,14 @@ function buildBindings(): BindingDef[] {
       chord: 'j',
       group: 'Navigate',
       label: 'Next session in sidebar',
-      run: () => void navigateRelative(1)
+      run: () => void navigateRelative(1),
     },
     {
       id: 'navigate.prev',
       chord: 'k',
       group: 'Navigate',
       label: 'Previous session in sidebar',
-      run: () => void navigateRelative(-1)
+      run: () => void navigateRelative(-1),
     },
     {
       id: 'navigate.bracket-next',
@@ -257,7 +251,7 @@ function buildBindings(): BindingDef[] {
       group: 'Navigate',
       label: 'Next session (modifier variant)',
       global: true,
-      run: () => void navigateRelative(1)
+      run: () => void navigateRelative(1),
     },
     {
       id: 'navigate.bracket-prev',
@@ -265,7 +259,7 @@ function buildBindings(): BindingDef[] {
       group: 'Navigate',
       label: 'Previous session (modifier variant)',
       global: true,
-      run: () => void navigateRelative(-1)
+      run: () => void navigateRelative(-1),
     },
 
     // Focus
@@ -275,7 +269,7 @@ function buildBindings(): BindingDef[] {
       group: 'Focus',
       label: 'Defocus input / dismiss overlay',
       global: true,
-      run: handleEscape
+      run: handleEscape,
     },
 
     // Help
@@ -284,7 +278,7 @@ function buildBindings(): BindingDef[] {
       chord: '?',
       group: 'Help',
       label: 'Show this cheat sheet',
-      run: () => uiActions.toggleCheatSheet()
+      run: () => uiActions.toggleCheatSheet(),
     },
 
     // Pending operations
@@ -294,7 +288,7 @@ function buildBindings(): BindingDef[] {
       group: 'Help',
       label: 'Toggle pending-ops card',
       global: true,
-      run: () => pending.toggleCard()
+      run: () => pending.toggleCard(),
     },
 
     // Command palette
@@ -304,7 +298,7 @@ function buildBindings(): BindingDef[] {
       group: 'Command palette',
       label: 'Toggle command palette',
       global: true,
-      run: () => palette.toggle()
+      run: () => palette.toggle(),
     },
     {
       id: 'palette.search',
@@ -314,8 +308,8 @@ function buildBindings(): BindingDef[] {
       // SidebarSearch wires this directly so the focus target is
       // colocated with the input ref. Listed here only for cheat-sheet
       // display; the dispatcher skips it.
-      displayOnly: true
-    }
+      displayOnly: true,
+    },
   ];
 
   // Alt+1..9 — jump to the Nth open session. Generated rather than
@@ -329,7 +323,7 @@ function buildBindings(): BindingDef[] {
       group: 'Navigate',
       label: `Jump to session ${n}`,
       global: true,
-      run: () => void jumpToIndex(idx)
+      run: () => void jumpToIndex(idx),
     });
   }
 
@@ -356,7 +350,7 @@ const BINDINGS: BindingDef[] = buildBindings();
 
 const PARSED: { def: BindingDef; req: ChordReq }[] = BINDINGS.map((def) => ({
   def,
-  req: parseChord(def.chord)
+  req: parseChord(def.chord),
 }));
 
 // ---------- public api ----------
@@ -384,7 +378,10 @@ export function groupedBindings(): { group: BindingGroup; items: BindingDef[] }[
  * (`Shift+C` → `['Shift', 'C']`). The renderer wraps each segment in
  * a `<kbd>`. */
 export function chordSegments(chord: string): string[] {
-  return chord.split('+').map((s) => s.trim()).filter(Boolean);
+  return chord
+    .split('+')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /** Try to dispatch the event against the registry. Returns `true`

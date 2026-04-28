@@ -91,7 +91,7 @@
 <div class="relative">
   <button
     type="button"
-    class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-1.5 py-0.5"
+    class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
     aria-label="Open template picker"
     aria-expanded={open}
     title="Start a session from a saved template"
@@ -102,20 +102,18 @@
   </button>
   {#if open}
     <div
-      class="absolute right-0 top-full mt-1 w-64 rounded border border-slate-700
-        bg-slate-900 shadow-lg z-20 text-xs"
+      class="absolute right-0 top-full z-20 mt-1 w-64 rounded border
+        border-slate-700 bg-slate-900 text-xs shadow-lg"
       role="menu"
       data-testid="template-picker-panel"
     >
       <div
-        class="px-2 py-1 uppercase tracking-wider text-[10px] text-slate-500
-          border-b border-slate-800 flex items-center justify-between"
+        class="flex items-center justify-between border-b border-slate-800 px-2
+          py-1 text-[10px] uppercase tracking-wider text-slate-500"
       >
         <span>Templates</span>
         {#if templates.loading}
-          <span
-            class="inline-flex items-center gap-1 text-slate-600 normal-case tracking-normal"
-          >
+          <span class="inline-flex items-center gap-1 normal-case tracking-normal text-slate-600">
             <BearingsMark size={10} spin label="Loading templates" />
             loading…
           </span>
@@ -134,20 +132,20 @@
             <li class="group flex items-stretch hover:bg-slate-800">
               <button
                 type="button"
-                class="flex-1 text-left px-2 py-1 min-w-0"
+                class="min-w-0 flex-1 px-2 py-1 text-left"
                 onclick={() => onPick(t.id)}
                 data-testid="template-picker-row"
               >
                 <div class="truncate">{t.name}</div>
-                <div class="text-[10px] text-slate-500 font-mono truncate">
+                <div class="truncate font-mono text-[10px] text-slate-500">
                   {t.working_dir ?? '— no working dir —'}
                 </div>
               </button>
               <button
                 type="button"
                 class="px-1.5 text-[11px] transition {confirmDelete.id === t.id
-                  ? 'text-rose-400 font-medium'
-                  : 'text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100'}"
+                  ? 'font-medium text-rose-400'
+                  : 'text-slate-500 opacity-0 hover:text-rose-400 group-hover:opacity-100'}"
                 aria-label={confirmDelete.id === t.id
                   ? 'Confirm delete template'
                   : 'Delete template'}

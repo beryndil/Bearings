@@ -21,7 +21,7 @@ import {
   filterEntries,
   rankEntry,
   type PaletteEntry,
-  type TargetResolver
+  type TargetResolver,
 } from './palette-resolver';
 import type { Action, ActionSection } from './types';
 import type { Session } from '$lib/api';
@@ -33,16 +33,12 @@ import type { Session } from '$lib/api';
  *  Action (instead of `as any`) keeps the test honest about the
  *  contract: if the type ever grows a new required field, the test
  *  breaks loud rather than silently masking it via `any`. */
-function fakeAction(
-  id: string,
-  label: string,
-  section: ActionSection
-): Action {
+function fakeAction(id: string, label: string, section: ActionSection): Action {
   return {
     id,
     label,
     section,
-    handler: () => {}
+    handler: () => {},
   };
 }
 
@@ -71,15 +67,13 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
 const SESSION_RESOLVER: TargetResolver = (type) => {
   if (type === 'session') {
-    return sessions.selectedId
-      ? { type: 'session', id: sessions.selectedId }
-      : null;
+    return sessions.selectedId ? { type: 'session', id: sessions.selectedId } : null;
   }
   return null;
 };
@@ -117,9 +111,7 @@ describe('collectPaletteEntries', () => {
 
   it('expands submenu children inline with a parent-label prefix', () => {
     const entries = collectPaletteEntries(SESSION_RESOLVER, ['session']);
-    const changeModel = entries.filter((e) =>
-      e.id.startsWith('session.change_model.')
-    );
+    const changeModel = entries.filter((e) => e.id.startsWith('session.change_model.'));
     // KNOWN_MODELS has 3 entries; the submenu expansion yields one
     // palette row per leaf.
     expect(changeModel.length).toBeGreaterThanOrEqual(1);
@@ -169,7 +161,7 @@ describe('rankEntry', () => {
       target: { type: 'session', id: 'x' },
       action: fakeAction(id, label, 'copy'),
       disabledReason: null,
-      advanced: false
+      advanced: false,
     };
   }
 
@@ -217,20 +209,16 @@ describe('filterEntries', () => {
       target: { type: 'session', id: 'x' },
       action: fakeAction('session.pin', 'Pin session', 'organize'),
       disabledReason: null,
-      advanced: false
+      advanced: false,
     },
     {
       id: 'session.open_in.editor',
       label: 'Open in editor',
       section: 'navigate',
       target: { type: 'session', id: 'x' },
-      action: fakeAction(
-        'session.open_in.editor',
-        'Open in editor',
-        'navigate'
-      ),
+      action: fakeAction('session.open_in.editor', 'Open in editor', 'navigate'),
       disabledReason: null,
-      advanced: false
+      advanced: false,
     },
     {
       id: 'session.copy_title',
@@ -239,8 +227,8 @@ describe('filterEntries', () => {
       target: { type: 'session', id: 'x' },
       action: fakeAction('session.copy_title', 'Copy session title', 'copy'),
       disabledReason: null,
-      advanced: false
-    }
+      advanced: false,
+    },
   ];
 
   it('sorts alphabetically by label on an empty query', () => {
@@ -252,7 +240,7 @@ describe('filterEntries', () => {
     expect(out.map((e) => e.label)).toEqual([
       'Copy session title',
       'Open in editor',
-      'Pin session'
+      'Pin session',
     ]);
   });
 
@@ -270,7 +258,7 @@ describe('filterEntries', () => {
     // Two entries whose labels both contain "session" as a substring.
     const list: PaletteEntry[] = [
       { ...entries[2]!, label: 'zoom session' },
-      { ...entries[0]!, label: 'pin session' }
+      { ...entries[0]!, label: 'pin session' },
     ];
     const out = filterEntries(list, 'session');
     // Both rank the same; alphabetical asc puts "pin" before "zoom".

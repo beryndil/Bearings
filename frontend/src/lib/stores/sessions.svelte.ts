@@ -137,10 +137,7 @@ class SessionStore {
    * conversation pane swaps to it without waiting on the WS upsert
    * broadcast. Errors land on `this.error` and return `null`, matching
    * `create`. */
-  async spawnFromReply(
-    parentSessionId: string,
-    messageId: string
-  ): Promise<api.Session | null> {
+  async spawnFromReply(parentSessionId: string, messageId: string): Promise<api.Session | null> {
     this.error = null;
     try {
       const spawned = await api.spawnFromReply(parentSessionId, messageId);
@@ -254,10 +251,9 @@ class SessionStore {
         ...hit,
         updated_at: now,
         last_completed_at: now,
-        total_cost_usd:
-          deltaUsd > 0 ? hit.total_cost_usd + deltaUsd : hit.total_cost_usd
+        total_cost_usd: deltaUsd > 0 ? hit.total_cost_usd + deltaUsd : hit.total_cost_usd,
       },
-      ...rest
+      ...rest,
     ];
     if (id === this.selectedId) this.scrollTick++;
   }
@@ -269,9 +265,7 @@ class SessionStore {
    * refresh will reconcile. */
   async markViewed(id: string): Promise<void> {
     const now = new Date().toISOString();
-    this.list = this.list.map((s) =>
-      s.id === id ? { ...s, last_viewed_at: now } : s
-    );
+    this.list = this.list.map((s) => (s.id === id ? { ...s, last_viewed_at: now } : s));
     try {
       const updated = await api.markSessionViewed(id);
       this.list = this.list.map((s) => (s.id === id ? updated : s));
@@ -367,8 +361,7 @@ class SessionStore {
     // not reassigning when nothing changed, we keep `sessions.list`
     // itself identity-stable across quiescent polls.
     const sameOrder =
-      merged.length === this.list.length &&
-      merged.every((row, i) => row === this.list[i]);
+      merged.length === this.list.length && merged.every((row, i) => row === this.list[i]);
     if (!sameOrder) {
       this.list = merged;
     }
@@ -458,11 +451,7 @@ class SessionStore {
    * `isAwaitingUser` is optional so pre-0.10 broadcast frames (which
    * omit the field) degrade to "not awaiting" without blowing up the
    * reducer. Once the whole fleet is on 0.10+ this default can go. */
-  applyRunnerState(
-    sessionId: string,
-    isRunning: boolean,
-    isAwaitingUser: boolean = false
-  ): void {
+  applyRunnerState(sessionId: string, isRunning: boolean, isAwaitingUser: boolean = false): void {
     const nextRunning = new Set(this.running);
     if (isRunning) nextRunning.add(sessionId);
     else nextRunning.delete(sessionId);
@@ -479,9 +468,7 @@ class SessionStore {
   bumpMessageCount(id: string, delta: number): void {
     if (delta === 0) return;
     this.list = this.list.map((s) =>
-      s.id === id
-        ? { ...s, message_count: Math.max(0, s.message_count + delta) }
-        : s
+      s.id === id ? { ...s, message_count: Math.max(0, s.message_count + delta) } : s
     );
   }
 

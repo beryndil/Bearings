@@ -50,8 +50,8 @@
           // init and `console.warn`s if the two ever diverge.
           var THEME_COLORS = {
             'midnight-glass': '#0A0E1C',
-            'default': '#020617',
-            'paper-light': '#FAF7F0'
+            default: '#020617',
+            'paper-light': '#FAF7F0',
           };
           var theme = null;
           try {
@@ -116,12 +116,8 @@
                   getComputedStyle(aside).webkitBackdropFilter ||
                   null
                 : null,
-              aside_background_color: aside
-                ? getComputedStyle(aside).backgroundColor
-                : null,
-              aside_background_image: aside
-                ? getComputedStyle(aside).backgroundImage
-                : null,
+              aside_background_color: aside ? getComputedStyle(aside).backgroundColor : null,
+              aside_background_image: aside ? getComputedStyle(aside).backgroundImage : null,
               body_background_image_first_200: bodyBg.slice(0, 200),
               supports_backdrop_filter:
                 (typeof CSS !== 'undefined' &&
@@ -132,14 +128,14 @@
               viewport: {
                 w: window.innerWidth,
                 h: window.innerHeight,
-                dpr: window.devicePixelRatio
-              }
+                dpr: window.devicePixelRatio,
+              },
             };
             fetch('/api/diag/theme', {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify(report),
-              keepalive: true
+              keepalive: true,
             }).catch(function () {
               /* best-effort — if the endpoint is gone the reporter
                  quietly does nothing */
@@ -177,7 +173,7 @@
       })();
     </script>
   </head>
-  <body class="h-full bg-slate-950 text-slate-100 font-sans antialiased">
+  <body class="h-full bg-slate-950 font-sans text-slate-100 antialiased">
     <div class="h-full">%sveltekit.body%</div>
   </body>
 </html>

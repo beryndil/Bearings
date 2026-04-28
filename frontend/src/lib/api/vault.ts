@@ -49,16 +49,11 @@ export type VaultSearchResult = {
   truncated: boolean;
 };
 
-export function fetchVaultIndex(
-  fetchImpl: typeof fetch = fetch
-): Promise<VaultIndex> {
+export function fetchVaultIndex(fetchImpl: typeof fetch = fetch): Promise<VaultIndex> {
   return jsonFetch<VaultIndex>(fetchImpl, '/api/vault/index');
 }
 
-export function fetchVaultDoc(
-  path: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<VaultDoc> {
+export function fetchVaultDoc(path: string, fetchImpl: typeof fetch = fetch): Promise<VaultDoc> {
   const params = new URLSearchParams({ path });
   return jsonFetch<VaultDoc>(fetchImpl, `/api/vault/doc?${params.toString()}`);
 }
@@ -68,8 +63,5 @@ export function searchVault(
   fetchImpl: typeof fetch = fetch
 ): Promise<VaultSearchResult> {
   const params = new URLSearchParams({ q: query });
-  return jsonFetch<VaultSearchResult>(
-    fetchImpl,
-    `/api/vault/search?${params.toString()}`
-  );
+  return jsonFetch<VaultSearchResult>(fetchImpl, `/api/vault/search?${params.toString()}`);
 }

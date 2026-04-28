@@ -327,9 +327,7 @@
     // Tour mode: visit each item's pre-linked chat session and skip
     // failures rather than halting. Otherwise omit the body entirely
     // so the server uses the conservative spawn-fresh + halt defaults.
-    const body = tourMode
-      ? { failure_policy: 'skip' as const, visit_existing_sessions: true }
-      : {};
+    const body = tourMode ? { failure_policy: 'skip' as const, visit_existing_sessions: true } : {};
     try {
       const status = await startAutoRun(sid, body);
       runStatus = status;
@@ -367,9 +365,7 @@
     if (status.state === 'running') {
       const done = status.items_completed ?? 0;
       const legs = status.legs_spawned ?? 0;
-      return legs > 1
-        ? `running · ${done} done · leg ${legs}`
-        : `running · ${done} done`;
+      return legs > 1 ? `running · ${done} done · leg ${legs}` : `running · ${done} done`;
     }
     if (status.state === 'errored') return 'errored';
     // Finished — derive from outcome.
@@ -400,7 +396,7 @@
 <section class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-slate-950 text-slate-100">
   <header class="flex items-center gap-3 border-b border-slate-800 px-4 py-3">
     <span class="text-lg" aria-hidden="true">☑</span>
-    <h2 class="flex flex-1 items-center gap-2 min-w-0 text-sm font-semibold">
+    <h2 class="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold">
       <span class="truncate">{selected?.title ?? 'Checklist'}</span>
       {#if selected}
         <button
@@ -492,7 +488,7 @@
        checklists.current}` guard keeps the body from rendering
        during the mount-before-first-load microtick. -->
   <DataView
-    class="flex flex-1 min-h-0 flex-col"
+    class="flex min-h-0 flex-1 flex-col"
     loading={checklists.loading}
     error={checklists.error}
     isEmpty={false}
@@ -500,67 +496,67 @@
     loadingLabel="Loading checklist"
   >
     {#if checklists.current}
-    <div class="flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto px-4 py-4">
-      <label class="flex flex-col gap-1 text-sm">
-        <span class="text-slate-400">Notes</span>
-        <textarea
-          class="min-h-[3rem] resize-y rounded border border-slate-800 bg-slate-900 p-2 text-slate-100 focus:border-sky-500 focus:outline-none"
-          bind:value={notesDraft}
-          onblur={handleNotesBlur}
-          placeholder="Optional longform notes for this checklist"
-        ></textarea>
-      </label>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+        <label class="flex flex-col gap-1 text-sm">
+          <span class="text-slate-400">Notes</span>
+          <textarea
+            class="min-h-[3rem] resize-y rounded border border-slate-800 bg-slate-900 p-2 text-slate-100 focus:border-sky-500 focus:outline-none"
+            bind:value={notesDraft}
+            onblur={handleNotesBlur}
+            placeholder="Optional longform notes for this checklist"
+          ></textarea>
+        </label>
 
-      {#snippet itemRow(item: ChecklistItem)}
-        {@const checked = item.checked_at !== null}
-        {@const blocked = item.blocked_at !== null && item.checked_at === null}
-        {@const parentOf = hasChildren(item.id)}
-        {@const pairedChat = item.chat_session_id
-          ? (sessions.list.find((s) => s.id === item.chat_session_id) ?? null)
-          : null}
-        <li
-          class="group flex flex-col rounded border border-slate-900 px-2 py-1 hover:border-slate-700"
-          data-item-id={item.id}
-          data-parent={parentOf ? 'true' : 'false'}
-        >
-          <div class="flex items-center gap-2">
-            <input
-              type="checkbox"
-              class="h-4 w-4 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
-              aria-label={parentOf
-                ? `All children of ${item.label} checked`
-                : `Toggle ${item.label}`}
-              {checked}
-              disabled={parentOf}
-              title={parentOf
-                ? 'Parents are auto-checked when all their children are done'
-                : undefined}
-              onchange={(ev) =>
-                handleToggle(item.id, (ev.currentTarget as HTMLInputElement).checked)}
-            />
-            {#if editingId === item.id}
-              <!-- svelte-ignore a11y_autofocus -->
+        {#snippet itemRow(item: ChecklistItem)}
+          {@const checked = item.checked_at !== null}
+          {@const blocked = item.blocked_at !== null && item.checked_at === null}
+          {@const parentOf = hasChildren(item.id)}
+          {@const pairedChat = item.chat_session_id
+            ? (sessions.list.find((s) => s.id === item.chat_session_id) ?? null)
+            : null}
+          <li
+            class="group flex flex-col rounded border border-slate-900 px-2 py-1 hover:border-slate-700"
+            data-item-id={item.id}
+            data-parent={parentOf ? 'true' : 'false'}
+          >
+            <div class="flex items-center gap-2">
               <input
-                class="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm focus:border-sky-500 focus:outline-none"
-                bind:value={editDraft}
-                onkeydown={onEditKey}
-                onblur={commitEdit}
-                autofocus
+                type="checkbox"
+                class="h-4 w-4 accent-sky-500 disabled:cursor-not-allowed disabled:opacity-70"
+                aria-label={parentOf
+                  ? `All children of ${item.label} checked`
+                  : `Toggle ${item.label}`}
+                {checked}
+                disabled={parentOf}
+                title={parentOf
+                  ? 'Parents are auto-checked when all their children are done'
+                  : undefined}
+                onchange={(ev) =>
+                  handleToggle(item.id, (ev.currentTarget as HTMLInputElement).checked)}
               />
-            {:else}
-              <button
-                type="button"
-                class="flex-1 cursor-text truncate text-left text-sm {checked
-                  ? 'text-slate-500 line-through'
-                  : 'text-slate-100'}"
-                onclick={() => startEdit(item.id, item.label)}
-                title="Click to edit"
-              >
-                {item.label}
-              </button>
-            {/if}
-            {#if blocked}
-              <!-- Blocked-on-Dave flag (migration 0033). Red flag
+              {#if editingId === item.id}
+                <!-- svelte-ignore a11y_autofocus -->
+                <input
+                  class="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm focus:border-sky-500 focus:outline-none"
+                  bind:value={editDraft}
+                  onkeydown={onEditKey}
+                  onblur={commitEdit}
+                  autofocus
+                />
+              {:else}
+                <button
+                  type="button"
+                  class="flex-1 cursor-text truncate text-left text-sm {checked
+                    ? 'text-slate-500 line-through'
+                    : 'text-slate-100'}"
+                  onclick={() => startEdit(item.id, item.label)}
+                  title="Click to edit"
+                >
+                  {item.label}
+                </button>
+              {/if}
+              {#if blocked}
+                <!-- Blocked-on-Dave flag (migration 0033). Red flag
                    icon next to the label, tooltip carries the
                    category + the agent's reason + TRIED: log so
                    Dave can see at a glance why the item stalled and
@@ -568,83 +564,83 @@
                    paired session where Dave can type to re-engage
                    the agent. Reuses the existing red awaiting axis —
                    no new color per the design discussion. -->
-              <button
-                type="button"
-                class="text-xs text-rose-400 hover:text-rose-300"
-                data-testid="blocked-flag"
-                aria-label={`Blocked: ${item.blocked_reason_category ?? 'unknown'}`}
-                title={`Blocked (${item.blocked_reason_category ?? 'unknown'})\n\n${item.blocked_reason_text ?? ''}`}
-                onclick={() => pairedChat && handleOpenPairedChat(pairedChat.id)}
-              >
-                🚩
-              </button>
-            {/if}
-            {#if !parentOf && pairedChat}
-              <!-- Paired-chat title as a link. Always visible (not
+                <button
+                  type="button"
+                  class="text-xs text-rose-400 hover:text-rose-300"
+                  data-testid="blocked-flag"
+                  aria-label={`Blocked: ${item.blocked_reason_category ?? 'unknown'}`}
+                  title={`Blocked (${item.blocked_reason_category ?? 'unknown'})\n\n${item.blocked_reason_text ?? ''}`}
+                  onclick={() => pairedChat && handleOpenPairedChat(pairedChat.id)}
+                >
+                  🚩
+                </button>
+              {/if}
+              {#if !parentOf && pairedChat}
+                <!-- Paired-chat title as a link. Always visible (not
                    opacity-gated) so Dave can see at a glance which
                    items have live sessions. -->
+                <button
+                  type="button"
+                  class="max-w-[24ch] truncate text-xs text-sky-400 hover:text-sky-300"
+                  data-testid="paired-chat-link"
+                  aria-label={`Open paired chat: ${pairedChat.title ?? 'Untitled chat'}`}
+                  title={pairedChat.title ?? 'Untitled chat'}
+                  onclick={() => handleOpenPairedChat(pairedChat.id)}
+                >
+                  → {pairedChat.title ?? 'Untitled chat'}
+                </button>
+              {:else if !parentOf}
+                <button
+                  type="button"
+                  class="text-xs text-slate-400 opacity-0 hover:text-sky-400 group-hover:opacity-100"
+                  aria-label={`Work on ${item.label} in a new chat`}
+                  title="Work on this"
+                  onclick={() => handleWorkOnThis(item.id)}
+                >
+                  💬
+                </button>
+              {/if}
               <button
                 type="button"
-                class="max-w-[24ch] truncate text-xs text-sky-400 hover:text-sky-300"
-                data-testid="paired-chat-link"
-                aria-label={`Open paired chat: ${pairedChat.title ?? 'Untitled chat'}`}
-                title={pairedChat.title ?? 'Untitled chat'}
-                onclick={() => handleOpenPairedChat(pairedChat.id)}
+                class="text-xs text-slate-500 opacity-0 hover:text-rose-400 group-hover:opacity-100"
+                aria-label={`Delete ${item.label}`}
+                onclick={() => handleDelete(item.id)}
               >
-                → {pairedChat.title ?? 'Untitled chat'}
+                ✕
               </button>
-            {:else if !parentOf}
-              <button
-                type="button"
-                class="text-xs text-slate-400 opacity-0 hover:text-sky-400 group-hover:opacity-100"
-                aria-label={`Work on ${item.label} in a new chat`}
-                title="Work on this"
-                onclick={() => handleWorkOnThis(item.id)}
-              >
-                💬
-              </button>
+            </div>
+            {#if parentOf}
+              <ul class="ml-6 mt-1 flex flex-col gap-1 border-l border-slate-800 pl-2">
+                {#each childrenByParent.get(item.id) ?? [] as child (child.id)}
+                  {@render itemRow(child)}
+                {/each}
+              </ul>
             {/if}
-            <button
-              type="button"
-              class="text-xs text-slate-500 opacity-0 hover:text-rose-400 group-hover:opacity-100"
-              aria-label={`Delete ${item.label}`}
-              onclick={() => handleDelete(item.id)}
-            >
-              ✕
-            </button>
-          </div>
-          {#if parentOf}
-            <ul class="mt-1 ml-6 flex flex-col gap-1 border-l border-slate-800 pl-2">
-              {#each childrenByParent.get(item.id) ?? [] as child (child.id)}
-                {@render itemRow(child)}
-              {/each}
-            </ul>
-          {/if}
-        </li>
-      {/snippet}
+          </li>
+        {/snippet}
 
-      <ul class="flex flex-col gap-1">
-        {#each rootItems as root (root.id)}
-          {@render itemRow(root)}
-        {/each}
-      </ul>
+        <ul class="flex flex-col gap-1">
+          {#each rootItems as root (root.id)}
+            {@render itemRow(root)}
+          {/each}
+        </ul>
 
-      <form class="flex items-center gap-2" onsubmit={handleAdd}>
-        <span aria-hidden="true" class="text-slate-500">+</span>
-        <input
-          bind:this={addInput}
-          bind:value={newLabel}
-          class="flex-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-sm focus:border-sky-500 focus:outline-none"
-          placeholder="Add item…"
-          aria-label="Add a checklist item"
-        />
-        <button
-          type="submit"
-          class="rounded bg-sky-600 px-3 py-1 text-xs font-medium hover:bg-sky-500 disabled:opacity-50"
-          disabled={newLabel.trim() === ''}>Add</button
-        >
-      </form>
-    </div>
+        <form class="flex items-center gap-2" onsubmit={handleAdd}>
+          <span aria-hidden="true" class="text-slate-500">+</span>
+          <input
+            bind:this={addInput}
+            bind:value={newLabel}
+            class="flex-1 rounded border border-slate-800 bg-slate-900 px-2 py-1 text-sm focus:border-sky-500 focus:outline-none"
+            placeholder="Add item…"
+            aria-label="Add a checklist item"
+          />
+          <button
+            type="submit"
+            class="rounded bg-sky-600 px-3 py-1 text-xs font-medium hover:bg-sky-500 disabled:opacity-50"
+            disabled={newLabel.trim() === ''}>Add</button
+          >
+        </form>
+      </div>
     {:else}
       <p class="px-4 py-6 text-sm text-slate-400">No checklist loaded.</p>
     {/if}

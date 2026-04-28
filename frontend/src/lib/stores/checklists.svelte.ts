@@ -61,7 +61,7 @@ class ChecklistStore {
     try {
       const created = await api.createItem(this.sessionId, {
         label: label.trim(),
-        parent_item_id: parentId
+        parent_item_id: parentId,
       });
       // Append — the server already assigned the next sort_order.
       this.current = { ...this.current, items: [...this.current.items, created] };
@@ -76,7 +76,7 @@ class ChecklistStore {
     const prevItems = this.current.items;
     this.current = {
       ...this.current,
-      items: prevItems.map((i) => (i.id === itemId ? { ...i, checked_at: stamp } : i))
+      items: prevItems.map((i) => (i.id === itemId ? { ...i, checked_at: stamp } : i)),
     };
     const sid = this.sessionId;
     try {
@@ -120,7 +120,7 @@ class ChecklistStore {
     const prevItems = this.current.items;
     this.current = {
       ...this.current,
-      items: prevItems.filter((i) => i.id !== itemId)
+      items: prevItems.filter((i) => i.id !== itemId),
     };
     try {
       await api.deleteItem(this.sessionId, itemId);
@@ -152,7 +152,7 @@ class ChecklistStore {
         ...this.current,
         items: this.current.items.map((i) =>
           i.id === itemId ? { ...i, chat_session_id: chat.id } : i
-        )
+        ),
       };
       return chat;
     } catch (e) {
@@ -190,7 +190,7 @@ class ChecklistStore {
     if (!this.current) return;
     this.current = {
       ...this.current,
-      items: this.current.items.map((i) => (i.id === updated.id ? updated : i))
+      items: this.current.items.map((i) => (i.id === updated.id ? updated : i)),
     };
   }
 }

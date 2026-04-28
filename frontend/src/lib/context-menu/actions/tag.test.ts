@@ -12,13 +12,7 @@ import type { TagChipTarget } from '../types';
 describe('tag.ts — TAG_ACTIONS stability', () => {
   it('exposes the frozen v0.9.1 catalog for sidebar tag rows', () => {
     const ids = TAG_ACTIONS.map((a) => a.id).sort();
-    expect(ids).toEqual([
-      'tag.copy_name',
-      'tag.delete',
-      'tag.edit',
-      'tag.pin',
-      'tag.unpin'
-    ]);
+    expect(ids).toEqual(['tag.copy_name', 'tag.delete', 'tag.edit', 'tag.pin', 'tag.unpin']);
   });
 
   it('every ID follows `tag.<verb>` naming', () => {
@@ -61,12 +55,12 @@ describe('tag.ts — TAG_CHIP_ACTIONS stability', () => {
     const withSession: TagChipTarget = {
       type: 'tag_chip',
       tagId: 5,
-      sessionId: 'sess-1'
+      sessionId: 'sess-1',
     };
     const withoutSession: TagChipTarget = {
       type: 'tag_chip',
       tagId: 5,
-      sessionId: null
+      sessionId: null,
     };
     expect(detach!.requires!(withSession)).toBe(true);
     expect(detach!.requires!(withoutSession)).toBe(false);

@@ -1,10 +1,6 @@
 <script lang="ts">
   import { collectMenuShortcuts } from '$lib/context-menu/shortcuts';
-  import {
-    chordSegments,
-    groupedBindings,
-    type BindingDef
-  } from '$lib/keyboard/bindings';
+  import { chordSegments, groupedBindings, type BindingDef } from '$lib/keyboard/bindings';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
 
   /**
@@ -39,28 +35,28 @@
         { keys: ['Right-click'], description: 'Open the target’s menu' },
         {
           keys: ['Shift', 'Right-click'],
-          description: 'Open with advanced actions revealed'
+          description: 'Open with advanced actions revealed',
         },
         {
           keys: ['Ctrl', 'Shift', 'Right-click'],
-          description: 'Passthrough to the browser’s native menu'
+          description: 'Passthrough to the browser’s native menu',
         },
         {
           keys: ['Long-press'],
-          description: '500ms touch-hold on coarse pointers'
+          description: '500ms touch-hold on coarse pointers',
         },
         { keys: ['↑', '↓'], description: 'Move focus between menu items' },
         { keys: ['→', '←'], description: 'Open / close submenus' },
-        { keys: ['Enter'], description: 'Activate the focused item' }
-      ]
+        { keys: ['Enter'], description: 'Activate the focused item' },
+      ],
     },
     {
       group: 'Conversation',
       items: [
         { keys: ['Enter'], description: 'Send the prompt' },
         { keys: ['Shift', 'Enter'], description: 'Newline inside the prompt' },
-        { keys: ['/plan'], description: 'Toggle plan mode (append "off" to exit)' }
-      ]
+        { keys: ['/plan'], description: 'Toggle plan mode (append "off" to exit)' },
+      ],
     },
     {
       group: 'Sessions (mouse)',
@@ -68,9 +64,9 @@
         { keys: ['Double-click', 'title'], description: 'Rename a session' },
         { keys: ['✎'], description: 'Edit title or budget in the header' },
         { keys: ['⚙'], description: 'Open Settings (token + defaults)' },
-        { keys: ['✕'], description: 'Delete a session (click twice to confirm)' }
-      ]
-    }
+        { keys: ['✕'], description: 'Delete a session (click twice to confirm)' },
+      ],
+    },
   ];
 
   const registryGroups = $derived.by(() => groupedBindings());
@@ -92,9 +88,7 @@
     // Normalise `Ctrl` to `⌘/Ctrl` for the renderer so Mac visitors
     // recognise the binding works under Cmd as well. The dispatcher
     // already accepts both modifiers; this is purely cosmetic.
-    return chordSegments(b.chord).map((seg) =>
-      seg === 'Ctrl' ? '⌘/Ctrl' : seg
-    );
+    return chordSegments(b.chord).map((seg) => (seg === 'Ctrl' ? '⌘/Ctrl' : seg));
   }
 
   function onCancel() {
@@ -105,19 +99,19 @@
 {#if uiActions.cheatSheetOpen}
   <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4">
     <div
-      class="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl
-        flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
+      class="flex max-h-[90vh] w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg
+        border border-slate-800 bg-slate-900 p-6 shadow-2xl"
     >
       <header class="flex items-start justify-between">
         <div>
           <h2 class="text-lg font-medium">Shortcuts</h2>
-          <p class="text-xs text-slate-400 mt-1">
+          <p class="mt-1 text-xs text-slate-400">
             Esc or <kbd class="kbd">?</kbd> to close.
           </p>
         </div>
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-sm"
+          class="text-sm text-slate-500 hover:text-slate-300"
           aria-label="Close cheat sheet"
           onclick={onCancel}
         >
@@ -128,14 +122,14 @@
       <div class="flex flex-col gap-4 text-sm">
         {#each registryGroups as group (group.group)}
           <section>
-            <h3 class="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <h3 class="mb-2 text-[10px] uppercase tracking-wider text-slate-500">
               {group.group}
             </h3>
             <ul class="flex flex-col gap-1">
               {#each group.items as b (b.id)}
                 <li class="flex items-baseline justify-between gap-3">
                   <span class="text-slate-300">{b.label}</span>
-                  <span class="flex gap-1 shrink-0">
+                  <span class="flex shrink-0 gap-1">
                     {#each bindingKeys(b) as k}
                       <kbd class="kbd">{k}</kbd>
                     {/each}
@@ -148,14 +142,14 @@
 
         {#each staticGroups as group (group.group)}
           <section>
-            <h3 class="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <h3 class="mb-2 text-[10px] uppercase tracking-wider text-slate-500">
               {group.group}
             </h3>
             <ul class="flex flex-col gap-1">
               {#each group.items as sc}
                 <li class="flex items-baseline justify-between gap-3">
                   <span class="text-slate-300">{sc.description}</span>
-                  <span class="flex gap-1 shrink-0">
+                  <span class="flex shrink-0 gap-1">
                     {#each sc.keys as k}
                       <kbd class="kbd">{k}</kbd>
                     {/each}
@@ -168,7 +162,7 @@
 
         {#if userShortcuts.length > 0}
           <section>
-            <h3 class="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+            <h3 class="mb-2 text-[10px] uppercase tracking-wider text-slate-500">
               Your shortcuts (menus.toml)
             </h3>
             <ul class="flex flex-col gap-1">
@@ -176,9 +170,9 @@
                 <li class="flex items-baseline justify-between gap-3">
                   <span class="text-slate-300">
                     {entry.label}
-                    <span class="text-slate-500 text-xs">· {entry.target}</span>
+                    <span class="text-xs text-slate-500">· {entry.target}</span>
                   </span>
-                  <span class="flex gap-1 shrink-0">
+                  <span class="flex shrink-0 gap-1">
                     {#each legacySplitChord(entry.chord) as seg}
                       <kbd class="kbd">{seg}</kbd>
                     {/each}

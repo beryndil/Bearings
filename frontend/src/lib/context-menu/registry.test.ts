@@ -23,44 +23,44 @@ const MESSAGE: ContextTarget = {
   type: 'message',
   id: 'msg-1',
   sessionId: 'sess-1',
-  role: 'user'
+  role: 'user',
 };
 const TAG: ContextTarget = { type: 'tag', id: 7 };
 const TAG_CHIP: ContextTarget = {
   type: 'tag_chip',
   tagId: 7,
-  sessionId: 'sess-1'
+  sessionId: 'sess-1',
 };
 const TOOL_CALL: ContextTarget = {
   type: 'tool_call',
   id: 'tc-1',
   sessionId: 'sess-1',
-  messageId: 'msg-1'
+  messageId: 'msg-1',
 };
 const CODE_BLOCK: ContextTarget = {
   type: 'code_block',
   text: 'print("hi")',
   language: 'python',
   sessionId: 'sess-1',
-  messageId: 'msg-1'
+  messageId: 'msg-1',
 };
 const LINK: ContextTarget = {
   type: 'link',
   href: 'https://example.com',
   text: 'example',
   sessionId: 'sess-1',
-  messageId: 'msg-1'
+  messageId: 'msg-1',
 };
 const CHECKPOINT: ContextTarget = {
   type: 'checkpoint',
   id: 'cp-1',
   sessionId: 'sess-1',
   messageId: 'msg-1',
-  label: 'mid'
+  label: 'mid',
 };
 const MULTI_SELECT: ContextTarget = {
   type: 'multi_select',
-  ids: ['sess-1', 'sess-2']
+  ids: ['sess-1', 'sess-2'],
 };
 
 describe('registry', () => {
@@ -110,7 +110,7 @@ describe('registry', () => {
       CODE_BLOCK_ACTIONS,
       LINK_ACTIONS,
       CHECKPOINT_ACTIONS,
-      MULTI_SELECT_ACTIONS
+      MULTI_SELECT_ACTIONS,
     ]) {
       const ids = list.map((a) => a.id);
       expect(new Set(ids).size).toBe(ids.length);
@@ -144,12 +144,10 @@ describe('resolveMenu', () => {
       'view',
       'copy',
       'organize',
-      'destructive'
+      'destructive',
     ];
     for (let i = 1; i < seen.length; i++) {
-      expect(canonical.indexOf(seen[i]!)).toBeGreaterThan(
-        canonical.indexOf(seen[i - 1]!)
-      );
+      expect(canonical.indexOf(seen[i]!)).toBeGreaterThan(canonical.indexOf(seen[i - 1]!));
     }
   });
 
@@ -234,8 +232,8 @@ describe('resolveMenu', () => {
         label: 'gated',
         section: 'view',
         requires: () => false,
-        handler: () => {}
-      }
+        handler: () => {},
+      },
     ];
     const visible = gated.filter((a) => !(a.requires && !a.requires(t)));
     expect(visible).toHaveLength(0);
@@ -257,9 +255,9 @@ describe('resolveMenu with menus.toml overrides', () => {
         session: {
           pinned: [],
           hidden: ['session.copy_title'],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     const ids = flatIds(resolveMenu(SESSION, false));
     expect(ids).not.toContain('session.copy_title');
@@ -274,9 +272,9 @@ describe('resolveMenu with menus.toml overrides', () => {
         session: {
           pinned: [],
           hidden: ['session.copy_title'],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     const rawIds = getActions('session').map((a) => a.id);
     expect(rawIds).toContain('session.copy_title');
@@ -288,9 +286,9 @@ describe('resolveMenu with menus.toml overrides', () => {
         session: {
           pinned: ['session.delete'],
           hidden: [],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     const menu = resolveMenu(SESSION, false);
     const destructive = menu.groups.find((g) => g.section === 'destructive');
@@ -306,9 +304,9 @@ describe('resolveMenu with menus.toml overrides', () => {
           // declaration order is pin, unpin, archive, reopen.
           pinned: ['session.reopen', 'session.pin'],
           hidden: [],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     const menu = resolveMenu(SESSION, false);
     const organize = menu.groups.find((g) => g.section === 'organize');
@@ -334,9 +332,9 @@ describe('resolveMenu with menus.toml overrides', () => {
         session: {
           pinned: ['session.does_not_exist'],
           hidden: [],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     // No throw — the menu still resolves.
     const menu = resolveMenu(SESSION, false);
@@ -350,9 +348,9 @@ describe('resolveMenu with menus.toml overrides', () => {
         session: {
           pinned: [],
           hidden: ['session.also_does_not_exist'],
-          shortcuts: {}
-        }
-      }
+          shortcuts: {},
+        },
+      },
     });
     const afterIds = flatIds(resolveMenu(SESSION, false));
     expect(afterIds.length).toBe(baseline);

@@ -18,7 +18,7 @@ beforeEach(() => {
     configurable: true,
     get() {
       return currentHeight;
-    }
+    },
   });
   // Minimal ResizeObserver stub — the component only uses it to
   // re-measure after content mutations. Tests drive height via the
@@ -44,7 +44,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     messageId: 'm-1',
     content: 'body text',
     highlightQuery: '',
-    ...overrides
+    ...overrides,
   };
 }
 

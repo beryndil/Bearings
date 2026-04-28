@@ -39,7 +39,7 @@ export const PENDING_OPERATION_ACTIONS: readonly Action[] = [
       const t = asPending(target);
       if (!t) return;
       await pending.resolve(t.directory, t.name);
-    }
+    },
   },
   {
     id: 'pending_operation.dismiss',
@@ -50,7 +50,7 @@ export const PENDING_OPERATION_ACTIONS: readonly Action[] = [
       const t = asPending(target);
       if (!t) return;
       await pending.dismiss(t.directory, t.name);
-    }
+    },
   },
   {
     id: 'pending_operation.copy_name',
@@ -60,7 +60,7 @@ export const PENDING_OPERATION_ACTIONS: readonly Action[] = [
       const t = asPending(target);
       if (!t) return;
       await writeClipboard(t.name);
-    }
+    },
   },
   {
     id: 'pending_operation.copy_command',
@@ -76,7 +76,7 @@ export const PENDING_OPERATION_ACTIONS: readonly Action[] = [
       const t = asPending(target);
       if (!t) return null;
       return t.command ? null : 'No command attached to this pending op';
-    }
+    },
   },
   {
     id: 'pending_operation.open_in.editor',
@@ -91,9 +91,9 @@ export const PENDING_OPERATION_ACTIONS: readonly Action[] = [
       } catch (err) {
         stubStore.show({
           actionId: 'pending_operation.open_in.editor',
-          reason: err instanceof Error ? err.message : String(err)
+          reason: err instanceof Error ? err.message : String(err),
         });
       }
-    }
-  }
+    },
+  },
 ];

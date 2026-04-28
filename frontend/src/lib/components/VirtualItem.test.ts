@@ -79,8 +79,8 @@ function fireIntersection(rec: Recorded, target: Element, isIntersecting: boolea
         boundingClientRect: {} as DOMRectReadOnly,
         intersectionRect: {} as DOMRectReadOnly,
         rootBounds: null,
-        time: 0
-      }
+        time: 0,
+      },
     ],
     rec as unknown as IntersectionObserver
   );
@@ -105,7 +105,7 @@ describe('VirtualItem', () => {
   it('renders content immediately when forceVisible is set', async () => {
     const { findByTestId } = render(VirtualItemHarness, {
       label: 'forced',
-      forceVisible: true
+      forceVisible: true,
     });
     const wrapper = await findByTestId('virtual-item');
     expect(wrapper.getAttribute('data-visible')).toBe('true');
@@ -127,10 +127,7 @@ describe('VirtualItem', () => {
     // firing the ResizeObserver callback after stubbing offsetHeight.
     Object.defineProperty(wrapper, 'offsetHeight', { value: 742, configurable: true });
     expect(resizeObservers.length).toBe(1);
-    resizeObservers[0].callback(
-      [] as unknown as ResizeObserverEntry[],
-      {} as ResizeObserver
-    );
+    resizeObservers[0].callback([] as unknown as ResizeObserverEntry[], {} as ResizeObserver);
     await tick();
 
     fireIntersection(observers[0], wrapper, false);
@@ -142,7 +139,7 @@ describe('VirtualItem', () => {
   it('applies fallbackHeightPx as min-height before any measurement', async () => {
     const { findByTestId } = render(VirtualItemHarness, {
       label: 'cell-C',
-      fallbackHeightPx: 250
+      fallbackHeightPx: 250,
     });
     const wrapper = (await findByTestId('virtual-item')) as HTMLDivElement;
     expect(wrapper.getAttribute('data-visible')).toBe('false');
@@ -155,7 +152,7 @@ describe('VirtualItem', () => {
     render(VirtualItemHarness, {
       label: 'cell-D',
       scrollRoot: root,
-      rootMarginPx: 800
+      rootMarginPx: 800,
     });
     expect(observers.length).toBe(1);
     expect(observers[0].options?.root).toBe(root);

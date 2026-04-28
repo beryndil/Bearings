@@ -32,13 +32,13 @@ const storage = new MemoryStorage();
 Object.defineProperty(globalThis, 'localStorage', {
   value: storage,
   writable: true,
-  configurable: true
+  configurable: true,
 });
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'localStorage', {
     value: storage,
     writable: true,
-    configurable: true
+    configurable: true,
   });
 }
 

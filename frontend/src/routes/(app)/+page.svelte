@@ -63,7 +63,7 @@
     const legacyId = $page.url.searchParams.get('session');
     if (legacyId) {
       void goto(`/sessions/${encodeURIComponent(legacyId)}`, {
-        replaceState: true
+        replaceState: true,
       });
     }
   });
@@ -92,7 +92,7 @@
     if (!remembered) return;
     if (!sessions.openList.some((s) => s.id === remembered)) return;
     void goto(`/sessions/${encodeURIComponent(remembered)}`, {
-      replaceState: true
+      replaceState: true,
     });
   });
 </script>

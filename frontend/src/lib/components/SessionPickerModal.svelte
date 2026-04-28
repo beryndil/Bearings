@@ -52,7 +52,7 @@
     defaultCreating = false,
     onPickExisting,
     onPickNew,
-    onCancel
+    onCancel,
   }: Props = $props();
 
   let query = $state('');
@@ -135,9 +135,7 @@
   }
 
   function toggleNewTag(id: number) {
-    newTagIds = newTagIds.includes(id)
-      ? newTagIds.filter((x) => x !== id)
-      : [...newTagIds, id];
+    newTagIds = newTagIds.includes(id) ? newTagIds.filter((x) => x !== id) : [...newTagIds, id];
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -190,14 +188,14 @@
     data-testid="session-picker"
   >
     <div
-      class="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl
-        flex flex-col gap-3"
+      class="flex w-full max-w-lg flex-col gap-3 rounded-lg border border-slate-800
+        bg-slate-900 p-5 shadow-2xl"
     >
       <header class="flex items-start justify-between">
         <h2 class="text-sm font-medium text-slate-200">{title}</h2>
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-sm"
+          class="text-sm text-slate-500 hover:text-slate-300"
           aria-label="Close picker"
           onclick={onCancel}
         >
@@ -208,8 +206,8 @@
       {#if !creating}
         <input
           type="text"
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-            focus:outline-none focus:border-slate-600"
+          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+            focus:border-slate-600 focus:outline-none"
           placeholder="Search by title, working dir, or model…"
           aria-label="Search sessions"
           bind:value={query}
@@ -222,10 +220,10 @@
               {@const active = filterTagIds.includes(tag.id)}
               <button
                 type="button"
-                class="rounded px-2 py-0.5 text-[11px] font-mono border
+                class="rounded border px-2 py-0.5 font-mono text-[11px]
                   {active
-                    ? 'bg-emerald-700 border-emerald-500 text-white'
-                    : 'bg-slate-900 border-slate-800 hover:border-slate-600 text-slate-300'}"
+                  ? 'border-emerald-500 bg-emerald-700 text-white'
+                  : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-600'}"
                 aria-pressed={active}
                 onclick={() => toggleFilterTag(tag.id)}
               >
@@ -251,17 +249,17 @@
               <li>
                 <button
                   type="button"
-                  class="w-full text-left px-3 py-2 border-b border-slate-800 last:border-b-0
+                  class="w-full border-b border-slate-800 px-3 py-2 text-left last:border-b-0
                     hover:bg-slate-800 {hi ? 'bg-slate-800' : ''}"
                   onclick={() => onPickExisting(s.id)}
                   onmouseenter={() => (highlighted = s.id)}
                   data-testid="picker-row"
                   data-session-id={s.id}
                 >
-                  <div class="text-sm text-slate-200 truncate">
+                  <div class="truncate text-sm text-slate-200">
                     {s.title ?? '(untitled)'}
                   </div>
-                  <div class="text-[10px] text-slate-500 font-mono truncate">
+                  <div class="truncate font-mono text-[10px] text-slate-500">
                     {s.model} · {s.working_dir} · {s.message_count} msg{s.message_count === 1
                       ? ''
                       : 's'}
@@ -286,14 +284,14 @@
         <div class="flex items-center justify-end gap-2 pt-1">
           <button
             type="button"
-            class="rounded bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs"
+            class="rounded bg-slate-800 px-3 py-1.5 text-xs hover:bg-slate-700"
             onclick={onCancel}
           >
             Cancel
           </button>
           <button
             type="button"
-            class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs
+            class="rounded bg-emerald-600 px-3 py-1.5 text-xs hover:bg-emerald-500
               disabled:opacity-50"
             disabled={candidates.length === 0}
             onclick={() => {
@@ -310,29 +308,29 @@
           <p class="text-[11px] text-slate-500">
             Other fields (model, working dir) inherit from the source session.
           </p>
-          <label class="flex flex-col text-xs gap-1">
+          <label class="flex flex-col gap-1 text-xs">
             <span class="text-slate-400">Title</span>
             <input
               type="text"
-              class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-                focus:outline-none focus:border-slate-600"
+              class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+                focus:border-slate-600 focus:outline-none"
               placeholder="Short title for the new session"
               bind:value={newTitle}
               data-testid="picker-new-title"
             />
           </label>
           {#if tags.list.length > 0}
-            <div class="flex flex-col text-xs gap-1">
+            <div class="flex flex-col gap-1 text-xs">
               <span class="text-slate-400">Tags <span class="text-rose-400">*</span></span>
               <div class="flex flex-wrap gap-1">
                 {#each tags.list as tag (tag.id)}
                   {@const active = newTagIds.includes(tag.id)}
                   <button
                     type="button"
-                    class="rounded px-2 py-0.5 text-[11px] font-mono border
+                    class="rounded border px-2 py-0.5 font-mono text-[11px]
                       {active
-                        ? 'bg-emerald-700 border-emerald-500 text-white'
-                        : 'bg-slate-900 border-slate-800 hover:border-slate-600 text-slate-300'}"
+                      ? 'border-emerald-500 bg-emerald-700 text-white'
+                      : 'border-slate-800 bg-slate-900 text-slate-300 hover:border-slate-600'}"
                     aria-pressed={active}
                     onclick={() => toggleNewTag(tag.id)}
                   >
@@ -343,9 +341,7 @@
               </div>
             </div>
           {:else}
-            <p class="text-[11px] text-rose-400">
-              Create a tag first — sessions must be tagged.
-            </p>
+            <p class="text-[11px] text-rose-400">Create a tag first — sessions must be tagged.</p>
           {/if}
           {#if createError}
             <p class="text-xs text-rose-400" role="alert">{createError}</p>
@@ -353,14 +349,14 @@
           <div class="flex items-center justify-end gap-2 pt-1">
             <button
               type="button"
-              class="rounded bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs"
+              class="rounded bg-slate-800 px-3 py-1.5 text-xs hover:bg-slate-700"
               onclick={() => (creating = false)}
             >
               Back
             </button>
             <button
               type="button"
-              class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs
+              class="rounded bg-emerald-600 px-3 py-1.5 text-xs hover:bg-emerald-500
                 disabled:opacity-50"
               disabled={tags.list.length === 0}
               onclick={submitNew}

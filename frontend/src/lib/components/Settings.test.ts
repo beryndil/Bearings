@@ -36,7 +36,7 @@ function stubPatchOk(response: Record<string, unknown>): ReturnType<typeof vi.fn
     },
     async text() {
       return JSON.stringify(response);
-    }
+    },
   }));
   vi.stubGlobal('fetch', stub);
   return stub;
@@ -62,9 +62,7 @@ beforeEach(() => {
  * `/api/health`; the About section calls `/api/version`; PATCHes go
  * to `/api/preferences`. Returning per-URL bodies lets one test
  * exercise multiple sections without juggling spy reassignment. */
-function stubFetchByUrl(
-  routes: Record<string, unknown>
-): ReturnType<typeof vi.fn> {
+function stubFetchByUrl(routes: Record<string, unknown>): ReturnType<typeof vi.fn> {
   const stub = vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
     const key = Object.keys(routes).find((k) => url.includes(k));
@@ -77,7 +75,7 @@ function stubFetchByUrl(
       },
       async text() {
         return JSON.stringify(body);
-      }
+      },
     };
   });
   vi.stubGlobal('fetch', stub);
@@ -88,7 +86,7 @@ describe('Settings', () => {
   it('opens onto the Profile section by default', () => {
     seedPreferences({ display_name: 'Dave' });
     const { getByLabelText, getByTestId } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
     // Profile section is the lowest-weight entry in the registry, so
     // it's the active pane on open.
@@ -103,12 +101,12 @@ describe('Settings', () => {
       default_model: null,
       default_working_dir: null,
       notify_on_complete: false,
-      updated_at: '2026-04-25T00:00:01+00:00'
+      updated_at: '2026-04-25T00:00:01+00:00',
     });
     const { getByLabelText } = render(Settings, { props: { open: true } });
 
     await fireEvent.input(getByLabelText('Display name'), {
-      target: { value: 'Dave' }
+      target: { value: 'Dave' },
     });
 
     // 400ms debounce in SettingsTextField — `waitFor` polls until
@@ -129,12 +127,12 @@ describe('Settings', () => {
       default_model: null,
       default_working_dir: null,
       notify_on_complete: false,
-      updated_at: '2026-04-25T00:00:02+00:00'
+      updated_at: '2026-04-25T00:00:02+00:00',
     });
     const { getByLabelText } = render(Settings, { props: { open: true } });
 
     await fireEvent.input(getByLabelText('Display name'), {
-      target: { value: '   ' }
+      target: { value: '   ' },
     });
 
     await waitFor(() => expect(stub).toHaveBeenCalledTimes(1));
@@ -146,10 +144,10 @@ describe('Settings', () => {
   it('navigating to Defaults shows the model + working dir fields seeded from the store', async () => {
     seedPreferences({
       default_model: 'claude-opus-4-7',
-      default_working_dir: '/home/dave'
+      default_working_dir: '/home/dave',
     });
     const { getByLabelText, getByTestId } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-defaults'));
@@ -203,12 +201,12 @@ describe('Settings', () => {
       },
       async text() {
         return JSON.stringify({ version: '0.20.5', build: '1714075200000000000' });
-      }
+      },
     }));
     vi.stubGlobal('fetch', stub);
 
     const { getByTestId, findByText } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-about'));
@@ -226,12 +224,12 @@ describe('Settings', () => {
       },
       async text() {
         return JSON.stringify({ detail: 'boom' });
-      }
+      },
     }));
     vi.stubGlobal('fetch', stub);
 
     const { getByTestId, findByText, findAllByText } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-about'));
@@ -250,20 +248,18 @@ describe('Settings', () => {
       '/api/health': {
         auth: 'disabled',
         version: '0.20.7',
-        data_dir: '/home/dave/.local/share/bearings'
-      }
+        data_dir: '/home/dave/.local/share/bearings',
+      },
     });
 
     const { getByTestId, findByText } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-privacy'));
     expect(getByTestId('settings-section-privacy')).toBeInTheDocument();
 
-    const telemetry = getByTestId(
-      'settings-privacy-telemetry'
-    ) as HTMLAnchorElement;
+    const telemetry = getByTestId('settings-privacy-telemetry') as HTMLAnchorElement;
     expect(telemetry.href).toContain('TELEMETRY.md');
 
     // Data-dir text appears once /api/health resolves.
@@ -287,18 +283,16 @@ describe('Settings', () => {
     // Mutually-exclusive overlay rule: opening the cheat sheet closes
     // Settings so we don't stack two modals.
     await waitFor(() => {
-      expect(
-        document.querySelector('[data-testid="settings-backdrop"]')
-      ).toBeNull();
+      expect(document.querySelector('[data-testid="settings-backdrop"]')).toBeNull();
     });
   });
 
   it('About section surfaces the MIT License row', async () => {
     stubFetchByUrl({
-      '/api/version': { version: '0.20.7', build: '1714075200000000000' }
+      '/api/version': { version: '0.20.7', build: '1714075200000000000' },
     });
     const { getByTestId, findByText } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-about'));
@@ -311,8 +305,8 @@ describe('Settings', () => {
       '/api/health': {
         auth: 'disabled',
         version: '0.20.7',
-        data_dir: '/home/dave/.local/share/bearings'
-      }
+        data_dir: '/home/dave/.local/share/bearings',
+      },
     });
     // Seed the URL before render so SettingsShell's initialId() sees it.
     const url = new URL(window.location.href);
@@ -322,9 +316,7 @@ describe('Settings', () => {
     const { getByTestId } = render(Settings, { props: { open: true } });
 
     expect(getByTestId('settings-section-privacy')).toBeInTheDocument();
-    expect(
-      getByTestId('settings-rail-privacy').getAttribute('aria-selected')
-    ).toBe('true');
+    expect(getByTestId('settings-rail-privacy').getAttribute('aria-selected')).toBe('true');
   });
 
   it('navigating between sections mirrors the active id into ?settings=', async () => {
@@ -332,8 +324,8 @@ describe('Settings', () => {
       '/api/health': {
         auth: 'disabled',
         version: '0.20.7',
-        data_dir: '/home/dave/.local/share/bearings'
-      }
+        data_dir: '/home/dave/.local/share/bearings',
+      },
     });
     const { getByTestId } = render(Settings, { props: { open: true } });
 
@@ -350,29 +342,27 @@ describe('Settings', () => {
     window.history.replaceState(window.history.state, '', url);
 
     stubFetchByUrl({
-      '/api/version': { version: '0.20.7', build: '1714075200000000000' }
+      '/api/version': { version: '0.20.7', build: '1714075200000000000' },
     });
     render(Settings, { props: { open: true } });
 
     await fireEvent.keyDown(window, { key: 'Escape' });
 
     await waitFor(() => {
-      expect(
-        new URL(window.location.href).searchParams.has('settings')
-      ).toBe(false);
+      expect(new URL(window.location.href).searchParams.has('settings')).toBe(false);
     });
   });
 
   it('Authentication section writes the token to localStorage and not /api/preferences', async () => {
     const stub = stubPatchOk({});
     const { getByLabelText, getByTestId } = render(Settings, {
-      props: { open: true }
+      props: { open: true },
     });
 
     await fireEvent.click(getByTestId('settings-rail-auth'));
 
     await fireEvent.input(getByLabelText('Auth token'), {
-      target: { value: 'fresh-token' }
+      target: { value: 'fresh-token' },
     });
 
     // Wait past the debounce so the assertion isn't racing the timer.

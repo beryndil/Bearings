@@ -10,7 +10,7 @@
     type FSMEvent,
     type FSMItem,
     type ItemsSnapshot,
-    type KeyboardState
+    type KeyboardState,
   } from '$lib/context-menu/keyboard';
   import ContextMenuItem from './ContextMenuItem.svelte';
 
@@ -67,10 +67,10 @@
           contextMenu.state.target !== null &&
           a.disabled?.(contextMenu.state.target) !== null &&
           a.disabled?.(contextMenu.state.target) !== undefined,
-        hasSubmenu: a.submenu !== undefined
+        hasSubmenu: a.submenu !== undefined,
       })
     ),
-    submenu: []
+    submenu: [],
   }));
 
   const placement = $derived.by(() => {
@@ -87,7 +87,7 @@
       menuWidth: menuEl?.offsetWidth ?? DEFAULT_WIDTH_PX,
       menuHeight: menuEl?.offsetHeight ?? DEFAULT_HEIGHT_PX,
       viewportWidth: typeof window === 'undefined' ? 0 : window.innerWidth,
-      viewportHeight: typeof window === 'undefined' ? 0 : window.innerHeight
+      viewportHeight: typeof window === 'undefined' ? 0 : window.innerHeight,
     });
   });
 
@@ -112,9 +112,7 @@
       menuEl.focus();
       return;
     }
-    const row = menuEl.querySelector<HTMLElement>(
-      `[data-flat-index="${idx}"]`
-    );
+    const row = menuEl.querySelector<HTMLElement>(`[data-flat-index="${idx}"]`);
     row?.focus();
   }
 
@@ -123,7 +121,7 @@
     return {
       target: s.target!,
       event: null,
-      advanced: s.advanced
+      advanced: s.advanced,
     };
   }
 
@@ -186,9 +184,7 @@
   function isEditableOutsideMenu(target: EventTarget | null): boolean {
     const el =
       (target instanceof HTMLElement ? target : null) ??
-      (typeof document !== 'undefined'
-        ? (document.activeElement as HTMLElement | null)
-        : null);
+      (typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null);
     if (!el) return false;
     if (menuEl && menuEl.contains(el)) return false;
     if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
@@ -267,26 +263,16 @@
   /** Sections are flattened for the FSM, but the template still
    * groups them visually. This helper turns (groupIndex, itemIndex)
    * into the flat index that `data-flat-index` uses. */
-  function flatIndex(groups: typeof rendered extends null ? never : NonNullable<typeof rendered>['groups'], gi: number, ii: number): number {
+  function flatIndex(
+    groups: typeof rendered extends null ? never : NonNullable<typeof rendered>['groups'],
+    gi: number,
+    ii: number
+  ): number {
     let n = 0;
     for (let i = 0; i < gi; i++) n += groups[i]!.actions.length;
     return n + ii;
   }
 </script>
-
-<style>
-  /* 44px minimum touch target per spec §6.4 / iOS HIG. Tailwind's
-     default row padding is `py-1.5` which clocks in around 28px with
-     the `text-xs` row label — too small for reliable thumb accuracy.
-     Scope the bump to bottom-sheet mode so the desktop menu keeps its
-     compact density. */
-  :global([data-testid='context-menu'][data-coarse='true'] button[role='menuitem']) {
-    min-height: 44px;
-    padding-top: 0.625rem;
-    padding-bottom: 0.625rem;
-    font-size: 0.875rem; /* Tailwind `text-sm` — easier to read at arm's length. */
-  }
-</style>
 
 {#if rendered}
   {#if coarse}
@@ -312,8 +298,8 @@
     data-advanced={rendered.advanced}
     data-coarse={coarse}
     class={coarse
-      ? 'fixed inset-x-0 bottom-0 z-50 max-h-[75vh] overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 py-2 text-slate-200 shadow-2xl touch-manipulation'
-      : 'fixed z-50 min-w-[12rem] max-w-xs rounded border border-slate-700 bg-slate-900 shadow-xl py-1 text-slate-200'}
+      ? 'fixed inset-x-0 bottom-0 z-50 max-h-[75vh] touch-manipulation overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 py-2 text-slate-200 shadow-2xl'
+      : 'fixed z-50 min-w-[12rem] max-w-xs rounded border border-slate-700 bg-slate-900 py-1 text-slate-200 shadow-xl'}
     style={coarse ? '' : `left: ${placement.left}px; top: ${placement.top}px;`}
     oncontextmenu={onOwnContextMenu}
   >
@@ -321,10 +307,7 @@
       <!-- Drag handle affordance — purely decorative, the backdrop
            handles close. Keeps the sheet visually consistent with
            Android / iOS conventions. -->
-      <div
-        aria-hidden="true"
-        class="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-600"
-      ></div>
+      <div aria-hidden="true" class="mx-auto mb-2 h-1.5 w-12 rounded-full bg-slate-600"></div>
     {/if}
     {#each rendered.groups as group, gi (group.section)}
       {#if gi > 0}
@@ -341,3 +324,17 @@
     {/each}
   </div>
 {/if}
+
+<style>
+  /* 44px minimum touch target per spec §6.4 / iOS HIG. Tailwind's
+     default row padding is `py-1.5` which clocks in around 28px with
+     the `text-xs` row label — too small for reliable thumb accuracy.
+     Scope the bump to bottom-sheet mode so the desktop menu keeps its
+     compact density. */
+  :global([data-testid='context-menu'][data-coarse='true'] button[role='menuitem']) {
+    min-height: 44px;
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+    font-size: 0.875rem; /* Tailwind `text-sm` — easier to read at arm's length. */
+  }
+</style>

@@ -68,10 +68,10 @@
        at 40 (was 64), tightened gaps and padding. Treatment is
        still recognisably the Spyglass hero, just at desktop-modal
        density rather than mobile-fullscreen density. -->
-  <div class="flex flex-col items-center pt-0 pb-1 gap-1">
+  <div class="flex flex-col items-center gap-1 pb-1 pt-0">
     <BearingsMark size={40} label="Bearings" />
 
-    <h3 class="text-lg font-semibold text-sky-400 mt-1">Bearings</h3>
+    <h3 class="mt-1 text-lg font-semibold text-sky-400">Bearings</h3>
 
     <p class="text-xs text-slate-400">
       {info ? `v${info.version}` : error ? 'version unavailable' : '…'}
@@ -84,7 +84,7 @@
       target="_blank"
       rel="noopener noreferrer"
       class="text-xs text-sky-400 hover:text-sky-300 hover:underline
-        focus:outline-none focus:underline"
+        focus:underline focus:outline-none"
     >
       by Beryndil
     </a>
@@ -103,16 +103,14 @@
       target="_blank"
       rel="noopener noreferrer"
       class="mt-2 inline-flex flex-col items-center rounded-lg
-        bg-sky-600 hover:bg-sky-500 transition-colors
-        px-4 py-1.5 text-center
+        bg-sky-600 px-4 py-1.5
+        text-center transition-colors hover:bg-sky-500
         focus:outline-none focus:ring-2 focus:ring-sky-300/60
         focus:ring-offset-2 focus:ring-offset-slate-900"
       data-testid="settings-coffee-cta"
     >
-      <span class="text-[10px] text-sky-100 leading-tight">Enjoy Bearings?</span>
-      <span class="text-sm font-semibold text-white leading-tight">
-        Buy Me a Cup of Coffee
-      </span>
+      <span class="text-[10px] leading-tight text-sky-100">Enjoy Bearings?</span>
+      <span class="text-sm font-semibold leading-tight text-white"> Buy Me a Cup of Coffee </span>
     </a>
   </div>
 

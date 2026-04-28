@@ -232,8 +232,7 @@ export class DragDropController {
   installSwallow(): () => void {
     const swallow = (e: DragEvent) => {
       const sectionEl = this.ops.getSectionEl();
-      const inside =
-        !!sectionEl && e.target instanceof Node && sectionEl.contains(e.target);
+      const inside = !!sectionEl && e.target instanceof Node && sectionEl.contains(e.target);
       if (!inside) e.preventDefault();
     };
     document.addEventListener('dragover', swallow);

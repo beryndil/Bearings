@@ -26,16 +26,10 @@
 
 <header class="flex items-center gap-2 px-1">
   {#if icon}
-    <span class="text-sky-400 shrink-0">{@render icon()}</span>
+    <span class="shrink-0 text-sky-400">{@render icon()}</span>
   {/if}
-  <h2
-    {id}
-    class="text-[11px] font-semibold uppercase tracking-wider text-sky-400"
-  >
+  <h2 {id} class="text-[11px] font-semibold uppercase tracking-wider text-sky-400">
     {label}
   </h2>
-  <span
-    class="flex-1 border-t border-slate-800 ml-2"
-    aria-hidden="true"
-  ></span>
+  <span class="ml-2 flex-1 border-t border-slate-800" aria-hidden="true"></span>
 </header>

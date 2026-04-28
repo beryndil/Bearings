@@ -23,7 +23,7 @@ function rightClick(el: Element, init: MouseEventInit = {}): MouseEvent {
     bubbles: true,
     cancelable: true,
     button: 2,
-    ...init
+    ...init,
   });
   el.dispatchEvent(ev);
   return ev;
@@ -49,7 +49,7 @@ describe('contextmenuDelegate — code block', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
 
     const code = host.querySelector('code')!;
@@ -61,7 +61,7 @@ describe('contextmenuDelegate — code block', () => {
       text: 'print("hi")',
       language: 'python',
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
     expect(ev.defaultPrevented).toBe(true);
 
@@ -78,7 +78,7 @@ describe('contextmenuDelegate — code block', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: null,
-      messageId: null
+      messageId: null,
     });
 
     rightClick(host.querySelector('code')!);
@@ -86,7 +86,7 @@ describe('contextmenuDelegate — code block', () => {
     expect(contextMenu.state.target).toMatchObject({
       type: 'code_block',
       language: null,
-      text: 'echo hi'
+      text: 'echo hi',
     });
 
     action.destroy();
@@ -100,7 +100,7 @@ describe('contextmenuDelegate — link', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
 
     const anchor = host.querySelector('a')!;
@@ -111,7 +111,7 @@ describe('contextmenuDelegate — link', () => {
       href: 'https://example.com',
       text: 'example',
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
     expect(ev.defaultPrevented).toBe(true);
 
@@ -131,7 +131,7 @@ describe('contextmenuDelegate — link', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
 
     rightClick(host.querySelector('a')!);
@@ -149,7 +149,7 @@ describe('contextmenuDelegate — passthrough', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
 
     const ev = rightClick(host.querySelector('p')!);
@@ -172,12 +172,12 @@ describe('contextmenuDelegate — passthrough', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: null,
-      messageId: null
+      messageId: null,
     });
 
     const ev = rightClick(host.querySelector('code')!, {
       ctrlKey: true,
-      shiftKey: true
+      shiftKey: true,
     });
 
     expect(contextMenu.state.open).toBe(false);
@@ -192,7 +192,7 @@ describe('contextmenuDelegate — passthrough', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: null,
-      messageId: null
+      messageId: null,
     });
 
     rightClick(host.querySelector('a')!, { shiftKey: true });
@@ -211,7 +211,7 @@ describe('contextmenuDelegate — binding updates', () => {
     document.body.appendChild(host);
     const action = contextmenuDelegate(host, {
       sessionId: 's-1',
-      messageId: 'm-1'
+      messageId: 'm-1',
     });
     action.update({ sessionId: 's-2', messageId: 'm-9' });
 
@@ -219,7 +219,7 @@ describe('contextmenuDelegate — binding updates', () => {
 
     expect(contextMenu.state.target).toMatchObject({
       sessionId: 's-2',
-      messageId: 'm-9'
+      messageId: 'm-9',
     });
 
     action.destroy();

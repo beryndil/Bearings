@@ -57,7 +57,7 @@
  *   - `versionWatcher.dispose()` — tear down (test-only).
  */
 
-import { fetchVersion } from "$lib/api/version";
+import { fetchVersion } from '$lib/api/version';
 
 const POLL_INTERVAL_MS = 60_000;
 /** How long the watcher waits, while visible, with no user activity
@@ -78,7 +78,7 @@ const IDLE_SWEEP_INTERVAL_MS = 1_000;
  * clicking, reading-with-scroll); pointermove is intentionally NOT
  * included because cursor drift while reading is not meaningful
  * activity and would defeat the debounce entirely. */
-const ACTIVITY_EVENTS = ["keydown", "pointerdown", "wheel", "scroll"] as const;
+const ACTIVITY_EVENTS = ['keydown', 'pointerdown', 'wheel', 'scroll'] as const;
 
 type ActivityCheck = () => boolean;
 
@@ -181,11 +181,11 @@ class VersionWatcher {
       clearInterval(this.idleTimer);
       this.idleTimer = null;
     }
-    if (this.visibilityHandler && typeof document !== "undefined") {
-      document.removeEventListener("visibilitychange", this.visibilityHandler);
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = null;
     }
-    if (this.activityHandler && typeof document !== "undefined") {
+    if (this.activityHandler && typeof document !== 'undefined') {
       for (const ev of ACTIVITY_EVENTS) {
         document.removeEventListener(ev, this.activityHandler, true);
       }
@@ -231,9 +231,9 @@ class VersionWatcher {
   }
 
   private installVisibilityHandler(): void {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
     this.visibilityHandler = () => {
-      if (document.visibilityState === "hidden") {
+      if (document.visibilityState === 'hidden') {
         // Don't bother with the disruption guards on hidden — the user
         // isn't looking. Streaming will reconnect on the new bundle's
         // boot path; modal state has no practical user impact when the
@@ -249,7 +249,7 @@ class VersionWatcher {
         this.markActivity();
       }
     };
-    document.addEventListener("visibilitychange", this.visibilityHandler);
+    document.addEventListener('visibilitychange', this.visibilityHandler);
   }
 
   /** Wire document-level activity events to `markActivity` so the
@@ -258,7 +258,7 @@ class VersionWatcher {
    * with downstream handlers. The hidden-tab branch doesn't need
    * this — it reloads unconditionally on visibilitychange. */
   private installInteractivityHandler(): void {
-    if (typeof document === "undefined") return;
+    if (typeof document === 'undefined') return;
     this.activityHandler = () => this.markActivity();
     for (const ev of ACTIVITY_EVENTS) {
       document.addEventListener(ev, this.activityHandler, {
@@ -275,8 +275,8 @@ class VersionWatcher {
     // Body is one date subtract + a few function calls — cheap enough
     // to run at 1 Hz without showing up in any profile.
     this.idleTimer = setInterval(() => {
-      if (typeof document === "undefined") return;
-      if (document.visibilityState !== "visible") return; // visibility branch handles this
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState !== 'visible') return; // visibility branch handles this
       if (!this.wantsReload) return;
       const elapsed = Date.now() - this.lastActivityAt;
       if (elapsed < IDLE_DEBOUNCE_MS) return;

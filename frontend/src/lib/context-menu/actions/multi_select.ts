@@ -53,7 +53,7 @@ function tagSubmenuItem(tag: api.Tag, op: 'tag' | 'untag'): Action {
       await api.bulkSessions({ op, ids: [...t.ids], payload: { tag_id: tag.id } });
       sessionSelection.clear();
       await sessions.refresh(sessions.filter);
-    }
+    },
   };
 }
 
@@ -65,7 +65,7 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
     mnemonic: 'c',
     handler: () => {
       sessionSelection.clear();
-    }
+    },
   },
   {
     id: 'multi_select.tag',
@@ -73,7 +73,7 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
     section: 'organize',
     mnemonic: 't',
     handler: () => {},
-    submenu: () => tags.list.map((tag) => tagSubmenuItem(tag, 'tag'))
+    submenu: () => tags.list.map((tag) => tagSubmenuItem(tag, 'tag')),
   },
   {
     id: 'multi_select.untag',
@@ -81,7 +81,7 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
     section: 'organize',
     advanced: true,
     handler: () => {},
-    submenu: () => tags.list.map((tag) => tagSubmenuItem(tag, 'untag'))
+    submenu: () => tags.list.map((tag) => tagSubmenuItem(tag, 'untag')),
   },
   {
     id: 'multi_select.close',
@@ -94,7 +94,7 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
       await api.bulkSessions({ op: 'close', ids: [...t.ids] });
       sessionSelection.clear();
       await sessions.refresh(sessions.filter);
-    }
+    },
   },
   {
     id: 'multi_select.export',
@@ -107,11 +107,11 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
       const result = await api.bulkSessions({ op: 'export', ids: [...t.ids] });
       if (result.op !== 'export') return;
       const blob = new Blob([JSON.stringify(result, null, 2)], {
-        type: 'application/json'
+        type: 'application/json',
       });
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
       downloadBlob(blob, `bearings-sessions-${stamp}.json`);
-    }
+    },
   },
   {
     id: 'multi_select.delete',
@@ -134,8 +134,8 @@ export const MULTI_SELECT_ACTIONS: readonly Action[] = [
           await api.bulkSessions({ op: 'delete', ids: [...t.ids] });
           sessionSelection.clear();
           await sessions.refresh(sessions.filter);
-        }
+        },
       });
-    }
-  }
+    },
+  },
 ];

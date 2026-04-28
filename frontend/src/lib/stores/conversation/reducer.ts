@@ -75,7 +75,7 @@ export function capToolOutput(next: string): { output: string; truncated: boolea
   const marker = `…[truncated ${dropped.toLocaleString()} chars]…\n`;
   return {
     output: marker + next.slice(-TOOL_OUTPUT_CAP_CHARS),
-    truncated: true
+    truncated: true,
   };
 }
 
@@ -105,7 +105,7 @@ export function hydrateToolCall(row: api.ToolCall): LiveToolCall {
     startedAt,
     finishedAt,
     outputTruncated: capped.truncated,
-    lastProgressMs: null
+    lastProgressMs: null,
   };
 }
 
@@ -210,7 +210,7 @@ export function emptyState(): SessionState {
     loadingInitial: false,
     turns: [],
     audits: [],
-    timeline: []
+    timeline: [],
   };
 }
 
@@ -255,7 +255,7 @@ function ensureStreamingTail(state: SessionState, messageId: string | null): Tur
     toolCalls: [],
     streamingContent: '',
     streamingThinking: '',
-    isStreaming: true
+    isStreaming: true,
   };
   state.turns.push(tail);
   // `when=''` so `recomputeTimeline`'s sort sinks the streaming tail
@@ -266,7 +266,7 @@ function ensureStreamingTail(state: SessionState, messageId: string | null): Tur
     kind: 'turn',
     key: `turn:${tail.key}`,
     when: '',
-    turn: tail
+    turn: tail,
   });
   return tail;
 }
@@ -309,14 +309,14 @@ export function appendUserTurn(state: SessionState, msg: api.Message): void {
     toolCalls: [],
     streamingContent: '',
     streamingThinking: '',
-    isStreaming: false
+    isStreaming: false,
   };
   state.turns.push(turn);
   state.timeline.push({
     kind: 'turn',
     key: `turn:${turn.key}`,
     when: msg.created_at,
-    turn
+    turn,
   });
 }
 
@@ -392,11 +392,7 @@ export type ReducerCtx = {
   refreshMessages: (sessionId: string) => void;
 };
 
-export function applyEvent(
-  state: SessionState,
-  event: api.AgentEvent,
-  ctx: ReducerCtx
-): void {
+export function applyEvent(state: SessionState, event: api.AgentEvent, ctx: ReducerCtx): void {
   // Advance the replay cursor before any early-returns below so a
   // malformed event type still marks itself seen.
   if (typeof event._seq === 'number' && event._seq > state.lastSeq) {
@@ -426,10 +422,7 @@ export function applyEvent(
     case 'token': {
       // Replay guard: if the start frame's message_id is already
       // completed, ignore mid-turn tokens.
-      if (
-        state.streamingMessageId &&
-        state.completedMessageIds.has(state.streamingMessageId)
-      )
+      if (state.streamingMessageId && state.completedMessageIds.has(state.streamingMessageId))
         return;
       state.streamingText += event.text;
       // In-place tail mutation — single field write on an existing
@@ -440,10 +433,7 @@ export function applyEvent(
       return;
     }
     case 'thinking': {
-      if (
-        state.streamingMessageId &&
-        state.completedMessageIds.has(state.streamingMessageId)
-      )
+      if (state.streamingMessageId && state.completedMessageIds.has(state.streamingMessageId))
         return;
       state.streamingThinking += event.text;
       const tail = findStreamingTail(state);
@@ -470,7 +460,7 @@ export function applyEvent(
         startedAt: Date.now(),
         finishedAt: null,
         outputTruncated: false,
-        lastProgressMs: null
+        lastProgressMs: null,
       };
       state.toolCalls.push(tc);
       // Attach to the live tail so the MessageTurn's tool-call list
@@ -541,9 +531,7 @@ export function applyEvent(
       const tc = state.toolCalls.find((c) => c.id === event.tool_call_id);
       if (!tc) return;
       const capped =
-        event.output !== null
-          ? capToolOutput(event.output)
-          : { output: null, truncated: false };
+        event.output !== null ? capToolOutput(event.output) : { output: null, truncated: false };
       tc.ok = event.ok;
       tc.output = capped.output;
       tc.error = event.error;
@@ -562,7 +550,7 @@ export function applyEvent(
           role: 'assistant',
           content: state.streamingText,
           thinking: state.streamingThinking || null,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         };
         state.messages = [...state.messages, msg];
         state.completedMessageIds.add(event.message_id);
@@ -597,7 +585,7 @@ export function applyEvent(
         request_id: event.request_id,
         tool_name: event.tool_name,
         input: event.input,
-        tool_use_id: event.tool_use_id
+        tool_use_id: event.tool_use_id,
       };
       return;
     case 'approval_resolved':
@@ -614,7 +602,7 @@ export function applyEvent(
         percentage: event.percentage,
         totalTokens: event.total_tokens,
         maxTokens: event.max_tokens,
-        isAutoCompactEnabled: event.is_auto_compact_enabled
+        isAutoCompactEnabled: event.is_auto_compact_enabled,
       };
       return;
     case 'todo_write_update':

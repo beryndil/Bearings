@@ -29,6 +29,6 @@ export function patchMessage(
   return jsonFetch<Message>(fetchImpl, `/api/messages/${messageId}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }

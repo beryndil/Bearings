@@ -45,7 +45,7 @@
     maxlength,
     id,
     validate,
-    onChange
+    onChange,
   }: Props = $props();
 
   const generated = `settings-text-${Math.random().toString(36).slice(2, 9)}`;
@@ -90,7 +90,7 @@
     } catch (err) {
       saveState = {
         kind: 'error',
-        message: err instanceof Error ? err.message : String(err)
+        message: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -104,8 +104,8 @@
       <input
         id={inputId}
         type={inputType}
-        class="rounded bg-slate-950 border border-slate-800 px-2 py-1.5 text-sm w-56
-          focus:outline-none focus:border-slate-600
+        class="w-56 rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-sm
+          focus:border-slate-600 focus:outline-none
           {monospace ? 'font-mono' : ''}
           {validationError ? 'border-rose-700' : ''}"
         {placeholder}
@@ -116,11 +116,11 @@
         data-testid="settings-text-input"
       />
       {#if validationError}
-        <span class="text-[11px] text-rose-400 leading-snug" role="alert">
+        <span class="text-[11px] leading-snug text-rose-400" role="alert">
           {validationError}
         </span>
       {:else if showCounter}
-        <span class="text-[11px] text-slate-500 tabular-nums">
+        <span class="text-[11px] tabular-nums text-slate-500">
           {value.length}/{maxlength}
         </span>
       {/if}

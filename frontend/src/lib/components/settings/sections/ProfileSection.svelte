@@ -15,7 +15,7 @@
   async function save(next: string): Promise<void> {
     const trimmed = next.trim();
     await preferences.update({
-      display_name: trimmed === '' ? null : next
+      display_name: trimmed === '' ? null : next,
     });
   }
 </script>

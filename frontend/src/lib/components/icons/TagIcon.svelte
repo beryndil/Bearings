@@ -43,7 +43,7 @@
        pointy tip at x≈1.5 y≈8. -->
   <path
     d="M5 3 H12.5 A1.5 1.5 0 0 1 14 4.5 V11.5 A1.5 1.5 0 0 1 12.5 13 H5 L1.5 8 Z"
-    fill={fill}
+    {fill}
     stroke="rgba(0,0,0,0.35)"
     stroke-width="0.8"
     stroke-linejoin="round"

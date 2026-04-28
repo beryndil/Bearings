@@ -10,9 +10,7 @@ import typography from '@tailwindcss/typography';
 // grep). Unmapped shades fall through to Tailwind's defaults, which is
 // fine for colors we don't intentionally theme.
 const themed = (family, shades) =>
-  Object.fromEntries(
-    shades.map((s) => [s, `rgb(var(--bearings-${family}-${s}) / <alpha-value>)`])
-  );
+  Object.fromEntries(shades.map((s) => [s, `rgb(var(--bearings-${family}-${s}) / <alpha-value>)`]));
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -21,18 +19,26 @@ export default {
     extend: {
       colors: {
         slate: themed('slate', [
-          '50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'
+          '50',
+          '100',
+          '200',
+          '300',
+          '400',
+          '500',
+          '600',
+          '700',
+          '800',
+          '900',
+          '950',
         ]),
         sky: themed('sky', ['200', '300', '400', '500', '600', '800', '900']),
         emerald: themed('emerald', ['200', '300', '400', '500', '600', '700', '900']),
         amber: themed('amber', ['100', '200', '300', '400', '500', '800', '900', '950']),
-        rose: themed('rose', [
-          '200', '300', '400', '500', '600', '700', '800', '900', '950'
-        ]),
+        rose: themed('rose', ['200', '300', '400', '500', '600', '700', '800', '900', '950']),
         red: themed('red', ['100', '500', '600', '900']),
         orange: themed('orange', ['100', '600', '900']),
         teal: themed('teal', ['300', '900']),
-        indigo: themed('indigo', ['300', '500', '900'])
+        indigo: themed('indigo', ['300', '500', '900']),
       },
       // `flash-red` is used by ContextMeter when the current context window
       // crosses the empirical 32K-token recall-degradation threshold. The
@@ -57,18 +63,18 @@ export default {
         flashRed: {
           '0%, 100%': {
             backgroundColor: 'rgb(var(--bearings-red-900) / 0.6)',
-            color: 'rgb(var(--bearings-red-100))'
+            color: 'rgb(var(--bearings-red-100))',
           },
           '50%': {
             backgroundColor: 'rgb(var(--bearings-red-500) / 0.9)',
-            color: 'rgb(255 255 255)'
-          }
-        }
+            color: 'rgb(255 255 255)',
+          },
+        },
       },
       animation: {
-        'flash-red': 'flashRed 1.2s ease-in-out infinite'
-      }
-    }
+        'flash-red': 'flashRed 1.2s ease-in-out infinite',
+      },
+    },
   },
-  plugins: [typography]
+  plugins: [typography],
 };

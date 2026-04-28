@@ -39,9 +39,7 @@
   }
 
   let activeId = $state(initialId());
-  const active = $derived(
-    SETTINGS_SECTIONS.find((s) => s.id === activeId) ?? SETTINGS_SECTIONS[0]
-  );
+  const active = $derived(SETTINGS_SECTIONS.find((s) => s.id === activeId) ?? SETTINGS_SECTIONS[0]);
 
   /** Mirror `activeId` into `?settings=<id>` so deep-links round-trip.
    * `replaceState` keeps the back button useful — flipping rails
@@ -89,10 +87,7 @@
   }
 </script>
 
-<div
-  class="flex flex-row min-h-[28rem] max-h-[36rem]"
-  data-testid="settings-shell"
->
+<div class="flex max-h-[36rem] min-h-[28rem] flex-row" data-testid="settings-shell">
   <!-- Left nav rail. role="tablist" + role="tab" gives screen
        readers the right model: each rail item is a tab; the content
        pane is the corresponding tabpanel. We use a plain <div>
@@ -114,11 +109,11 @@
         aria-selected={activeId === section.id}
         aria-controls="settings-pane-{section.id}"
         tabindex={activeId === section.id ? 0 : -1}
-        class="w-full text-left px-4 py-2 text-sm transition-colors
-          focus:outline-none focus:bg-slate-800/60
+        class="w-full px-4 py-2 text-left text-sm transition-colors
+          focus:bg-slate-800/60 focus:outline-none
           {activeId === section.id
-            ? 'bg-slate-800/80 text-slate-100 border-l-2 border-sky-400'
-            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border-l-2 border-transparent'}"
+          ? 'border-l-2 border-sky-400 bg-slate-800/80 text-slate-100'
+          : 'border-l-2 border-transparent text-slate-400 hover:bg-slate-900/60 hover:text-slate-200'}"
         onclick={() => (activeId = section.id)}
         data-testid="settings-rail-{section.id}"
       >
@@ -143,7 +138,7 @@
     <header class="mb-4">
       <h2 class="text-base font-semibold text-slate-100">{active.label}</h2>
       {#if active.description}
-        <p class="text-xs text-slate-400 mt-1">{active.description}</p>
+        <p class="mt-1 text-xs text-slate-400">{active.description}</p>
       {/if}
     </header>
 

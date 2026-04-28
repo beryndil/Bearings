@@ -6,7 +6,7 @@ import {
   placeAnchored,
   placeAtCursor,
   placeSubmenu,
-  type Rect
+  type Rect,
 } from './positioning';
 
 // Phase 1 covered cursor-anchored clamping. Phase 2 adds exhaustive
@@ -19,9 +19,10 @@ describe('placeAtCursor', () => {
   const smallMenu = { menuWidth: 200, menuHeight: 100 };
 
   it('places at the cursor when fully inside the viewport', () => {
-    expect(
-      placeAtCursor({ x: 100, y: 100, ...smallMenu, ...viewport })
-    ).toEqual({ left: 100, top: 100 });
+    expect(placeAtCursor({ x: 100, y: 100, ...smallMenu, ...viewport })).toEqual({
+      left: 100,
+      top: 100,
+    });
   });
 
   it('clamps to the right-edge margin when x+width overflows', () => {
@@ -51,7 +52,7 @@ describe('placeAtCursor', () => {
       menuWidth: 2000,
       menuHeight: 100,
       viewportWidth: 1000,
-      viewportHeight: 800
+      viewportHeight: 800,
     });
     // Oversize menu: left pins to margin, renderer handles overflow.
     expect(p.left).toBe(VIEWPORT_MARGIN_PX);
@@ -64,7 +65,7 @@ describe('placeAtCursor', () => {
       menuWidth: 200,
       menuHeight: 2000,
       viewportWidth: 1000,
-      viewportHeight: 800
+      viewportHeight: 800,
     });
     expect(p.top).toBe(VIEWPORT_MARGIN_PX);
   });
@@ -74,7 +75,7 @@ describe('placeAtCursor', () => {
       x: 10_000,
       y: 10_000,
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     expect(p.left).toBe(1000 - 200 - VIEWPORT_MARGIN_PX);
     expect(p.top).toBe(800 - 100 - VIEWPORT_MARGIN_PX);
@@ -94,7 +95,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(100, 100),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // top aligns to anchor.bottom (120), left aligns to anchor.left (100).
     expect(p).toEqual({ left: 100, top: 120 });
@@ -105,7 +106,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(100, 750, 40, 30),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Flipped above: top = anchor.top - menuHeight = 750 - 100 = 650.
     expect(p.top).toBe(650);
@@ -117,7 +118,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(900, 100, 40, 20),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Flipped right-align: left = anchor.right - menuWidth = 940 - 200 = 740.
     expect(p.left).toBe(740);
@@ -128,7 +129,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(900, 750, 40, 30),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     expect(p.top).toBe(650); // flipped above
     expect(p.left).toBe(740); // flipped right-aligned
@@ -139,7 +140,7 @@ describe('placeAnchored', () => {
       anchor: rect(100, 400),
       menuWidth: 1200,
       menuHeight: 900,
-      ...viewport
+      ...viewport,
     });
     expect(p.left).toBe(VIEWPORT_MARGIN_PX);
     expect(p.top).toBe(VIEWPORT_MARGIN_PX);
@@ -149,7 +150,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(0, 0, 40, 20),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Left would be 0, but the final clamp floors to VIEWPORT_MARGIN_PX.
     expect(p).toEqual({ left: VIEWPORT_MARGIN_PX, top: 20 });
@@ -159,7 +160,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(960, 0, 40, 20),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Flip right-align → left = 1000 - 200 = 800, then the final clamp
     // pulls inside the right margin: 1000 - 200 - 4 = 796.
@@ -171,7 +172,7 @@ describe('placeAnchored', () => {
     const p = placeAnchored({
       anchor: rect(0, 780, 40, 20),
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Below overflows: flip above. top = 780 - 100 = 680.
     expect(p.top).toBe(680);
@@ -193,7 +194,7 @@ describe('placeSubmenu', () => {
     const p = placeSubmenu({
       parent,
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     expect(p.left).toBe(parent.right - SUBMENU_OVERLAP_PX);
     expect(p.top).toBe(parent.top);
@@ -205,7 +206,7 @@ describe('placeSubmenu', () => {
     const p = placeSubmenu({
       parent,
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Flipped left: left = parent.left - menuWidth + overlap.
     expect(p.left).toBe(parent.left - 200 + SUBMENU_OVERLAP_PX);
@@ -217,7 +218,7 @@ describe('placeSubmenu', () => {
     const p = placeSubmenu({
       parent,
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     // Flipped up: top = parent.bottom - menuHeight.
     expect(p.top).toBe(parent.bottom - 120);
@@ -228,7 +229,7 @@ describe('placeSubmenu', () => {
     const p = placeSubmenu({
       parent,
       ...smallMenu,
-      ...viewport
+      ...viewport,
     });
     expect(p.left).toBe(parent.left - 200 + SUBMENU_OVERLAP_PX);
     expect(p.top).toBe(parent.bottom - 120);
@@ -239,7 +240,7 @@ describe('placeSubmenu', () => {
       parent: rect(400, 400),
       menuWidth: 2000,
       menuHeight: 1000,
-      ...viewport
+      ...viewport,
     });
     expect(p.left).toBe(VIEWPORT_MARGIN_PX);
     expect(p.top).toBe(VIEWPORT_MARGIN_PX);

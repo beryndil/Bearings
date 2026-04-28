@@ -41,7 +41,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -56,7 +56,7 @@ beforeEach(() => {
       },
       async text() {
         return '[]';
-      }
+      },
     }))
   );
 });
@@ -76,19 +76,17 @@ afterEach(() => {
 describe('root / route component', () => {
   it('renders the empty-state pane when no redirect fires', async () => {
     const { getByTestId } = render(RootPage);
-    expect(getByTestId('root-empty-state').textContent).toMatch(
-      /Pick a session/i
-    );
+    expect(getByTestId('root-empty-state').textContent).toMatch(/Pick a session/i);
   });
 
   it('redirects ?session=<id> to /sessions/<id>', async () => {
     setStubPage({
-      url: new URL('http://localhost/?session=legacy-abc')
+      url: new URL('http://localhost/?session=legacy-abc'),
     });
     render(RootPage);
     await waitFor(() =>
       expect(goto).toHaveBeenCalledWith('/sessions/legacy-abc', {
-        replaceState: true
+        replaceState: true,
       })
     );
   });
@@ -103,7 +101,7 @@ describe('root / route component', () => {
 
     await waitFor(() =>
       expect(goto).toHaveBeenCalledWith('/sessions/sess-r', {
-        replaceState: true
+        replaceState: true,
       })
     );
   });

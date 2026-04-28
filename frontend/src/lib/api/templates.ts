@@ -49,16 +49,13 @@ export function createTemplate(
   return jsonFetch<Template>(fetchImpl, '/api/templates', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
-export function deleteTemplate(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
+export function deleteTemplate(id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   return voidFetch(fetchImpl, `/api/templates/${encodeURIComponent(id)}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }
 
@@ -67,13 +64,9 @@ export function instantiateTemplate(
   body: TemplateInstantiateRequest = {},
   fetchImpl: typeof fetch = fetch
 ): Promise<Session> {
-  return jsonFetch<Session>(
-    fetchImpl,
-    `/api/sessions/from_template/${encodeURIComponent(id)}`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
-    }
-  );
+  return jsonFetch<Session>(fetchImpl, `/api/sessions/from_template/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }

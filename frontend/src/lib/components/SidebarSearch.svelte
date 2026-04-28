@@ -75,8 +75,8 @@
 <input
   type="search"
   placeholder="Search messages (⌘/Ctrl+K)"
-  class="rounded bg-slate-950 border border-slate-800 px-2 py-1.5 text-sm
-    focus:outline-none focus:border-slate-600"
+  class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-sm
+    focus:border-slate-600 focus:outline-none"
   bind:value={query}
   bind:this={inputEl}
   onkeydown={onKey}
@@ -86,23 +86,23 @@
   {#if error}
     <p class="text-xs text-rose-400">{error}</p>
   {:else if results.length === 0}
-    <p class="text-slate-500 text-sm">No matches.</p>
+    <p class="text-sm text-slate-500">No matches.</p>
   {:else}
     <ul class="flex flex-col gap-1">
       {#each results as hit (hit.message_id)}
         <li>
           <button
             type="button"
-            class="w-full text-left rounded bg-slate-800/40 hover:bg-slate-800 px-2 py-2"
+            class="w-full rounded bg-slate-800/40 px-2 py-2 text-left hover:bg-slate-800"
             onclick={() => onPick(hit.session_id)}
           >
             <div class="flex items-baseline justify-between gap-2">
-              <span class="text-sm truncate">
+              <span class="truncate text-sm">
                 {hit.session_title ?? hit.model}
               </span>
               <span class="text-[10px] uppercase text-slate-500">{hit.role}</span>
             </div>
-            <div class="text-[11px] text-slate-300 mt-0.5 line-clamp-2 snippet">
+            <div class="snippet mt-0.5 line-clamp-2 text-[11px] text-slate-300">
               {@html highlightText(hit.snippet, query.trim())}
             </div>
           </button>

@@ -66,14 +66,8 @@ export type PlaceInput = {
  */
 export function placeAtCursor(input: PlaceInput): Placement {
   const { x, y, menuWidth, menuHeight, viewportWidth, viewportHeight } = input;
-  const maxLeft = Math.max(
-    VIEWPORT_MARGIN_PX,
-    viewportWidth - menuWidth - VIEWPORT_MARGIN_PX
-  );
-  const maxTop = Math.max(
-    VIEWPORT_MARGIN_PX,
-    viewportHeight - menuHeight - VIEWPORT_MARGIN_PX
-  );
+  const maxLeft = Math.max(VIEWPORT_MARGIN_PX, viewportWidth - menuWidth - VIEWPORT_MARGIN_PX);
+  const maxTop = Math.max(VIEWPORT_MARGIN_PX, viewportHeight - menuHeight - VIEWPORT_MARGIN_PX);
   const left = Math.min(Math.max(x, VIEWPORT_MARGIN_PX), maxLeft);
   const top = Math.min(Math.max(y, VIEWPORT_MARGIN_PX), maxTop);
   return { left, top };
@@ -98,12 +92,10 @@ export type AnchoredInput = {
  * "clamp 4px min margin" as the backstop.
  */
 export function placeAnchored(input: AnchoredInput): Placement {
-  const { anchor, menuWidth, menuHeight, viewportWidth, viewportHeight } =
-    input;
+  const { anchor, menuWidth, menuHeight, viewportWidth, viewportHeight } = input;
 
   // Vertical: prefer below; flip above when below overflows.
-  const fitsBelow =
-    anchor.bottom + menuHeight + VIEWPORT_MARGIN_PX <= viewportHeight;
+  const fitsBelow = anchor.bottom + menuHeight + VIEWPORT_MARGIN_PX <= viewportHeight;
   const fitsAbove = anchor.top - menuHeight - VIEWPORT_MARGIN_PX >= 0;
   let top: number;
   if (fitsBelow) {
@@ -116,8 +108,7 @@ export function placeAnchored(input: AnchoredInput): Placement {
   }
 
   // Horizontal: prefer left-align; flip right-align when left overflows.
-  const fitsLeftAlign =
-    anchor.left + menuWidth + VIEWPORT_MARGIN_PX <= viewportWidth;
+  const fitsLeftAlign = anchor.left + menuWidth + VIEWPORT_MARGIN_PX <= viewportWidth;
   const fitsRightAlign = anchor.right - menuWidth - VIEWPORT_MARGIN_PX >= 0;
   let left: number;
   if (fitsLeftAlign) {
@@ -128,10 +119,7 @@ export function placeAnchored(input: AnchoredInput): Placement {
     left = anchor.left;
   }
 
-  return clampToViewport(
-    { left, top },
-    { menuWidth, menuHeight, viewportWidth, viewportHeight }
-  );
+  return clampToViewport({ left, top }, { menuWidth, menuHeight, viewportWidth, viewportHeight });
 }
 
 export type SubmenuInput = {
@@ -148,13 +136,11 @@ export type SubmenuInput = {
  * bottom overflows.
  */
 export function placeSubmenu(input: SubmenuInput): Placement {
-  const { parent, menuWidth, menuHeight, viewportWidth, viewportHeight } =
-    input;
+  const { parent, menuWidth, menuHeight, viewportWidth, viewportHeight } = input;
 
   const rightStart = parent.right - SUBMENU_OVERLAP_PX;
   const leftStart = parent.left - menuWidth + SUBMENU_OVERLAP_PX;
-  const fitsRight =
-    rightStart + menuWidth + VIEWPORT_MARGIN_PX <= viewportWidth;
+  const fitsRight = rightStart + menuWidth + VIEWPORT_MARGIN_PX <= viewportWidth;
   const fitsLeft = leftStart - VIEWPORT_MARGIN_PX >= 0;
   let left: number;
   if (fitsRight) {
@@ -166,8 +152,7 @@ export function placeSubmenu(input: SubmenuInput): Placement {
   }
 
   const topStart = parent.top;
-  const fitsDown =
-    topStart + menuHeight + VIEWPORT_MARGIN_PX <= viewportHeight;
+  const fitsDown = topStart + menuHeight + VIEWPORT_MARGIN_PX <= viewportHeight;
   const upStart = parent.bottom - menuHeight;
   const fitsUp = upStart - VIEWPORT_MARGIN_PX >= 0;
   let top: number;
@@ -179,29 +164,17 @@ export function placeSubmenu(input: SubmenuInput): Placement {
     top = topStart;
   }
 
-  return clampToViewport(
-    { left, top },
-    { menuWidth, menuHeight, viewportWidth, viewportHeight }
-  );
+  return clampToViewport({ left, top }, { menuWidth, menuHeight, viewportWidth, viewportHeight });
 }
 
 /** Shared final clamp used by every flavor above. Extracted so the
  * margin semantics are identical whether the caller flipped or not. */
-function clampToViewport(
-  placement: Placement,
-  size: MenuSize & Viewport
-): Placement {
+function clampToViewport(placement: Placement, size: MenuSize & Viewport): Placement {
   const { menuWidth, menuHeight, viewportWidth, viewportHeight } = size;
-  const maxLeft = Math.max(
-    VIEWPORT_MARGIN_PX,
-    viewportWidth - menuWidth - VIEWPORT_MARGIN_PX
-  );
-  const maxTop = Math.max(
-    VIEWPORT_MARGIN_PX,
-    viewportHeight - menuHeight - VIEWPORT_MARGIN_PX
-  );
+  const maxLeft = Math.max(VIEWPORT_MARGIN_PX, viewportWidth - menuWidth - VIEWPORT_MARGIN_PX);
+  const maxTop = Math.max(VIEWPORT_MARGIN_PX, viewportHeight - menuHeight - VIEWPORT_MARGIN_PX);
   return {
     left: Math.min(Math.max(placement.left, VIEWPORT_MARGIN_PX), maxLeft),
-    top: Math.min(Math.max(placement.top, VIEWPORT_MARGIN_PX), maxTop)
+    top: Math.min(Math.max(placement.top, VIEWPORT_MARGIN_PX), maxTop),
   };
 }

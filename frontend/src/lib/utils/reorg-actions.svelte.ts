@@ -67,10 +67,7 @@ export type ReorgOps = {
  * op that was reversed. The delete is scoped to `sourceId` and
  * swallows 404s — a second-click race against the user manually
  * deleting the divider should not blow up the undo. */
-async function deleteAuditSafe(
-  sourceId: string,
-  auditId: number | null
-): Promise<void> {
+async function deleteAuditSafe(sourceId: string, auditId: number | null): Promise<void> {
   if (auditId == null) return;
   try {
     await api.deleteReorgAudit(sourceId, auditId);
@@ -96,7 +93,7 @@ export class ReorgController {
    * user navigated away mid-fetch, the result is dropped. Non-fatal —
    * a failed audit fetch just leaves the timeline without dividers. */
   async refreshAudits(): Promise<void> {
-const sid = sessions.selectedId;
+    const sid = sessions.selectedId;
     if (!sid) return;
     try {
       const rows = await api.listReorgAudits(sid);
@@ -112,7 +109,7 @@ const sid = sessions.selectedId;
    * re-pulls the audit list when the current session is on either end
    * of the op — new/undone dividers surface without a reload. */
   async reconcileAfterReorg(affectedIds: string[]): Promise<void> {
-await sessions.refresh(sessions.filter);
+    await sessions.refresh(sessions.filter);
     const currentSid = sessions.selectedId;
     if (currentSid && affectedIds.includes(currentSid)) {
       await conversation.load(currentSid);
@@ -128,10 +125,10 @@ await sessions.refresh(sessions.filter);
     targetSessionId: string,
     label: string
   ): Promise<void> {
-try {
+    try {
       const result = await api.reorgMove(sourceId, {
         target_session_id: targetSessionId,
-        message_ids: [msgId]
+        message_ids: [msgId],
       });
       await this.reconcileAfterReorg([sourceId, targetSessionId]);
       const auditId = result.audit_id;
@@ -141,11 +138,11 @@ try {
         run: async () => {
           await api.reorgMove(targetSessionId, {
             target_session_id: sourceId,
-            message_ids: [msgId]
+            message_ids: [msgId],
           });
           await deleteAuditSafe(sourceId, auditId);
           await this.reconcileAfterReorg([sourceId, targetSessionId]);
-        }
+        },
       };
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
@@ -164,10 +161,10 @@ try {
     label: string,
     deleteTargetOnUndo = false
   ): Promise<void> {
-try {
+    try {
       const result = await api.reorgMove(sourceId, {
         target_session_id: targetSessionId,
-        message_ids: msgIds
+        message_ids: msgIds,
       });
       await this.reconcileAfterReorg([sourceId, targetSessionId]);
       this.ops.exitBulkMode();
@@ -179,7 +176,7 @@ try {
         run: async () => {
           await api.reorgMove(targetSessionId, {
             target_session_id: sourceId,
-            message_ids: msgIds
+            message_ids: msgIds,
           });
           if (deleteTargetOnUndo) {
             // Deleting the target cascades the audit row automatically,
@@ -189,7 +186,7 @@ try {
             await deleteAuditSafe(sourceId, auditId);
           }
           await this.reconcileAfterReorg([sourceId, targetSessionId]);
-        }
+        },
       };
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
@@ -200,15 +197,11 @@ try {
    * session. Inverse is "move everything back + delete the new
    * session"; deleting the new session cascades its audit row, so no
    * explicit deleteReorgAudit call needed. */
-  async doSplit(
-    sourceId: string,
-    anchorMsgId: string,
-    draft: ReorgNewSessionDraft
-  ): Promise<void> {
-try {
+  async doSplit(sourceId: string, anchorMsgId: string, draft: ReorgNewSessionDraft): Promise<void> {
+    try {
       const result = await api.reorgSplit(sourceId, {
         after_message_id: anchorMsgId,
-        new_session: { title: draft.title, tag_ids: draft.tag_ids }
+        new_session: { title: draft.title, tag_ids: draft.tag_ids },
       });
       await this.reconcileAfterReorg([sourceId, result.session.id]);
       const newId = result.session.id;
@@ -223,12 +216,12 @@ try {
           if (rows.length > 0) {
             await api.reorgMove(newId, {
               target_session_id: sourceId,
-              message_ids: rows.map((m) => m.id)
+              message_ids: rows.map((m) => m.id),
             });
           }
           await api.deleteSession(newId);
           await this.reconcileAfterReorg([sourceId, newId]);
-        }
+        },
       };
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
@@ -245,17 +238,13 @@ try {
    * knows exactly which rows to move back — `move_messages_tx`
    * preserves `created_at`, so "the N newest rows on the target"
    * isn't necessarily "the ones we just moved over." */
-  async doMerge(
-    sourceId: string,
-    targetSessionId: string,
-    label: string
-  ): Promise<void> {
-try {
+  async doMerge(sourceId: string, targetSessionId: string, label: string): Promise<void> {
+    try {
       const sourceRows = await api.listMessages(sourceId);
       const sourceIds = sourceRows.map((m) => m.id);
       const result = await api.reorgMerge(sourceId, {
         target_session_id: targetSessionId,
-        delete_source: false
+        delete_source: false,
       });
       await this.reconcileAfterReorg([sourceId, targetSessionId]);
       const auditId = result.audit_id;
@@ -271,12 +260,12 @@ try {
           if (sourceIds.length > 0) {
             await api.reorgMove(targetSessionId, {
               target_session_id: sourceId,
-              message_ids: sourceIds
+              message_ids: sourceIds,
             });
           }
           await deleteAuditSafe(sourceId, auditId);
           await this.reconcileAfterReorg([sourceId, targetSessionId]);
-        }
+        },
       };
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);
@@ -288,14 +277,10 @@ try {
    * routed through `doBulkMove` because semantically the user picked
    * an existing session, which collapses to a bulk-move of the post-
    * anchor ids. Closing the picker is the caller's job. */
-  async pickerPickExisting(
-    targetId: string,
-    ctx: ReorgPickerContext
-  ): Promise<void> {
-const sourceId = sessions.selectedId;
+  async pickerPickExisting(targetId: string, ctx: ReorgPickerContext): Promise<void> {
+    const sourceId = sessions.selectedId;
     if (!sourceId) return;
-    const targetLabel =
-      sessions.list.find((s) => s.id === targetId)?.title ?? 'session';
+    const targetLabel = sessions.list.find((s) => s.id === targetId)?.title ?? 'session';
 
     if (ctx.op === 'bulk-move' || ctx.op === 'bulk-split') {
       // Split-into-existing collapses to a bulk move against the
@@ -334,11 +319,8 @@ const sourceId = sessions.selectedId;
    * single round-trip). For bulk variants and single-message moves to
    * a new target, creates an empty session up front, then dispatches
    * the corresponding move. Closing the picker is the caller's job. */
-  async pickerPickNew(
-    draft: ReorgNewSessionDraft,
-    ctx: ReorgPickerContext
-  ): Promise<void> {
-const sourceId = sessions.selectedId;
+  async pickerPickNew(draft: ReorgNewSessionDraft, ctx: ReorgPickerContext): Promise<void> {
+    const sourceId = sessions.selectedId;
     if (!sourceId) return;
 
     if (ctx.op === 'split' && ctx.anchor) {
@@ -365,12 +347,7 @@ const sourceId = sessions.selectedId;
     // mid-triage. `reconcileAfterReorg` refreshes the sidebar list.
     const created = await this.createEmptySession(sourceId, draft);
     if (!created) return;
-    await this.doMove(
-      sourceId,
-      ctx.anchor.id,
-      created.id,
-      `"${created.title ?? '(untitled)'}"`
-    );
+    await this.doMove(sourceId, ctx.anchor.id, created.id, `"${created.title ?? '(untitled)'}"`);
   }
 
   /** Direct API session-create that mirrors the source's
@@ -381,14 +358,14 @@ const sourceId = sessions.selectedId;
     sourceId: string,
     draft: ReorgNewSessionDraft
   ): Promise<api.Session | null> {
-const source = sessions.list.find((s) => s.id === sourceId);
+    const source = sessions.list.find((s) => s.id === sourceId);
     if (!source) return null;
     try {
       return await api.createSession({
         working_dir: source.working_dir,
         model: source.model,
         title: draft.title,
-        tag_ids: draft.tag_ids
+        tag_ids: draft.tag_ids,
       });
     } catch (e) {
       conversation.error = e instanceof Error ? e.message : String(e);

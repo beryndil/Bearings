@@ -44,7 +44,7 @@ function setStreaming(text = ''): void {
     sessionId: 's1',
     text,
     costUsd: null,
-    errorMessage: ''
+    errorMessage: '',
   };
 }
 
@@ -57,18 +57,14 @@ describe('ReplyActionPreview', () => {
   it('opens with the catalog label when streaming starts', async () => {
     const { getByTestId, queryByTestId } = render(ReplyActionPreview);
     setStreaming();
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     expect(getByTestId('reply-action-label').textContent?.trim()).toBe('TL;DR');
   });
 
   it('renders streamed text with a blinking caret', async () => {
     const { getByTestId, queryByTestId } = render(ReplyActionPreview);
     setStreaming('alpha beta');
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     const body = getByTestId('reply-action-body');
     expect(body.textContent).toContain('alpha beta');
     // Streaming caret is the `▍` glyph rendered while status is
@@ -83,11 +79,9 @@ describe('ReplyActionPreview', () => {
       ...replyActions.state,
       status: 'complete',
       text: 'alpha beta',
-      costUsd: 0.0123
+      costUsd: 0.0123,
     };
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     const body = getByTestId('reply-action-body');
     expect(body.textContent).toContain('alpha beta');
     expect(body.textContent).not.toContain('▍');
@@ -105,32 +99,26 @@ describe('ReplyActionPreview', () => {
       sessionId: 's1',
       text: '',
       costUsd: null,
-      errorMessage: 'model unavailable'
+      errorMessage: 'model unavailable',
     };
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
-    expect(getByTestId('reply-action-body').textContent).toContain(
-      'model unavailable'
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
+    expect(getByTestId('reply-action-body').textContent).toContain('model unavailable');
   });
 
   it('Copy writes the body text to the clipboard', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
-      value: { writeText }
+      value: { writeText },
     });
     const { getByTestId, queryByTestId } = render(ReplyActionPreview);
     setStreaming('summary body');
     replyActions.state = {
       ...replyActions.state,
       status: 'complete',
-      text: 'summary body'
+      text: 'summary body',
     };
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     await fireEvent.click(getByTestId('reply-action-copy'));
     expect(writeText).toHaveBeenCalledWith('summary body');
   });
@@ -144,11 +132,9 @@ describe('ReplyActionPreview', () => {
       replyActions.state = {
         ...replyActions.state,
         status: 'complete',
-        text: 'preview text'
+        text: 'preview text',
       };
-      await waitFor(() =>
-        expect(queryByTestId('reply-action-modal')).not.toBeNull()
-      );
+      await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
       await fireEvent.click(getByTestId('reply-action-send'));
       expect(handler).toHaveBeenCalledTimes(1);
       const ev = handler.mock.calls[0][0] as CustomEvent;
@@ -163,18 +149,14 @@ describe('ReplyActionPreview', () => {
   it('Send-to-composer is disabled while streaming', async () => {
     const { getByTestId, queryByTestId } = render(ReplyActionPreview);
     setStreaming('partial');
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     expect(getByTestId('reply-action-send')).toBeDisabled();
   });
 
   it('Close button cancels the stream and resets store state', async () => {
     const { getByTestId, queryByTestId } = render(ReplyActionPreview);
     setStreaming('partial');
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     // While streaming, the Close button is labelled "Cancel".
     const close = getByTestId('reply-action-close');
     expect(close.textContent?.trim()).toBe('Cancel');
@@ -185,9 +167,7 @@ describe('ReplyActionPreview', () => {
   it('ESC closes the modal', async () => {
     const { queryByTestId } = render(ReplyActionPreview);
     setStreaming('partial');
-    await waitFor(() =>
-      expect(queryByTestId('reply-action-modal')).not.toBeNull()
-    );
+    await waitFor(() => expect(queryByTestId('reply-action-modal')).not.toBeNull());
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(replyActions.state.status).toBe('idle');
   });

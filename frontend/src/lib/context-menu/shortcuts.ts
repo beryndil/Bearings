@@ -43,7 +43,7 @@ const TARGET_TYPES: readonly TargetType[] = [
   'code_block',
   'link',
   'checkpoint',
-  'multi_select'
+  'multi_select',
 ];
 
 /** Resolve an action id to its display label for the current release.
@@ -72,7 +72,7 @@ export function collectMenuShortcuts(): MenuShortcutEntry[] {
         target,
         id,
         label: labelFor(target, id),
-        chord: chord.toLowerCase()
+        chord: chord.toLowerCase(),
       });
     }
   }

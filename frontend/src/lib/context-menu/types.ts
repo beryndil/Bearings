@@ -19,7 +19,7 @@ export const SECTIONS = [
   'view',
   'copy',
   'organize',
-  'destructive'
+  'destructive',
 ] as const;
 export type ActionSection = (typeof SECTIONS)[number];
 

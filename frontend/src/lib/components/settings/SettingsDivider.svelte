@@ -16,7 +16,4 @@
   let { inset = false }: Props = $props();
 </script>
 
-<hr
-  class="border-0 border-t border-slate-800 {inset ? 'ml-3' : ''}"
-  aria-hidden="true"
-/>
+<hr class="border-0 border-t border-slate-800 {inset ? 'ml-3' : ''}" aria-hidden="true" />

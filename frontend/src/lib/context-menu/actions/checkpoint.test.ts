@@ -16,7 +16,7 @@ const LIVE: CheckpointTarget = {
   id: 'cp-1',
   sessionId: 's-1',
   messageId: 'm-1',
-  label: 'midpoint'
+  label: 'midpoint',
 };
 
 const ORPHAN: CheckpointTarget = {
@@ -24,7 +24,7 @@ const ORPHAN: CheckpointTarget = {
   id: 'cp-2',
   sessionId: 's-1',
   messageId: null,
-  label: 'stranded'
+  label: 'stranded',
 };
 
 const UNLABELLED: CheckpointTarget = {
@@ -32,7 +32,7 @@ const UNLABELLED: CheckpointTarget = {
   id: 'cp-3',
   sessionId: 's-1',
   messageId: 'm-3',
-  label: null
+  label: null,
 };
 
 describe('checkpoint.ts — action-ID stability', () => {
@@ -42,7 +42,7 @@ describe('checkpoint.ts — action-ID stability', () => {
       'checkpoint.copy_id',
       'checkpoint.copy_label',
       'checkpoint.delete',
-      'checkpoint.fork'
+      'checkpoint.fork',
     ]);
   });
 

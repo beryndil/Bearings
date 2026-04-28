@@ -56,7 +56,7 @@ export const TOOL_CALL_ACTIONS: readonly Action[] = [
       const call = lookupCall(t.id);
       if (!call) return;
       await writeClipboard(call.name);
-    }
+    },
   },
   {
     id: 'tool_call.copy.input',
@@ -69,7 +69,7 @@ export const TOOL_CALL_ACTIONS: readonly Action[] = [
       const call = lookupCall(t.id);
       if (!call) return;
       await writeClipboard(formatInput(call.input));
-    }
+    },
   },
   {
     id: 'tool_call.copy.output',
@@ -97,7 +97,7 @@ export const TOOL_CALL_ACTIONS: readonly Action[] = [
         return 'No output yet — the tool is still running';
       }
       return null;
-    }
+    },
   },
   {
     id: 'tool_call.copy.id',
@@ -108,7 +108,7 @@ export const TOOL_CALL_ACTIONS: readonly Action[] = [
       const t = asToolCall(target);
       if (!t) return;
       await writeClipboard(t.id);
-    }
+    },
   },
   {
     id: 'tool_call.retry',
@@ -116,6 +116,6 @@ export const TOOL_CALL_ACTIONS: readonly Action[] = [
     section: 'edit',
     advanced: true,
     handler: () => notYetImplemented('tool_call.retry'),
-    disabled: () => 'Retry / regenerate lands in v0.10.x+'
-  }
+    disabled: () => 'Retry / regenerate lands in v0.10.x+',
+  },
 ];

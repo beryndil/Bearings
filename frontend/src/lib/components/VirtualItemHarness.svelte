@@ -22,7 +22,7 @@
     forceVisible = false,
     rootMarginPx,
     fallbackHeightPx,
-    scrollRoot
+    scrollRoot,
   }: Props = $props();
 </script>
 

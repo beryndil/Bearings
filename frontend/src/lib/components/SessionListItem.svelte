@@ -30,7 +30,10 @@
     contextTarget: ContextTarget;
     onSelect: (id: string, e: MouseEvent) => void;
     onDelete: (e: MouseEvent, id: string) => void;
-    onStartRename: (e: MouseEvent, session: { id: string; title: string | null; model: string }) => void;
+    onStartRename: (
+      e: MouseEvent,
+      session: { id: string; title: string | null; model: string }
+    ) => void;
     onCommitRename: () => void | Promise<void>;
     onCancelRename: () => void;
     onRenameDraftChange: (draft: string) => void;
@@ -51,7 +54,7 @@
     onStartRename,
     onCommitRename,
     onCancelRename,
-    onRenameDraftChange
+    onRenameDraftChange,
   }: Props = $props();
 
   let medals = $derived(medallionData(session, allTags));
@@ -70,13 +73,13 @@
 <li
   class="group flex items-stretch gap-1 rounded hover:bg-slate-800 {selected
     ? 'bg-slate-800'
-    : ''} {bulkSelected ? 'ring-1 ring-emerald-500/60 bg-slate-800/80' : ''}"
+    : ''} {bulkSelected ? 'bg-slate-800/80 ring-1 ring-emerald-500/60' : ''}"
   use:contextmenu={{ target: contextTarget }}
   data-multi-selected={bulkSelected ? 'true' : 'false'}
 >
   <button
     type="button"
-    class="flex-1 min-w-0 text-left px-2 py-1 rounded-l"
+    class="min-w-0 flex-1 rounded-l px-2 py-1 text-left"
     onclick={(e) => onSelect(session.id, e)}
     ondblclick={(e) => onStartRename(e, session)}
   >
@@ -84,8 +87,8 @@
       <!-- svelte-ignore a11y_autofocus -->
       <input
         type="text"
-        class="w-full bg-slate-950 rounded px-1 py-0.5 text-xs
-          border border-slate-700 focus:outline-none focus:border-emerald-600"
+        class="w-full rounded border border-slate-700 bg-slate-950 px-1
+          py-0.5 text-xs focus:border-emerald-600 focus:outline-none"
         value={renameDraft}
         oninput={(e) => onRenameDraftChange((e.currentTarget as HTMLInputElement).value)}
         onkeydown={handleRenameKey}
@@ -105,17 +108,14 @@
            indicator rather than a stray pixel. Sized up from
            0.75rem × 6 px after the original pill was visually
            swallowed by the selected-row slate highlight. -->
-      <div
-        class="grid grid-cols-[1.25rem_1fr] gap-x-1 text-xs"
-        title="Double-click to rename"
-      >
+      <div class="grid grid-cols-[1.25rem_1fr] gap-x-1 text-xs" title="Double-click to rename">
         <!-- Row 1, Col 1: activity indicator slot. Width is always
              reserved so titles align whether or not an indicator is
              showing. Two states share the same ping geometry — only
              the color differs — so the animation rhythm reads
              identically for "working" and "look at this now"; color
              carries the meaning. -->
-        <div class="row-start-1 col-start-1 flex items-center justify-center">
+        <div class="col-start-1 row-start-1 flex items-center justify-center">
           {#if indicator === 'red'}
             <!-- Red flashing: needs attention now. Covers both
                  "runner parked on approval/AskUserQuestion" (live
@@ -131,8 +131,8 @@
               data-testid="indicator-red"
             >
               <span
-                class="absolute inline-flex h-full w-full rounded-full
-                  bg-red-400 opacity-60 animate-ping"
+                class="absolute inline-flex h-full w-full animate-ping
+                  rounded-full bg-red-400 opacity-60"
               ></span>
               <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
             </span>
@@ -146,12 +146,10 @@
               data-testid="indicator-orange"
             >
               <span
-                class="absolute inline-flex h-full w-full rounded-full
-                  bg-orange-400 opacity-60 animate-ping"
+                class="absolute inline-flex h-full w-full animate-ping
+                  rounded-full bg-orange-400 opacity-60"
               ></span>
-              <span
-                class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"
-              ></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"></span>
             </span>
           {:else if indicator === 'green'}
             <!-- Green solid: turn finished while the user was
@@ -165,9 +163,7 @@
               title="Finished — new output waiting to be viewed"
               data-testid="indicator-green"
             >
-              <span
-                class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"
-              ></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
             </span>
           {/if}
         </div>
@@ -175,15 +171,15 @@
         <!-- Row 1, Col 2: title with severity shield pinned to the
              right edge. The checklist marker stays inline with the
              title so ☑ still reads as a type badge. -->
-        <div class="row-start-1 col-start-2 flex items-center gap-1 min-w-0">
+        <div class="col-start-2 row-start-1 flex min-w-0 items-center gap-1">
           {#if session.kind === 'checklist'}
             <span
-              class="text-slate-500 shrink-0"
+              class="shrink-0 text-slate-500"
               aria-label="Checklist session"
               title="Checklist session">☑</span
             >
           {/if}
-          <span class="min-w-0 truncate flex-1">
+          <span class="min-w-0 flex-1 truncate">
             {session.title ?? session.model}
           </span>
           <SeverityShield
@@ -196,21 +192,21 @@
         <!-- Row 2, Col 2: general-group tag icons ("what project are
              we on") followed by the working_dir path. -->
         <div
-          class="row-start-2 col-start-2 flex items-center gap-1 min-w-0"
+          class="col-start-2 row-start-2 flex min-w-0 items-center gap-1"
           data-testid="medallion-row"
         >
           {#each medals.general as tag (tag.id)}
             <TagIcon color={tag.color} title={tag.name} size={11} />
           {/each}
-          <span class="text-[10px] text-slate-500 font-mono truncate min-w-0">
+          <span class="min-w-0 truncate font-mono text-[10px] text-slate-500">
             {session.working_dir}
           </span>
         </div>
 
         <!-- Row 3, Col 2: timestamp + optional cost. -->
         <div
-          class="row-start-3 col-start-2 text-[10px] flex justify-between
-            items-baseline gap-2"
+          class="col-start-2 row-start-3 flex items-baseline justify-between
+            gap-2 text-[10px]"
         >
           <span class="text-slate-600">
             {formatTimestamp(session.updated_at)}
@@ -227,8 +223,8 @@
   <button
     type="button"
     class="px-1.5 text-[11px] transition {confirming
-      ? 'text-rose-400 font-medium'
-      : 'text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100'}"
+      ? 'font-medium text-rose-400'
+      : 'text-slate-500 opacity-0 hover:text-rose-400 group-hover:opacity-100'}"
     aria-label={confirming ? 'Confirm delete session' : 'Delete session'}
     onclick={(e) => onDelete(e, session.id)}
   >

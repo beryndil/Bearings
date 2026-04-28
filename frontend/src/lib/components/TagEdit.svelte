@@ -7,7 +7,7 @@
 
   let {
     open = $bindable(false),
-    tagId = null as number | null
+    tagId = null as number | null,
   }: { open?: boolean; tagId?: number | null } = $props();
 
   let name = $state('');
@@ -32,9 +32,7 @@
   let saveError = $state<string | null>(null);
   let confirmDelete = $state(false);
 
-  const current = $derived(
-    tagId === null ? null : (tags.list.find((t) => t.id === tagId) ?? null)
-  );
+  const current = $derived(tagId === null ? null : (tags.list.find((t) => t.id === tagId) ?? null));
 
   /** Preset swatches for the color row. The first five mirror the
    * migration-0021 severity ramp (red → emerald) so a severity tag is
@@ -55,7 +53,7 @@
     '#8b5cf6', // violet-500
     '#ec4899', // pink-500
     '#a3a3a3', // neutral-400
-    '#475569'  // slate-600 — matches the fallback
+    '#475569', // slate-600 — matches the fallback
   ] as const;
 
   async function loadMemory(id: number): Promise<void> {
@@ -165,8 +163,8 @@
 {#if open && current}
   <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4">
     <form
-      class="w-full max-w-2xl rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl
-        flex flex-col gap-4 max-h-[90vh] overflow-y-auto"
+      class="flex max-h-[90vh] w-full max-w-2xl flex-col gap-4 overflow-y-auto rounded-lg
+        border border-slate-800 bg-slate-900 p-6 shadow-2xl"
       onsubmit={(e) => {
         e.preventDefault();
         onSave();
@@ -175,7 +173,7 @@
       <header class="flex items-start justify-between">
         <div>
           <h2 class="text-lg font-medium">Edit tag</h2>
-          <p class="text-[10px] text-slate-600 font-mono mt-1">
+          <p class="mt-1 font-mono text-[10px] text-slate-600">
             <!-- Mirror the sidebar split so the edit modal's headline
                  count matches the row Daisy just clicked on. -->
             <span class={current.open_session_count > 0 ? 'text-emerald-400' : ''}>
@@ -186,7 +184,7 @@
         </div>
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-sm"
+          class="text-sm text-slate-500 hover:text-slate-300"
           aria-label="Close edit"
           onclick={onCancel}
         >
@@ -194,14 +192,14 @@
         </button>
       </header>
 
-      <div class="grid grid-cols-[1fr_auto_auto] gap-3 items-end">
+      <div class="grid grid-cols-[1fr_auto_auto] items-end gap-3">
         <label class="flex flex-col gap-1 text-xs">
           <span class="text-slate-400">Name *</span>
           <input
             type="text"
             required
-            class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-              focus:outline-none focus:border-slate-600"
+            class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+              focus:border-slate-600 focus:outline-none"
             bind:value={name}
           />
         </label>
@@ -209,13 +207,13 @@
           <span class="text-slate-400">Order</span>
           <input
             type="number"
-            class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono w-16
-              focus:outline-none focus:border-slate-600"
+            class="w-16 rounded border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-sm
+              focus:border-slate-600 focus:outline-none"
             title="Lower number = higher in sidebar. Breaks ties in prompt assembly (later wins)."
             bind:value={sortOrder}
           />
         </label>
-        <label class="inline-flex items-center gap-1.5 text-xs text-slate-300 pb-2">
+        <label class="inline-flex items-center gap-1.5 pb-2 text-xs text-slate-300">
           <input type="checkbox" bind:checked={pinned} class="accent-emerald-500" />
           <span>Pinned</span>
         </label>
@@ -238,26 +236,26 @@
            slate used for the "no severity" / "no color chosen" look. -->
       <section class="flex flex-col gap-1.5">
         <div class="flex items-baseline justify-between">
-          <span class="text-slate-400 text-xs">Color</span>
-          <span class="text-[10px] font-mono text-slate-600">
+          <span class="text-xs text-slate-400">Color</span>
+          <span class="font-mono text-[10px] text-slate-600">
             {color ?? 'none — falls back to slate'}
           </span>
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
-            class="w-6 h-6 rounded-full border flex items-center justify-center text-[10px]
+            class="flex h-6 w-6 items-center justify-center rounded-full border text-[10px]
               text-slate-300 hover:border-slate-400 {color === null
-                ? 'border-emerald-400 ring-1 ring-emerald-400/60 bg-slate-800'
-                : 'border-slate-700 bg-slate-900'}"
+              ? 'border-emerald-400 bg-slate-800 ring-1 ring-emerald-400/60'
+              : 'border-slate-700 bg-slate-900'}"
             onclick={() => (color = null)}
             aria-label="Clear color"
-            title="Clear color — medallion falls back to dim slate"
-          >✕</button>
+            title="Clear color — medallion falls back to dim slate">✕</button
+          >
           {#each PALETTE as swatch}
             <button
               type="button"
-              class="w-6 h-6 rounded-full border hover:scale-110 transition-transform {color?.toLowerCase() ===
+              class="h-6 w-6 rounded-full border transition-transform hover:scale-110 {color?.toLowerCase() ===
               swatch.toLowerCase()
                 ? 'border-emerald-400 ring-1 ring-emerald-400/60'
                 : 'border-slate-700'}"
@@ -271,12 +269,12 @@
                value is always a hex (no null), so clearing still
                routes through the ✕ button. -->
           <label
-            class="inline-flex items-center gap-1 text-[10px] text-slate-500 cursor-pointer ml-1"
+            class="ml-1 inline-flex cursor-pointer items-center gap-1 text-[10px] text-slate-500"
             title="Pick any hex color"
           >
             <input
               type="color"
-              class="w-6 h-6 rounded border-0 bg-transparent cursor-pointer"
+              class="h-6 w-6 cursor-pointer rounded border-0 bg-transparent"
               value={color ?? '#475569'}
               oninput={(e) => (color = (e.currentTarget as HTMLInputElement).value)}
             />
@@ -287,13 +285,15 @@
 
       <section class="flex flex-col gap-1">
         <div class="flex items-baseline justify-between gap-2">
-          <span class="text-slate-400 text-xs">
-            Memory <span class="text-slate-600">(markdown — injected into every session with this tag)</span>
+          <span class="text-xs text-slate-400">
+            Memory <span class="text-slate-600"
+              >(markdown — injected into every session with this tag)</span
+            >
           </span>
           <button
             type="button"
-            class="text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5
-              bg-slate-800 hover:bg-slate-700 text-slate-300"
+            class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase
+              tracking-wider text-slate-300 hover:bg-slate-700"
             onclick={() => (showPreview = !showPreview)}
           >
             {showPreview ? 'Edit' : 'Preview'}
@@ -301,8 +301,8 @@
         </div>
         {#if showPreview}
           <div
-            class="rounded bg-slate-950 border border-slate-800 px-3 py-2 text-sm
-              prose prose-invert prose-sm max-w-none min-h-[10rem]"
+            class="prose prose-sm prose-invert min-h-[10rem] max-w-none rounded border
+              border-slate-800 bg-slate-950 px-3 py-2 text-sm"
           >
             {#if previewHtml}
               {@html previewHtml}
@@ -312,35 +312,35 @@
           </div>
         {:else}
           <textarea
-            class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-              focus:outline-none focus:border-slate-600 resize-y min-h-[10rem] font-mono"
+            class="min-h-[10rem] resize-y rounded border border-slate-800 bg-slate-950 px-2
+              py-2 font-mono text-sm focus:border-slate-600 focus:outline-none"
             rows="10"
             placeholder="# Context&#10;&#10;Directory pointers, conventions, constraints. Markdown."
             bind:value={memory}
           ></textarea>
         {/if}
         <p class="text-[10px] text-slate-500">
-          If multiple tags have conflicting rules, later tags (lower in the
-          sidebar sort order) override earlier ones.
+          If multiple tags have conflicting rules, later tags (lower in the sidebar sort order)
+          override earlier ones.
         </p>
       </section>
 
       {#if loadError}
-        <p class="text-rose-400 text-xs">memory: {loadError}</p>
+        <p class="text-xs text-rose-400">memory: {loadError}</p>
       {/if}
       {#if saveError}
-        <p class="text-rose-400 text-xs">{saveError}</p>
+        <p class="text-xs text-rose-400">{saveError}</p>
       {/if}
       {#if tags.error && !saveError}
-        <p class="text-rose-400 text-xs">{tags.error}</p>
+        <p class="text-xs text-rose-400">{tags.error}</p>
       {/if}
 
       <div class="flex items-center justify-between gap-2 pt-2">
         <button
           type="button"
           class="rounded px-3 py-2 text-sm {confirmDelete
-            ? 'bg-rose-600 hover:bg-rose-500 text-white'
-            : 'bg-slate-800 hover:bg-slate-700 text-rose-300'}"
+            ? 'bg-rose-600 text-white hover:bg-rose-500'
+            : 'bg-slate-800 text-rose-300 hover:bg-slate-700'}"
           onclick={onDelete}
           disabled={saving}
         >
@@ -349,14 +349,14 @@
         <div class="flex items-center gap-2">
           <button
             type="button"
-            class="rounded bg-slate-800 hover:bg-slate-700 px-3 py-2 text-sm"
+            class="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
             onclick={onCancel}
           >
             Cancel
           </button>
           <button
             type="submit"
-            class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm disabled:opacity-50"
+            class="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500 disabled:opacity-50"
             disabled={saving || name.trim() === ''}
           >
             {saving ? 'Saving…' : 'Save'}

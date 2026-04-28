@@ -9,8 +9,8 @@
 
 {#if undoStore.items.length > 0}
   <div
-    class="fixed bottom-4 right-4 z-40 flex flex-col gap-2 items-end
-      pointer-events-none"
+    class="pointer-events-none fixed bottom-4 right-4 z-40 flex flex-col items-end
+      gap-2"
     data-testid="undo-toast-host"
   >
     {#each undoStore.items as item (item.id)}

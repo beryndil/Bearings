@@ -15,13 +15,7 @@
  */
 
 import { menuConfig } from '$lib/stores/menuConfig.svelte';
-import type {
-  Action,
-  ActionSection,
-  ContextTarget,
-  RenderedMenu,
-  TargetType
-} from './types';
+import type { Action, ActionSection, ContextTarget, RenderedMenu, TargetType } from './types';
 import { SECTIONS } from './types';
 import { SESSION_ACTIONS } from './actions/session';
 import { MESSAGE_ACTIONS } from './actions/message';
@@ -45,7 +39,7 @@ const REGISTRY: Record<TargetType, readonly Action[]> = {
   checkpoint: CHECKPOINT_ACTIONS,
   multi_select: MULTI_SELECT_ACTIONS,
   attachment: ATTACHMENT_ACTIONS,
-  pending_operation: PENDING_OPERATION_ACTIONS
+  pending_operation: PENDING_OPERATION_ACTIONS,
 };
 
 /** Unfiltered actions for a target type. */
@@ -59,10 +53,7 @@ export function getActions(type: TargetType): readonly Action[] {
  * in the bucket are silently ignored — unknown IDs in `menus.toml` are
  * a no-op rather than a hard error (the user might pin an action from
  * a newer version of Bearings). */
-function applyPinning(
-  bucket: Action[],
-  pinnedOrder: readonly string[]
-): Action[] {
+function applyPinning(bucket: Action[], pinnedOrder: readonly string[]): Action[] {
   if (pinnedOrder.length === 0) return bucket;
   const pinnedSet = new Set(pinnedOrder);
   const byId = new Map(bucket.map((a) => [a.id, a]));
@@ -97,10 +88,7 @@ function applyPinning(
  * order. Empty sections are dropped so the renderer doesn't produce
  * stray dividers.
  */
-export function resolveMenu(
-  target: ContextTarget,
-  advanced: boolean
-): RenderedMenu {
+export function resolveMenu(target: ContextTarget, advanced: boolean): RenderedMenu {
   const overrides = menuConfig.forTarget(target.type);
   const hiddenSet = new Set(overrides.hidden);
   const all = getActions(target.type);

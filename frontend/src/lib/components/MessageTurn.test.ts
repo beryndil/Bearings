@@ -14,7 +14,7 @@ function msg(overrides: Partial<Message> = {}): Message {
     content: 'hello',
     thinking: null,
     created_at: '2026-04-21T00:00:00+00:00',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -32,7 +32,7 @@ function baseProps(overrides: Render = {}): Render {
     highlightQuery: '',
     copiedMsgId: null,
     onCopyMessage: vi.fn(),
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -52,7 +52,7 @@ describe('MessageTurn (bulk mode)', () => {
       baseProps({
         bulkMode: true,
         selectedIds: new Set<string>(),
-        onToggleSelect: vi.fn()
+        onToggleSelect: vi.fn(),
       })
     );
     const boxes = getAllByTestId('bulk-checkbox');
@@ -67,7 +67,7 @@ describe('MessageTurn (bulk mode)', () => {
       baseProps({
         bulkMode: true,
         selectedIds: new Set<string>(),
-        onToggleSelect
+        onToggleSelect,
       })
     );
     const boxes = getAllByTestId('bulk-checkbox');
@@ -87,7 +87,7 @@ describe('MessageTurn (bulk mode)', () => {
       baseProps({
         bulkMode: true,
         selectedIds: selected,
-        onToggleSelect: vi.fn()
+        onToggleSelect: vi.fn(),
       })
     );
     const userArticle = getByTestId('user-article');
@@ -103,7 +103,7 @@ describe('MessageTurn (bulk mode)', () => {
       baseProps({
         bulkMode: true,
         selectedIds: selected,
-        onToggleSelect: vi.fn()
+        onToggleSelect: vi.fn(),
       })
     );
     const boxes = getAllByTestId('bulk-checkbox') as HTMLInputElement[];
@@ -141,7 +141,7 @@ describe('MessageTurn (more-info button)', () => {
       baseProps({
         onMoreInfo: vi.fn(),
         isLatestAssistant: true,
-        isStreaming: true
+        isStreaming: true,
       })
     );
     expect(queryByTestId('more-info-button')).toBeNull();
@@ -151,19 +151,13 @@ describe('MessageTurn (more-info button)', () => {
     // Defensive: callers that haven't wired the handler shouldn't
     // render a dead button. Conversation.svelte always wires it,
     // but legacy callers / tests passing a partial prop set don't.
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ isLatestAssistant: true })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ isLatestAssistant: true }));
     expect(queryByTestId('more-info-button')).toBeNull();
   });
 
   it('clicking ℹ MORE fires onMoreInfo with the assistant message', async () => {
     const onMoreInfo = vi.fn();
-    const { getByTestId } = render(
-      MessageTurn,
-      baseProps({ onMoreInfo, isLatestAssistant: true })
-    );
+    const { getByTestId } = render(MessageTurn, baseProps({ onMoreInfo, isLatestAssistant: true }));
     await fireEvent.click(getByTestId('more-info-button'));
     expect(onMoreInfo).toHaveBeenCalledTimes(1);
     expect(onMoreInfo.mock.calls[0][0].id).toBe('a-1');
@@ -177,10 +171,7 @@ describe('MessageTurn (spawn button)', () => {
   // `ℹ MORE`) so older replies remain spawnable. Hidden during streaming
   // and when no `onSpawn` handler is wired.
   it('renders ＋ SPAWN on a finished assistant reply when onSpawn is wired', () => {
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ onSpawn: vi.fn() })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ onSpawn: vi.fn() }));
     const btn = queryByTestId('spawn-button');
     expect(btn).not.toBeNull();
     expect(btn!.textContent).toContain('＋');
@@ -234,7 +225,7 @@ describe('MessageTurn (tool-call rows)', () => {
       finishedAt: 1,
       outputTruncated: false,
       lastProgressMs: null,
-      ...overrides
+      ...overrides,
     };
   }
 
@@ -242,7 +233,7 @@ describe('MessageTurn (tool-call rows)', () => {
     const { getAllByTestId } = render(
       MessageTurn,
       baseProps({
-        toolCalls: [call(), call({ id: 'tc-2', name: 'Grep' })]
+        toolCalls: [call(), call({ id: 'tc-2', name: 'Grep' })],
       })
     );
     const rows = getAllByTestId('tool-call-row');
@@ -251,10 +242,7 @@ describe('MessageTurn (tool-call rows)', () => {
   });
 
   it('finished calls render no pulse, no elapsed readout, no running flag', () => {
-    const { queryByTestId, getByTestId } = render(
-      MessageTurn,
-      baseProps({ toolCalls: [call()] })
-    );
+    const { queryByTestId, getByTestId } = render(MessageTurn, baseProps({ toolCalls: [call()] }));
     expect(getByTestId('tool-call-row').getAttribute('data-running')).toBe('false');
     expect(queryByTestId('tool-call-pulse')).toBeNull();
     expect(queryByTestId('tool-call-elapsed')).toBeNull();
@@ -270,8 +258,8 @@ describe('MessageTurn (tool-call rows)', () => {
       MessageTurn,
       baseProps({
         toolCalls: [
-          call({ id: 'tc-run', ok: null, finishedAt: null, startedAt: fixedNow - 45_000 })
-        ]
+          call({ id: 'tc-run', ok: null, finishedAt: null, startedAt: fixedNow - 45_000 }),
+        ],
       })
     );
     expect(getByTestId('tool-call-row').getAttribute('data-running')).toBe('true');
@@ -293,9 +281,9 @@ describe('MessageTurn (tool-call rows)', () => {
             input: { description: 'research the codebase' },
             ok: null,
             finishedAt: null,
-            startedAt: fixedNow - 3_000
-          })
-        ]
+            startedAt: fixedNow - 3_000,
+          }),
+        ],
       })
     );
     const subtitle = getByTestId('tool-call-subagent');
@@ -317,9 +305,9 @@ describe('MessageTurn (tool-call rows)', () => {
             name: 'Read',
             ok: null,
             finishedAt: null,
-            startedAt: fixedNow
-          })
-        ]
+            startedAt: fixedNow,
+          }),
+        ],
       })
     );
     expect(getByTestId('tool-call-pulse')).not.toBeNull();
@@ -342,9 +330,9 @@ describe('MessageTurn (tool-call rows)', () => {
             name: 'Agent',
             input: { description: 'research the codebase' },
             ok: null,
-            finishedAt: null
-          })
-        ]
+            finishedAt: null,
+          }),
+        ],
       })
     );
     const subtitle = getByTestId('tool-work-subagent-subtitle');
@@ -362,16 +350,16 @@ describe('MessageTurn (tool-call rows)', () => {
             name: 'Agent',
             input: { description: 'first job' },
             ok: null,
-            finishedAt: null
+            finishedAt: null,
           }),
           call({
             id: 'tc-sub-2',
             name: 'Task',
             input: { description: 'second job' },
             ok: null,
-            finishedAt: null
-          })
-        ]
+            finishedAt: null,
+          }),
+        ],
       })
     );
     const subtitle = getByTestId('tool-work-subagent-subtitle');
@@ -390,9 +378,9 @@ describe('MessageTurn (tool-call rows)', () => {
             input: { description: 'already finished' },
             ok: true,
             finishedAt: 2000,
-            startedAt: 1000
-          })
-        ]
+            startedAt: 1000,
+          }),
+        ],
       })
     );
     expect(queryByTestId('tool-work-subagent-subtitle')).toBeNull();
@@ -407,9 +395,9 @@ describe('MessageTurn (tool-call rows)', () => {
             id: 'tc-read',
             name: 'Read',
             ok: null,
-            finishedAt: null
-          })
-        ]
+            finishedAt: null,
+          }),
+        ],
       })
     );
     // Running badge is still present (there's a running tool), but
@@ -435,9 +423,9 @@ describe('MessageTurn (tool-call rows)', () => {
             ok: null,
             finishedAt: null,
             startedAt: fixedNow - 2_000,
-            lastProgressMs: 40_000
-          })
-        ]
+            lastProgressMs: 40_000,
+          }),
+        ],
       })
     );
     expect(getByTestId('tool-call-elapsed').textContent).toBe('40s');
@@ -460,9 +448,9 @@ describe('MessageTurn (tool-call rows)', () => {
             ok: null,
             finishedAt: null,
             startedAt: fixedNow - 10_000,
-            lastProgressMs: 6_000
-          })
-        ]
+            lastProgressMs: 6_000,
+          }),
+        ],
       })
     );
     expect(getByTestId('tool-call-elapsed').textContent).toBe('10s');
@@ -482,9 +470,9 @@ describe('MessageTurn (tool-call rows)', () => {
             ok: null,
             finishedAt: null,
             // 82s — matches the transcript gap in the silence-gap entry.
-            startedAt: fixedNow - 82_000
-          })
-        ]
+            startedAt: fixedNow - 82_000,
+          }),
+        ],
       })
     );
     expect(getByTestId('tool-call-elapsed').textContent).toBe('1m22s');
@@ -499,10 +487,7 @@ describe('MessageTurn (quote-reply button)', () => {
   // wired. The actual quote-prefix logic lives in Conversation.svelte;
   // MessageTurn only forwards the click.
   it('renders ❝ QUOTE on a finished assistant reply when onQuoteReply is wired', () => {
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ onQuoteReply: vi.fn() })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ onQuoteReply: vi.fn() }));
     const btn = queryByTestId('quote-reply-button');
     expect(btn).not.toBeNull();
     expect(btn!.textContent).toContain('❝');
@@ -547,8 +532,7 @@ describe('MessageTurn (copy-code-only button)', () => {
   // empty clipboard write. Detection regex matches the parent's
   // extractor regex so visibility tracks "extraction would yield
   // content."
-  const replyWithCode =
-    'Here is the answer:\n\n```python\nprint("hello")\n```\n\nThat works.';
+  const replyWithCode = 'Here is the answer:\n\n```python\nprint("hello")\n```\n\nThat works.';
   const replyWithoutCode = 'Just prose, no code blocks at all.';
 
   it('renders ⌗ CODE when assistant content has fenced code blocks', () => {
@@ -556,7 +540,7 @@ describe('MessageTurn (copy-code-only button)', () => {
       MessageTurn,
       baseProps({
         onCopyCodeOnly: vi.fn(),
-        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode }),
       })
     );
     const btn = queryByTestId('copy-code-button');
@@ -572,8 +556,8 @@ describe('MessageTurn (copy-code-only button)', () => {
         assistant: msg({
           id: 'a-1',
           role: 'assistant',
-          content: replyWithoutCode
-        })
+          content: replyWithoutCode,
+        }),
       })
     );
     expect(queryByTestId('copy-code-button')).toBeNull();
@@ -585,7 +569,7 @@ describe('MessageTurn (copy-code-only button)', () => {
       baseProps({
         onCopyCodeOnly: vi.fn(),
         assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode }),
-        isStreaming: true
+        isStreaming: true,
       })
     );
     expect(queryByTestId('copy-code-button')).toBeNull();
@@ -595,7 +579,7 @@ describe('MessageTurn (copy-code-only button)', () => {
     const { queryByTestId } = render(
       MessageTurn,
       baseProps({
-        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode }),
       })
     );
     expect(queryByTestId('copy-code-button')).toBeNull();
@@ -607,7 +591,7 @@ describe('MessageTurn (copy-code-only button)', () => {
       MessageTurn,
       baseProps({
         onCopyCodeOnly,
-        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode })
+        assistant: msg({ id: 'a-1', role: 'assistant', content: replyWithCode }),
       })
     );
     await fireEvent.click(getByTestId('copy-code-button'));
@@ -624,10 +608,7 @@ describe('MessageTurn (export-turn button)', () => {
   // the callback so the parent can build the JSON payload from
   // session metadata + the matching turn.
   it('renders ⤓ SAVE on a finished assistant reply when onExportTurn is wired', () => {
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ onExportTurn: vi.fn() })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ onExportTurn: vi.fn() }));
     const btn = queryByTestId('export-turn-button');
     expect(btn).not.toBeNull();
     expect(btn!.textContent).toContain('⤓');
@@ -675,15 +656,12 @@ describe('MessageTurn (jump-to-tools button)', () => {
       finishedAt: 1,
       outputTruncated: false,
       lastProgressMs: null,
-      ...overrides
+      ...overrides,
     };
   }
 
   it('renders ⤴ TOOLS when the turn has tool calls', () => {
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ toolCalls: [call()] })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ toolCalls: [call()] }));
     const btn = queryByTestId('jump-tools-button');
     expect(btn).not.toBeNull();
     expect(btn!.textContent).toContain('⤴');
@@ -711,13 +689,10 @@ describe('MessageTurn (jump-to-tools button)', () => {
     const scrollSpy = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
-      value: scrollSpy
+      value: scrollSpy,
     });
     try {
-      const { getByTestId } = render(
-        MessageTurn,
-        baseProps({ toolCalls: [call()] })
-      );
+      const { getByTestId } = render(MessageTurn, baseProps({ toolCalls: [call()] }));
       const details = getByTestId('tool-work-details') as HTMLDetailsElement;
       expect(details.open).toBe(false);
       await fireEvent.click(getByTestId('jump-tools-button'));
@@ -738,10 +713,7 @@ describe('MessageTurn (critique button)', () => {
   // TL;DR comes from the modal's catalog-driven label badge — the
   // button itself uses the same compact action-row styling.
   it('renders ⚔ CRIT on a finished assistant reply when onCritique is wired', () => {
-    const { queryByTestId } = render(
-      MessageTurn,
-      baseProps({ onCritique: vi.fn() })
-    );
+    const { queryByTestId } = render(MessageTurn, baseProps({ onCritique: vi.fn() }));
     const btn = queryByTestId('critique-button');
     expect(btn).not.toBeNull();
     expect(btn!.textContent).toContain('⚔');

@@ -150,10 +150,7 @@ export function formatRelative(
  *     where the tenths digit is always `.0` mid-tick and reads as
  *     false precision (MessageTurn's existing behavior).
  * Minute-and-up rendering is the same regardless of `precision`. */
-export function formatDuration(
-  ms: number,
-  precision: 'tenths' | 'integer' = 'tenths'
-): string {
+export function formatDuration(ms: number, precision: 'tenths' | 'integer' = 'tenths'): string {
   if (!Number.isFinite(ms) || ms < 0) return '';
   if (ms < 1000) return `${Math.round(ms)}ms`;
   const totalSec = Math.floor(ms / 1000);

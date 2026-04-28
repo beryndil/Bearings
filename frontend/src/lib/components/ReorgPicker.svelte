@@ -22,11 +22,7 @@
   import { conversation } from '$lib/stores/conversation.svelte';
   import { sessions } from '$lib/stores/sessions.svelte';
   import * as api from '$lib/api';
-  import {
-    pickerConfirmLabel,
-    pickerTitle,
-    type PickerOp
-  } from '$lib/utils/reorg-picker';
+  import { pickerConfirmLabel, pickerTitle, type PickerOp } from '$lib/utils/reorg-picker';
   import type { ReorgController } from '$lib/utils/reorg-actions.svelte';
   import SessionPickerModal from './SessionPickerModal.svelte';
 
@@ -42,7 +38,7 @@
   };
 
   let {
-    controller
+    controller,
   }: {
     controller: ReorgController;
   } = $props();
@@ -161,7 +157,7 @@
   confirmLabel={pickerConfirmLabel(pickerOp)}
   defaultCreating={pickerOp === 'bulk-split'}
   allowCreate={pickerOp !== 'merge'}
-  onPickExisting={onPickExisting}
-  onPickNew={onPickNew}
+  {onPickExisting}
+  {onPickNew}
   onCancel={closePicker}
 />

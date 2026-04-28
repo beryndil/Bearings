@@ -32,7 +32,7 @@
     nextHistory,
     prevHistory,
     resetHistory,
-    type HistoryState
+    type HistoryState,
   } from '$lib/input-history';
 
   const selected = $derived(sessions.selected);
@@ -49,10 +49,7 @@
     // flight). `agent.connect()` closes + reopens, so re-firing
     // during 'connecting' would tear down the fresh socket and
     // paint a bogus error flash.
-    if (
-      agent.sessionId === sid &&
-      (agent.state === 'open' || agent.state === 'connecting')
-    ) {
+    if (agent.sessionId === sid && (agent.state === 'open' || agent.state === 'connecting')) {
       return;
     }
     void agent.connect(sid);
@@ -191,10 +188,7 @@
             setCaretToEnd();
             return;
           }
-        } else if (
-          ev.key === 'ArrowDown' &&
-          caretOnLastLine(draft, start, end)
-        ) {
+        } else if (ev.key === 'ArrowDown' && caretOnLastLine(draft, start, end)) {
           const step = nextHistory(historyState, historyEntries);
           if (step.changed) {
             ev.preventDefault();
@@ -229,8 +223,7 @@
   // is purely visual.
   const showStreaming = $derived(
     streamingActive &&
-      (streamingMessageId === null ||
-        !messages.some((m) => m.id === streamingMessageId))
+      (streamingMessageId === null || !messages.some((m) => m.id === streamingMessageId))
   );
 </script>
 
@@ -238,7 +231,9 @@
   class="flex min-h-0 flex-col border-b border-slate-800 bg-slate-950"
   data-testid="checklist-chat"
 >
-  <header class="flex items-center gap-2 border-b border-slate-900 px-4 py-1 text-xs text-slate-500">
+  <header
+    class="flex items-center gap-2 border-b border-slate-900 px-4 py-1 text-xs text-slate-500"
+  >
     <span aria-hidden="true">💬</span>
     <span>Chat about this list</span>
     {#if agent.state !== 'open' && agent.state !== 'idle'}
@@ -253,21 +248,20 @@
   >
     {#if messages.length === 0 && !showStreaming}
       <p class="text-xs text-slate-500">
-        Ask Claude about this checklist. The list's current state is
-        injected into every turn.
+        Ask Claude about this checklist. The list's current state is injected into every turn.
       </p>
     {/if}
     {#each messages as msg (msg.id)}
       {#if msg.role === 'user'}
         <div
-          class="self-end max-w-[85%] rounded bg-sky-900/40 px-2 py-1 text-slate-100"
+          class="max-w-[85%] self-end rounded bg-sky-900/40 px-2 py-1 text-slate-100"
           data-testid="checklist-chat-user"
         >
           <p class="whitespace-pre-wrap break-words">{msg.content}</p>
         </div>
       {:else if msg.role === 'assistant'}
         <div
-          class="self-start max-w-[90%] rounded bg-slate-900 px-2 py-1 text-slate-100"
+          class="max-w-[90%] self-start rounded bg-slate-900 px-2 py-1 text-slate-100"
           data-testid="checklist-chat-assistant"
         >
           <p class="whitespace-pre-wrap break-words">{msg.content}</p>
@@ -276,7 +270,7 @@
     {/each}
     {#if showStreaming}
       <div
-        class="self-start max-w-[90%] rounded bg-slate-900 px-2 py-1 text-slate-300"
+        class="max-w-[90%] self-start rounded bg-slate-900 px-2 py-1 text-slate-300"
         data-testid="checklist-chat-streaming"
       >
         <p class="whitespace-pre-wrap break-words">

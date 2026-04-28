@@ -42,9 +42,7 @@
    * "click gutter chip → scroll". */
   function jumpTo(messageId: string | null): void {
     if (messageId === null || typeof document === 'undefined') return;
-    const el = document.querySelector<HTMLElement>(
-      `[data-message-id="${CSS.escape(messageId)}"]`
-    );
+    const el = document.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
     if (!el) return;
     el.scrollIntoView({ behavior: scrollBehavior(), block: 'center' });
     const prev = el.style.outline;
@@ -68,14 +66,14 @@
       bg-slate-900/60 px-3 py-1.5 text-[11px]"
     data-testid="checkpoint-gutter"
   >
-    <span class="text-slate-500 uppercase tracking-wider">Checkpoints</span>
+    <span class="uppercase tracking-wider text-slate-500">Checkpoints</span>
     {#each list as cp (cp.id)}
       <button
         type="button"
         class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5
           transition-colors disabled:cursor-not-allowed
           {cp.message_id === null
-          ? 'border-slate-700 bg-slate-900 text-slate-500 italic'
+          ? 'border-slate-700 bg-slate-900 italic text-slate-500'
           : 'border-fuchsia-900/60 bg-fuchsia-950/30 text-fuchsia-200 hover:border-fuchsia-600 hover:bg-fuchsia-900/40'}"
         title={cp.message_id === null
           ? 'Anchor message dropped in a reorg — right-click to delete'
@@ -88,8 +86,8 @@
             id: cp.id,
             sessionId: cp.session_id,
             messageId: cp.message_id,
-            label: cp.label
-          }
+            label: cp.label,
+          },
         }}
         data-testid="checkpoint-chip"
         data-checkpoint-id={cp.id}

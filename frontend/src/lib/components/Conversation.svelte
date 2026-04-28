@@ -17,7 +17,7 @@
   import BulkActionBar from '$lib/components/BulkActionBar.svelte';
   import CheckpointGutter from '$lib/components/CheckpointGutter.svelte';
   import ConversationComposer, {
-    type ConversationComposerHandle
+    type ConversationComposerHandle,
   } from '$lib/components/ConversationComposer.svelte';
   import ConversationHeader from '$lib/components/ConversationHeader.svelte';
   import LiveTodos from '$lib/components/LiveTodos.svelte';
@@ -75,7 +75,7 @@
   const dragdrop = new DragDropController({
     attachFileAtCursor: (path, filename, sizeBytes) =>
       composer?.attachFileAtCursor(path, filename, sizeBytes),
-    getSectionEl: () => sectionEl
+    getSectionEl: () => sectionEl,
   });
   const reorg = new ReorgController({ exitBulkMode: () => bulk.clear() });
 
@@ -102,7 +102,7 @@
     if (!sid) return;
     window.dispatchEvent(
       new CustomEvent('bearings:composer-prefill', {
-        detail: { sessionId: sid, text: MORE_INFO_PROMPT }
+        detail: { sessionId: sid, text: MORE_INFO_PROMPT },
       })
     );
   }
@@ -167,7 +167,7 @@
       .join('\n');
     window.dispatchEvent(
       new CustomEvent('bearings:composer-prefill', {
-        detail: { sessionId: sid, text: `${quoted}\n\n` }
+        detail: { sessionId: sid, text: `${quoted}\n\n` },
       })
     );
   }
@@ -229,8 +229,7 @@
       // strings. Round-trip via Date so the saved file matches what
       // the server would emit for the same turn.
       started_at: new Date(tc.startedAt).toISOString(),
-      finished_at:
-        tc.finishedAt !== null ? new Date(tc.finishedAt).toISOString() : null
+      finished_at: tc.finishedAt !== null ? new Date(tc.finishedAt).toISOString() : null,
     }));
     const payload = { session, messages, tool_calls };
     const json = JSON.stringify(payload, null, 2);
@@ -359,8 +358,8 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <section
   bind:this={sectionEl}
-  class="relative bg-slate-900 overflow-hidden flex flex-col min-w-0
-    {dragdrop.dragging ? 'ring-2 ring-emerald-500/60 ring-inset' : ''}"
+  class="relative flex min-w-0 flex-col overflow-hidden bg-slate-900
+    {dragdrop.dragging ? 'ring-2 ring-inset ring-emerald-500/60' : ''}"
   ondragenter={(e) => dragdrop.onDragEnter(e)}
   ondragover={(e) => dragdrop.onDragOver(e)}
   ondragleave={(e) => dragdrop.onDragLeave(e)}
@@ -368,8 +367,8 @@
 >
   {#if dragdrop.dragging}
     <div
-      class="pointer-events-none absolute inset-2 rounded border-2 border-dashed
-        border-emerald-500/70 bg-slate-950/60 flex items-center justify-center z-20"
+      class="pointer-events-none absolute inset-2 z-20 flex items-center
+        justify-center rounded border-2 border-dashed border-emerald-500/70 bg-slate-950/60"
       data-testid="conversation-drop-hint"
     >
       <p class="text-sm text-emerald-300">Drop to attach file to the prompt</p>
@@ -377,16 +376,14 @@
   {/if}
   {#if dragdrop.uploading}
     <div
-      class="pointer-events-none absolute inset-2 rounded border-2 border-dashed
-        border-sky-500/60 bg-slate-950/70 flex items-center justify-center z-20"
+      class="pointer-events-none absolute inset-2 z-20 flex items-center
+        justify-center rounded border-2 border-dashed border-sky-500/60 bg-slate-950/70"
       data-testid="conversation-upload-hint"
     >
-      <div class="flex flex-col items-center gap-3 text-sky-300 w-72 max-w-[80%]">
+      <div class="flex w-72 max-w-[80%] flex-col items-center gap-3 text-sky-300">
         <BearingsMark size={56} spin label="Uploading file" />
-        <p class="text-sm truncate w-full text-center" data-testid="upload-label">
-          {dragdrop.uploadLabel
-            ? `Uploading ${dragdrop.uploadLabel}…`
-            : 'Uploading dropped file…'}
+        <p class="w-full truncate text-center text-sm" data-testid="upload-label">
+          {dragdrop.uploadLabel ? `Uploading ${dragdrop.uploadLabel}…` : 'Uploading dropped file…'}
         </p>
         <!-- Determinate bar when the browser handed us a total; marquee
              when it didn't (chunked encoding, redirects). The width
@@ -397,7 +394,7 @@
           {@const loaded = dragdrop.uploadProgress.loaded}
           {@const pct = Math.min(100, Math.round((loaded / total) * 100))}
           <div
-            class="h-1.5 w-full rounded bg-slate-800 overflow-hidden"
+            class="h-1.5 w-full overflow-hidden rounded bg-slate-800"
             data-testid="upload-progress-bar"
             role="progressbar"
             aria-valuemin={0}
@@ -416,14 +413,11 @@
           <!-- Indeterminate fallback: render a faint marquee so the
                operator sees motion even when bytes/sec aren't known. -->
           <div
-            class="h-1.5 w-full rounded bg-slate-800 overflow-hidden relative"
+            class="relative h-1.5 w-full overflow-hidden rounded bg-slate-800"
             data-testid="upload-progress-bar-indeterminate"
             role="progressbar"
           >
-            <div
-              class="h-full w-1/3 bg-sky-500/60 animate-pulse"
-              style="margin-left: 33%"
-            ></div>
+            <div class="h-full w-1/3 animate-pulse bg-sky-500/60" style="margin-left: 33%"></div>
           </div>
           <p class="text-[11px] text-sky-400/80">
             {formatBytes(dragdrop.uploadProgress.loaded)} sent
@@ -442,8 +436,8 @@
          doesn't block keyboard focus on the textarea below; z-30 puts
          it above drag + upload hints but below the approval modal. -->
     <div
-      class="pointer-events-none absolute inset-0 flex items-center justify-center
-        bg-slate-950/60 backdrop-blur-sm z-30"
+      class="pointer-events-none absolute inset-0 z-30 flex items-center
+        justify-center bg-slate-950/60 backdrop-blur-sm"
       data-testid="conversation-initial-loading"
     >
       <div class="flex flex-col items-center gap-3 text-sky-300">
@@ -470,8 +464,8 @@
 
   {#if conversation.highlightQuery}
     <div
-      class="px-4 py-1.5 bg-amber-950/40 border-b border-amber-900/40
-        flex items-center justify-between text-xs"
+      class="flex items-center justify-between border-b border-amber-900/40
+        bg-amber-950/40 px-4 py-1.5 text-xs"
     >
       <span class="text-amber-200">
         Matching <span class="font-mono">«{conversation.highlightQuery}»</span> · Esc to clear
@@ -504,12 +498,12 @@
 
   <div
     bind:this={scrollContainer}
-    class="relative flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4"
+    class="relative flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
   >
     {#if conversation.hasMore}
       <p
-        class="text-[10px] text-slate-600 text-center inline-flex items-center
-          justify-center gap-1 self-center"
+        class="inline-flex items-center justify-center gap-1 self-center
+          text-center text-[10px] text-slate-600"
       >
         {#if conversation.loadingOlder}
           <BearingsMark size={10} spin label="Loading older messages" />
@@ -520,9 +514,9 @@
       </p>
     {/if}
     {#if !sessions.selectedId}
-      <p class="text-slate-500 text-sm">No session selected.</p>
+      <p class="text-sm text-slate-500">No session selected.</p>
     {:else if conversation.messages.length === 0 && !conversation.streamingActive && audits.length === 0 && !conversation.loadingInitial}
-      <p class="text-slate-500 text-sm">
+      <p class="text-sm text-slate-500">
         No messages yet. Send a prompt to start the conversation.
       </p>
     {:else}
@@ -549,8 +543,7 @@
             isLatestAssistant={item.turn.key === latestAssistantTurnKey}
             bulkMode={bulk.active}
             selectedIds={bulk.selectedIds}
-            onToggleSelect={(msg, shift) =>
-              bulk.toggleSelect(msg, shift, conversation.messages)}
+            onToggleSelect={(msg, shift) => bulk.toggleSelect(msg, shift, conversation.messages)}
             workingDir={sessions.selected?.working_dir ?? null}
           />
         {:else}
@@ -562,10 +555,7 @@
         {#if useVirtualization}
           {@const isStreamingTail = item.kind === 'turn' && item.turn.isStreaming}
           {@const inWarmTail = idx >= timeline.length - ALWAYS_WARM_TAIL}
-          <VirtualItem
-            scrollRoot={scrollContainer}
-            forceVisible={isStreamingTail || inWarmTail}
-          >
+          <VirtualItem scrollRoot={scrollContainer} forceVisible={isStreamingTail || inWarmTail}>
             {@render timelineEntry(item)}
           </VirtualItem>
         {:else}
@@ -574,11 +564,9 @@
       {/each}
 
       {#if conversation.error}
-        <article class="rounded border border-rose-900/50 px-3 py-2 bg-rose-950/30">
-          <header class="text-[10px] uppercase tracking-wider text-rose-400 mb-1">
-            error
-          </header>
-          <pre class="text-xs text-rose-300 whitespace-pre-wrap">{conversation.error}</pre>
+        <article class="rounded border border-rose-900/50 bg-rose-950/30 px-3 py-2">
+          <header class="mb-1 text-[10px] uppercase tracking-wider text-rose-400">error</header>
+          <pre class="whitespace-pre-wrap text-xs text-rose-300">{conversation.error}</pre>
         </article>
       {/if}
     {/if}

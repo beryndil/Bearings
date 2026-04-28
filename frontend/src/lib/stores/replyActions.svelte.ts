@@ -23,23 +23,14 @@
  */
 
 import * as api from '$lib/api';
-import type {
-  Message,
-  ReplyActionEvent,
-  ReplyActionStreamHandle
-} from '$lib/api';
+import type { Message, ReplyActionEvent, ReplyActionStreamHandle } from '$lib/api';
 
 /** Discriminated state union — `status` tells the modal what to
  * render. `idle` = closed (no modal). The non-idle states share
  * `text`, `messageId`, etc. so the modal renders the same surface
  * for streaming/complete/error and only swaps the footer treatment.
  */
-export type ReplyActionStatus =
-  | 'idle'
-  | 'streaming'
-  | 'complete'
-  | 'error'
-  | 'cancelled';
+export type ReplyActionStatus = 'idle' | 'streaming' | 'complete' | 'error' | 'cancelled';
 
 export type ReplyActionState = {
   status: ReplyActionStatus;
@@ -68,7 +59,7 @@ const INITIAL_STATE: ReplyActionState = {
   sessionId: null,
   text: '',
   costUsd: null,
-  errorMessage: ''
+  errorMessage: '',
 };
 
 class ReplyActionsStore {
@@ -108,13 +99,10 @@ class ReplyActionsStore {
       sessionId: msg.session_id,
       text: '',
       costUsd: null,
-      errorMessage: ''
+      errorMessage: '',
     };
-    this.handle = api.streamReplyAction(
-      msg.session_id,
-      msg.id,
-      action,
-      (ev: ReplyActionEvent) => this.handleEvent(ev)
+    this.handle = api.streamReplyAction(msg.session_id, msg.id, action, (ev: ReplyActionEvent) =>
+      this.handleEvent(ev)
     );
   }
 
@@ -137,7 +125,7 @@ class ReplyActionsStore {
         // canonical "what the model produced" so it wins on any
         // edge-case mismatch (rare).
         text: ev.full_text || this.state.text,
-        costUsd: ev.cost_usd
+        costUsd: ev.cost_usd,
       };
       this.handle = null;
       return;
@@ -146,7 +134,7 @@ class ReplyActionsStore {
       this.state = {
         ...this.state,
         status: 'error',
-        errorMessage: ev.message
+        errorMessage: ev.message,
       };
       this.handle = null;
     }

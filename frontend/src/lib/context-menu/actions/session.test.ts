@@ -34,14 +34,12 @@ describe('session.ts — action-ID stability', () => {
       'session.pin',
       'session.reopen',
       'session.save_as_template',
-      'session.unpin'
+      'session.unpin',
     ]);
   });
 
   it('change_model submenu enumerates every known model', () => {
-    const changeModel = SESSION_ACTIONS.find(
-      (a) => a.id === 'session.change_model'
-    );
+    const changeModel = SESSION_ACTIONS.find((a) => a.id === 'session.change_model');
     expect(changeModel).toBeDefined();
     const submenu = Array.isArray(changeModel!.submenu) ? changeModel!.submenu : [];
     const ids = submenu.map((a) => a.id).sort();
@@ -51,7 +49,7 @@ describe('session.ts — action-ID stability', () => {
     expect(ids).toEqual([
       'session.change_model.claude-haiku-4-5-20251001',
       'session.change_model.claude-opus-4-7',
-      'session.change_model.claude-sonnet-4-6'
+      'session.change_model.claude-sonnet-4-6',
     ]);
   });
 
@@ -98,9 +96,7 @@ describe('session.ts — action-ID stability', () => {
   });
 
   it('session.fork.from_last_message is no longer a stub', () => {
-    const fork = SESSION_ACTIONS.find(
-      (a) => a.id === 'session.fork.from_last_message'
-    );
+    const fork = SESSION_ACTIONS.find((a) => a.id === 'session.fork.from_last_message');
     expect(fork).toBeDefined();
     // `disabled` is absent (hard-stub removed); `requires` now gates
     // on the session row existing in the store.
@@ -109,9 +105,7 @@ describe('session.ts — action-ID stability', () => {
   });
 
   it('session.save_as_template is live in v0.9.2', () => {
-    const save = SESSION_ACTIONS.find(
-      (a) => a.id === 'session.save_as_template'
-    );
+    const save = SESSION_ACTIONS.find((a) => a.id === 'session.save_as_template');
     expect(save).toBeDefined();
     // No `disabled` predicate — the action fires whenever a session
     // row exists. `handler` does the prompt + create round-trip.

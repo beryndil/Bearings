@@ -19,8 +19,8 @@ describe('SettingsLink', () => {
     const { getByTestId } = render(SettingsLink, {
       props: {
         title: 'Repo',
-        href: 'https://github.com/Beryndil/Bearings'
-      }
+        href: 'https://github.com/Beryndil/Bearings',
+      },
     });
     const a = getByTestId('settings-link') as HTMLAnchorElement;
     expect(a.tagName).toBe('A');
@@ -32,7 +32,7 @@ describe('SettingsLink', () => {
   it('onClick mode renders a button and fires the handler', async () => {
     const onClick = vi.fn(async () => {});
     const { getByTestId } = render(SettingsLink, {
-      props: { title: 'Test', onClick, trailing: 'Run' }
+      props: { title: 'Test', onClick, trailing: 'Run' },
     });
     const btn = getByTestId('settings-link') as HTMLButtonElement;
     expect(btn.tagName).toBe('BUTTON');
@@ -42,7 +42,7 @@ describe('SettingsLink', () => {
 
   it('trailing-only mode renders a plain span (used for value displays)', () => {
     const { queryByTestId, getByText } = render(SettingsLink, {
-      props: { title: 'Version', trailing: 'v0.20.5' }
+      props: { title: 'Version', trailing: 'v0.20.5' },
     });
     expect(queryByTestId('settings-link')).toBeNull();
     expect(getByText('v0.20.5')).toBeInTheDocument();

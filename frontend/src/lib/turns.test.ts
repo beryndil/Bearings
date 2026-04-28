@@ -1,23 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from '$lib/api';
 import type { LiveToolCall } from '$lib/stores/conversation.svelte';
-import {
-  buildSettledTurns,
-  buildStreamingTail,
-  buildTurns,
-  type TurnsInput
-} from './turns';
+import { buildSettledTurns, buildStreamingTail, buildTurns, type TurnsInput } from './turns';
 
 function msg(partial: Partial<Message> & Pick<Message, 'id' | 'role' | 'content'>): Message {
   return {
     session_id: 'sess',
     thinking: null,
     created_at: '2026-04-20T00:00:00Z',
-    ...partial
+    ...partial,
   };
 }
 
-function call(partial: Partial<LiveToolCall> & Pick<LiveToolCall, 'id' | 'messageId'>): LiveToolCall {
+function call(
+  partial: Partial<LiveToolCall> & Pick<LiveToolCall, 'id' | 'messageId'>
+): LiveToolCall {
   return {
     name: 'Bash',
     input: {},
@@ -28,7 +25,7 @@ function call(partial: Partial<LiveToolCall> & Pick<LiveToolCall, 'id' | 'messag
     finishedAt: null,
     outputTruncated: false,
     lastProgressMs: null,
-    ...partial
+    ...partial,
   };
 }
 
@@ -40,7 +37,7 @@ function input(overrides: Partial<TurnsInput> = {}): TurnsInput {
     streamingMessageId: null,
     streamingThinking: '',
     streamingText: '',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -52,13 +49,13 @@ describe('buildTurns', () => {
           msg({ id: 'u1', role: 'user', content: 'hi' }),
           msg({ id: 'a1', role: 'assistant', content: 'hello', thinking: 'hm' }),
           msg({ id: 'u2', role: 'user', content: 'again' }),
-          msg({ id: 'a2', role: 'assistant', content: 'sure' })
-        ]
+          msg({ id: 'a2', role: 'assistant', content: 'sure' }),
+        ],
       })
     );
     expect(turns.map((t) => [t.user?.id, t.assistant?.id])).toEqual([
       ['u1', 'a1'],
-      ['u2', 'a2']
+      ['u2', 'a2'],
     ]);
     expect(turns[0].thinking).toBe('hm');
   });
@@ -68,13 +65,13 @@ describe('buildTurns', () => {
       input({
         messages: [
           msg({ id: 'u1', role: 'user', content: 'q' }),
-          msg({ id: 'a1', role: 'assistant', content: 'a' })
+          msg({ id: 'a1', role: 'assistant', content: 'a' }),
         ],
         toolCalls: [
           call({ id: 't1', messageId: 'a1' }),
           call({ id: 't2', messageId: 'a1' }),
-          call({ id: 't3', messageId: 'other' })
-        ]
+          call({ id: 't3', messageId: 'other' }),
+        ],
       })
     );
     expect(turns).toHaveLength(1);
@@ -89,7 +86,7 @@ describe('buildTurns', () => {
         streamingActive: true,
         streamingMessageId: 'live',
         streamingThinking: 'pondering',
-        streamingText: 'working…'
+        streamingText: 'working…',
       })
     );
     expect(turns).toHaveLength(1);
@@ -106,8 +103,8 @@ describe('buildTurns', () => {
         messages: [
           msg({ id: 'u1', role: 'user', content: 'q' }),
           msg({ id: 'a1', role: 'assistant', content: 'a' }),
-          msg({ id: 'u2', role: 'user', content: 'pending' })
-        ]
+          msg({ id: 'u2', role: 'user', content: 'pending' }),
+        ],
       })
     );
     expect(turns).toHaveLength(2);

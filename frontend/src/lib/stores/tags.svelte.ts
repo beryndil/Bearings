@@ -91,8 +91,7 @@ class TagStore {
    * list, not every session. */
   filter = $derived<api.SessionFilter>({
     tags: [...this.selected],
-    severityTags:
-      this.selectedSeverity.length > 0 ? [...this.selectedSeverity] : undefined
+    severityTags: this.selectedSeverity.length > 0 ? [...this.selectedSeverity] : undefined,
   });
 
   /** Finder/Explorer click semantics for the general tag list. Without
@@ -124,8 +123,7 @@ class TagStore {
         : [...this.selectedSeverity, id];
       return;
     }
-    const solo =
-      this.selectedSeverity.length === 1 && this.selectedSeverity[0] === id;
+    const solo = this.selectedSeverity.length === 1 && this.selectedSeverity[0] === id;
     this.selectedSeverity = solo ? [] : [id];
   }
 
@@ -154,10 +152,7 @@ class TagStore {
    * have to be fully populated for the backend to emit every row. */
   selectAll(): void {
     this.selected = this.generalList.map((t) => t.id);
-    this.selectedSeverity = [
-      ...this.severityList.map((t) => t.id),
-      SEVERITY_NONE_ID
-    ];
+    this.selectedSeverity = [...this.severityList.map((t) => t.id), SEVERITY_NONE_ID];
   }
 
   /** Clear both axes at once — general AND severity. Wired to the
@@ -247,7 +242,7 @@ class TagStore {
         ? {
             ...t,
             session_count: Math.max(0, t.session_count + delta),
-            open_session_count: Math.max(0, t.open_session_count + openDelta)
+            open_session_count: Math.max(0, t.open_session_count + openDelta),
           }
         : t
     );

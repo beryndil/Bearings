@@ -41,7 +41,7 @@ beforeEach(() => {
       },
       async text() {
         return '[]';
-      }
+      },
     }))
   );
   // SessionList mounts an $effect that calls sessions.refresh() on
@@ -76,7 +76,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -87,8 +87,8 @@ describe('SessionList open/closed split', () => {
       sess({
         id: 'done-1',
         title: 'Shipped v0.3.24',
-        closed_at: '2026-04-20T00:00:00+00:00'
-      })
+        closed_at: '2026-04-20T00:00:00+00:00',
+      }),
     ];
     const { queryByText, getByTestId } = render(SessionList);
     // Open session is visible.
@@ -106,8 +106,8 @@ describe('SessionList open/closed split', () => {
       sess({
         id: 'done-1',
         title: 'Shipped v0.3.24',
-        closed_at: '2026-04-20T00:00:00+00:00'
-      })
+        closed_at: '2026-04-20T00:00:00+00:00',
+      }),
     ];
     const { getByText, getByTestId } = render(SessionList);
     const toggle = getByTestId('closed-group-toggle');
@@ -130,8 +130,8 @@ describe('SessionList open/closed split', () => {
       sess({
         id: 'done-1',
         title: 'Shipped feature',
-        closed_at: '2026-04-20T00:00:00+00:00'
-      })
+        closed_at: '2026-04-20T00:00:00+00:00',
+      }),
     ];
     const { getByText, getByTestId } = render(SessionList);
     expect(getByText('No open sessions.')).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe('SessionList open/closed split', () => {
       sess({ id: 'a', closed_at: '2026-04-20T00:00:00+00:00' }),
       sess({ id: 'b', closed_at: '2026-04-19T00:00:00+00:00' }),
       sess({ id: 'c', closed_at: '2026-04-18T00:00:00+00:00' }),
-      sess({ id: 'd', closed_at: null, title: 'Alive' })
+      sess({ id: 'd', closed_at: null, title: 'Alive' }),
     ];
     const { getByTestId } = render(SessionList);
     expect(getByTestId('closed-group-toggle').textContent).toContain('Closed (3)');

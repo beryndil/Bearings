@@ -22,9 +22,7 @@
   // Visible counter derives from `nowMs` + the live `item.windowMs`.
   // The store's own timer drives auto-dismiss; this interval only
   // updates the displayed seconds-remaining.
-  const remaining = $derived(
-    Math.max(0, Math.ceil((item.windowMs - (nowMs - startedAt)) / 1000))
-  );
+  const remaining = $derived(Math.max(0, Math.ceil((item.windowMs - (nowMs - startedAt)) / 1000)));
 
   const tick = setInterval(() => {
     nowMs = Date.now();
@@ -48,8 +46,8 @@
 </script>
 
 <div
-  class="rounded-lg border border-slate-700 bg-slate-900 shadow-2xl px-4 py-3
-    flex flex-col gap-2 max-w-sm pointer-events-auto"
+  class="pointer-events-auto flex max-w-sm flex-col gap-2 rounded-lg border
+    border-slate-700 bg-slate-900 px-4 py-3 shadow-2xl"
   role="status"
   aria-live="polite"
   data-testid="undo-toast"
@@ -57,20 +55,20 @@
 >
   {#if item.detail}
     <p
-      class="text-[11px] text-amber-300 border border-amber-500/40 bg-amber-500/10
-        rounded px-2 py-1"
+      class="rounded border border-amber-500/40 bg-amber-500/10 px-2
+        py-1 text-[11px] text-amber-300"
       data-testid="undo-toast-detail"
     >
       {item.detail}
     </p>
   {/if}
   <div class="flex items-center gap-3">
-    <span class="text-xs text-slate-200 flex-1">
+    <span class="flex-1 text-xs text-slate-200">
       {item.message}
     </span>
     <button
       type="button"
-      class="text-xs text-amber-300 hover:text-amber-200 font-medium disabled:opacity-50"
+      class="text-xs font-medium text-amber-300 hover:text-amber-200 disabled:opacity-50"
       onclick={runUndo}
       disabled={undoing}
       data-testid="undo-toast-button"
@@ -79,7 +77,7 @@
     </button>
     <button
       type="button"
-      class="text-slate-500 hover:text-slate-300 text-xs"
+      class="text-xs text-slate-500 hover:text-slate-300"
       aria-label="Dismiss undo toast"
       onclick={dismiss}
     >

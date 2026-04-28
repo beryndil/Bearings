@@ -16,8 +16,8 @@
 {#if pending.count > 0}
   <button
     type="button"
-    class="relative text-[11px] rounded bg-amber-900/40 hover:bg-amber-900/60
-      border border-amber-700/40 px-1.5 py-0.5 text-amber-200"
+    class="relative rounded border border-amber-700/40 bg-amber-900/40
+      px-1.5 py-0.5 text-[11px] text-amber-200 hover:bg-amber-900/60"
     aria-label="{pending.count} pending operation{pending.count === 1 ? '' : 's'}"
     title="{pending.count} pending operation{pending.count === 1 ? '' : 's'} (Ctrl+Shift+O)"
     onclick={() => pending.toggleCard()}

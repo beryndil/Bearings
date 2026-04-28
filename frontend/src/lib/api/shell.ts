@@ -5,12 +5,7 @@ import { voidFetch } from './core';
  * returns 400 with the exact key name when the selected kind isn't
  * configured, so the frontend tooltip can be actionable. See
  * `src/bearings/api/routes_shell.py`. */
-export type ShellKind =
-  | 'editor'
-  | 'terminal'
-  | 'file_explorer'
-  | 'git_gui'
-  | 'claude_cli';
+export type ShellKind = 'editor' | 'terminal' | 'file_explorer' | 'git_gui' | 'claude_cli';
 
 /** Ask the server to spawn a GUI app (editor / terminal / file
  * explorer / git GUI / Claude CLI) on `path`. Detached spawn — the
@@ -29,6 +24,6 @@ export function openShell(
   return voidFetch(fetchImpl, '/api/shell/open', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind, path })
+    body: JSON.stringify({ kind, path }),
   });
 }

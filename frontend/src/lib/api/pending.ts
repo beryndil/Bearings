@@ -60,6 +60,6 @@ export function deletePending(
 ): Promise<void> {
   const params = new URLSearchParams({ directory });
   return voidFetch(fetchImpl, `/api/pending/${encodeURIComponent(name)}?${params}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }

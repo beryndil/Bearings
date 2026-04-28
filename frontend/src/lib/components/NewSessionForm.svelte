@@ -31,7 +31,9 @@
   let tagError = $state<string | null>(null);
 
   const attachedTags = $derived(
-    tagIds.map((id) => tags.list.find((t) => t.id === id)).filter((t): t is api.Tag => t !== undefined)
+    tagIds
+      .map((id) => tags.list.find((t) => t.id === id))
+      .filter((t): t is api.Tag => t !== undefined)
   );
   const attachedSet = $derived(new Set(tagIds));
   const draftLower = $derived(tagDraft.trim().toLowerCase());
@@ -40,9 +42,7 @@
       ? []
       : tags.list.filter((t) => !attachedSet.has(t.id) && t.name.toLowerCase().includes(draftLower))
   );
-  const exactMatch = $derived(
-    tags.list.find((t) => t.name.toLowerCase() === draftLower) ?? null
-  );
+  const exactMatch = $derived(tags.list.find((t) => t.name.toLowerCase() === draftLower) ?? null);
 
   /** Precedence-aware defaults from the tags currently attached.
    * Canonical tag order (pinned-first / sort_order / id); last wins —
@@ -155,7 +155,7 @@
       title: trimmedTitle,
       max_budget_usd: parseBudget(budget),
       tag_ids: ids,
-      kind: createdKind
+      kind: createdKind,
     });
     submitting = false;
     if (!created) return;
@@ -216,17 +216,17 @@
         ☑ Checklist
       </button>
     </div>
-    <div class="flex flex-col text-xs gap-1">
+    <div class="flex flex-col gap-1 text-xs">
       <span class="text-slate-400">Working dir</span>
       <FolderPicker bind:value={workingDir} />
     </div>
     {#if kind === 'chat'}
-      <div class="flex flex-col text-xs gap-1">
+      <div class="flex flex-col gap-1 text-xs">
         <span class="text-slate-400">Model</span>
         <ModelSelect bind:value={model} />
       </div>
     {/if}
-    <label class="flex flex-col text-xs gap-1">
+    <label class="flex flex-col gap-1 text-xs">
       <span class="text-slate-400">Title <span class="text-rose-400">*</span></span>
       <input
         type="text"
@@ -243,9 +243,8 @@
       {/if}
     </label>
     {#if kind === 'chat'}
-      <label class="flex flex-col text-xs gap-1">
-        <span class="text-slate-400"
-          >Budget USD <span class="text-slate-600">(optional)</span></span
+      <label class="flex flex-col gap-1 text-xs">
+        <span class="text-slate-400">Budget USD <span class="text-slate-600">(optional)</span></span
         >
         <input
           type="number"
@@ -253,7 +252,7 @@
           step="0.01"
           min="0"
           placeholder="no cap"
-          class="rounded bg-slate-950 px-2 py-1 text-sm font-mono"
+          class="rounded bg-slate-950 px-2 py-1 font-mono text-sm"
           bind:value={budget}
         />
       </label>
@@ -267,7 +266,7 @@
             <li
               class="flex items-center gap-1 rounded bg-slate-900 px-2 py-0.5"
               use:contextmenu={{
-                target: { type: 'tag_chip', tagId: tag.id, sessionId: null }
+                target: { type: 'tag_chip', tagId: tag.id, sessionId: null },
               }}
             >
               {#if tag.pinned}
@@ -300,7 +299,7 @@
             <li>
               <button
                 type="button"
-                class="rounded bg-slate-900 hover:bg-slate-700 px-2 py-0.5"
+                class="rounded bg-slate-900 px-2 py-0.5 hover:bg-slate-700"
                 onclick={() => attachTag(tag)}
               >
                 + {tag.name}
@@ -311,7 +310,7 @@
       {:else if tagDraft.trim() !== '' && !exactMatch}
         <button
           type="button"
-          class="self-start rounded bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5"
+          class="self-start rounded bg-emerald-700 px-2 py-0.5 hover:bg-emerald-600"
           onclick={createAndAttach}
         >
           + Create "{tagDraft.trim()}"
@@ -324,7 +323,7 @@
 
     <button
       type="submit"
-      class="rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1 text-sm mt-1 disabled:opacity-50"
+      class="mt-1 rounded bg-emerald-600 px-2 py-1 text-sm hover:bg-emerald-500 disabled:opacity-50"
       disabled={submitting || tagIds.length === 0 || title.trim() === ''}
       title={title.trim() === ''
         ? 'Enter a title'

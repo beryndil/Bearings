@@ -44,7 +44,7 @@
         message: `${action.label}?`,
         confirmLabel: action.label,
         destructive: true,
-        onConfirm: runHandler
+        onConfirm: runHandler,
       });
       return;
     }
@@ -56,9 +56,9 @@
 <button
   type="button"
   role="menuitem"
-  class="w-full text-left px-3 py-1.5 text-xs flex items-center gap-2
+  class="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs
     hover:bg-slate-800 focus:bg-slate-800 focus:outline-none
-    {disabledReason !== null ? 'opacity-40 cursor-not-allowed' : 'text-slate-200'}
+    {disabledReason !== null ? 'cursor-not-allowed opacity-40' : 'text-slate-200'}
     {action.destructive ? 'text-rose-300' : ''}"
   aria-disabled={disabledReason !== null}
   title={disabledReason ?? undefined}
@@ -67,9 +67,9 @@
   data-testid="context-menu-item"
   onclick={onClick}
 >
-  <span class="flex-1 min-w-0 truncate">{action.label}</span>
+  <span class="min-w-0 flex-1 truncate">{action.label}</span>
   {#if action.shortcut}
-    <span class="text-[10px] text-slate-500 font-mono shrink-0">
+    <span class="shrink-0 font-mono text-[10px] text-slate-500">
       {action.shortcut}
     </span>
   {/if}

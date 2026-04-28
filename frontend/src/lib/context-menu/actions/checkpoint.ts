@@ -48,7 +48,7 @@ export const CHECKPOINT_ACTIONS: readonly Action[] = [
       return t.messageId === null
         ? 'Anchor message was dropped in a reorg — fork unavailable'
         : null;
-    }
+    },
   },
   {
     id: 'checkpoint.copy_label',
@@ -62,10 +62,8 @@ export const CHECKPOINT_ACTIONS: readonly Action[] = [
     disabled: (target) => {
       const t = asCheckpoint(target);
       if (!t) return null;
-      return t.label === null || t.label === ''
-        ? 'No label to copy'
-        : null;
-    }
+      return t.label === null || t.label === '' ? 'No label to copy' : null;
+    },
   },
   {
     id: 'checkpoint.copy_id',
@@ -76,7 +74,7 @@ export const CHECKPOINT_ACTIONS: readonly Action[] = [
       const t = asCheckpoint(target);
       if (!t) return;
       await writeClipboard(t.id);
-    }
+    },
   },
   {
     id: 'checkpoint.delete',
@@ -100,8 +98,8 @@ export const CHECKPOINT_ACTIONS: readonly Action[] = [
         message: prev.label ? `Checkpoint "${prev.label}" deleted` : 'Checkpoint deleted',
         inverse: async () => {
           await checkpoints.create(prev.sessionId, anchorId, prev.label);
-        }
+        },
       });
-    }
-  }
+    },
+  },
 ];

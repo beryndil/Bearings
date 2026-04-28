@@ -53,6 +53,6 @@ export function bulkSessions(
   return jsonFetch<SessionBulkResponse>(fetchImpl, '/api/sessions/bulk', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...body, payload: body.payload ?? {} })
+    body: JSON.stringify({ ...body, payload: body.payload ?? {} }),
   });
 }

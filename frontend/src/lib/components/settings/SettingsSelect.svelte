@@ -23,14 +23,7 @@
     onChange?: (next: T) => Promise<void> | void;
   }
 
-  let {
-    title,
-    description,
-    value = $bindable(),
-    options,
-    id,
-    onChange
-  }: Props = $props();
+  let { title, description, value = $bindable(), options, id, onChange }: Props = $props();
 
   const generated = `settings-select-${Math.random().toString(36).slice(2, 9)}`;
   const inputId = $derived(id ?? generated);
@@ -52,7 +45,7 @@
     } catch (err) {
       saveState = {
         kind: 'error',
-        message: err instanceof Error ? err.message : String(err)
+        message: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -62,8 +55,8 @@
   {#snippet control()}
     <select
       id={inputId}
-      class="rounded bg-slate-950 border border-slate-800 px-2 py-1.5 text-sm w-56
-        focus:outline-none focus:border-slate-600"
+      class="w-56 rounded border border-slate-800 bg-slate-950 px-2 py-1.5 text-sm
+        focus:border-slate-600 focus:outline-none"
       {value}
       onchange={onSelect}
       data-testid="settings-select"

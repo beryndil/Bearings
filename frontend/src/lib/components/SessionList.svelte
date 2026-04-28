@@ -84,7 +84,7 @@
       } catch (err) {
         failures.push({
           name: file.name,
-          error: err instanceof Error ? err.message : String(err)
+          error: err instanceof Error ? err.message : String(err),
         });
       }
       importProgress = { done: created.length + failures.length, total: files.length };
@@ -153,7 +153,10 @@
 
   const rename = $state<{ id: string | null; draft: string }>({ id: null, draft: '' });
 
-  function startRename(e: MouseEvent, session: { id: string; title: string | null; model: string }) {
+  function startRename(
+    e: MouseEvent,
+    session: { id: string; title: string | null; model: string }
+  ) {
     e.stopPropagation();
     rename.id = session.id;
     rename.draft = session.title ?? '';
@@ -183,9 +186,7 @@
   // removing either triggers a refresh without a user also having to
   // touch the other axis. General-tag combination is always OR now
   // (v0.7.4), so there's no separate `mode` component to key off of.
-  let filterKey = $derived(
-    `${tags.selected.join(',')}|${tags.selectedSeverity.join(',')}`
-  );
+  let filterKey = $derived(`${tags.selected.join(',')}|${tags.selectedSeverity.join(',')}`);
   let lastAppliedKey = '';
   $effect(() => {
     const key = filterKey;
@@ -218,7 +219,7 @@
    * sync. */
   let orderedVisibleIds = $derived([
     ...sessions.openList.map((s) => s.id),
-    ...sessions.closedList.map((s) => s.id)
+    ...sessions.closedList.map((s) => s.id),
   ]);
 
   /** Resolve the context-menu target for a right-clicked session row.
@@ -279,8 +280,8 @@
 
 <aside
   bind:this={asideEl}
-  class="relative h-full bg-slate-900 p-2 overflow-y-auto border-r border-slate-800
-    flex flex-col gap-2 {dragging ? 'ring-2 ring-emerald-500/60 ring-inset' : ''}"
+  class="relative flex h-full flex-col gap-2 overflow-y-auto border-r
+    border-slate-800 bg-slate-900 p-2 {dragging ? 'ring-2 ring-inset ring-emerald-500/60' : ''}"
   ondragenter={onDragEnter}
   ondragover={onDragOver}
   ondragleave={onDragLeave}
@@ -295,8 +296,8 @@
 
   {#if dragging}
     <div
-      class="pointer-events-none absolute inset-2 rounded border-2 border-dashed
-        border-emerald-500/70 bg-slate-950/60 flex items-center justify-center z-10"
+      class="pointer-events-none absolute inset-2 z-10 flex items-center
+        justify-center rounded border-2 border-dashed border-emerald-500/70 bg-slate-950/60"
     >
       <p class="text-sm text-emerald-300">Drop session JSON to import</p>
     </div>
@@ -362,7 +363,7 @@
           {/each}
         </ul>
       {:else}
-        <p class="text-slate-500 text-sm">No open sessions.</p>
+        <p class="text-sm text-slate-500">No open sessions.</p>
       {/if}
     </DataView>
 
@@ -371,8 +372,8 @@
            The real bulk ops fire from the right-click menu on any
            selected row (dispatches the `multi_select` target). -->
       <div
-        class="mt-2 border-t border-emerald-700/40 pt-2 flex items-center
-          justify-between gap-2 text-xs"
+        class="mt-2 flex items-center justify-between gap-2 border-t
+          border-emerald-700/40 pt-2 text-xs"
         data-testid="session-bulk-bar"
       >
         <span class="text-emerald-300">
@@ -381,8 +382,8 @@
         <span class="text-slate-500">Right-click for actions</span>
         <button
           type="button"
-          class="rounded bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-[11px]
-            text-slate-300"
+          class="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300
+            hover:bg-slate-700"
           onclick={() => sessionSelection.clear()}
           data-testid="session-bulk-clear"
         >

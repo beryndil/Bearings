@@ -37,10 +37,7 @@ export type ReplyActionComplete = {
  * the modal renders it in red. */
 export type ReplyActionError = { type: 'error'; message: string };
 
-export type ReplyActionEvent =
-  | ReplyActionToken
-  | ReplyActionComplete
-  | ReplyActionError;
+export type ReplyActionEvent = ReplyActionToken | ReplyActionComplete | ReplyActionError;
 
 /** Mirrors the backend's `ACTION_LABELS` dict. Adding `critique` in
  * L4.3.3 only needs a new entry on the server side; the catalog
@@ -62,7 +59,7 @@ function readAuthToken(): string | null {
 function authHeaders(): HeadersInit {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Accept: 'text/event-stream'
+    Accept: 'text/event-stream',
   };
   const token = readAuthToken();
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -73,7 +70,7 @@ export async function fetchReplyActionsCatalog(
   fetchImpl: typeof fetch = fetch
 ): Promise<ReplyActionCatalog> {
   const res = await fetchImpl('/api/sessions/reply_actions/catalog', {
-    headers: authHeaders()
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -125,20 +122,17 @@ export function streamReplyAction(
   if (opts.model) body.model = opts.model;
   const done = (async () => {
     try {
-      const res = await fetchImpl(
-        `/api/sessions/${sessionId}/invoke_reply_action/${messageId}`,
-        {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify(body),
-          signal: controller.signal
-        }
-      );
+      const res = await fetchImpl(`/api/sessions/${sessionId}/invoke_reply_action/${messageId}`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
       if (!res.ok) {
         const errBody = await res.text().catch(() => '');
         onEvent({
           type: 'error',
-          message: `HTTP ${res.status}: ${errBody || res.statusText || 'request failed'}`
+          message: `HTTP ${res.status}: ${errBody || res.statusText || 'request failed'}`,
         });
         return;
       }
@@ -167,19 +161,18 @@ export function streamReplyAction(
     } catch (err) {
       // AbortError = caller hit cancel(); silent. Anything else
       // surfaces as a wire-level error event.
-      const isAbort =
-        err instanceof DOMException && err.name === 'AbortError';
+      const isAbort = err instanceof DOMException && err.name === 'AbortError';
       if (!isAbort) {
         onEvent({
           type: 'error',
-          message: err instanceof Error ? err.message : String(err)
+          message: err instanceof Error ? err.message : String(err),
         });
       }
     }
   })();
   return {
     cancel: () => controller.abort(),
-    done
+    done,
   };
 }
 
@@ -219,14 +212,10 @@ function parseFrame(frame: string): ReplyActionEvent | null {
     return {
       type: 'complete',
       cost_usd: data.cost_usd as number | null,
-      full_text: data.full_text
+      full_text: data.full_text,
     };
   }
-  if (
-    eventName === 'error' &&
-    isObj(data) &&
-    typeof data.message === 'string'
-  ) {
+  if (eventName === 'error' && isObj(data) && typeof data.message === 'string') {
     return { type: 'error', message: data.message };
   }
   return null;

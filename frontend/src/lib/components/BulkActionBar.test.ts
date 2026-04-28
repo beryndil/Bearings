@@ -11,7 +11,7 @@ describe('BulkActionBar', () => {
       count: 3,
       onMove: vi.fn(),
       onSplit: vi.fn(),
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     expect(getByText('3 selected')).toBeInTheDocument();
     expect(getByTestId('bulk-move').textContent).toContain('Move 3');
@@ -24,7 +24,7 @@ describe('BulkActionBar', () => {
       count: 0,
       onMove: vi.fn(),
       onSplit: vi.fn(),
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     expect(getByTestId('bulk-move')).toBeDisabled();
     expect(getByTestId('bulk-split')).toBeDisabled();
@@ -40,7 +40,7 @@ describe('BulkActionBar', () => {
       count: 2,
       onMove,
       onSplit,
-      onCancel
+      onCancel,
     });
     await fireEvent.click(getByTestId('bulk-move'));
     await fireEvent.click(getByTestId('bulk-split'));
@@ -57,7 +57,7 @@ describe('BulkActionBar', () => {
       count: 1,
       onMove,
       onSplit,
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     await fireEvent.keyDown(document, { key: 'm' });
     await fireEvent.keyDown(document, { key: 's' });
@@ -71,7 +71,7 @@ describe('BulkActionBar', () => {
       count: 0,
       onMove: vi.fn(),
       onSplit: vi.fn(),
-      onCancel
+      onCancel,
     });
     await fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(1);
@@ -84,7 +84,7 @@ describe('BulkActionBar', () => {
       count: 0,
       onMove,
       onSplit,
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     await fireEvent.keyDown(document, { key: 'm' });
     await fireEvent.keyDown(document, { key: 's' });
@@ -99,7 +99,7 @@ describe('BulkActionBar', () => {
       count: 2,
       onMove,
       onSplit,
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     // Cmd+S / Ctrl+M must still hit the browser.
     await fireEvent.keyDown(document, { key: 's', metaKey: true });
@@ -114,7 +114,7 @@ describe('BulkActionBar', () => {
       count: 2,
       onMove,
       onSplit: vi.fn(),
-      onCancel: vi.fn()
+      onCancel: vi.fn(),
     });
     const input = document.createElement('input');
     document.body.appendChild(input);

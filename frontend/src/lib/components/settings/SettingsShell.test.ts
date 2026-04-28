@@ -43,9 +43,7 @@ describe('SettingsShell', () => {
     const { getByTestId } = render(SettingsShell);
     const target = SETTINGS_SECTIONS[2]; // arbitrary non-first
     await fireEvent.click(getByTestId(`settings-rail-${target.id}`));
-    expect(
-      getByTestId(`settings-rail-${target.id}`).getAttribute('aria-selected')
-    ).toBe('true');
+    expect(getByTestId(`settings-rail-${target.id}`).getAttribute('aria-selected')).toBe('true');
   });
 
   it('ArrowDown on the rail advances by one section', async () => {
@@ -53,18 +51,14 @@ describe('SettingsShell', () => {
     const tablist = getByRole('tablist');
     await fireEvent.keyDown(tablist, { key: 'ArrowDown' });
     const secondId = SETTINGS_SECTIONS[1].id;
-    expect(
-      getByTestId(`settings-rail-${secondId}`).getAttribute('aria-selected')
-    ).toBe('true');
+    expect(getByTestId(`settings-rail-${secondId}`).getAttribute('aria-selected')).toBe('true');
   });
 
   it('End jumps to the last section', async () => {
     const { getByTestId, getByRole } = render(SettingsShell);
     await fireEvent.keyDown(getByRole('tablist'), { key: 'End' });
     const lastId = SETTINGS_SECTIONS[SETTINGS_SECTIONS.length - 1].id;
-    expect(
-      getByTestId(`settings-rail-${lastId}`).getAttribute('aria-selected')
-    ).toBe('true');
+    expect(getByTestId(`settings-rail-${lastId}`).getAttribute('aria-selected')).toBe('true');
   });
 
   it('Home jumps to the first section', async () => {
@@ -73,8 +67,6 @@ describe('SettingsShell', () => {
     await fireEvent.keyDown(getByRole('tablist'), { key: 'End' });
     await fireEvent.keyDown(getByRole('tablist'), { key: 'Home' });
     const firstId = SETTINGS_SECTIONS[0].id;
-    expect(
-      getByTestId(`settings-rail-${firstId}`).getAttribute('aria-selected')
-    ).toBe('true');
+    expect(getByTestId(`settings-rail-${firstId}`).getAttribute('aria-selected')).toBe('true');
   });
 });

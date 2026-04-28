@@ -27,13 +27,13 @@ const agentStub: {
   connect,
   send,
   stop,
-  close
+  close,
 };
 
 vi.mock('$lib/agent.svelte', () => ({
   get agent() {
     return agentStub;
-  }
+  },
 }));
 
 const { default: ChecklistChat } = await import('./ChecklistChat.svelte');
@@ -63,7 +63,7 @@ function session(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -79,7 +79,7 @@ function message(overrides: Partial<Message> = {}): Message {
     output_tokens: null,
     cache_read_tokens: null,
     cache_creation_tokens: null,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -96,13 +96,13 @@ function seedConversation(sid: string, messages: Message[]): void {
       conversation.handleEvent({
         type: 'message_start',
         session_id: sid,
-        message_id: m.id
+        message_id: m.id,
       } as never);
       conversation.handleEvent({
         type: 'token',
         session_id: sid,
         message_id: m.id,
-        text: m.content
+        text: m.content,
       } as never);
       conversation.handleEvent({
         type: 'message_complete',
@@ -112,7 +112,7 @@ function seedConversation(sid: string, messages: Message[]): void {
         input_tokens: 0,
         output_tokens: 0,
         cache_read_tokens: 0,
-        cache_creation_tokens: 0
+        cache_creation_tokens: 0,
       } as never);
     }
   }
@@ -173,7 +173,7 @@ describe('ChecklistChat', () => {
   it('renders user and assistant messages with distinct data-testids', async () => {
     seedConversation('sess-cl', [
       message({ id: 'm-u', role: 'user', content: 'What is left?' }),
-      message({ id: 'm-a', role: 'assistant', content: 'Three items remain.' })
+      message({ id: 'm-a', role: 'assistant', content: 'Three items remain.' }),
     ]);
     const { findByTestId } = render(ChecklistChat);
     const userBubble = await findByTestId('checklist-chat-user');
@@ -236,15 +236,11 @@ describe('ChecklistChat', () => {
     const input = getByTestId('checklist-chat-input') as HTMLTextAreaElement;
     await fireEvent.input(input, { target: { value: 'ship it' } });
     await fireEvent.click(getByTestId('checklist-chat-send'));
-    await waitFor(() =>
-      expect(localStorage.getItem('bearings:draft:sess-cl')).toBeNull()
-    );
+    await waitFor(() => expect(localStorage.getItem('bearings:draft:sess-cl')).toBeNull());
   });
 
   it('ArrowUp on an empty input loads the most recent user prompt', async () => {
-    seedConversation('sess-cl', [
-      message({ id: 'm-u', role: 'user', content: 'prior prompt' })
-    ]);
+    seedConversation('sess-cl', [message({ id: 'm-u', role: 'user', content: 'prior prompt' })]);
     const { getByTestId } = render(ChecklistChat);
     const input = getByTestId('checklist-chat-input') as HTMLTextAreaElement;
     input.focus();
@@ -253,9 +249,7 @@ describe('ChecklistChat', () => {
   });
 
   it('ArrowDown past newest restores the stashed in-progress draft', async () => {
-    seedConversation('sess-cl', [
-      message({ id: 'm-u', role: 'user', content: 'earlier' })
-    ]);
+    seedConversation('sess-cl', [message({ id: 'm-u', role: 'user', content: 'earlier' })]);
     const { getByTestId } = render(ChecklistChat);
     const input = getByTestId('checklist-chat-input') as HTMLTextAreaElement;
     await fireEvent.input(input, { target: { value: 'work-in-progress' } });

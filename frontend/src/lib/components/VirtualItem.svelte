@@ -68,7 +68,7 @@
     forceVisible = false,
     rootMarginPx = 1500,
     fallbackHeightPx = 180,
-    children
+    children,
   }: Props = $props();
 
   // The IntersectionObserver toggles `intersecting`. `noIO` flips
@@ -108,7 +108,7 @@
       },
       {
         root: scrollRoot ?? null,
-        rootMargin: `${rootMarginPx}px 0px ${rootMarginPx}px 0px`
+        rootMargin: `${rootMarginPx}px 0px ${rootMarginPx}px 0px`,
       }
     );
     io.observe(target);

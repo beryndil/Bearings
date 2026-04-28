@@ -13,11 +13,7 @@
   import SettingsCard from '../SettingsCard.svelte';
   import SettingsToggle from '../SettingsToggle.svelte';
   import { preferences } from '$lib/stores/preferences.svelte';
-  import {
-    notifyPermission,
-    notifySupported,
-    requestNotifyPermission
-  } from '$lib/utils/notify';
+  import { notifyPermission, notifySupported, requestNotifyPermission } from '$lib/utils/notify';
 
   let enabled = $state(preferences.notifyOnComplete);
   let permission = $state(notifyPermission());
@@ -53,8 +49,7 @@
         {#if !supported}
           Your browser does not support desktop notifications.
         {:else if blocked}
-          Blocked in browser settings — re-allow notifications for this site,
-          then re-toggle.
+          Blocked in browser settings — re-allow notifications for this site, then re-toggle.
         {/if}
       {/snippet}
     </SettingsToggle>

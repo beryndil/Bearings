@@ -109,10 +109,9 @@
       text-amber-50 shadow-lg backdrop-blur"
     data-testid="backend-status-banner"
   >
-    <span aria-hidden="true" class="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-300"></span>
+    <span aria-hidden="true" class="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-300"
+    ></span>
     <span class="font-medium">Backend unreachable.</span>
-    <span class="text-amber-200/80">
-      Trying to reconnect — recent updates may be missing.
-    </span>
+    <span class="text-amber-200/80"> Trying to reconnect — recent updates may be missing. </span>
   </div>
 {/if}

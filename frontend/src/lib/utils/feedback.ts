@@ -65,7 +65,7 @@ export function readBrowserEnv(): Pick<FeedbackEnv, 'userAgent' | 'platform' | '
   return {
     userAgent: navigator.userAgent || 'unknown',
     platform: navigator.platform || 'unknown',
-    language: navigator.language || 'unknown'
+    language: navigator.language || 'unknown',
   };
 }
 
@@ -78,7 +78,7 @@ export function composeEnv(
   return {
     version: versionInfo?.version ?? 'unknown',
     build: versionInfo?.build ?? null,
-    ...browser
+    ...browser,
   };
 }
 
@@ -105,7 +105,7 @@ function renderEnvBlock(env: FeedbackEnv): string {
     `- **Build:** ${formatBuild(env.build)}`,
     `- **Browser:** ${env.userAgent}`,
     `- **Platform:** ${env.platform}`,
-    `- **Language:** ${env.language}`
+    `- **Language:** ${env.language}`,
   ].join('\n');
 }
 
@@ -134,7 +134,7 @@ function renderBugScaffold(): string {
     '',
     '### Additional context',
     '',
-    '<!-- Screenshots, logs, or anything else that helps. -->'
+    '<!-- Screenshots, logs, or anything else that helps. -->',
   ].join('\n');
 }
 
@@ -156,7 +156,7 @@ function renderFeatureScaffold(): string {
     '',
     '### Additional context',
     '',
-    '<!-- Mock-ups, related issues, anything that helps. -->'
+    '<!-- Mock-ups, related issues, anything that helps. -->',
   ].join('\n');
 }
 
@@ -179,7 +179,7 @@ export function buildFeedbackUrl(kind: FeedbackKind, env: FeedbackEnv): string {
   const params = new URLSearchParams({
     template,
     labels,
-    body
+    body,
   });
   return `${ISSUES_NEW_URL}?${params.toString()}`;
 }

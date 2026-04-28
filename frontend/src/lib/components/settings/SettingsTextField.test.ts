@@ -21,7 +21,7 @@ describe('SettingsTextField', () => {
   it('debounces onChange by 400ms after the last keystroke', async () => {
     const onChange = vi.fn(async () => {});
     const { getByLabelText } = render(SettingsTextField, {
-      props: { title: 'Display name', value: '', onChange }
+      props: { title: 'Display name', value: '', onChange },
     });
     const input = getByLabelText('Display name');
     await fireEvent.input(input, { target: { value: 'D' } });
@@ -40,11 +40,11 @@ describe('SettingsTextField', () => {
         title: 'Field',
         value: '',
         onChange,
-        validate: (v: string) => (v.includes(' ') ? 'no spaces allowed' : null)
-      }
+        validate: (v: string) => (v.includes(' ') ? 'no spaces allowed' : null),
+      },
     });
     await fireEvent.input(getByLabelText('Field'), {
-      target: { value: 'a b' }
+      target: { value: 'a b' },
     });
     const alert = await findByRole('alert');
     expect(alert).toHaveTextContent('no spaces allowed');
@@ -53,7 +53,7 @@ describe('SettingsTextField', () => {
 
   it('shows the char counter past 80% of maxlength', async () => {
     const { getByLabelText, queryByText } = render(SettingsTextField, {
-      props: { title: 'Field', value: '', maxlength: 10 }
+      props: { title: 'Field', value: '', maxlength: 10 },
     });
     const input = getByLabelText('Field');
 
@@ -68,7 +68,7 @@ describe('SettingsTextField', () => {
 
   it('password mode masks the input and disables autocomplete', () => {
     const { getByLabelText } = render(SettingsTextField, {
-      props: { title: 'Token', value: 'secret', password: true }
+      props: { title: 'Token', value: 'secret', password: true },
     });
     const input = getByLabelText('Token') as HTMLInputElement;
     expect(input.type).toBe('password');

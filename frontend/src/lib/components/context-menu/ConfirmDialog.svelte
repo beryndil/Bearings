@@ -58,8 +58,8 @@
   {@const req = confirmStore.pending}
   <div
     role="presentation"
-    class="fixed inset-0 z-40 bg-black/60 backdrop-blur-[1px] flex items-center
-      justify-center p-4"
+    class="fixed inset-0 z-40 flex items-center justify-center bg-black/60
+      p-4 backdrop-blur-[1px]"
     onclick={onBackdrop}
     data-testid="confirm-backdrop"
   >
@@ -67,16 +67,14 @@
       role="alertdialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
-      class="rounded border border-slate-700 bg-slate-900 shadow-2xl max-w-md w-full
-        p-4 flex flex-col gap-3"
+      class="flex w-full max-w-md flex-col gap-3 rounded border
+        border-slate-700 bg-slate-900 p-4 shadow-2xl"
       data-testid="confirm-dialog"
       data-action-id={req.actionId}
     >
       <h2
         id="confirm-dialog-title"
-        class="text-sm font-semibold {req.destructive
-          ? 'text-rose-300'
-          : 'text-slate-200'}"
+        class="text-sm font-semibold {req.destructive ? 'text-rose-300' : 'text-slate-200'}"
       >
         {req.message}
       </h2>
@@ -93,7 +91,7 @@
         <button
           bind:this={cancelEl}
           type="button"
-          class="px-3 py-1 text-xs rounded border border-slate-700 text-slate-300
+          class="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300
             hover:bg-slate-800 disabled:opacity-50"
           onclick={onCancel}
           disabled={confirmStore.busy}
@@ -104,10 +102,10 @@
         <button
           bind:this={confirmEl}
           type="button"
-          class="px-3 py-1 text-xs rounded font-medium disabled:opacity-50
+          class="rounded px-3 py-1 text-xs font-medium disabled:opacity-50
             {req.destructive
-              ? 'bg-rose-700 hover:bg-rose-600 text-white'
-              : 'bg-emerald-700 hover:bg-emerald-600 text-white'}"
+            ? 'bg-rose-700 text-white hover:bg-rose-600'
+            : 'bg-emerald-700 text-white hover:bg-emerald-600'}"
           onclick={onAccept}
           disabled={confirmStore.busy}
           data-testid="confirm-accept"

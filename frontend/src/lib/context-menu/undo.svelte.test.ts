@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DEFAULT_WINDOW_MS,
-  MAX_VISIBLE,
-  undoStore
-} from './undo.svelte';
+import { DEFAULT_WINDOW_MS, MAX_VISIBLE, undoStore } from './undo.svelte';
 
 describe('undoStore', () => {
   beforeEach(() => {
@@ -14,7 +10,7 @@ describe('undoStore', () => {
     // we can `advanceTimersByTime` deterministically.
     undoStore._setTimeSource({
       set: (fn, ms) => globalThis.setTimeout(fn, ms),
-      clear: (t) => globalThis.clearTimeout(t)
+      clear: (t) => globalThis.clearTimeout(t),
     });
   });
 
@@ -54,7 +50,7 @@ describe('undoStore', () => {
     undoStore.push({
       message: 'short',
       windowMs: 1000,
-      inverse: () => {}
+      inverse: () => {},
     });
     vi.advanceTimersByTime(500);
     expect(undoStore.items).toHaveLength(1);
@@ -68,11 +64,7 @@ describe('undoStore', () => {
     }
     expect(undoStore.items).toHaveLength(MAX_VISIBLE);
     // Oldest two were evicted — the newest MAX_VISIBLE remain.
-    expect(undoStore.items.map((x) => x.message)).toEqual([
-      't2',
-      't3',
-      't4'
-    ]);
+    expect(undoStore.items.map((x) => x.message)).toEqual(['t2', 't3', 't4']);
   });
 
   it('eviction clears the victim timer (no zombie dismiss later)', () => {
@@ -106,7 +98,7 @@ describe('undoStore', () => {
       message: 'boom',
       inverse: () => {
         throw new Error('nope');
-      }
+      },
     });
     await undoStore.invoke(id);
     expect(undoStore.items).toHaveLength(0);

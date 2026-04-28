@@ -50,7 +50,7 @@ export const LINK_ACTIONS: readonly Action[] = [
       const t = asLink(target);
       if (!t) return;
       await writeClipboard(t.href);
-    }
+    },
   },
   {
     id: 'link.copy_text',
@@ -62,7 +62,7 @@ export const LINK_ACTIONS: readonly Action[] = [
       const t = asLink(target);
       if (!t) return;
       await writeClipboard(t.text);
-    }
+    },
   },
   {
     id: 'link.open_new_tab',
@@ -76,7 +76,7 @@ export const LINK_ACTIONS: readonly Action[] = [
       // `noopener,noreferrer` severs the reverse reference so an
       // untrusted agent link can't reach back into this window.
       window.open(t.href, '_blank', 'noopener,noreferrer');
-    }
+    },
   },
   {
     id: 'link.open_in.editor',
@@ -96,7 +96,7 @@ export const LINK_ACTIONS: readonly Action[] = [
           actionId: 'link.open_in.editor',
           reason: msg.includes('shell.')
             ? `Configure ${msg} in config.toml`
-            : `Shell dispatch failed: ${msg}`
+            : `Shell dispatch failed: ${msg}`,
         });
       }
     },
@@ -107,6 +107,6 @@ export const LINK_ACTIONS: readonly Action[] = [
         return 'Editor open only works for file:// URLs';
       }
       return null;
-    }
-  }
+    },
+  },
 ];

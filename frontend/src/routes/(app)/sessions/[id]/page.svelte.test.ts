@@ -43,7 +43,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -60,7 +60,7 @@ beforeEach(() => {
       },
       async text() {
         return '{}';
-      }
+      },
     }))
   );
 });
@@ -125,9 +125,7 @@ describe('/sessions/[id] route component', () => {
 
     render(SessionPage);
 
-    await waitFor(() =>
-      expect(goto).toHaveBeenCalledWith('/', { replaceState: true })
-    );
+    await waitFor(() => expect(goto).toHaveBeenCalledWith('/', { replaceState: true }));
   });
 
   it('does NOT redirect while the sessions list is still loading', async () => {

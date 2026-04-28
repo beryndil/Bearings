@@ -97,7 +97,7 @@
           target="_blank"
           rel="noopener noreferrer"
           class="text-sm text-sky-400 hover:text-sky-300 hover:underline
-            focus:outline-none focus:underline"
+            focus:underline focus:outline-none"
           data-testid="settings-privacy-telemetry"
         >
           TELEMETRY.md ↗
@@ -110,16 +110,14 @@
     <SettingsRow
       title="Data directory"
       description={dataDir ??
-        (error
-          ? `Could not reach /api/health: ${error}`
-          : 'Resolving from /api/health…')}
+        (error ? `Could not reach /api/health: ${error}` : 'Resolving from /api/health…')}
     >
       {#snippet control()}
         <button
           type="button"
           class="text-sm text-sky-400 hover:text-sky-300 hover:underline
-            focus:outline-none focus:underline disabled:opacity-50
-            disabled:cursor-not-allowed"
+            focus:underline focus:outline-none disabled:cursor-not-allowed
+            disabled:opacity-50"
           disabled={!dataDir || openState.kind === 'opening'}
           onclick={openDataDir}
           data-testid="settings-privacy-open-data-dir"
@@ -136,8 +134,9 @@
       {#snippet footnote()}
         {#if openState.kind === 'copied'}
           File explorer not configured — copied
-          <code class="font-mono">{openState.path}</code> to the clipboard.
-          Set <code class="font-mono">shell.file_explorer_command</code> in
+          <code class="font-mono">{openState.path}</code> to the clipboard. Set
+          <code class="font-mono">shell.file_explorer_command</code>
+          in
           <code class="font-mono">config.toml</code> to open it directly.
         {:else if openState.kind === 'error'}
           <span class="text-rose-400" role="alert">{openState.message}</span>

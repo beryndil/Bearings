@@ -20,9 +20,9 @@ describe('collectMenuShortcuts', () => {
         session: {
           pinned: [],
           hidden: [],
-          shortcuts: { 'session.delete': 'CTRL+D' }
-        }
-      }
+          shortcuts: { 'session.delete': 'CTRL+D' },
+        },
+      },
     });
     const entries = collectMenuShortcuts();
     expect(entries).toHaveLength(1);
@@ -30,7 +30,7 @@ describe('collectMenuShortcuts', () => {
       target: 'session',
       id: 'session.delete',
       label: 'Delete session',
-      chord: 'ctrl+d'
+      chord: 'ctrl+d',
     });
   });
 
@@ -43,9 +43,9 @@ describe('collectMenuShortcuts', () => {
         session: {
           pinned: [],
           hidden: [],
-          shortcuts: { 'session.does_not_exist': 'ctrl+x' }
-        }
-      }
+          shortcuts: { 'session.does_not_exist': 'ctrl+x' },
+        },
+      },
     });
     const [entry] = collectMenuShortcuts();
     expect(entry?.label).toBe('session.does_not_exist');
@@ -59,10 +59,10 @@ describe('collectMenuShortcuts', () => {
           hidden: [],
           shortcuts: {
             'session.pin': 'ctrl+p',
-            'session.archive': 'ctrl+a'
-          }
-        }
-      }
+            'session.archive': 'ctrl+a',
+          },
+        },
+      },
     });
     const ids = collectMenuShortcuts().map((e) => e.id);
     expect(ids).toEqual(['session.archive', 'session.pin']);
@@ -74,14 +74,14 @@ describe('collectMenuShortcuts', () => {
         message: {
           pinned: [],
           hidden: [],
-          shortcuts: { 'message.copy_id': 'ctrl+m' }
+          shortcuts: { 'message.copy_id': 'ctrl+m' },
         },
         session: {
           pinned: [],
           hidden: [],
-          shortcuts: { 'session.pin': 'ctrl+p' }
-        }
-      }
+          shortcuts: { 'session.pin': 'ctrl+p' },
+        },
+      },
     });
     // `session` precedes `message` in TARGET_TYPES even though the
     // object literal lists them in the other order.

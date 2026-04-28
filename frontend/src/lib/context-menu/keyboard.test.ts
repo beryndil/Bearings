@@ -5,17 +5,14 @@ import {
   reduce,
   type FSMItem,
   type ItemsSnapshot,
-  type KeyboardState
+  type KeyboardState,
 } from './keyboard';
 
 // Plan §6.2 asks for every FSM transition to be unit-tested. The
 // reducer is pure, so each test constructs its own state + items and
 // asserts the returned state + optional effect.
 
-function items(
-  main: FSMItem[],
-  submenu: FSMItem[] = []
-): ItemsSnapshot {
+function items(main: FSMItem[], submenu: FSMItem[] = []): ItemsSnapshot {
   return { main, submenu };
 }
 
@@ -41,30 +38,18 @@ describe('reduce — main menu navigation', () => {
   });
 
   it('ArrowDown wraps past the end', () => {
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 2 },
-      { type: 'ArrowDown' },
-      snap
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 2 }, { type: 'ArrowDown' }, snap);
     expect(r.state.focusedIndex).toBe(0);
   });
 
   it('ArrowUp wraps before the start', () => {
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 0 },
-      { type: 'ArrowUp' },
-      snap
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 0 }, { type: 'ArrowUp' }, snap);
     expect(r.state.focusedIndex).toBe(2);
   });
 
   it('ArrowDown skips disabled rows', () => {
     const snap2 = items([plain, disabled, plain]);
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 0 },
-      { type: 'ArrowDown' },
-      snap2
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 0 }, { type: 'ArrowDown' }, snap2);
     expect(r.state.focusedIndex).toBe(2);
   });
 
@@ -97,31 +82,19 @@ describe('reduce — Enter and Escape', () => {
   });
 
   it('Enter on a focused plain item fires activate', () => {
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 1 },
-      { type: 'Enter' },
-      snap
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 1 }, { type: 'Enter' }, snap);
     expect(r.effect).toEqual({ type: 'activate', list: 'main', index: 1 });
   });
 
   it('Enter on a disabled item is a no-op', () => {
     const snap2 = items([plain, disabled, plain]);
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 1 },
-      { type: 'Enter' },
-      snap2
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 1 }, { type: 'Enter' }, snap2);
     expect(r.effect).toBeUndefined();
   });
 
   it('Enter on a submenu parent fires openSubmenu', () => {
     const snap2 = items([plain, withSubmenu], [plain]);
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 1 },
-      { type: 'Enter' },
-      snap2
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 1 }, { type: 'Enter' }, snap2);
     expect(r.effect).toEqual({ type: 'openSubmenu', parentIndex: 1 });
     expect(r.state.submenuOpen).toBe(true);
     expect(r.state.submenuFocusedIndex).toBe(0);
@@ -137,22 +110,14 @@ describe('reduce — submenu open / close via arrows', () => {
   const snap = items([plain, withSubmenu], [plain, plain]);
 
   it('ArrowRight on a focused submenu parent opens the submenu', () => {
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 1 },
-      { type: 'ArrowRight' },
-      snap
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 1 }, { type: 'ArrowRight' }, snap);
     expect(r.state.submenuOpen).toBe(true);
     expect(r.state.submenuFocusedIndex).toBe(0);
     expect(r.effect).toEqual({ type: 'openSubmenu', parentIndex: 1 });
   });
 
   it('ArrowRight on a non-submenu row is a no-op', () => {
-    const r = reduce(
-      { ...INITIAL_STATE, focusedIndex: 0 },
-      { type: 'ArrowRight' },
-      snap
-    );
+    const r = reduce({ ...INITIAL_STATE, focusedIndex: 0 }, { type: 'ArrowRight' }, snap);
     expect(r.state.submenuOpen).toBe(false);
     expect(r.effect).toBeUndefined();
   });
@@ -161,7 +126,7 @@ describe('reduce — submenu open / close via arrows', () => {
     const state: KeyboardState = {
       focusedIndex: 1,
       submenuOpen: true,
-      submenuFocusedIndex: 0
+      submenuFocusedIndex: 0,
     };
     const r = reduce(state, { type: 'ArrowLeft' }, snap);
     expect(r.state.submenuOpen).toBe(false);
@@ -178,7 +143,7 @@ describe('reduce — submenu open / close via arrows', () => {
     const state: KeyboardState = {
       focusedIndex: 1,
       submenuOpen: true,
-      submenuFocusedIndex: 0
+      submenuFocusedIndex: 0,
     };
     const r = reduce(state, { type: 'ArrowRight' }, snap);
     expect(r.state.submenuOpen).toBe(true);
@@ -189,7 +154,7 @@ describe('reduce — submenu open / close via arrows', () => {
     const state: KeyboardState = {
       focusedIndex: 1,
       submenuOpen: true,
-      submenuFocusedIndex: 0
+      submenuFocusedIndex: 0,
     };
     const r = reduce(state, { type: 'Escape' }, snap);
     expect(r.state.submenuOpen).toBe(false);
@@ -202,7 +167,7 @@ describe('reduce — submenu nav and activation', () => {
   const opened: KeyboardState = {
     focusedIndex: 1,
     submenuOpen: true,
-    submenuFocusedIndex: 0
+    submenuFocusedIndex: 0,
   };
 
   it('ArrowDown in submenu skips disabled', () => {
@@ -220,7 +185,7 @@ describe('reduce — submenu nav and activation', () => {
     expect(r.effect).toEqual({
       type: 'activate',
       list: 'submenu',
-      index: 0
+      index: 0,
     });
   });
 
@@ -241,11 +206,7 @@ describe('reduce — submenu nav and activation', () => {
 describe('reduce — mnemonics', () => {
   it('unique mnemonic focuses and activates', () => {
     const snap = items([plain, mnemA, plainB]);
-    const r = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const r = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'a' }, snap);
     expect(r.state.focusedIndex).toBe(1);
     expect(r.effect).toEqual({ type: 'activate', list: 'main', index: 1 });
   });
@@ -253,71 +214,43 @@ describe('reduce — mnemonics', () => {
   it('unique mnemonic on submenu parent opens the submenu instead', () => {
     const parent: FSMItem = { mnemonic: 'a', hasSubmenu: true };
     const snap = items([plain, parent], [plain]);
-    const r = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const r = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'a' }, snap);
     expect(r.state.submenuOpen).toBe(true);
     expect(r.effect).toEqual({ type: 'openSubmenu', parentIndex: 1 });
   });
 
   it('duplicate mnemonic cycles focus without activating', () => {
     const snap = items([mnemA, mnemA2, plain]);
-    const first = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const first = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'a' }, snap);
     expect(first.state.focusedIndex).toBe(0);
     expect(first.effect).toBeUndefined();
 
-    const second = reduce(
-      first.state,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const second = reduce(first.state, { type: 'Mnemonic', char: 'a' }, snap);
     expect(second.state.focusedIndex).toBe(1);
     expect(second.effect).toBeUndefined();
 
     // Wraps past the last match back to the first.
-    const third = reduce(
-      second.state,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const third = reduce(second.state, { type: 'Mnemonic', char: 'a' }, snap);
     expect(third.state.focusedIndex).toBe(0);
   });
 
   it('unknown mnemonic is a no-op', () => {
     const snap = items([plain, mnemA]);
-    const r = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'z' },
-      snap
-    );
+    const r = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'z' }, snap);
     expect(r.state.focusedIndex).toBe(-1);
     expect(r.effect).toBeUndefined();
   });
 
   it('mnemonic is case-insensitive', () => {
     const snap = items([plain, mnemA]);
-    const r = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'A' },
-      snap
-    );
+    const r = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'A' }, snap);
     expect(r.effect).toEqual({ type: 'activate', list: 'main', index: 1 });
   });
 
   it('disabled matches are ignored', () => {
     const gated: FSMItem = { mnemonic: 'a', disabled: true };
     const snap = items([gated, plain]);
-    const r = reduce(
-      INITIAL_STATE,
-      { type: 'Mnemonic', char: 'a' },
-      snap
-    );
+    const r = reduce(INITIAL_STATE, { type: 'Mnemonic', char: 'a' }, snap);
     expect(r.state.focusedIndex).toBe(-1);
     expect(r.effect).toBeUndefined();
   });
@@ -328,13 +261,13 @@ describe('reduce — mnemonics', () => {
     const opened: KeyboardState = {
       focusedIndex: 1,
       submenuOpen: true,
-      submenuFocusedIndex: 0
+      submenuFocusedIndex: 0,
     };
     const r = reduce(opened, { type: 'Mnemonic', char: 'a' }, snap);
     expect(r.effect).toEqual({
       type: 'activate',
       list: 'submenu',
-      index: 1
+      index: 1,
     });
   });
 });

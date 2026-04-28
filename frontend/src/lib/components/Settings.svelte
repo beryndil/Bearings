@@ -127,26 +127,24 @@
   >
     <div
       bind:this={dialogEl}
-      class="w-full max-w-3xl rounded-lg border border-slate-800 bg-slate-900 shadow-2xl
-        flex flex-col"
+      class="flex w-full max-w-3xl flex-col rounded-lg border border-slate-800
+        bg-slate-900 shadow-2xl"
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-dialog-title"
       data-testid="settings-dialog"
     >
-      <header
-        class="flex items-start justify-between px-6 py-4 border-b border-slate-800"
-      >
+      <header class="flex items-start justify-between border-b border-slate-800 px-6 py-4">
         <div>
           <h2 id="settings-dialog-title" class="text-lg font-medium">Settings</h2>
-          <p class="text-xs text-slate-400 mt-1">
+          <p class="mt-1 text-xs text-slate-400">
             Changes save automatically. Auth token stays on this device.
           </p>
         </div>
         <button
           bind:this={closeButtonEl}
           type="button"
-          class="text-slate-500 hover:text-slate-300 p-1 rounded
+          class="rounded p-1 text-slate-500 hover:text-slate-300
             focus:outline-none focus:ring-2 focus:ring-sky-500/60"
           aria-label="Close settings"
           onclick={onClose}
@@ -159,18 +157,14 @@
       <SettingsShell />
 
       <footer
-        class="px-6 py-2 border-t border-slate-800 text-xs min-h-[2rem]
-          flex items-center"
+        class="flex min-h-[2rem] items-center border-t border-slate-800 px-6
+          py-2 text-xs"
         data-testid="settings-footer"
       >
         {#if preferences.lastSaveStatus.kind === 'saving'}
-          <span class="text-slate-400 italic" role="status" aria-live="polite">
-            Saving…
-          </span>
+          <span class="italic text-slate-400" role="status" aria-live="polite"> Saving… </span>
         {:else if preferences.lastSaveStatus.kind === 'saved'}
-          <span class="text-emerald-400" role="status" aria-live="polite">
-            All changes saved
-          </span>
+          <span class="text-emerald-400" role="status" aria-live="polite"> All changes saved </span>
         {:else if preferences.lastSaveStatus.kind === 'error'}
           <span class="text-rose-400" role="alert">
             Failed to save: {preferences.lastSaveStatus.error}

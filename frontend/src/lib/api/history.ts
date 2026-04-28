@@ -40,7 +40,7 @@ export function importSession(
   return jsonFetch<Session>(fetchImpl, '/api/sessions/import', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 

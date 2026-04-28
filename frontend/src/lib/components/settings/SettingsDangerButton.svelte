@@ -40,7 +40,7 @@
     actionId,
     targetType = 'settings',
     onConfirm,
-    disabled = false
+    disabled = false,
   }: Props = $props();
 
   let saveState = $state<SaveState>({ kind: 'idle' });
@@ -68,11 +68,11 @@
         } catch (err) {
           saveState = {
             kind: 'error',
-            message: err instanceof Error ? err.message : String(err)
+            message: err instanceof Error ? err.message : String(err),
           };
           throw err;
         }
-      }
+      },
     });
   }
 </script>
@@ -81,10 +81,10 @@
   {#snippet control()}
     <button
       type="button"
-      class="rounded bg-rose-700/80 hover:bg-rose-600 text-white text-sm
-        px-3 py-1.5 font-medium disabled:opacity-50 disabled:cursor-not-allowed
-        focus:outline-none focus:ring-2 focus:ring-rose-500/60 focus:ring-offset-1
-        focus:ring-offset-slate-900"
+      class="rounded bg-rose-700/80 px-3 py-1.5 text-sm
+        font-medium text-white hover:bg-rose-600 focus:outline-none focus:ring-2
+        focus:ring-rose-500/60 focus:ring-offset-1 focus:ring-offset-slate-900 disabled:cursor-not-allowed
+        disabled:opacity-50"
       {disabled}
       onclick={fire}
       data-testid="settings-danger-button"

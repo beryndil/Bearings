@@ -204,7 +204,7 @@ export class AgentConnection {
         request_id: requestId,
         decision,
         ...(reason ? { reason } : {}),
-        ...(updatedInput ? { updated_input: updatedInput } : {})
+        ...(updatedInput ? { updated_input: updatedInput } : {}),
       })
     );
     conversation.clearPendingApproval(this.sessionId, requestId);
@@ -266,7 +266,7 @@ export class AgentConnection {
         ws.send(
           JSON.stringify({
             type: 'set_permission_mode',
-            mode: this.permissionMode
+            mode: this.permissionMode,
           })
         );
       }
@@ -282,9 +282,7 @@ export class AgentConnection {
         // post-hoc check can't tell a replay from a novel turn.
         const fresh =
           event.type === 'message_complete' &&
-          !conversation
-            .completedIdsFor(event.session_id)
-            .has(event.message_id);
+          !conversation.completedIdsFor(event.session_id).has(event.message_id);
         conversation.handleEvent(event);
         if (fresh && event.type === 'message_complete') {
           maybeNotifyTurnComplete(event);
@@ -326,10 +324,7 @@ export class AgentConnection {
 
   private scheduleReconnect(): void {
     if (!this.sessionId) return;
-    const delay = Math.min(
-      BASE_RETRY_DELAY_MS * 2 ** this.retryCount,
-      MAX_RETRY_DELAY_MS
-    );
+    const delay = Math.min(BASE_RETRY_DELAY_MS * 2 ** this.retryCount, MAX_RETRY_DELAY_MS);
     this.retryCount += 1;
     this.reconnectDelayMs = delay;
     this.reconnectTimer = setTimeout(() => {
@@ -361,14 +356,13 @@ function maybeNotifyTurnComplete(event: api.MessageCompleteEvent): void {
   if (!preferences.notifyOnComplete) return;
   if (typeof document !== 'undefined') {
     const hidden = document.visibilityState === 'hidden';
-    const unfocused =
-      typeof document.hasFocus === 'function' && !document.hasFocus();
+    const unfocused = typeof document.hasFocus === 'function' && !document.hasFocus();
     if (!hidden && !unfocused) return;
   }
   const session = sessions.list.find((s) => s.id === event.session_id);
   const title = session?.title?.trim() || 'Untitled session';
   notify('Claude finished replying', {
     body: title,
-    tag: `bearings:complete:${event.session_id}`
+    tag: `bearings:complete:${event.session_id}`,
   });
 }

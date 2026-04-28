@@ -4,7 +4,7 @@
 export const KNOWN_MODELS = [
   'claude-opus-4-7',
   'claude-sonnet-4-6',
-  'claude-haiku-4-5-20251001'
+  'claude-haiku-4-5-20251001',
 ] as const;
 
 export type KnownModel = (typeof KNOWN_MODELS)[number];

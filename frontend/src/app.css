@@ -22,7 +22,11 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #app { height: 100%; }
+html,
+body,
+#app {
+  height: 100%;
+}
 
 /* Thin scrollbars across the whole app, theme-driven. Firefox uses the
    `scrollbar-*` properties; Chromium/WebKit gets the `::-webkit-*`

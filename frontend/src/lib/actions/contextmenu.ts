@@ -57,7 +57,7 @@ export function contextmenu(
     onLongPress: (x, y) => {
       if (current.target === null) return;
       contextMenu.open(current.target, x, y, false);
-    }
+    },
   });
 
   return {
@@ -67,12 +67,12 @@ export function contextmenu(
         onLongPress: (x, y) => {
           if (current.target === null) return;
           contextMenu.open(current.target, x, y, false);
-        }
+        },
       });
     },
     destroy(): void {
       node.removeEventListener('contextmenu', onContextMenu);
       longpressHandle.destroy();
-    }
+    },
   };
 }

@@ -4,10 +4,8 @@
   import { tags } from '$lib/stores/tags.svelte';
   import { contextmenu } from '$lib/actions/contextmenu';
 
-  let {
-    open = $bindable(false),
-    sessionId
-  }: { open?: boolean; sessionId: string | null } = $props();
+  let { open = $bindable(false), sessionId }: { open?: boolean; sessionId: string | null } =
+    $props();
 
   let title = $state('');
   let description = $state('');
@@ -31,14 +29,10 @@
   const attachSuggestions = $derived(
     draftLower === ''
       ? []
-      : tags.list.filter(
-          (t) => !attachedIds.has(t.id) && t.name.toLowerCase().includes(draftLower)
-        )
+      : tags.list.filter((t) => !attachedIds.has(t.id) && t.name.toLowerCase().includes(draftLower))
   );
 
-  const exactMatch = $derived(
-    tags.list.find((t) => t.name.toLowerCase() === draftLower) ?? null
-  );
+  const exactMatch = $derived(tags.list.find((t) => t.name.toLowerCase() === draftLower) ?? null);
 
   // Seed form state on the open transition only. The 3 s `softRefresh`
   // poll in `sessions.svelte.ts` replaces `sessions.list` with new
@@ -142,7 +136,7 @@
     await sessions.update(sessionId, {
       title: title.trim() === '' ? null : title.trim(),
       description: description.trim() === '' ? null : description.trim(),
-      max_budget_usd: parseBudget(budget)
+      max_budget_usd: parseBudget(budget),
     });
     saving = false;
     open = false;
@@ -156,8 +150,8 @@
 {#if open && current}
   <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/80 p-4">
     <form
-      class="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl
-        flex flex-col gap-4"
+      class="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-slate-800
+        bg-slate-900 p-6 shadow-2xl"
       onsubmit={(e) => {
         e.preventDefault();
         onSave();
@@ -166,13 +160,13 @@
       <header class="flex items-start justify-between">
         <div>
           <h2 class="text-lg font-medium">Edit session</h2>
-          <p class="text-[10px] text-slate-600 font-mono mt-1 truncate">
+          <p class="mt-1 truncate font-mono text-[10px] text-slate-600">
             {current.model} · {current.working_dir}
           </p>
         </div>
         <button
           type="button"
-          class="text-slate-500 hover:text-slate-300 text-sm"
+          class="text-sm text-slate-500 hover:text-slate-300"
           aria-label="Close edit"
           onclick={onCancel}
         >
@@ -184,8 +178,8 @@
         <span class="text-slate-400">Title</span>
         <input
           type="text"
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-            focus:outline-none focus:border-slate-600"
+          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+            focus:border-slate-600 focus:outline-none"
           placeholder="(leave empty to clear)"
           bind:value={title}
         />
@@ -194,8 +188,8 @@
       <label class="flex flex-col gap-1 text-xs">
         <span class="text-slate-400">Description</span>
         <textarea
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-            focus:outline-none focus:border-slate-600 resize-y min-h-[4.5rem]"
+          class="min-h-[4.5rem] resize-y rounded border border-slate-800 bg-slate-950 px-2
+            py-2 text-sm focus:border-slate-600 focus:outline-none"
           placeholder="context notes for this session (optional)"
           rows="3"
           bind:value={description}
@@ -210,8 +204,8 @@
           step="0.01"
           min="0"
           placeholder="no cap"
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-            focus:outline-none focus:border-slate-600"
+          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-sm
+            focus:border-slate-600 focus:outline-none"
           bind:value={budget}
         />
       </label>
@@ -227,8 +221,8 @@
                   target: {
                     type: 'tag_chip',
                     tagId: tag.id,
-                    sessionId: current?.id ?? null
-                  }
+                    sessionId: current?.id ?? null,
+                  },
                 }}
               >
                 {#if tag.pinned}
@@ -249,8 +243,8 @@
         {/if}
         <input
           type="text"
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm
-            focus:outline-none focus:border-slate-600"
+          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+            focus:border-slate-600 focus:outline-none"
           placeholder="Add a tag (Enter to attach or create)"
           aria-label="Tag name"
           bind:value={tagDraft}
@@ -262,7 +256,7 @@
               <li>
                 <button
                   type="button"
-                  class="rounded bg-slate-800 hover:bg-slate-700 px-2 py-0.5 text-xs"
+                  class="rounded bg-slate-800 px-2 py-0.5 text-xs hover:bg-slate-700"
                   onclick={() => onAttach(tag)}
                 >
                   + {tag.name}
@@ -273,7 +267,7 @@
         {:else if tagDraft.trim() !== '' && !exactMatch}
           <button
             type="button"
-            class="self-start rounded bg-emerald-700 hover:bg-emerald-600 px-2 py-0.5 text-xs"
+            class="self-start rounded bg-emerald-700 px-2 py-0.5 text-xs hover:bg-emerald-600"
             onclick={onCreateAndAttach}
           >
             + Create "{tagDraft.trim()}"
@@ -287,14 +281,14 @@
       <div class="flex items-center justify-end gap-2 pt-2">
         <button
           type="button"
-          class="rounded bg-slate-800 hover:bg-slate-700 px-3 py-2 text-sm"
+          class="rounded bg-slate-800 px-3 py-2 text-sm hover:bg-slate-700"
           onclick={onCancel}
         >
           Cancel
         </button>
         <button
           type="submit"
-          class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm
+          class="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500
             disabled:opacity-50"
           disabled={saving}
         >

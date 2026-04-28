@@ -15,7 +15,7 @@ const CALL: ContextTarget = {
   type: 'tool_call',
   id: 'tc-1',
   sessionId: 's-1',
-  messageId: 'a-1'
+  messageId: 'a-1',
 };
 
 describe('tool_call.ts — action-ID stability', () => {
@@ -26,7 +26,7 @@ describe('tool_call.ts — action-ID stability', () => {
       'tool_call.copy.input',
       'tool_call.copy.name',
       'tool_call.copy.output',
-      'tool_call.retry'
+      'tool_call.retry',
     ]);
   });
 

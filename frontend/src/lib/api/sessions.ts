@@ -204,9 +204,7 @@ export type SessionFilter = {
   severityTags?: number[];
 };
 
-export function listRunningSessions(
-  fetchImpl: typeof fetch = fetch
-): Promise<string[]> {
+export function listRunningSessions(fetchImpl: typeof fetch = fetch): Promise<string[]> {
   return jsonFetch<string[]>(fetchImpl, '/api/sessions/running');
 }
 
@@ -215,9 +213,7 @@ export function listRunningSessions(
  * flashing "look at this now" indicator as the poll fallback when the
  * `/ws/sessions` broadcast is down; the live path carries this state
  * on each `runner_state` frame's `is_awaiting_user` field. */
-export function listAwaitingSessions(
-  fetchImpl: typeof fetch = fetch
-): Promise<string[]> {
+export function listAwaitingSessions(fetchImpl: typeof fetch = fetch): Promise<string[]> {
   return jsonFetch<string[]>(fetchImpl, '/api/sessions/awaiting');
 }
 
@@ -245,10 +241,7 @@ export function listSessions(
   return jsonFetch<Session[]>(fetchImpl, `/api/sessions?${params}`);
 }
 
-export function getSession(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<Session> {
+export function getSession(id: string, fetchImpl: typeof fetch = fetch): Promise<Session> {
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}`);
 }
 
@@ -259,16 +252,13 @@ export function createSession(
   return jsonFetch<Session>(fetchImpl, '/api/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
-export async function deleteSession(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
+export async function deleteSession(id: string, fetchImpl: typeof fetch = fetch): Promise<void> {
   await jsonFetch<{ deleted: boolean }>(fetchImpl, `/api/sessions/${id}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }
 
@@ -280,7 +270,7 @@ export function updateSession(
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch)
+    body: JSON.stringify(patch),
   });
 }
 
@@ -288,23 +278,17 @@ export function updateSession(
  * "Closed" group on the next render. Idempotent: the server refreshes
  * the `closed_at` timestamp on a second call. Returns the refreshed
  * session row. */
-export function closeSession(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<Session> {
+export function closeSession(id: string, fetchImpl: typeof fetch = fetch): Promise<Session> {
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}/close`, {
-    method: 'POST'
+    method: 'POST',
   });
 }
 
 /** Reopen a previously closed session. Idempotent on already-open
  * sessions. Returns the refreshed session row. */
-export function reopenSession(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<Session> {
+export function reopenSession(id: string, fetchImpl: typeof fetch = fetch): Promise<Session> {
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}/reopen`, {
-    method: 'POST'
+    method: 'POST',
   });
 }
 
@@ -313,12 +297,9 @@ export function reopenSession(
  * `visibilitychange` → visible while a session is selected. Does not
  * change sort position; the server returns the refreshed row for the
  * caller to merge into local state. Idempotent. */
-export function markSessionViewed(
-  id: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<Session> {
+export function markSessionViewed(id: string, fetchImpl: typeof fetch = fetch): Promise<Session> {
   return jsonFetch<Session>(fetchImpl, `/api/sessions/${id}/viewed`, {
-    method: 'POST'
+    method: 'POST',
   });
 }
 
@@ -461,7 +442,7 @@ export function reorgMove(
   return jsonFetch<ReorgMoveResult>(fetchImpl, `/api/sessions/${sourceId}/reorg/move`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -477,7 +458,7 @@ export function reorgSplit(
   return jsonFetch<ReorgSplitResult>(fetchImpl, `/api/sessions/${sourceId}/reorg/split`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -516,7 +497,7 @@ export function reorgMerge(
   return jsonFetch<ReorgMergeResult>(fetchImpl, `/api/sessions/${sourceId}/reorg/merge`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -556,7 +537,7 @@ export function deleteReorgAudit(
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
   return voidFetch(fetchImpl, `/api/sessions/${sessionId}/reorg/audits/${auditId}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }
 
@@ -608,7 +589,7 @@ export function analyzeReorg(
   return jsonFetch<ReorgAnalyzeResult>(fetchImpl, `/api/sessions/${sessionId}/reorg/analyze`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 

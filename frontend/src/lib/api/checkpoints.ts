@@ -43,10 +43,7 @@ export function listCheckpoints(
   sessionId: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<Checkpoint[]> {
-  return jsonFetch<Checkpoint[]>(
-    fetchImpl,
-    `/api/sessions/${sessionId}/checkpoints`
-  );
+  return jsonFetch<Checkpoint[]>(fetchImpl, `/api/sessions/${sessionId}/checkpoints`);
 }
 
 export function createCheckpoint(
@@ -54,15 +51,11 @@ export function createCheckpoint(
   body: CheckpointCreate,
   fetchImpl: typeof fetch = fetch
 ): Promise<Checkpoint> {
-  return jsonFetch<Checkpoint>(
-    fetchImpl,
-    `/api/sessions/${sessionId}/checkpoints`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
-    }
-  );
+  return jsonFetch<Checkpoint>(fetchImpl, `/api/sessions/${sessionId}/checkpoints`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 export function deleteCheckpoint(
@@ -70,11 +63,9 @@ export function deleteCheckpoint(
   checkpointId: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  return voidFetch(
-    fetchImpl,
-    `/api/sessions/${sessionId}/checkpoints/${checkpointId}`,
-    { method: 'DELETE' }
-  );
+  return voidFetch(fetchImpl, `/api/sessions/${sessionId}/checkpoints/${checkpointId}`, {
+    method: 'DELETE',
+  });
 }
 
 export function forkCheckpoint(
@@ -89,7 +80,7 @@ export function forkCheckpoint(
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
     }
   );
 }

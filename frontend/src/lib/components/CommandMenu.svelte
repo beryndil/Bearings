@@ -68,8 +68,7 @@
         return true;
       case 'ArrowUp':
         e.preventDefault();
-        selectedIndex =
-          (selectedIndex - 1 + filtered.length) % filtered.length;
+        selectedIndex = (selectedIndex - 1 + filtered.length) % filtered.length;
         return true;
       case 'Enter':
       case 'Tab': {
@@ -105,9 +104,9 @@
 
 {#if open}
   <div
-    class="absolute left-4 right-4 bottom-full mb-2 z-30
-      rounded border border-slate-800 bg-slate-900 shadow-lg
-      max-h-64 overflow-y-auto"
+    class="absolute bottom-full left-4 right-4 z-30 mb-2
+      max-h-64 overflow-y-auto rounded border border-slate-800
+      bg-slate-900 shadow-lg"
     role="listbox"
     aria-label="Slash command palette"
   >
@@ -121,7 +120,7 @@
               type="button"
               role="option"
               aria-selected={i === selectedIndex}
-              class="w-full text-left px-3 py-1.5 flex items-baseline gap-2
+              class="flex w-full items-baseline gap-2 px-3 py-1.5 text-left
                 hover:bg-slate-800 aria-selected:bg-slate-800"
               onmousedown={(e) => {
                 // mousedown (not click) keeps the textarea focused so
@@ -136,7 +135,7 @@
                 {scopeLabel(entry.scope)}{entry.kind === 'skill' ? '·skill' : ''}
               </span>
               {#if entry.description}
-                <span class="text-xs text-slate-500 truncate flex-1 text-right">
+                <span class="flex-1 truncate text-right text-xs text-slate-500">
                   {entry.description}
                 </span>
               {/if}

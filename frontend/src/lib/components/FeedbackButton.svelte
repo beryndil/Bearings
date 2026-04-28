@@ -65,9 +65,7 @@
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 
-  const label = $derived(
-    kind === 'bug' ? 'Report a bug on GitHub' : 'Request a feature on GitHub'
-  );
+  const label = $derived(kind === 'bug' ? 'Report a bug on GitHub' : 'Request a feature on GitHub');
 </script>
 
 <button

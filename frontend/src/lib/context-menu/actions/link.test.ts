@@ -16,7 +16,7 @@ const HTTP_LINK: ContextTarget = {
   href: 'https://example.com/page',
   text: 'example',
   sessionId: 's-1',
-  messageId: 'm-1'
+  messageId: 'm-1',
 };
 
 const FILE_LINK: ContextTarget = {
@@ -24,7 +24,7 @@ const FILE_LINK: ContextTarget = {
   href: 'file:///tmp/demo.py',
   text: 'demo.py',
   sessionId: 's-1',
-  messageId: 'm-1'
+  messageId: 'm-1',
 };
 
 const BAD_LINK: ContextTarget = {
@@ -32,7 +32,7 @@ const BAD_LINK: ContextTarget = {
   href: 'not a url at all',
   text: 'broken',
   sessionId: null,
-  messageId: null
+  messageId: null,
 };
 
 describe('link.ts — action-ID stability', () => {
@@ -42,7 +42,7 @@ describe('link.ts — action-ID stability', () => {
       'link.copy_text',
       'link.copy_url',
       'link.open_in.editor',
-      'link.open_new_tab'
+      'link.open_new_tab',
     ]);
   });
 

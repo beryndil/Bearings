@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  notify,
-  notifyPermission,
-  notifySupported,
-  requestNotifyPermission
-} from './notify';
+import { notify, notifyPermission, notifySupported, requestNotifyPermission } from './notify';
 
 type NotificationCtor = typeof Notification;
 
@@ -21,7 +16,11 @@ const ctorCalls: Array<{ title: string; options: Record<string, unknown> }> = []
 let lastInstance: NotificationMock | null = null;
 
 function installNotificationMock(permission: NotificationPermission): void {
-  const Mock = function (this: NotificationMock, title: string, options: Record<string, unknown> = {}) {
+  const Mock = function (
+    this: NotificationMock,
+    title: string,
+    options: Record<string, unknown> = {}
+  ) {
     ctorCalls.push({ title, options });
     this.body = options.body as string | undefined;
     this.tag = options.tag as string | undefined;
@@ -107,7 +106,7 @@ describe('notify', () => {
     expect(ctorCalls[0].options).toMatchObject({
       body: 'Session A',
       tag: 'sess-1',
-      icon: '/icon-192.png'
+      icon: '/icon-192.png',
     });
   });
 

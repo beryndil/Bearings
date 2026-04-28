@@ -68,7 +68,7 @@ function apply(node: HTMLElement, query: string): void {
       // wrapping them would pollute the DOM.
       if (!candidate.textContent?.trim()) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_ACCEPT;
-    }
+    },
   });
   const texts: Text[] = [];
   let current = walker.nextNode();
@@ -94,6 +94,6 @@ export function highlight(node: HTMLElement, query: string) {
     },
     destroy() {
       // Node is going away — nothing to clean up explicitly.
-    }
+    },
   };
 }

@@ -19,7 +19,7 @@ describe('multi_select.ts — action-ID stability', () => {
       'multi_select.delete',
       'multi_select.export',
       'multi_select.tag',
-      'multi_select.untag'
+      'multi_select.untag',
     ]);
   });
 

@@ -19,7 +19,7 @@ afterEach(cleanup);
 describe('SettingsToggle', () => {
   it('renders the title and reflects checked state via aria-checked', () => {
     const { getByRole } = render(SettingsToggle, {
-      props: { title: 'Notify on complete', checked: true }
+      props: { title: 'Notify on complete', checked: true },
     });
     const sw = getByRole('switch');
     expect(sw).toHaveAttribute('aria-checked', 'true');
@@ -29,7 +29,7 @@ describe('SettingsToggle', () => {
   it('clicking the switch fires onChange with the next value', async () => {
     const onChange = vi.fn(async () => {});
     const { getByRole } = render(SettingsToggle, {
-      props: { title: 'Toggle', checked: false, onChange }
+      props: { title: 'Toggle', checked: false, onChange },
     });
     await fireEvent.click(getByRole('switch'));
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(true));
@@ -38,7 +38,7 @@ describe('SettingsToggle', () => {
   it('surfaces Saved after a successful onChange', async () => {
     const onChange = vi.fn(async () => {});
     const { getByRole, findByText } = render(SettingsToggle, {
-      props: { title: 'Toggle', checked: false, onChange }
+      props: { title: 'Toggle', checked: false, onChange },
     });
     await fireEvent.click(getByRole('switch'));
     await findByText('Saved');
@@ -49,7 +49,7 @@ describe('SettingsToggle', () => {
       throw new Error('denied');
     });
     const { getByRole, findByText } = render(SettingsToggle, {
-      props: { title: 'Toggle', checked: false, onChange }
+      props: { title: 'Toggle', checked: false, onChange },
     });
     const sw = getByRole('switch');
     await fireEvent.click(sw);
@@ -61,7 +61,7 @@ describe('SettingsToggle', () => {
   it('disabled toggle does not fire onChange', async () => {
     const onChange = vi.fn(async () => {});
     const { getByRole } = render(SettingsToggle, {
-      props: { title: 'Toggle', checked: false, disabled: true, onChange }
+      props: { title: 'Toggle', checked: false, disabled: true, onChange },
     });
     await fireEvent.click(getByRole('switch'));
     expect(onChange).not.toHaveBeenCalled();

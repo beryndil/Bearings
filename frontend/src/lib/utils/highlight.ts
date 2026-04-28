@@ -3,7 +3,7 @@ const ESCAPES: Record<string, string> = {
   '<': '&lt;',
   '>': '&gt;',
   '"': '&quot;',
-  "'": '&#39;'
+  "'": '&#39;',
 };
 
 function escapeHtml(input: string): string {

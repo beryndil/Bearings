@@ -4,7 +4,7 @@ import {
   STUB_DEFAULT_WINDOW_MS,
   STUB_MAX_VISIBLE,
   notYetImplemented,
-  stubStore
+  stubStore,
 } from './stub.svelte';
 
 describe('stubStore', () => {
@@ -13,7 +13,7 @@ describe('stubStore', () => {
     vi.useFakeTimers();
     stubStore._setTimeSource({
       set: (fn, ms) => globalThis.setTimeout(fn, ms),
-      clear: (t) => globalThis.clearTimeout(t)
+      clear: (t) => globalThis.clearTimeout(t),
     });
   });
 
@@ -56,11 +56,7 @@ describe('stubStore', () => {
       stubStore.show({ actionId: `a${i}` });
     }
     expect(stubStore.items).toHaveLength(STUB_MAX_VISIBLE);
-    expect(stubStore.items.map((x) => x.actionId)).toEqual([
-      'a2',
-      'a3',
-      'a4'
-    ]);
+    expect(stubStore.items.map((x) => x.actionId)).toEqual(['a2', 'a3', 'a4']);
   });
 
   it('dismiss removes the toast and cancels the timer', () => {

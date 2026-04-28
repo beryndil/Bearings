@@ -129,7 +129,7 @@
     bulkMode = false,
     selectedIds,
     onToggleSelect,
-    workingDir = null
+    workingDir = null,
   }: Props = $props();
 
   /** Render a tool-call payload (input JSON, output, error) with URLs
@@ -180,11 +180,7 @@
     return () => clearInterval(id);
   });
 
-  function formatElapsed(
-    startedAt: number,
-    nowMs: number,
-    lastProgressMs: number | null
-  ): string {
+  function formatElapsed(startedAt: number, nowMs: number, lastProgressMs: number | null): string {
     // Take the max of (local wall-clock delta) and (server-reported
     // monotonic). Foreground tabs use the local clock almost
     // exclusively — it ticks every 1s via the effect above. A
@@ -248,9 +244,7 @@
    * clipboard write. Tilde fences are intentionally out of scope for
    * v0; agent output uses backticks ~exclusively. */
   const FENCED_CODE_RE = /```[ \t]*[\w+#-]*[ \t]*\n[\s\S]*?```/;
-  const hasCodeBlocks = $derived(
-    assistant !== null && FENCED_CODE_RE.test(assistant.content)
-  );
+  const hasCodeBlocks = $derived(assistant !== null && FENCED_CODE_RE.test(assistant.content));
 
   /** L5.1 — `⤴ TOOLS` jump target. Bound on the tool-work `<details>`
    * so the button can pop the disclosure open and scroll the user
@@ -268,12 +262,12 @@
 
 {#if user}
   <article
-    class="relative rounded border px-3 py-2 group
+    class="group relative rounded border px-3 py-2
       {bulkMode && isSelected(user.id)
-        ? 'border-emerald-500 bg-emerald-900/10'
-        : user.pinned
-          ? 'border-amber-500/60 bg-slate-800/60'
-          : 'border-slate-800 bg-slate-800/60'}
+      ? 'border-emerald-500 bg-emerald-900/10'
+      : user.pinned
+        ? 'border-amber-500/60 bg-slate-800/60'
+        : 'border-slate-800 bg-slate-800/60'}
       {user.hidden_from_context ? 'opacity-50' : ''}"
     data-testid="user-article"
     data-message-id={user.id}
@@ -284,19 +278,19 @@
         type: 'message',
         id: user.id,
         sessionId: user.session_id,
-        role: 'user'
-      }
+        role: 'user',
+      },
     }}
   >
     <header
-      class="flex items-center justify-between text-[10px] uppercase tracking-wider
-        text-slate-500 mb-1"
+      class="mb-1 flex items-center justify-between text-[10px] uppercase
+        tracking-wider text-slate-500"
     >
       <span class="flex items-center gap-2">
         {#if bulkMode}
           <input
             type="checkbox"
-            class="accent-emerald-500 cursor-pointer"
+            class="cursor-pointer accent-emerald-500"
             aria-label={`Select user message ${user.id}`}
             checked={isSelected(user.id)}
             onclick={(e) => onCheckboxClick(e, user!)}
@@ -306,10 +300,10 @@
         {/if}
         <span>{preferences.displayName ?? 'user'}</span>
         {#if user.pinned}
-          <span class="text-amber-400 normal-case" title="Pinned">📌</span>
+          <span class="normal-case text-amber-400" title="Pinned">📌</span>
         {/if}
         {#if user.hidden_from_context}
-          <span class="text-slate-500 normal-case" title="Hidden from context window"
+          <span class="normal-case text-slate-500" title="Hidden from context window"
             >👁‍🗨 hidden</span
           >
         {/if}
@@ -319,18 +313,17 @@
       messageId={user.id}
       sessionId={user.session_id}
       content={user.content}
-      highlightQuery={highlightQuery}
+      {highlightQuery}
     />
   </article>
 {/if}
 
 {#if thinkingCombined}
-  <details class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1">
+  <details class="ml-6 rounded border border-slate-800/60 bg-slate-950/40 px-2 py-1">
     <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500">
       thinking{isStreaming ? ' · live' : ''}
     </summary>
-    <pre
-      class="mt-1 whitespace-pre-wrap text-xs text-slate-400 font-sans">{thinkingCombined}</pre>
+    <pre class="mt-1 whitespace-pre-wrap font-sans text-xs text-slate-400">{thinkingCombined}</pre>
   </details>
 {/if}
 
@@ -343,17 +336,17 @@
   <details
     bind:this={toolWorkDetails}
     data-testid="tool-work-details"
-    class="ml-6 rounded bg-slate-950/40 border border-slate-800/60 px-2 py-1"
+    class="ml-6 rounded border border-slate-800/60 bg-slate-950/40 px-2 py-1"
   >
     <summary
-      class="cursor-pointer text-[10px] uppercase tracking-wider text-slate-500
-        flex items-center gap-2"
+      class="flex cursor-pointer items-center gap-2 text-[10px]
+        uppercase tracking-wider text-slate-500"
     >
       <span>tool work · {toolCalls.length}</span>
       {#if runningCount > 0}
         <span
-          class="bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded text-[9px] uppercase
-            animate-pulse flex items-center gap-1"
+          class="flex animate-pulse items-center gap-1 rounded bg-amber-900 px-1.5
+            py-0.5 text-[9px] uppercase text-amber-300"
           data-testid="tool-work-running-badge"
         >
           <span aria-hidden="true">●</span>
@@ -362,7 +355,7 @@
       {/if}
       {#if firstRunningSubAgent}
         <span
-          class="normal-case tracking-normal text-amber-200 truncate max-w-sm min-w-0"
+          class="min-w-0 max-w-sm truncate normal-case tracking-normal text-amber-200"
           data-testid="tool-work-subagent-subtitle"
           title={subAgentSubtitle(firstRunningSubAgent.input)}
         >
@@ -385,29 +378,33 @@
           data-running={running ? 'true' : 'false'}
           use:contextmenuDelegate={{
             sessionId: assistant?.session_id ?? user?.session_id ?? null,
-            messageId: call.messageId
+            messageId: call.messageId,
           }}
           use:contextmenu={{
             target: {
               type: 'tool_call',
               id: call.id,
               sessionId: assistant?.session_id ?? user?.session_id ?? '',
-              messageId: call.messageId
-            }
-          }}><span
-            class="text-emerald-400">$ {call.name}</span> <span
-            class={mark.cls}>{mark.glyph}</span>{#if running} <span
-            class="inline-block animate-pulse text-amber-400"
-            data-testid="tool-call-pulse"
-            aria-hidden="true">●</span> <span
-            class="text-amber-300"
-            data-testid="tool-call-elapsed">{formatElapsed(call.startedAt, now, call.lastProgressMs)}</span>{#if isSubAgent(call.name)} <span
-            class="text-amber-200"
-            data-testid="tool-call-subagent">— running sub-agent: {subAgentSubtitle(call.input)}</span>{/if}{/if}{#if call.outputTruncated} <span
-            class="text-amber-400">[truncated]</span>{/if}
+              messageId: call.messageId,
+            },
+          }}><span class="text-emerald-400">$ {call.name}</span> <span class={mark.cls}
+            >{mark.glyph}</span
+          >{#if running}
+            <span
+              class="inline-block animate-pulse text-amber-400"
+              data-testid="tool-call-pulse"
+              aria-hidden="true">●</span
+            > <span class="text-amber-300" data-testid="tool-call-elapsed"
+              >{formatElapsed(call.startedAt, now, call.lastProgressMs)}</span
+            >{#if isSubAgent(call.name)}
+              <span class="text-amber-200" data-testid="tool-call-subagent"
+                >— running sub-agent: {subAgentSubtitle(call.input)}</span
+              >{/if}{/if}{#if call.outputTruncated}
+            <span class="text-amber-400">[truncated]</span>{/if}
 {@html linkifiedSegment(JSON.stringify(call.input, null, 2))}{#if call.output !== null}
-{@html linkifiedSegment(call.output)}{/if}{#if call.error}
-<span class="text-rose-400">error: {@html linkifiedSegment(call.error)}</span>{/if}</pre>
+            {@html linkifiedSegment(call.output)}{/if}{#if call.error}
+            <span class="text-rose-400">error: {@html linkifiedSegment(call.error)}</span
+            >{/if}</pre>
       {/each}
     </div>
   </details>
@@ -415,14 +412,14 @@
 
 {#if assistant || isStreaming}
   <article
-    class="relative rounded border px-3 py-2 bg-slate-900 group
+    class="group relative rounded border bg-slate-900 px-3 py-2
       {bulkMode && assistant && isSelected(assistant.id)
-        ? 'border-emerald-500 bg-emerald-900/10'
-        : isStreaming
-          ? 'border-amber-900/50'
-          : assistant?.pinned
-            ? 'border-amber-500/60'
-            : 'border-slate-800'}
+      ? 'border-emerald-500 bg-emerald-900/10'
+      : isStreaming
+        ? 'border-amber-900/50'
+        : assistant?.pinned
+          ? 'border-amber-500/60'
+          : 'border-slate-800'}
       {assistant?.hidden_from_context ? 'opacity-50' : ''}"
     data-testid="assistant-article"
     data-message-id={assistant?.id ?? ''}
@@ -434,20 +431,20 @@
             type: 'message',
             id: assistant.id,
             sessionId: assistant.session_id,
-            role: 'assistant'
+            role: 'assistant',
           }
-        : null
+        : null,
     }}
   >
     <header
-      class="flex items-center justify-between text-[10px] uppercase tracking-wider mb-1
+      class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-wider
         {isStreaming ? 'text-amber-400' : 'text-slate-500'}"
     >
       <span class="flex items-center gap-2">
         {#if bulkMode && assistant}
           <input
             type="checkbox"
-            class="accent-emerald-500 cursor-pointer"
+            class="cursor-pointer accent-emerald-500"
             aria-label={`Select assistant message ${assistant.id}`}
             checked={isSelected(assistant.id)}
             onclick={(e) => onCheckboxClick(e, assistant!)}
@@ -457,10 +454,10 @@
         {/if}
         <span>assistant{isStreaming ? ' · streaming' : ''}</span>
         {#if assistant?.pinned}
-          <span class="text-amber-400 normal-case" title="Pinned">📌</span>
+          <span class="normal-case text-amber-400" title="Pinned">📌</span>
         {/if}
         {#if assistant?.hidden_from_context}
-          <span class="text-slate-500 normal-case" title="Hidden from context window"
+          <span class="normal-case text-slate-500" title="Hidden from context window"
             >👁‍🗨 hidden</span
           >
         {/if}
@@ -471,7 +468,7 @@
         messageId={assistant.id}
         sessionId={assistant.session_id}
         content={assistant.content}
-        highlightQuery={highlightQuery}
+        {highlightQuery}
         disabled={isStreaming}
       />
     {:else}
@@ -479,7 +476,7 @@
         messageId={null}
         sessionId={user?.session_id ?? null}
         content={streamingContent}
-        highlightQuery={highlightQuery}
+        {highlightQuery}
         disabled={true}
       />
       <span class="inline-block animate-pulse">▍</span>

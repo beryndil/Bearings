@@ -83,14 +83,11 @@ export function listSessionTags(
   return jsonFetch<Tag[]>(fetchImpl, `/api/sessions/${sessionId}/tags`);
 }
 
-export function createTag(
-  body: TagCreate,
-  fetchImpl: typeof fetch = fetch
-): Promise<Tag> {
+export function createTag(body: TagCreate, fetchImpl: typeof fetch = fetch): Promise<Tag> {
   return jsonFetch<Tag>(fetchImpl, '/api/tags', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }
 
@@ -102,21 +99,15 @@ export function updateTag(
   return jsonFetch<Tag>(fetchImpl, `/api/tags/${id}`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch)
+    body: JSON.stringify(patch),
   });
 }
 
-export function deleteTag(
-  id: number,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
+export function deleteTag(id: number, fetchImpl: typeof fetch = fetch): Promise<void> {
   return voidFetch(fetchImpl, `/api/tags/${id}`, { method: 'DELETE' });
 }
 
-export function getTagMemory(
-  tagId: number,
-  fetchImpl: typeof fetch = fetch
-): Promise<TagMemory> {
+export function getTagMemory(tagId: number, fetchImpl: typeof fetch = fetch): Promise<TagMemory> {
   return jsonFetch<TagMemory>(fetchImpl, `/api/tags/${tagId}/memory`);
 }
 
@@ -128,14 +119,11 @@ export function putTagMemory(
   return jsonFetch<TagMemory>(fetchImpl, `/api/tags/${tagId}/memory`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content }),
   });
 }
 
-export function deleteTagMemory(
-  tagId: number,
-  fetchImpl: typeof fetch = fetch
-): Promise<void> {
+export function deleteTagMemory(tagId: number, fetchImpl: typeof fetch = fetch): Promise<void> {
   return voidFetch(fetchImpl, `/api/tags/${tagId}/memory`, { method: 'DELETE' });
 }
 
@@ -145,7 +133,7 @@ export function attachSessionTag(
   fetchImpl: typeof fetch = fetch
 ): Promise<Tag[]> {
   return jsonFetch<Tag[]>(fetchImpl, `/api/sessions/${sessionId}/tags/${tagId}`, {
-    method: 'POST'
+    method: 'POST',
   });
 }
 
@@ -155,6 +143,6 @@ export function detachSessionTag(
   fetchImpl: typeof fetch = fetch
 ): Promise<Tag[]> {
   return jsonFetch<Tag[]>(fetchImpl, `/api/sessions/${sessionId}/tags/${tagId}`, {
-    method: 'DELETE'
+    method: 'DELETE',
   });
 }

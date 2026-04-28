@@ -47,7 +47,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -61,7 +61,7 @@ describe('SessionsWsConnection.handleFrame', () => {
     const conn = new SessionsWsConnection(fakeSocketFactory);
     conn.handleFrame({
       kind: 'upsert',
-      session: sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' })
+      session: sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' }),
     });
     expect(sessions.list.map((s) => s.id)).toEqual(['b', 'a']);
   });
@@ -92,7 +92,7 @@ describe('SessionsWsConnection.handleFrame', () => {
       kind: 'runner_state',
       session_id: 'a',
       is_running: true,
-      is_awaiting_user: true
+      is_awaiting_user: true,
     });
     expect(sessions.running.has('a')).toBe(true);
     expect(sessions.awaiting.has('a')).toBe(true);
@@ -100,7 +100,7 @@ describe('SessionsWsConnection.handleFrame', () => {
       kind: 'runner_state',
       session_id: 'a',
       is_running: true,
-      is_awaiting_user: false
+      is_awaiting_user: false,
     });
     expect(sessions.awaiting.has('a')).toBe(false);
   });
@@ -127,7 +127,7 @@ function makeFakeSocket() {
     close() {},
     fire(name: string, ev: unknown) {
       for (const fn of listeners[name] ?? []) fn(ev);
-    }
+    },
   } as unknown as WebSocket & { fire: (n: string, ev: unknown) => void };
 }
 
@@ -148,10 +148,9 @@ describe('SessionsWsConnection reconnect policy', () => {
     // wants the channel. Prior behavior: guard against code 1000 made
     // this a permanent teardown — sidebar fell back to poll-only for
     // the rest of the tab's lifetime. Current behavior: reconnect.
-    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
-      'close',
-      { code: 1000 }
-    );
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire('close', {
+      code: 1000,
+    });
 
     // Exponential backoff starts at BASE_RETRY_DELAY_MS=1000; advance
     // past it to let the reconnect timer fire.
@@ -170,10 +169,9 @@ describe('SessionsWsConnection reconnect policy', () => {
     const conn = new SessionsWsConnection(factory);
     conn.connect();
     conn.close(); // Client-initiated teardown → wantConnected=false.
-    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
-      'close',
-      { code: 1000 }
-    );
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire('close', {
+      code: 1000,
+    });
     vi.advanceTimersByTime(5_000);
     expect(opened.length).toBe(1);
   });
@@ -188,10 +186,9 @@ describe('SessionsWsConnection reconnect policy', () => {
     };
     const conn = new SessionsWsConnection(factory);
     conn.connect();
-    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire(
-      'close',
-      { code: 4401 }
-    );
+    (opened[0] as unknown as { fire: (n: string, ev: unknown) => void }).fire('close', {
+      code: 4401,
+    });
     vi.advanceTimersByTime(5_000);
     expect(opened.length).toBe(1);
   });

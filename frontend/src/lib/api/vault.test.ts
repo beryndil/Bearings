@@ -6,7 +6,7 @@ import {
   searchVault,
   type VaultDoc,
   type VaultIndex,
-  type VaultSearchResult
+  type VaultSearchResult,
 } from './vault';
 
 afterEach(() => {
@@ -23,7 +23,7 @@ function fakeFetch(body: unknown): { fetch: typeof fetch; calls: Call[] } {
       ok: true,
       status: 200,
       text: async () => JSON.stringify(body),
-      json: async () => body
+      json: async () => body,
     };
   }) as unknown as typeof fetch;
   return { fetch: impl, calls };
@@ -39,10 +39,10 @@ describe('fetchVaultIndex', () => {
           slug: 'alpha',
           title: 'Alpha',
           mtime: 1,
-          size: 10
-        }
+          size: 10,
+        },
       ],
-      todos: []
+      todos: [],
     };
     const { fetch, calls } = fakeFetch(payload);
     const out = await fetchVaultIndex(fetch);
@@ -61,7 +61,7 @@ describe('fetchVaultDoc', () => {
       title: 'Alpha',
       mtime: 2,
       size: 20,
-      body: '# hi'
+      body: '# hi',
     };
     const { fetch, calls } = fakeFetch(payload);
     await fetchVaultDoc('/abs/plans/alpha with space.md', fetch);
@@ -70,9 +70,7 @@ describe('fetchVaultDoc', () => {
     // right wire shape. The test pins it so a future codepath swap to
     // `encodeURIComponent` (which would emit `%20`) is a deliberate
     // choice, not an accidental regression.
-    expect(calls[0].url).toContain(
-      'path=%2Fabs%2Fplans%2Falpha+with+space.md'
-    );
+    expect(calls[0].url).toContain('path=%2Fabs%2Fplans%2Falpha+with+space.md');
   });
 });
 
@@ -81,7 +79,7 @@ describe('searchVault', () => {
     const payload: VaultSearchResult = {
       query: 'fish',
       hits: [{ path: '/abs/plans/alpha.md', line: 3, snippet: 'red fish' }],
-      truncated: false
+      truncated: false,
     };
     const { fetch, calls } = fakeFetch(payload);
     const out = await searchVault('fish', fetch);
@@ -93,7 +91,7 @@ describe('searchVault', () => {
     const payload: VaultSearchResult = {
       query: 'r.d',
       hits: [],
-      truncated: false
+      truncated: false,
     };
     const { fetch, calls } = fakeFetch(payload);
     await searchVault('r.d', fetch);

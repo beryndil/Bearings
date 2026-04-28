@@ -50,61 +50,42 @@
     controlId,
     state = { kind: 'idle' },
     control,
-    footnote
+    footnote,
   }: Props = $props();
 </script>
 
 <div
-  class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 items-start px-4 py-3"
+  class="grid grid-cols-[1fr_auto] items-start gap-x-4 gap-y-1 px-4 py-3"
   data-testid="settings-row"
 >
-  <div class="min-w-0 flex flex-col gap-0.5">
+  <div class="flex min-w-0 flex-col gap-0.5">
     {#if controlId}
-      <label
-        for={controlId}
-        class="text-sm font-medium text-slate-200 cursor-pointer w-fit"
-      >
+      <label for={controlId} class="w-fit cursor-pointer text-sm font-medium text-slate-200">
         {title}
       </label>
     {:else}
       <span class="text-sm font-medium text-slate-200">{title}</span>
     {/if}
     {#if description}
-      <span class="text-xs text-slate-400 leading-snug">{description}</span>
+      <span class="text-xs leading-snug text-slate-400">{description}</span>
     {/if}
     {#if footnote}
-      <div class="text-xs text-slate-500 leading-snug pt-1">
+      <div class="pt-1 text-xs leading-snug text-slate-500">
         {@render footnote()}
       </div>
     {/if}
   </div>
 
-  <div class="flex items-center gap-2 shrink-0">
+  <div class="flex shrink-0 items-center gap-2">
     {@render control()}
     {#if state.kind === 'saving'}
-      <span
-        class="text-[11px] text-slate-500 italic"
-        role="status"
-        aria-live="polite"
-      >
+      <span class="text-[11px] italic text-slate-500" role="status" aria-live="polite">
         Saving…
       </span>
     {:else if state.kind === 'saved'}
-      <span
-        class="text-[11px] text-emerald-400"
-        role="status"
-        aria-live="polite"
-      >
-        Saved
-      </span>
+      <span class="text-[11px] text-emerald-400" role="status" aria-live="polite"> Saved </span>
     {:else if state.kind === 'error'}
-      <span
-        class="text-[11px] text-rose-400"
-        role="alert"
-        title={state.message}
-      >
-        Error
-      </span>
+      <span class="text-[11px] text-rose-400" role="alert" title={state.message}> Error </span>
     {/if}
   </div>
 </div>

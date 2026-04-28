@@ -42,17 +42,17 @@
    * it doesn't glare under bright office lighting). 50 is body
    * text — picked dark enough for AA contrast against every surface
    * in the inverted scale (≥ 4.5:1 on slate-900 surface). */
-  --bearings-slate-50: 17 24 39;       /* near-black, primary text */
-  --bearings-slate-100: 30 41 59;      /* dark text on light surfaces */
-  --bearings-slate-200: 51 65 85;      /* secondary text */
-  --bearings-slate-300: 71 85 105;     /* muted text */
-  --bearings-slate-400: 100 116 139;   /* placeholder / dim text */
-  --bearings-slate-500: 148 163 184;   /* mid border / inactive */
-  --bearings-slate-600: 203 213 225;   /* subtle border */
-  --bearings-slate-700: 226 232 240;   /* elevated edge / separator */
-  --bearings-slate-800: 241 245 249;   /* elevated surface */
-  --bearings-slate-900: 248 250 252;   /* primary surface (paper white) */
-  --bearings-slate-950: 250 247 240;   /* root bg (warm cream) */
+  --bearings-slate-50: 17 24 39; /* near-black, primary text */
+  --bearings-slate-100: 30 41 59; /* dark text on light surfaces */
+  --bearings-slate-200: 51 65 85; /* secondary text */
+  --bearings-slate-300: 71 85 105; /* muted text */
+  --bearings-slate-400: 100 116 139; /* placeholder / dim text */
+  --bearings-slate-500: 148 163 184; /* mid border / inactive */
+  --bearings-slate-600: 203 213 225; /* subtle border */
+  --bearings-slate-700: 226 232 240; /* elevated edge / separator */
+  --bearings-slate-800: 241 245 249; /* elevated surface */
+  --bearings-slate-900: 248 250 252; /* primary surface (paper white) */
+  --bearings-slate-950: 250 247 240; /* root bg (warm cream) */
 
   /* ----- Sky — primary interactive accent.
    * Tuned slightly DARKER than Tailwind defaults so focus rings and
@@ -63,7 +63,7 @@
   --bearings-sky-200: 186 230 253;
   --bearings-sky-300: 125 211 252;
   --bearings-sky-400: 56 189 248;
-  --bearings-sky-500: 14 116 200;      /* darker than default-500 for AA */
+  --bearings-sky-500: 14 116 200; /* darker than default-500 for AA */
   --bearings-sky-600: 7 89 133;
   --bearings-sky-800: 12 74 110;
   --bearings-sky-900: 8 47 73;
@@ -75,7 +75,7 @@
   --bearings-emerald-200: 167 243 208;
   --bearings-emerald-300: 110 231 183;
   --bearings-emerald-400: 16 185 129;
-  --bearings-emerald-500: 5 150 105;   /* darker for text on light bg */
+  --bearings-emerald-500: 5 150 105; /* darker for text on light bg */
   --bearings-emerald-600: 4 120 87;
   --bearings-emerald-700: 6 95 70;
   --bearings-emerald-900: 6 78 59;
@@ -86,7 +86,7 @@
    * doesn't disappear into the cream. */
   --bearings-amber-100: 254 243 199;
   --bearings-amber-200: 253 230 138;
-  --bearings-amber-300: 217 119 6;     /* dark amber for text-on-light */
+  --bearings-amber-300: 217 119 6; /* dark amber for text-on-light */
   --bearings-amber-400: 180 83 9;
   --bearings-amber-500: 146 64 14;
   --bearings-amber-800: 120 53 15;

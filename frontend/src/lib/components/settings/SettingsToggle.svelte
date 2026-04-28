@@ -49,7 +49,7 @@
     disabled = false,
     id,
     onChange,
-    footnote
+    footnote,
   }: Props = $props();
 
   // Random-ish id when caller didn't supply one — `generated` is
@@ -76,7 +76,7 @@
       checked = previous;
       saveState = {
         kind: 'error',
-        message: err instanceof Error ? err.message : String(err)
+        message: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -90,7 +90,7 @@
         focus:outline-none focus:ring-2 focus:ring-sky-500/60 focus:ring-offset-1
         focus:ring-offset-slate-900
         {checked ? 'bg-emerald-600' : 'bg-slate-700'}
-        {disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}"
+        {disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}"
       role="switch"
       aria-checked={checked}
       aria-label={title}

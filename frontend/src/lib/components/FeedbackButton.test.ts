@@ -34,15 +34,15 @@ beforeEach(() => {
   // regardless of the test runner's UA.
   Object.defineProperty(navigator, 'userAgent', {
     value: 'TestUA/1.0',
-    configurable: true
+    configurable: true,
   });
   Object.defineProperty(navigator, 'platform', {
     value: 'TestPlatform',
-    configurable: true
+    configurable: true,
   });
   Object.defineProperty(navigator, 'language', {
     value: 'en-US',
-    configurable: true
+    configurable: true,
   });
 });
 
@@ -53,7 +53,7 @@ function captureWindowOpen(): { calls: OpenCall[] } {
       calls.push({
         url: String(url ?? ''),
         target: target ?? '',
-        features: features ?? ''
+        features: features ?? '',
       });
       return null;
     }
@@ -81,10 +81,10 @@ describe('FeedbackButton', () => {
       'fetch',
       vi.fn(async (url: string) => {
         if (url === '/api/version') {
-          return new Response(
-            JSON.stringify({ version: '0.21.0', build: '1714075200000000000' }),
-            { status: 200, headers: { 'content-type': 'application/json' } }
-          );
+          return new Response(JSON.stringify({ version: '0.21.0', build: '1714075200000000000' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
         }
         throw new Error(`unexpected fetch: ${url}`);
       })
@@ -129,7 +129,7 @@ describe('FeedbackButton', () => {
     const fetchSpy = vi.fn(async (url: string) => {
       return new Response(JSON.stringify({ version: '0.21.0', build: null }), {
         status: 200,
-        headers: { 'content-type': 'application/json' }
+        headers: { 'content-type': 'application/json' },
       });
     });
     vi.stubGlobal('fetch', fetchSpy);

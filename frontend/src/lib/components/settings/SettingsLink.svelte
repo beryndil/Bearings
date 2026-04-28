@@ -26,14 +26,7 @@
     disabled?: boolean;
   }
 
-  let {
-    title,
-    description,
-    href,
-    onClick,
-    trailing,
-    disabled = false
-  }: Props = $props();
+  let { title, description, href, onClick, trailing, disabled = false }: Props = $props();
 
   let saveState = $state<SaveState>({ kind: 'idle' });
 
@@ -46,7 +39,7 @@
     } catch (err) {
       saveState = {
         kind: 'error',
-        message: err instanceof Error ? err.message : String(err)
+        message: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -60,7 +53,7 @@
         target="_blank"
         rel="noopener noreferrer"
         class="text-sm text-sky-400 hover:text-sky-300 hover:underline
-          focus:outline-none focus:underline"
+          focus:underline focus:outline-none"
         data-testid="settings-link"
       >
         {trailing ?? 'Open ↗'}
@@ -69,8 +62,8 @@
       <button
         type="button"
         class="text-sm text-sky-400 hover:text-sky-300 hover:underline
-          focus:outline-none focus:underline disabled:opacity-50
-          disabled:cursor-not-allowed"
+          focus:underline focus:outline-none disabled:cursor-not-allowed
+          disabled:opacity-50"
         {disabled}
         onclick={fire}
         data-testid="settings-link"
@@ -78,7 +71,7 @@
         {trailing ?? 'Open'}
       </button>
     {:else if trailing}
-      <span class="text-sm text-slate-300 font-mono">{trailing}</span>
+      <span class="font-mono text-sm text-slate-300">{trailing}</span>
     {/if}
   {/snippet}
 </SettingsRow>

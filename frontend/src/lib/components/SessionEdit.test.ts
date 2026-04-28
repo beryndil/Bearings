@@ -36,7 +36,7 @@ function session(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -53,7 +53,7 @@ function tag(overrides: Partial<Tag> = {}): Tag {
     default_working_dir: null,
     default_model: null,
     tag_group: 'general',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -72,7 +72,7 @@ function queueResponses(queue: Fake[]): ReturnType<typeof vi.fn> {
       },
       async text() {
         return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-      }
+      },
     };
   });
   vi.stubGlobal('fetch', stub);
@@ -89,10 +89,10 @@ describe('SessionEdit tags', () => {
   it('renders attached tags on open and detaches on ✕', async () => {
     queueResponses([
       { ok: true, body: [tag({ id: 1, name: 'infra' })] }, // listSessionTags
-      { ok: true, body: [] } // detach → empty list
+      { ok: true, body: [] }, // detach → empty list
     ]);
     const { getByLabelText, queryByText } = render(SessionEdit, {
-      props: { open: true, sessionId: 'sess-1' }
+      props: { open: true, sessionId: 'sess-1' },
     });
     await waitFor(() => expect(queryByText('infra')).not.toBeNull());
     await fireEvent.click(getByLabelText('Detach infra'));
@@ -102,10 +102,10 @@ describe('SessionEdit tags', () => {
   it('clicking a suggestion attaches an existing tag', async () => {
     queueResponses([
       { ok: true, body: [] }, // listSessionTags (none attached)
-      { ok: true, body: [tag({ id: 2, name: 'bug-repro' })] } // attach
+      { ok: true, body: [tag({ id: 2, name: 'bug-repro' })] }, // attach
     ]);
     const { getByLabelText, getByRole, queryByText } = render(SessionEdit, {
-      props: { open: true, sessionId: 'sess-1' }
+      props: { open: true, sessionId: 'sess-1' },
     });
     // Trigger suggestions by typing in the tag input.
     await fireEvent.input(getByLabelText('Tag name'), { target: { value: 'bug' } });
@@ -119,10 +119,10 @@ describe('SessionEdit tags', () => {
       { ok: true, body: [] }, // listSessionTags
       { ok: true, body: created }, // createTag
       { ok: true, body: [created] }, // refresh after create
-      { ok: true, body: [created] } // attachSessionTag
+      { ok: true, body: [created] }, // attachSessionTag
     ]);
     const { getByLabelText, queryByText } = render(SessionEdit, {
-      props: { open: true, sessionId: 'sess-1' }
+      props: { open: true, sessionId: 'sess-1' },
     });
     const input = getByLabelText('Tag name') as HTMLInputElement;
     await fireEvent.input(input, { target: { value: 'new-one' } });

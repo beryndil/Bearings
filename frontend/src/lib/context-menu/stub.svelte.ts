@@ -38,7 +38,7 @@ type TimeSource = {
 
 const realTime: TimeSource = {
   set: (fn, ms) => setTimeout(fn, ms),
-  clear: (t) => clearTimeout(t)
+  clear: (t) => clearTimeout(t),
 };
 
 class StubStore {

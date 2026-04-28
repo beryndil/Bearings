@@ -99,8 +99,7 @@
     // session is mid-stream — the visibility branch ignores them on
     // the assumption that "not looking" makes any reload cheap.
     versionWatcher.configure({
-      isAgentStreaming: () =>
-        agent.sessionId !== null && sessions.running.has(agent.sessionId)
+      isAgentStreaming: () => agent.sessionId !== null && sessions.running.has(agent.sessionId),
     });
     void versionWatcher.init();
     // The agent-connect call previously made here moved to the
@@ -185,7 +184,7 @@
       left: DEFAULT_LEFT_PX,
       right: 0,
       lastLeft: DEFAULT_LEFT_PX,
-      lastRight: DEFAULT_RIGHT_PX
+      lastRight: DEFAULT_RIGHT_PX,
     };
     if (typeof localStorage === 'undefined') return fallback;
     try {
@@ -202,7 +201,7 @@
         lastRight:
           typeof p.lastRight === 'number' && p.lastRight >= MIN_PANE_PX
             ? p.lastRight
-            : fallback.lastRight
+            : fallback.lastRight,
       };
     } catch {
       return fallback;

@@ -21,12 +21,9 @@ export default defineConfig({
     // `$app/stores` resolves under jsdom — see src/test-stubs/app/.
     alias: {
       $lib: path.resolve(__dirname, 'src/lib'),
-      '$app/navigation': path.resolve(
-        __dirname,
-        'src/test-stubs/app/navigation.ts'
-      ),
-      '$app/stores': path.resolve(__dirname, 'src/test-stubs/app/stores.ts')
-    }
+      '$app/navigation': path.resolve(__dirname, 'src/test-stubs/app/navigation.ts'),
+      '$app/stores': path.resolve(__dirname, 'src/test-stubs/app/stores.ts'),
+    },
   },
   test: {
     include: ['src/**/*.{test,spec}.ts'],
@@ -35,8 +32,8 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     server: {
       deps: {
-        inline: [/^svelte/]
-      }
-    }
-  }
+        inline: [/^svelte/],
+      },
+    },
+  },
 });

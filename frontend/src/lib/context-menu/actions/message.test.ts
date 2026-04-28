@@ -20,7 +20,7 @@ const MESSAGE: ContextTarget = {
   type: 'message',
   id: 'm-1',
   sessionId: 's-1',
-  role: 'user'
+  role: 'user',
 };
 
 describe('message.ts — action-ID stability', () => {
@@ -38,7 +38,7 @@ describe('message.ts — action-ID stability', () => {
       'message.pin',
       'message.regenerate',
       'message.regenerate.in_place',
-      'message.split_here'
+      'message.split_here',
     ]);
   });
 

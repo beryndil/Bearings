@@ -19,11 +19,11 @@ const completedIds = new Map<string, Set<string>>();
 
 vi.mock('$lib/api', () => ({
   openAgentSocket: (sessionId: string, sinceSeq?: number) => openAgentSocket(sessionId, sinceSeq),
-  onAuthFailure: vi.fn()
+  onAuthFailure: vi.fn(),
 }));
 
 vi.mock('$lib/stores/auth.svelte', () => ({
-  auth: { markInvalid: vi.fn() }
+  auth: { markInvalid: vi.fn() },
 }));
 
 vi.mock('$lib/stores/conversation.svelte', () => ({
@@ -32,33 +32,31 @@ vi.mock('$lib/stores/conversation.svelte', () => ({
     load: (sessionId: string) => conversationLoad(sessionId),
     handleEvent: (...args: unknown[]) => handleEvent(...args),
     pushUserMessage: (...args: unknown[]) => pushUserMessage(...args),
-    completedIdsFor: (sessionId: string) =>
-      completedIds.get(sessionId) ?? new Set<string>(),
+    completedIdsFor: (sessionId: string) => completedIds.get(sessionId) ?? new Set<string>(),
     // Stub for the "paint the spinner before the hang" flip that
     // agent.connect() now does before yielding a paint frame. No test
     // asserts on the flag value, so a no-op keeps the mock stable
     // without having to thread fake state through every assertion.
     markLoadingInitial: (..._args: unknown[]) => {},
-    error: null
-  }
+    error: null,
+  },
 }));
 
 vi.mock('$lib/stores/preferences.svelte', () => ({
-  preferences: preferencesState
+  preferences: preferencesState,
 }));
 
 vi.mock('$lib/stores/sessions.svelte', () => ({
   sessions: {
     get list() {
       return sessionsList;
-    }
-  }
+    },
+  },
 }));
 
 vi.mock('$lib/utils/notify', () => ({
-  notify: (...args: unknown[]) => notifyMock(...args)
+  notify: (...args: unknown[]) => notifyMock(...args),
 }));
-
 
 type Listener = (ev: unknown) => void;
 
@@ -121,9 +119,7 @@ afterEach(() => {
 type TestAgent = {
   connect: (sid: string) => Promise<void>;
   close: () => void;
-  setPermissionMode: (
-    mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions'
-  ) => boolean;
+  setPermissionMode: (mode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions') => boolean;
   permissionMode: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
   stop: () => boolean;
   cancelPendingStop: () => void;
@@ -159,7 +155,7 @@ function fakeSession(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -191,9 +187,10 @@ describe('AgentConnection reconnect race', () => {
     // DURING the await (while load is pending), which is the race.
     let resolveLoad = (): void => {};
     conversationLoad.mockImplementationOnce(
-      () => new Promise<Session | null>((resolve) => {
-        resolveLoad = () => resolve(null);
-      })
+      () =>
+        new Promise<Session | null>((resolve) => {
+          resolveLoad = () => resolve(null);
+        })
     );
     const connectPromise = agent.connect('A');
     // connect() now suspends on `await waitForPaint()` BEFORE it calls
@@ -263,14 +260,14 @@ describe('AgentConnection turn-complete notifications', () => {
     sessionsList.push({ id: 'N', title: 'Bearings dev' });
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
-      get: () => 'hidden'
+      get: () => 'hidden',
     });
 
     s.fireMessage({
       type: 'message_complete',
       session_id: 'N',
       message_id: 'msg-1',
-      cost_usd: 0
+      cost_usd: 0,
     });
 
     expect(notifyMock).toHaveBeenCalledWith(
@@ -288,14 +285,14 @@ describe('AgentConnection turn-complete notifications', () => {
 
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
-      get: () => 'hidden'
+      get: () => 'hidden',
     });
 
     s.fireMessage({
       type: 'message_complete',
       session_id: 'N',
       message_id: 'msg-1',
-      cost_usd: 0
+      cost_usd: 0,
     });
 
     expect(notifyMock).not.toHaveBeenCalled();
@@ -311,7 +308,7 @@ describe('AgentConnection turn-complete notifications', () => {
     preferencesState.notifyOnComplete = true;
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
-      get: () => 'hidden'
+      get: () => 'hidden',
     });
     // Pretend the reducer already recorded this message_id — a
     // reconnect replay delivers the same frame and must NOT retrigger
@@ -322,7 +319,7 @@ describe('AgentConnection turn-complete notifications', () => {
       type: 'message_complete',
       session_id: 'N',
       message_id: 'msg-1',
-      cost_usd: 0
+      cost_usd: 0,
     });
 
     expect(notifyMock).not.toHaveBeenCalled();
@@ -348,7 +345,7 @@ describe('AgentConnection permission-mode persistence', () => {
     expect(s1.sent).toContainEqual(
       JSON.stringify({
         type: 'set_permission_mode',
-        mode: 'bypassPermissions'
+        mode: 'bypassPermissions',
       })
     );
 
@@ -363,7 +360,7 @@ describe('AgentConnection permission-mode persistence', () => {
     expect(s2.sent).toContainEqual(
       JSON.stringify({
         type: 'set_permission_mode',
-        mode: 'bypassPermissions'
+        mode: 'bypassPermissions',
       })
     );
   });
@@ -402,9 +399,7 @@ describe('AgentConnection permission-mode persistence', () => {
 
     const s1 = sockets[0];
     s1.fireOpen();
-    expect(s1.sent).toContainEqual(
-      JSON.stringify({ type: 'set_permission_mode', mode: 'plan' })
-    );
+    expect(s1.sent).toContainEqual(JSON.stringify({ type: 'set_permission_mode', mode: 'plan' }));
   });
 
   it('falls back to default when session.permission_mode is null', async () => {

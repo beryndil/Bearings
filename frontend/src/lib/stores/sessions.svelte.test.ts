@@ -52,7 +52,7 @@ function sess(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -73,7 +73,7 @@ function queueResponses(queue: Fake[]): void {
         },
         async text() {
           return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-        }
+        },
       };
     })
   );
@@ -85,7 +85,7 @@ describe('sessions store open/closed split', () => {
       sess({ id: 'a', closed_at: null }),
       sess({ id: 'b', closed_at: '2026-04-20T00:00:00+00:00' }),
       sess({ id: 'c', closed_at: null }),
-      sess({ id: 'd', closed_at: '2026-04-19T00:00:00+00:00' })
+      sess({ id: 'd', closed_at: '2026-04-19T00:00:00+00:00' }),
     ];
     expect(sessions.openList.map((s) => s.id)).toEqual(['a', 'c']);
     expect(sessions.closedList.map((s) => s.id)).toEqual(['b', 'd']);
@@ -101,7 +101,7 @@ describe('sessions store open/closed split', () => {
     sessions.list = [
       sess({ id: 'newest', updated_at: '2026-04-21T12:00:00+00:00' }),
       sess({ id: 'middle', updated_at: '2026-04-21T06:00:00+00:00' }),
-      sess({ id: 'oldest', updated_at: '2026-04-20T00:00:00+00:00' })
+      sess({ id: 'oldest', updated_at: '2026-04-20T00:00:00+00:00' }),
     ];
     expect(sessions.openList.map((s) => s.id)).toEqual(['newest', 'middle', 'oldest']);
   });
@@ -126,7 +126,7 @@ describe('sessions store open/closed split', () => {
       permission_mode: null,
       last_context_pct: null,
       last_context_tokens: null,
-      last_context_max: null
+      last_context_max: null,
       // closed_at intentionally absent
     };
     sessions.list = [partial as unknown as Session];
@@ -142,8 +142,8 @@ describe('sessions.close', () => {
     queueResponses([
       {
         ok: true,
-        body: { ...sess({ id: 'sess-a' }), closed_at: closedAt }
-      }
+        body: { ...sess({ id: 'sess-a' }), closed_at: closedAt },
+      },
     ]);
     const result = await sessions.close('sess-a');
     expect(result?.closed_at).toBe(closedAt);
@@ -166,9 +166,7 @@ describe('sessions.close', () => {
   it('is a no-op on an unknown id (no row to patch, still returns the server row)', async () => {
     sessions.list = [sess({ id: 'sess-a', closed_at: null })];
     const closedAt = '2026-04-21T10:00:00+00:00';
-    queueResponses([
-      { ok: true, body: { ...sess({ id: 'sess-b' }), closed_at: closedAt } }
-    ]);
+    queueResponses([{ ok: true, body: { ...sess({ id: 'sess-b' }), closed_at: closedAt } }]);
     await sessions.close('sess-b');
     // sess-a is untouched because the map() key didn't match.
     expect(sessions.list.map((s) => s.id)).toEqual(['sess-a']);
@@ -178,12 +176,8 @@ describe('sessions.close', () => {
 
 describe('sessions.reopen', () => {
   it('POSTs /reopen and clears closed_at on the cached row', async () => {
-    sessions.list = [
-      sess({ id: 'sess-a', closed_at: '2026-04-20T00:00:00+00:00' })
-    ];
-    queueResponses([
-      { ok: true, body: { ...sess({ id: 'sess-a' }), closed_at: null } }
-    ]);
+    sessions.list = [sess({ id: 'sess-a', closed_at: '2026-04-20T00:00:00+00:00' })];
+    queueResponses([{ ok: true, body: { ...sess({ id: 'sess-a' }), closed_at: null } }]);
     const result = await sessions.reopen('sess-a');
     expect(result?.closed_at).toBeNull();
     expect(sessions.list[0].closed_at).toBeNull();
@@ -192,9 +186,7 @@ describe('sessions.reopen', () => {
   });
 
   it('records error text on failure', async () => {
-    sessions.list = [
-      sess({ id: 'sess-a', closed_at: '2026-04-20T00:00:00+00:00' })
-    ];
+    sessions.list = [sess({ id: 'sess-a', closed_at: '2026-04-20T00:00:00+00:00' })];
     queueResponses([{ ok: false, status: 500, body: 'boom' }]);
     const result = await sessions.reopen('sess-a');
     expect(result).toBeNull();
@@ -208,7 +200,7 @@ describe('sessions.scrollTick', () => {
   it('touchSession on the selected id increments the tick', () => {
     sessions.list = [
       sess({ id: 'sess-a' }),
-      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' })
+      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' }),
     ];
     sessions.selectedId = 'sess-b';
     const before = sessions.scrollTick;
@@ -221,7 +213,7 @@ describe('sessions.scrollTick', () => {
   it('touchSession on a non-selected id leaves the tick alone', () => {
     sessions.list = [
       sess({ id: 'sess-a' }),
-      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' })
+      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' }),
     ];
     sessions.selectedId = 'sess-a';
     const before = sessions.scrollTick;
@@ -243,7 +235,7 @@ describe('sessions.scrollTick', () => {
   it('bumpCost on the selected id increments the tick', () => {
     sessions.list = [
       sess({ id: 'sess-a' }),
-      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' })
+      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' }),
     ];
     sessions.selectedId = 'sess-b';
     const before = sessions.scrollTick;
@@ -256,7 +248,7 @@ describe('sessions.scrollTick', () => {
   it('bumpCost on a non-selected id leaves the tick alone', () => {
     sessions.list = [
       sess({ id: 'sess-a' }),
-      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' })
+      sess({ id: 'sess-b', updated_at: '2026-04-20T00:00:00+00:00' }),
     ];
     sessions.selectedId = 'sess-a';
     const before = sessions.scrollTick;
@@ -273,7 +265,7 @@ describe('sessions.softRefresh', () => {
     // on b now beats a, so softRefresh should float b to the top.
     sessions.list = [
       sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' }),
-      sess({ id: 'b', updated_at: '2026-04-22T09:00:00+00:00' })
+      sess({ id: 'b', updated_at: '2026-04-22T09:00:00+00:00' }),
     ];
     sessions.selectedId = 'a';
     queueResponses([
@@ -281,9 +273,9 @@ describe('sessions.softRefresh', () => {
         ok: true,
         body: [
           sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' }),
-          sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' })
-        ]
-      }
+          sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' }),
+        ],
+      },
     ]);
     await sessions.softRefresh();
     expect(sessions.list.map((s) => s.id)).toEqual(['b', 'a']);
@@ -296,16 +288,16 @@ describe('sessions.softRefresh', () => {
     // on the next tick.
     sessions.list = [
       sess({ id: 'a', updated_at: '2026-04-22T12:00:00.500+00:00', total_cost_usd: 0.42 }),
-      sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' })
+      sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' }),
     ];
     queueResponses([
       {
         ok: true,
         body: [
           sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.11 }),
-          sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' })
-        ]
-      }
+          sess({ id: 'b', updated_at: '2026-04-22T12:00:00+00:00' }),
+        ],
+      },
     ]);
     await sessions.softRefresh();
     expect(sessions.list.map((s) => s.id)).toEqual(['a', 'b']);
@@ -317,15 +309,13 @@ describe('sessions.softRefresh', () => {
     // Equal timestamps prefer the server row so server-authoritative
     // fields (cost, message_count) converge without needing a bump.
     sessions.list = [
-      sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.0 })
+      sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.0 }),
     ];
     queueResponses([
       {
         ok: true,
-        body: [
-          sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.99 })
-        ]
-      }
+        body: [sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00', total_cost_usd: 0.99 })],
+      },
     ]);
     await sessions.softRefresh();
     expect(sessions.list[0].total_cost_usd).toBeCloseTo(0.99);
@@ -334,16 +324,16 @@ describe('sessions.softRefresh', () => {
   it('adds newly-created sessions and drops rows the server no longer returns', async () => {
     sessions.list = [
       sess({ id: 'stale', updated_at: '2026-04-22T08:00:00+00:00' }),
-      sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' })
+      sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' }),
     ];
     queueResponses([
       {
         ok: true,
         body: [
           sess({ id: 'fresh', updated_at: '2026-04-22T10:00:00+00:00' }),
-          sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' })
-        ]
-      }
+          sess({ id: 'keep', updated_at: '2026-04-22T09:00:00+00:00' }),
+        ],
+      },
     ]);
     await sessions.softRefresh();
     expect(sessions.list.map((s) => s.id)).toEqual(['fresh', 'keep']);
@@ -371,7 +361,7 @@ describe('sessions.softRefresh', () => {
     const seed = sess({
       id: 'stable',
       updated_at: '2026-04-22T09:00:00+00:00',
-      total_cost_usd: 0.5
+      total_cost_usd: 0.5,
     });
     sessions.list = [seed];
     // Capture the post-assignment proxy reference, not the raw seed —
@@ -497,7 +487,7 @@ describe('sessions.softRefresh', () => {
           },
           async text() {
             return '[]';
-          }
+          },
         };
       })
     );
@@ -511,16 +501,12 @@ describe('sessions.softRefresh', () => {
 describe('sessions.applyUpsert', () => {
   it('inserts a brand-new session and sorts it by updated_at DESC, id DESC', () => {
     sessions.list = [sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00' })];
-    sessions.applyUpsert(
-      sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' })
-    );
+    sessions.applyUpsert(sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' }));
     expect(sessions.list.map((s) => s.id)).toEqual(['b', 'a']);
   });
 
   it('replaces an existing row when server updated_at is newer', () => {
-    sessions.list = [
-      sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00', total_cost_usd: 0 })
-    ];
+    sessions.list = [sess({ id: 'a', updated_at: '2026-04-22T10:00:00+00:00', total_cost_usd: 0 })];
     sessions.applyUpsert(
       sess({ id: 'a', updated_at: '2026-04-22T11:00:00+00:00', total_cost_usd: 1.23 })
     );
@@ -529,7 +515,7 @@ describe('sessions.applyUpsert', () => {
 
   it('keeps the local row when local updated_at is strictly newer (optimistic touch)', () => {
     sessions.list = [
-      sess({ id: 'a', updated_at: '2026-04-22T11:00:01+00:00', total_cost_usd: 0.42 })
+      sess({ id: 'a', updated_at: '2026-04-22T11:00:01+00:00', total_cost_usd: 0.42 }),
     ];
     sessions.applyUpsert(
       sess({ id: 'a', updated_at: '2026-04-22T11:00:00+00:00', total_cost_usd: 0.11 })
@@ -562,25 +548,23 @@ describe('sessions.applyUpsert', () => {
     sessions.list = [
       sess({ id: 'a', updated_at: '2026-04-22T12:00:00+00:00' }),
       sess({ id: 'b', updated_at: '2026-04-22T11:00:00+00:00' }),
-      sess({ id: 'c', updated_at: '2026-04-22T10:00:00+00:00' })
+      sess({ id: 'c', updated_at: '2026-04-22T10:00:00+00:00' }),
     ];
-    sessions.applyUpsert(
-      sess({ id: 'c', updated_at: '2026-04-22T13:00:00+00:00' })
-    );
+    sessions.applyUpsert(sess({ id: 'c', updated_at: '2026-04-22T13:00:00+00:00' }));
     expect(sessions.list.map((s) => s.id)).toEqual(['c', 'a', 'b']);
   });
 
   it('applies an upsert whose tag_ids intersect the active filter', () => {
     sessions.filter = { tags: [42] };
     sessions.list = [
-      sess({ id: 'existing', tag_ids: [42], updated_at: '2026-04-22T10:00:00+00:00' })
+      sess({ id: 'existing', tag_ids: [42], updated_at: '2026-04-22T10:00:00+00:00' }),
     ];
     sessions.applyUpsert(
       sess({
         id: 'existing',
         tag_ids: [42],
         updated_at: '2026-04-22T11:00:00+00:00',
-        total_cost_usd: 2.5
+        total_cost_usd: 2.5,
       })
     );
     expect(sessions.list).toHaveLength(1);
@@ -597,7 +581,7 @@ describe('sessions.applyUpsert', () => {
   it('inserts a brand-new row under a tag filter when its tag_ids share a tag with the filter', () => {
     sessions.filter = { tags: [42] };
     sessions.list = [
-      sess({ id: 'existing', tag_ids: [42], updated_at: '2026-04-22T10:00:00+00:00' })
+      sess({ id: 'existing', tag_ids: [42], updated_at: '2026-04-22T10:00:00+00:00' }),
     ];
     sessions.applyUpsert(
       sess({ id: 'new-row', tag_ids: [42, 7], updated_at: '2026-04-22T11:00:00+00:00' })
@@ -607,10 +591,7 @@ describe('sessions.applyUpsert', () => {
 
   it('removes a listed row whose new tag_ids no longer intersect the filter (retag-out)', () => {
     sessions.filter = { tags: [42] };
-    sessions.list = [
-      sess({ id: 'a', tag_ids: [42] }),
-      sess({ id: 'b', tag_ids: [42] })
-    ];
+    sessions.list = [sess({ id: 'a', tag_ids: [42] }), sess({ id: 'b', tag_ids: [42] })];
     // Row `a` was retagged to {99} on another tab — the upsert frame
     // arrives with the new tag set, and it no longer belongs here.
     sessions.applyUpsert(sess({ id: 'a', tag_ids: [99] }));
@@ -686,10 +667,10 @@ describe('draft cleanup hooks', () => {
     queueResponses([
       {
         ok: true,
-        body: { ...sess({ id: 'sess-a' }), closed_at: '2026-04-22T00:00:00+00:00' }
+        body: { ...sess({ id: 'sess-a' }), closed_at: '2026-04-22T00:00:00+00:00' },
       },
       // The store also calls tags.refresh() as a side effect — swallow it.
-      { ok: true, body: [] }
+      { ok: true, body: [] },
     ]);
     await sessions.close('sess-a');
     expect(localStorage.getItem('bearings:draft:sess-a')).toBeNull();
@@ -753,7 +734,7 @@ describe('sessions.runningSnapshot', () => {
     sessions.awaiting = new Set();
     queueResponses([
       { ok: true, body: ['r1', 'r2'] },
-      { ok: true, body: ['a1'] }
+      { ok: true, body: ['a1'] },
     ]);
 
     await sessions.runningSnapshot();
@@ -792,4 +773,3 @@ describe('sessions.runningSnapshot', () => {
     );
   });
 });
-

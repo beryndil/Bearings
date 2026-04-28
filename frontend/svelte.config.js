@@ -25,9 +25,9 @@ const config = {
       // prerendered or covered by the fallback. With the fallback set,
       // dynamic routes with `prerender = false` qualify and the build
       // stays strict.
-      strict: true
-    })
-  }
+      strict: true,
+    }),
+  },
 };
 
 export default config;

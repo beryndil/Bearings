@@ -58,7 +58,7 @@ export function notify(title: string, options: NotifyOptions = {}): void {
     const n = new Notification(title, {
       body: options.body,
       tag: options.tag,
-      icon: '/icon-192.png'
+      icon: '/icon-192.png',
     });
     n.onclick = () => {
       try {

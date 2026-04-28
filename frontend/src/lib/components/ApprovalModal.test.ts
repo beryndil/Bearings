@@ -14,7 +14,7 @@ function fakeRequest(overrides: Partial<ApprovalRequestEvent> = {}): ApprovalReq
     tool_name: 'ExitPlanMode',
     input: { plan: '# plan' },
     tool_use_id: 'tu_1',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -24,7 +24,7 @@ describe('ApprovalModal', () => {
     const { getByText, getByTestId } = render(ApprovalModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     expect(getByText('ExitPlanMode')).toBeInTheDocument();
     // JSON.stringify with spaces produces the plan value on its own line.
@@ -36,7 +36,7 @@ describe('ApprovalModal', () => {
     const { getByTestId } = render(ApprovalModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     await fireEvent.click(getByTestId('approval-allow'));
     expect(onRespond).toHaveBeenCalledWith('req-1', 'allow');
@@ -47,7 +47,7 @@ describe('ApprovalModal', () => {
     const { getByTestId } = render(ApprovalModal, {
       request: fakeRequest({ request_id: 'req-2' }),
       connected: true,
-      onRespond
+      onRespond,
     });
     await fireEvent.click(getByTestId('approval-deny'));
     expect(onRespond).toHaveBeenCalledWith('req-2', 'deny');
@@ -58,7 +58,7 @@ describe('ApprovalModal', () => {
     const { getByTestId, getByText } = render(ApprovalModal, {
       request: fakeRequest(),
       connected: false,
-      onRespond
+      onRespond,
     });
     expect(getByTestId('approval-allow')).toBeDisabled();
     expect(getByTestId('approval-deny')).toBeDisabled();
@@ -88,7 +88,7 @@ describe('ApprovalModal', () => {
     const { getByTestId } = render(ApprovalModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     const allow = getByTestId('approval-allow');
     await fireEvent.click(allow);
@@ -105,7 +105,7 @@ describe('ApprovalModal', () => {
     const { getByTestId } = render(ApprovalModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     const allow = getByTestId('approval-allow');
     await fireEvent.click(allow);

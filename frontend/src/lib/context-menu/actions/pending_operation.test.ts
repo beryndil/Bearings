@@ -12,7 +12,7 @@ const WITH_COMMAND: PendingOperationTarget = {
   name: 'fix-lockfile',
   directory: '/home/dave/Projects/Bearings',
   command: 'uv lock --upgrade',
-  description: 'Lockfile drift detected'
+  description: 'Lockfile drift detected',
 };
 
 const WITHOUT_COMMAND: PendingOperationTarget = {
@@ -20,7 +20,7 @@ const WITHOUT_COMMAND: PendingOperationTarget = {
   name: 'review-todo',
   directory: '/home/dave/Projects/Bearings',
   command: null,
-  description: 'Backlog review pending'
+  description: 'Backlog review pending',
 };
 
 describe('pending_operation.ts — action-ID stability', () => {
@@ -31,34 +31,26 @@ describe('pending_operation.ts — action-ID stability', () => {
       'pending_operation.copy_name',
       'pending_operation.dismiss',
       'pending_operation.open_in.editor',
-      'pending_operation.resolve'
+      'pending_operation.resolve',
     ]);
   });
 
   it('every ID follows `pending_operation.<verb>[.<qualifier>]` naming', () => {
     for (const a of PENDING_OPERATION_ACTIONS) {
       expect(a.id.startsWith('pending_operation.')).toBe(true);
-      expect(a.id).toMatch(
-        /^pending_operation\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/
-      );
+      expect(a.id).toMatch(/^pending_operation\.[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/);
     }
   });
 
   it('resolve is primary, dismiss is destructive', () => {
-    const resolve = PENDING_OPERATION_ACTIONS.find(
-      (a) => a.id === 'pending_operation.resolve'
-    );
-    const dismiss = PENDING_OPERATION_ACTIONS.find(
-      (a) => a.id === 'pending_operation.dismiss'
-    );
+    const resolve = PENDING_OPERATION_ACTIONS.find((a) => a.id === 'pending_operation.resolve');
+    const dismiss = PENDING_OPERATION_ACTIONS.find((a) => a.id === 'pending_operation.dismiss');
     expect(resolve?.section).toBe('primary');
     expect(dismiss?.destructive).toBe(true);
   });
 
   it('copy_command is disabled when no command is attached', () => {
-    const copy = PENDING_OPERATION_ACTIONS.find(
-      (a) => a.id === 'pending_operation.copy_command'
-    );
+    const copy = PENDING_OPERATION_ACTIONS.find((a) => a.id === 'pending_operation.copy_command');
     expect(copy?.disabled?.(WITH_COMMAND)).toBeNull();
     expect(copy?.disabled?.(WITHOUT_COMMAND)).toBeTruthy();
   });

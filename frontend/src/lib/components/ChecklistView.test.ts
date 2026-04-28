@@ -42,7 +42,7 @@ function session(overrides: Partial<Session> = {}): Session {
     tag_ids: [],
     pinned: false,
     error_pending: false,
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -61,7 +61,7 @@ function queueResponses(queue: Fake[]): ReturnType<typeof vi.fn> {
       },
       async text() {
         return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-      }
+      },
     };
   });
   vi.stubGlobal('fetch', stub);
@@ -73,7 +73,7 @@ const EMPTY_CHECKLIST = {
   notes: null,
   created_at: '2026-04-21T00:00:00+00:00',
   updated_at: '2026-04-21T00:00:00+00:00',
-  items: []
+  items: [],
 };
 
 beforeEach(() => {
@@ -96,9 +96,7 @@ describe('ChecklistView', () => {
     await waitFor(() => expect(checklists.current?.session_id).toBe('sess-cl'));
     // Add-item input rendered, Add button disabled while empty.
     await waitFor(() => {
-      const btn = document.querySelector(
-        'button[type="submit"]'
-      ) as HTMLButtonElement | null;
+      const btn = document.querySelector('button[type="submit"]') as HTMLButtonElement | null;
       expect(btn).not.toBeNull();
       expect(btn!.disabled).toBe(true);
     });
@@ -118,9 +116,9 @@ describe('ChecklistView', () => {
           checked_at: null,
           sort_order: 0,
           created_at: '2026-04-21T00:01:00+00:00',
-          updated_at: '2026-04-21T00:01:00+00:00'
-        }
-      }
+          updated_at: '2026-04-21T00:01:00+00:00',
+        },
+      },
     ]);
     const { getByPlaceholderText, findByText } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -137,7 +135,7 @@ describe('ChecklistView', () => {
   it('rolls back an optimistic add when the POST fails', async () => {
     queueResponses([
       { ok: true, body: EMPTY_CHECKLIST },
-      { ok: false, status: 500, body: 'boom' }
+      { ok: false, status: 500, body: 'boom' },
     ]);
     const { getByPlaceholderText, queryByText } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -173,9 +171,9 @@ const CHECKLIST_WITH_ONE_ITEM = {
       sort_order: 0,
       created_at: '2026-04-21T00:00:00+00:00',
       updated_at: '2026-04-21T00:00:00+00:00',
-      chat_session_id: null
-    }
-  ]
+      chat_session_id: null,
+    },
+  ],
 };
 
 const PAIRED_CHAT_SESSION: Session = {
@@ -201,14 +199,14 @@ const PAIRED_CHAT_SESSION: Session = {
   last_viewed_at: null,
   tag_ids: [],
   pinned: false,
-  error_pending: false
+  error_pending: false,
 };
 
 describe('ChecklistView paired-chat affordance', () => {
   it('clicking "Work on this" spawns a paired chat and navigates to its URL', async () => {
     queueResponses([
       { ok: true, body: CHECKLIST_WITH_ONE_ITEM },
-      { ok: true, body: PAIRED_CHAT_SESSION }
+      { ok: true, body: PAIRED_CHAT_SESSION },
     ]);
     const { getByRole } = render(ChecklistView);
     await waitFor(() => expect(checklists.current?.items.length).toBe(1));
@@ -217,9 +215,7 @@ describe('ChecklistView paired-chat affordance', () => {
     // §28 deep-link routing: ChecklistView no longer wires
     // sessions.select / agent.connect itself — it navigates to the
     // chat's URL and /sessions/[id]/+page.svelte handles the rest.
-    await waitFor(() =>
-      expect(sessions.list.some((s) => s.id === 'chat-1')).toBe(true)
-    );
+    await waitFor(() => expect(sessions.list.some((s) => s.id === 'chat-1')).toBe(true));
     await waitFor(() => expect(goto).toHaveBeenCalledWith('/sessions/chat-1'));
   });
 
@@ -229,9 +225,9 @@ describe('ChecklistView paired-chat affordance', () => {
       items: [
         {
           ...CHECKLIST_WITH_ONE_ITEM.items[0],
-          chat_session_id: 'chat-1'
-        }
-      ]
+          chat_session_id: 'chat-1',
+        },
+      ],
     };
     queueResponses([{ ok: true, body: paired }]);
     // The paired session has to exist in the sidebar list for the
@@ -268,9 +264,9 @@ const CHECKLIST_WITH_PAIRED_ITEM = {
       sort_order: 0,
       created_at: '2026-04-21T00:00:00+00:00',
       updated_at: '2026-04-21T00:00:00+00:00',
-      chat_session_id: 'chat-1'
-    }
-  ]
+      chat_session_id: 'chat-1',
+    },
+  ],
 };
 
 const CHECKLIST_WITH_NESTED = {
@@ -289,7 +285,7 @@ const CHECKLIST_WITH_NESTED = {
       sort_order: 0,
       created_at: '2026-04-21T00:00:00+00:00',
       updated_at: '2026-04-21T00:00:00+00:00',
-      chat_session_id: null
+      chat_session_id: null,
     },
     {
       id: 2,
@@ -301,9 +297,9 @@ const CHECKLIST_WITH_NESTED = {
       sort_order: 0,
       created_at: '2026-04-21T00:00:00+00:00',
       updated_at: '2026-04-21T00:00:00+00:00',
-      chat_session_id: null
-    }
-  ]
+      chat_session_id: null,
+    },
+  ],
 };
 
 describe('ChecklistView Slice 4.1', () => {
@@ -313,7 +309,7 @@ describe('ChecklistView Slice 4.1', () => {
     // sessions.refresh (GET /sessions) from handleToggle's post-check.
     const toggledItem = {
       ...CHECKLIST_WITH_PAIRED_ITEM.items[0],
-      checked_at: '2026-04-21T00:02:00+00:00'
+      checked_at: '2026-04-21T00:02:00+00:00',
     };
     const toggledChecklist = { ...CHECKLIST_WITH_PAIRED_ITEM, items: [toggledItem] };
     const closedChat = { ...PAIRED_CHAT_SESSION, closed_at: '2026-04-21T00:02:00+00:00' };
@@ -322,7 +318,7 @@ describe('ChecklistView Slice 4.1', () => {
       { ok: true, body: closedChat }, // sessions.close
       { ok: true, body: toggledItem }, // PATCH toggle
       { ok: true, body: toggledChecklist }, // re-fetch after cascade
-      { ok: true, body: [closedChat] } // sessions.refresh after check
+      { ok: true, body: [closedChat] }, // sessions.refresh after check
     ]);
     // Seed the paired chat session into the sidebar so handleToggle
     // can find it and call sessions.close.
@@ -364,9 +360,7 @@ describe('ChecklistView Slice 4.1', () => {
     sessions.list = [session(), PAIRED_CHAT_SESSION];
     const { container } = render(ChecklistView);
     await waitFor(() => expect(checklists.current?.items.length).toBe(1));
-    const link = container.querySelector(
-      '[data-testid="paired-chat-link"]'
-    ) as HTMLButtonElement;
+    const link = container.querySelector('[data-testid="paired-chat-link"]') as HTMLButtonElement;
     await fireEvent.click(link);
     // §28 deep-link routing: ChecklistView's link handler navigates
     // and the route component owns select + agent.connect.
@@ -417,9 +411,9 @@ describe('ChecklistView Slice 4.1', () => {
           state: 'running',
           items_completed: 0,
           items_failed: 0,
-          legs_spawned: 0
-        }
-      }
+          legs_spawned: 0,
+        },
+      },
     ]);
     const { getByTestId } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -452,9 +446,9 @@ describe('ChecklistView Slice 4.1', () => {
           state: 'running',
           items_completed: 0,
           items_failed: 0,
-          legs_spawned: 0
-        }
-      }
+          legs_spawned: 0,
+        },
+      },
     ]);
     const { getByTestId } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -476,9 +470,9 @@ describe('ChecklistView Slice 4.1', () => {
           state: 'running',
           items_completed: 0,
           items_failed: 0,
-          legs_spawned: 1
-        }
-      }
+          legs_spawned: 1,
+        },
+      },
     ]);
     const { getByTestId, queryByTestId } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -500,12 +494,12 @@ describe('ChecklistView Slice 4.1', () => {
       {
         ok: true,
         status: 202,
-        body: { state: 'running', items_completed: 0, items_failed: 0, legs_spawned: 1 }
+        body: { state: 'running', items_completed: 0, items_failed: 0, legs_spawned: 1 },
       },
       // DELETE → 204 (voidFetch tolerates empty body).
       { ok: true, status: 204, body: '' },
       // After stop, ChecklistView reloads the checklist.
-      { ok: true, body: EMPTY_CHECKLIST }
+      { ok: true, body: EMPTY_CHECKLIST },
     ]);
     const { getByTestId, queryByTestId } = render(ChecklistView);
     await waitFor(() => expect(checklists.current).not.toBeNull());
@@ -525,16 +519,12 @@ describe('ChecklistView Slice 4.1', () => {
     const parentLi = container.querySelector('li[data-item-id="1"]');
     expect(parentLi).not.toBeNull();
     expect(parentLi!.getAttribute('data-parent')).toBe('true');
-    const parentBox = parentLi!.querySelector(
-      'input[type="checkbox"]'
-    ) as HTMLInputElement;
+    const parentBox = parentLi!.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(parentBox.disabled).toBe(true);
     // Child rendered inside the parent's subtree, not at the root level.
     const childLi = parentLi!.querySelector('li[data-item-id="2"]');
     expect(childLi).not.toBeNull();
-    const childBox = childLi!.querySelector(
-      'input[type="checkbox"]'
-    ) as HTMLInputElement;
+    const childBox = childLi!.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(childBox.disabled).toBe(false);
   });
 
@@ -563,9 +553,9 @@ describe('ChecklistView Slice 4.1', () => {
           blocked_at: '2026-04-26T00:05:00+00:00',
           blocked_reason_category: 'payment',
           blocked_reason_text:
-            "Need your card on file.\n\nTRIED:\n- looked for stored payment method"
-        }
-      ]
+            'Need your card on file.\n\nTRIED:\n- looked for stored payment method',
+        },
+      ],
     };
     queueResponses([{ ok: true, body: checklist }]);
     const { getByTestId } = render(ChecklistView);
@@ -602,9 +592,9 @@ describe('ChecklistView Slice 4.1', () => {
           chat_session_id: null,
           blocked_at: '2026-04-26T00:05:00+00:00',
           blocked_reason_category: 'payment',
-          blocked_reason_text: 'stale'
-        }
-      ]
+          blocked_reason_text: 'stale',
+        },
+      ],
     };
     queueResponses([{ ok: true, body: checklist }]);
     const { queryByTestId } = render(ChecklistView);

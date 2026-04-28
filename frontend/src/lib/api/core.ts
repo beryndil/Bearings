@@ -330,8 +330,5 @@ export function openAgentSocket(sessionId: string, sinceSeq = 0): WebSocket {
  * reconciles via `softRefresh` on reconnect. */
 export function openSessionsSocket(): WebSocket {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return new WebSocket(
-    `${proto}://${window.location.host}/ws/sessions`,
-    wsBearerProtocols()
-  );
+  return new WebSocket(`${proto}://${window.location.host}/ws/sessions`, wsBearerProtocols());
 }

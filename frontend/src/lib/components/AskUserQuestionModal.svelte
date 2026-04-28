@@ -31,7 +31,7 @@
   // fall back to the generic JSON view rather than crash.
   const questions = $derived<Question[]>(
     Array.isArray((request.input as { questions?: unknown }).questions)
-      ? ((request.input as { questions: Question[] }).questions)
+      ? (request.input as { questions: Question[] }).questions
       : []
   );
 
@@ -142,17 +142,14 @@
   data-testid="ask-user-question-modal"
 >
   <div
-    class="bg-slate-900 border border-sky-800 rounded-lg shadow-2xl w-full
-      max-w-xl mx-4 max-h-[85vh] flex flex-col"
+    class="mx-4 flex max-h-[85vh] w-full max-w-xl flex-col
+      rounded-lg border border-sky-800 bg-slate-900 shadow-2xl"
   >
-    <header class="px-5 py-3 border-b border-slate-800 flex-shrink-0">
-      <h2
-        id="ask-title"
-        class="text-sm font-medium text-sky-200 flex items-center gap-2"
-      >
+    <header class="flex-shrink-0 border-b border-slate-800 px-5 py-3">
+      <h2 id="ask-title" class="flex items-center gap-2 text-sm font-medium text-sky-200">
         <span
-          class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded
-            bg-sky-900 text-sky-200"
+          class="rounded bg-sky-900 px-1.5 py-0.5 text-[10px] uppercase
+            tracking-wider text-sky-200"
         >
           question
         </span>
@@ -160,27 +157,24 @@
       </h2>
     </header>
 
-    <div class="px-5 py-4 overflow-y-auto flex flex-col gap-5">
+    <div class="flex flex-col gap-5 overflow-y-auto px-5 py-4">
       {#if questions.length === 0}
         <p class="text-sm text-amber-300" data-testid="ask-malformed">
-          The agent sent a malformed AskUserQuestion payload. Cancel to deny
-          the call.
+          The agent sent a malformed AskUserQuestion payload. Cancel to deny the call.
         </p>
       {/if}
 
       {#each questions as q, qi (qi)}
         <fieldset class="flex flex-col gap-2">
-          <legend class="flex items-center gap-2 mb-1">
+          <legend class="mb-1 flex items-center gap-2">
             <span
-              class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded
-                bg-slate-800 text-slate-300"
+              class="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase
+                tracking-wider text-slate-300"
             >
               {q.header}
             </span>
             {#if q.multiSelect}
-              <span class="text-[10px] uppercase tracking-wider text-slate-500">
-                pick any
-              </span>
+              <span class="text-[10px] uppercase tracking-wider text-slate-500"> pick any </span>
             {/if}
           </legend>
           <p class="text-sm text-slate-200">{q.question}</p>
@@ -190,7 +184,7 @@
                 ? (selectedMulti[q.question]?.has(opt.label) ?? false)
                 : selectedSingle[q.question] === opt.label}
               <label
-                class="flex items-start gap-2 px-3 py-2 rounded border cursor-pointer
+                class="flex cursor-pointer items-start gap-2 rounded border px-3 py-2
                   transition-colors {checked
                   ? 'border-sky-700 bg-sky-950/40'
                   : 'border-slate-800 bg-slate-950 hover:border-slate-700'}"
@@ -199,7 +193,7 @@
                   type={q.multiSelect ? 'checkbox' : 'radio'}
                   name="q-{qi}"
                   value={opt.label}
-                  checked={checked}
+                  {checked}
                   disabled={pending !== null}
                   onchange={() =>
                     q.multiSelect
@@ -211,25 +205,23 @@
                 <span class="flex-1 text-xs">
                   <span class="text-slate-200">{opt.label}</span>
                   {#if opt.description}
-                    <span class="block text-slate-400 mt-0.5">
+                    <span class="mt-0.5 block text-slate-400">
                       {opt.description}
                     </span>
                   {/if}
                 </span>
               </label>
             {/each}
-            <label class="flex flex-col gap-1 mt-1">
-              <span class="text-[10px] uppercase tracking-wider text-slate-500">
-                Other
-              </span>
+            <label class="mt-1 flex flex-col gap-1">
+              <span class="text-[10px] uppercase tracking-wider text-slate-500"> Other </span>
               <input
                 type="text"
                 bind:value={otherText[q.question]}
                 disabled={pending !== null}
                 placeholder="Type a custom answer"
-                class="px-2 py-1.5 text-xs rounded bg-slate-950 border
-                  border-slate-800 text-slate-200 placeholder:text-slate-600
-                  focus:outline-none focus:border-sky-700"
+                class="rounded border border-slate-800 bg-slate-950 px-2 py-1.5
+                  text-xs text-slate-200 placeholder:text-slate-600
+                  focus:border-sky-700 focus:outline-none"
                 data-testid="ask-other-{qi}"
               />
             </label>
@@ -245,12 +237,12 @@
     </div>
 
     <footer
-      class="px-5 py-3 border-t border-slate-800 flex justify-end gap-2
-        flex-shrink-0"
+      class="flex flex-shrink-0 justify-end gap-2 border-t border-slate-800 px-5
+        py-3"
     >
       <button
         type="button"
-        class="px-3 py-1.5 text-xs rounded bg-slate-800 text-slate-200
+        class="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-200
           hover:bg-slate-700 disabled:opacity-50"
         onclick={cancel}
         disabled={pending !== null || !connected}
@@ -260,7 +252,7 @@
       </button>
       <button
         type="button"
-        class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white
+        class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white
           hover:bg-emerald-500 disabled:opacity-50"
         onclick={submit}
         disabled={pending !== null || !connected || !allAnswered}

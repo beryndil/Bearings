@@ -20,7 +20,7 @@ function makeFakeWs(): SessionsWsConnection {
       removeEventListener: () => {},
       close: () => {},
       readyState: 0,
-      send: () => {}
+      send: () => {},
     } as unknown as WebSocket;
   });
 }
@@ -33,7 +33,7 @@ vi.mock('$lib/stores/ws_sessions.svelte', async (importOriginal) => {
     ...orig,
     get sessionsWs() {
       return fakeWs;
-    }
+    },
   };
 });
 
@@ -59,33 +59,30 @@ describe('BackendStatusBanner', () => {
     const { default: Banner } = await import('./BackendStatusBanner.svelte');
     const { queryByTestId } = render(Banner, { thresholdMs: 30 });
     expect(queryByTestId('backend-status-banner')).toBeNull();
-    await waitFor(
-      () => expect(queryByTestId('backend-status-banner')).toBeTruthy(),
-      { timeout: 200 }
-    );
+    await waitFor(() => expect(queryByTestId('backend-status-banner')).toBeTruthy(), {
+      timeout: 200,
+    });
   });
 
   it('shows after the threshold elapses while in error state', async () => {
     fakeWs.state = 'error';
     const { default: Banner } = await import('./BackendStatusBanner.svelte');
     const { queryByTestId } = render(Banner, { thresholdMs: 30 });
-    await waitFor(
-      () => expect(queryByTestId('backend-status-banner')).toBeTruthy(),
-      { timeout: 200 }
-    );
+    await waitFor(() => expect(queryByTestId('backend-status-banner')).toBeTruthy(), {
+      timeout: 200,
+    });
   });
 
   it('hides immediately when the socket recovers to open', async () => {
     fakeWs.state = 'closed';
     const { default: Banner } = await import('./BackendStatusBanner.svelte');
     const { queryByTestId } = render(Banner, { thresholdMs: 20 });
-    await waitFor(
-      () => expect(queryByTestId('backend-status-banner')).toBeTruthy(),
-      { timeout: 200 }
-    );
+    await waitFor(() => expect(queryByTestId('backend-status-banner')).toBeTruthy(), {
+      timeout: 200,
+    });
     fakeWs.state = 'open';
     await waitFor(() => expect(queryByTestId('backend-status-banner')).toBeNull(), {
-      timeout: 100
+      timeout: 100,
     });
   });
 
@@ -106,10 +103,9 @@ describe('BackendStatusBanner', () => {
     fakeWs.state = 'error';
 
     // ~45ms in — the original timer should still fire near 60ms.
-    await waitFor(
-      () => expect(queryByTestId('backend-status-banner')).toBeTruthy(),
-      { timeout: 200 }
-    );
+    await waitFor(() => expect(queryByTestId('backend-status-banner')).toBeTruthy(), {
+      timeout: 200,
+    });
   });
 
   it('stays hidden for an auth-failure close (4401) — AuthGate owns that surface', async () => {

@@ -4,15 +4,11 @@ import { confirmStore, suppressionKey } from './confirm.svelte';
 
 describe('suppressionKey', () => {
   it('formats as <actionId>:<targetType>', () => {
-    expect(suppressionKey('session.delete', 'session')).toBe(
-      'session.delete:session'
-    );
+    expect(suppressionKey('session.delete', 'session')).toBe('session.delete:session');
   });
 
   it('treats same-id-different-target as distinct keys', () => {
-    expect(suppressionKey('delete', 'session')).not.toBe(
-      suppressionKey('delete', 'message')
-    );
+    expect(suppressionKey('delete', 'session')).not.toBe(suppressionKey('delete', 'message'));
   });
 });
 
@@ -32,7 +28,7 @@ describe('confirmStore', () => {
       targetType: 'session',
       message: 'Delete?',
       destructive: true,
-      onConfirm: handler
+      onConfirm: handler,
     });
     expect(confirmStore.pending).not.toBeNull();
     expect(handler).not.toHaveBeenCalled();
@@ -45,7 +41,7 @@ describe('confirmStore', () => {
       actionId: 'session.delete',
       targetType: 'session',
       message: 'Delete?',
-      onConfirm: () => {}
+      onConfirm: () => {},
     });
     await confirmStore.accept(true);
     expect(confirmStore.pending).toBeNull();
@@ -55,7 +51,7 @@ describe('confirmStore', () => {
       actionId: 'session.delete',
       targetType: 'session',
       message: 'Delete again?',
-      onConfirm: handler
+      onConfirm: handler,
     });
     expect(confirmStore.pending).toBeNull();
     expect(handler).toHaveBeenCalledOnce();
@@ -67,7 +63,7 @@ describe('confirmStore', () => {
       actionId: 'delete',
       targetType: 'session',
       message: 'Delete session?',
-      onConfirm: () => {}
+      onConfirm: () => {},
     });
     await confirmStore.accept(true);
 
@@ -77,7 +73,7 @@ describe('confirmStore', () => {
       actionId: 'delete',
       targetType: 'message',
       message: 'Delete message?',
-      onConfirm: handler
+      onConfirm: handler,
     });
     expect(confirmStore.pending).not.toBeNull();
     expect(handler).not.toHaveBeenCalled();
@@ -89,7 +85,7 @@ describe('confirmStore', () => {
       actionId: 'session.archive',
       targetType: 'session',
       message: 'Archive?',
-      onConfirm: handler
+      onConfirm: handler,
     });
     await confirmStore.accept(false);
     expect(handler).toHaveBeenCalledOnce();
@@ -102,7 +98,7 @@ describe('confirmStore', () => {
       actionId: 'a',
       targetType: 't',
       message: 'one?',
-      onConfirm: first
+      onConfirm: first,
     });
     await confirmStore.accept(false);
     expect(first).toHaveBeenCalledOnce();
@@ -113,7 +109,7 @@ describe('confirmStore', () => {
       actionId: 'a',
       targetType: 't',
       message: 'two?',
-      onConfirm: second
+      onConfirm: second,
     });
     expect(confirmStore.pending).not.toBeNull();
     expect(second).not.toHaveBeenCalled();
@@ -125,7 +121,7 @@ describe('confirmStore', () => {
       actionId: 'x',
       targetType: 't',
       message: 'nope?',
-      onConfirm: handler
+      onConfirm: handler,
     });
     confirmStore.dismiss();
     expect(confirmStore.pending).toBeNull();
@@ -140,7 +136,7 @@ describe('confirmStore', () => {
       message: '?',
       onConfirm: () => {
         throw new Error('blown');
-      }
+      },
     });
     await confirmStore.accept(false);
     expect(confirmStore.pending).toBeNull();
@@ -157,7 +153,7 @@ describe('confirmStore', () => {
       actionId: 'slow',
       targetType: 't',
       message: '?',
-      onConfirm: () => slow
+      onConfirm: () => slow,
     });
     const pending = confirmStore.accept(false);
     expect(confirmStore.busy).toBe(true);
@@ -172,7 +168,7 @@ describe('confirmStore', () => {
       actionId: 'race',
       targetType: 't',
       message: '?',
-      onConfirm: handler
+      onConfirm: handler,
     });
     const a = confirmStore.accept(false);
     const b = confirmStore.accept(false); // should be ignored

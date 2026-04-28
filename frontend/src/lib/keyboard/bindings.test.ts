@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  _internal,
-  bindings,
-  chordSegments,
-  dispatchShortcut,
-  groupedBindings
-} from './bindings';
+import { _internal, bindings, chordSegments, dispatchShortcut, groupedBindings } from './bindings';
 import { uiActions } from '$lib/stores/ui_actions.svelte';
 import { palette } from '$lib/context-menu/palette.svelte';
 import { contextMenu } from '$lib/context-menu/store.svelte';
@@ -33,7 +27,7 @@ function fakeEvent(init: {
     altKey: init.altKey ?? false,
     metaKey: init.metaKey ?? false,
     bubbles: true,
-    cancelable: true
+    cancelable: true,
   });
   if (init.target) Object.defineProperty(e, 'target', { value: init.target });
   return e;
@@ -45,7 +39,7 @@ describe('parseChord', () => {
       ctrl: true,
       shift: true,
       alt: false,
-      key: 'P'
+      key: 'P',
     });
   });
   it('handles bare letter chords', () => {
@@ -53,7 +47,7 @@ describe('parseChord', () => {
       ctrl: false,
       shift: false,
       alt: false,
-      key: 'c'
+      key: 'c',
     });
   });
   it('handles bracket chords', () => {
@@ -61,7 +55,7 @@ describe('parseChord', () => {
       ctrl: false,
       shift: false,
       alt: true,
-      key: '['
+      key: '[',
     });
   });
   it('rejects empty chords', () => {
@@ -71,25 +65,18 @@ describe('parseChord', () => {
 
 describe('matches', () => {
   it('matches by physical code for letters', () => {
-    expect(matches(fakeEvent({ key: 'c', code: 'KeyC' }), parseChord('c'))).toBe(
-      true
-    );
+    expect(matches(fakeEvent({ key: 'c', code: 'KeyC' }), parseChord('c'))).toBe(true);
   });
 
   it('matches Shift+C only with Shift held', () => {
     const req = parseChord('Shift+C');
-    expect(
-      matches(fakeEvent({ key: 'C', code: 'KeyC', shiftKey: true }), req)
-    ).toBe(true);
+    expect(matches(fakeEvent({ key: 'C', code: 'KeyC', shiftKey: true }), req)).toBe(true);
     expect(matches(fakeEvent({ key: 'c', code: 'KeyC' }), req)).toBe(false);
   });
 
   it('matches Alt+1 by Digit code', () => {
     expect(
-      matches(
-        fakeEvent({ key: '1', code: 'Digit1', altKey: true }),
-        parseChord('Alt+1')
-      )
+      matches(fakeEvent({ key: '1', code: 'Digit1', altKey: true }), parseChord('Alt+1'))
     ).toBe(true);
   });
 
@@ -100,7 +87,7 @@ describe('matches', () => {
           key: 'P',
           code: 'KeyP',
           metaKey: true,
-          shiftKey: true
+          shiftKey: true,
         }),
         parseChord('Ctrl+Shift+P')
       )
@@ -108,23 +95,17 @@ describe('matches', () => {
   });
 
   it('rejects Ctrl modifier when chord has none', () => {
-    expect(
-      matches(fakeEvent({ key: 'c', code: 'KeyC', ctrlKey: true }), parseChord('c'))
-    ).toBe(false);
+    expect(matches(fakeEvent({ key: 'c', code: 'KeyC', ctrlKey: true }), parseChord('c'))).toBe(
+      false
+    );
   });
 
   it('matches Alt+] / Alt+[ via key', () => {
     expect(
-      matches(
-        fakeEvent({ key: ']', code: 'BracketRight', altKey: true }),
-        parseChord('Alt+]')
-      )
+      matches(fakeEvent({ key: ']', code: 'BracketRight', altKey: true }), parseChord('Alt+]'))
     ).toBe(true);
     expect(
-      matches(
-        fakeEvent({ key: '[', code: 'BracketLeft', altKey: true }),
-        parseChord('Alt+[')
-      )
+      matches(fakeEvent({ key: '[', code: 'BracketLeft', altKey: true }), parseChord('Alt+['))
     ).toBe(true);
   });
 
@@ -139,12 +120,8 @@ describe('groupedBindings', () => {
     const groupNames = groups.map((g) => g.group);
     // Create comes before Navigate; Navigate before Focus; Focus
     // before Help.
-    expect(groupNames.indexOf('Create')).toBeLessThan(
-      groupNames.indexOf('Navigate')
-    );
-    expect(groupNames.indexOf('Navigate')).toBeLessThan(
-      groupNames.indexOf('Focus')
-    );
+    expect(groupNames.indexOf('Create')).toBeLessThan(groupNames.indexOf('Navigate'));
+    expect(groupNames.indexOf('Navigate')).toBeLessThan(groupNames.indexOf('Focus'));
   });
 
   it('renders all v1 picks', () => {
@@ -159,7 +136,7 @@ describe('groupedBindings', () => {
       'navigate.bracket-prev',
       'focus.escape',
       'palette.toggle',
-      'help.cheat-sheet'
+      'help.cheat-sheet',
     ]) {
       expect(ids).toContain(id);
     }
@@ -239,7 +216,7 @@ describe('dispatchShortcut', () => {
     const e = fakeEvent({
       key: 'c',
       code: 'KeyC',
-      target: input
+      target: input,
     });
     expect(dispatchShortcut(e)).toBe(false);
     expect(uiActions.newSessionOpen).toBe(false);
@@ -255,7 +232,7 @@ describe('dispatchShortcut', () => {
       code: 'KeyP',
       ctrlKey: true,
       shiftKey: true,
-      target: input
+      target: input,
     });
     expect(dispatchShortcut(e)).toBe(true);
     expect(palette.open).toBe(true);
@@ -266,12 +243,7 @@ describe('dispatchShortcut', () => {
     // Wedge fix (2026-04-26): the context menu's document-capture
     // keydown listener swallows alphanumerics from focused fields,
     // so its open state must close ahead of every other overlay.
-    contextMenu.open(
-      { type: 'session', id: 'sess-1' },
-      0,
-      0,
-      false
-    );
+    contextMenu.open({ type: 'session', id: 'sess-1' }, 0, 0, false);
     palette.show();
     uiActions.cheatSheetOpen = true;
     const e = fakeEvent({ key: 'Escape' });
@@ -287,12 +259,7 @@ describe('dispatchShortcut', () => {
     // with focus on the textarea. The menu's own Esc handler defers to
     // the focused field, so without bindings handleEscape closing the
     // menu, Esc would never dismiss it.
-    contextMenu.open(
-      { type: 'session', id: 'sess-1' },
-      0,
-      0,
-      false
-    );
+    contextMenu.open({ type: 'session', id: 'sess-1' }, 0, 0, false);
     const input = document.createElement('input');
     document.body.appendChild(input);
     input.focus();

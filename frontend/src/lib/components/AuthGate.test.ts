@@ -37,7 +37,7 @@ describe('AuthGate', () => {
     auth.status = 'required';
     const { getByLabelText, getByRole } = render(AuthGate);
     await fireEvent.input(getByLabelText('Token'), {
-      target: { value: 'secret-sauce' }
+      target: { value: 'secret-sauce' },
     });
     await fireEvent.click(getByRole('button', { name: /Save/i }));
     expect(auth.status).toBe('ok');
@@ -51,7 +51,7 @@ describe('AuthGate', () => {
     auth.status = 'required';
     const { getByLabelText, getByRole } = render(AuthGate);
     await fireEvent.input(getByLabelText('Token'), {
-      target: { value: '   ' }
+      target: { value: '   ' },
     });
     await fireEvent.click(getByRole('button', { name: /Save/i }));
     // Gate stays up — saveToken short-circuits on empty input.

@@ -20,7 +20,7 @@
 {#if auth.blocking}
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4">
     <form
-      class="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl flex flex-col gap-4"
+      class="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-2xl"
       onsubmit={(e) => {
         e.preventDefault();
         onSubmit();
@@ -28,7 +28,7 @@
     >
       <header>
         <h2 class="text-lg font-medium">Auth required</h2>
-        <p class="text-xs text-slate-400 mt-1">
+        <p class="mt-1 text-xs text-slate-400">
           {#if auth.status === 'invalid'}
             The stored token was rejected. Enter a new one.
           {:else}
@@ -40,8 +40,8 @@
         <span class="text-slate-400">Token</span>
         <input
           type="password"
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-sm font-mono
-            focus:outline-none focus:border-slate-600"
+          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 font-mono text-sm
+            focus:border-slate-600 focus:outline-none"
           autocomplete="off"
           bind:value={entry}
           bind:this={input}
@@ -49,8 +49,8 @@
       </label>
       <button
         type="submit"
-        class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm
-          disabled:opacity-50 disabled:cursor-not-allowed"
+        class="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500
+          disabled:cursor-not-allowed disabled:opacity-50"
         disabled={submitting || !entry.trim()}
       >
         Save & continue

@@ -23,7 +23,7 @@ function tag(overrides: Partial<Tag> = {}): Tag {
     default_working_dir: null,
     default_model: null,
     tag_group: 'general',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -42,7 +42,7 @@ function queueResponses(queue: Fake[]): ReturnType<typeof vi.fn> {
       },
       async text() {
         return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-      }
+      },
     };
   });
   vi.stubGlobal('fetch', stub);
@@ -59,11 +59,11 @@ describe('TagEdit memory editor', () => {
     queueResponses([
       {
         ok: true,
-        body: { tag_id: 1, content: 'remember nftables', updated_at: 'x' }
-      }
+        body: { tag_id: 1, content: 'remember nftables', updated_at: 'x' },
+      },
     ]);
     const { container } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     await waitFor(() => {
       const ta = container.querySelector('textarea') as HTMLTextAreaElement;
@@ -74,7 +74,7 @@ describe('TagEdit memory editor', () => {
   it('treats a 404 from GET /memory as empty', async () => {
     queueResponses([{ ok: false, status: 404, body: { detail: 'tag memory not found' } }]);
     const { container } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     await waitFor(() => {
       const ta = container.querySelector('textarea') as HTMLTextAreaElement;
@@ -87,17 +87,17 @@ describe('TagEdit memory editor', () => {
     const stub = queueResponses([
       {
         ok: true,
-        body: { tag_id: 1, content: 'seeded', updated_at: 'x' }
+        body: { tag_id: 1, content: 'seeded', updated_at: 'x' },
       }, // initial GET /memory — pretend memory already exists
       { ok: true, body: tag({ name: 'bearings' }) }, // PATCH tag
       { ok: true, body: [tag({ name: 'bearings' })] }, // tags.refresh after update
       {
         ok: true,
-        body: { tag_id: 1, content: 'seeded', updated_at: 'x' }
-      } // PUT /memory
+        body: { tag_id: 1, content: 'seeded', updated_at: 'x' },
+      }, // PUT /memory
     ]);
     const { container, getByRole } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     // Wait for initial GET /memory to populate the textarea. Using
     // pre-seeded content sidesteps the jsdom Svelte 5 bind:value
@@ -119,14 +119,14 @@ describe('TagEdit memory editor', () => {
     const stub = queueResponses([
       {
         ok: true,
-        body: { tag_id: 1, content: 'old memory', updated_at: 'x' }
+        body: { tag_id: 1, content: 'old memory', updated_at: 'x' },
       }, // GET /memory — exists
       { ok: true, body: tag({ name: 'bearings' }) }, // PATCH tag
       { ok: true, body: [tag({ name: 'bearings' })] }, // tags.refresh
-      { ok: true, body: '' } // DELETE /memory
+      { ok: true, body: '' }, // DELETE /memory
     ]);
     const { container, getByRole } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     const ta = (await waitFor(() => {
       const el = container.querySelector('textarea') as HTMLTextAreaElement;
@@ -148,10 +148,10 @@ describe('TagEdit memory editor', () => {
       // Start with no color so the ✕ button is highlighted initially.
       { ok: true, body: { tag_id: 1, content: '', updated_at: 'x' } }, // GET /memory
       { ok: true, body: tag({ color: '#dc2626' }) }, // PATCH tag
-      { ok: true, body: [tag({ color: '#dc2626' })] } // tags.refresh
+      { ok: true, body: [tag({ color: '#dc2626' })] }, // tags.refresh
     ]);
     const { getByRole, getByLabelText } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     // The Blocker-red swatch is the first in the palette.
     await fireEvent.click(getByLabelText('Use #dc2626'));
@@ -159,9 +159,7 @@ describe('TagEdit memory editor', () => {
 
     await waitFor(() => {
       // Find the PATCH call and confirm it carried the chosen color.
-      const patchCall = stub.mock.calls.find(
-        (c) => (c[1] as RequestInit)?.method === 'PATCH'
-      );
+      const patchCall = stub.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'PATCH');
       expect(patchCall).toBeDefined();
       const body = JSON.parse(String((patchCall?.[1] as RequestInit).body));
       expect(body.color).toBe('#dc2626');
@@ -173,19 +171,17 @@ describe('TagEdit memory editor', () => {
       // Start seeded with a color so the clear button has something to clear.
       { ok: true, body: { tag_id: 1, content: '', updated_at: 'x' } }, // GET /memory
       { ok: true, body: tag({ color: null }) }, // PATCH
-      { ok: true, body: [tag({ color: null })] } // refresh
+      { ok: true, body: [tag({ color: null })] }, // refresh
     ]);
     tags.list = [tag({ color: '#dc2626' })];
     const { getByRole, getByLabelText } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     await fireEvent.click(getByLabelText('Clear color'));
     await fireEvent.click(getByRole('button', { name: /save/i }));
 
     await waitFor(() => {
-      const patchCall = stub.mock.calls.find(
-        (c) => (c[1] as RequestInit)?.method === 'PATCH'
-      );
+      const patchCall = stub.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'PATCH');
       expect(patchCall).toBeDefined();
       const body = JSON.parse(String((patchCall?.[1] as RequestInit).body));
       expect(body.color).toBeNull();
@@ -193,11 +189,9 @@ describe('TagEdit memory editor', () => {
   });
 
   it('preview toggle renders markdown', async () => {
-    queueResponses([
-      { ok: true, body: { tag_id: 1, content: '# Heading', updated_at: 'x' } }
-    ]);
+    queueResponses([{ ok: true, body: { tag_id: 1, content: '# Heading', updated_at: 'x' } }]);
     const { container, getByRole } = render(TagEdit, {
-      props: { open: true, tagId: 1 }
+      props: { open: true, tagId: 1 },
     });
     await waitFor(() => {
       const ta = container.querySelector('textarea') as HTMLTextAreaElement;

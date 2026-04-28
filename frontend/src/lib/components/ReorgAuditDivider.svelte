@@ -24,11 +24,7 @@
   const { audit, onJumpTo }: Props = $props();
 
   const verb = $derived(
-    audit.op === 'move'
-      ? 'Moved'
-      : audit.op === 'split'
-        ? 'Split off'
-        : 'Merged'
+    audit.op === 'move' ? 'Moved' : audit.op === 'split' ? 'Split off' : 'Merged'
   );
 
   const targetLabel = $derived(audit.target_title_snapshot ?? '(untitled)');
@@ -46,7 +42,7 @@
 </script>
 
 <div
-  class="flex items-center gap-3 text-[11px] text-slate-500 px-2 py-1.5"
+  class="flex items-center gap-3 px-2 py-1.5 text-[11px] text-slate-500"
   role="note"
   aria-label="Reorg audit"
   data-testid="reorg-audit-divider"
@@ -62,14 +58,14 @@
     {#if audit.target_session_id}
       <button
         type="button"
-        class="text-emerald-400 hover:text-emerald-300 underline decoration-dotted underline-offset-2"
+        class="text-emerald-400 underline decoration-dotted underline-offset-2 hover:text-emerald-300"
         onclick={onClickTarget}
         data-testid="reorg-audit-jump"
       >
         "{targetLabel}"
       </button>
     {:else}
-      <span class="text-slate-400 italic" data-testid="reorg-audit-deleted-target">
+      <span class="italic text-slate-400" data-testid="reorg-audit-deleted-target">
         "{targetLabel}" (deleted session)
       </span>
     {/if}

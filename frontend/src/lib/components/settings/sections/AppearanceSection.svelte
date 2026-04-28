@@ -33,7 +33,7 @@
   const themeOptions = [
     { value: 'midnight-glass', label: 'Midnight Glass (warm-navy, glass panels)' },
     { value: 'default', label: 'Default (Tailwind classic dark)' },
-    { value: 'paper-light', label: 'Paper Light (cream, flat)' }
+    { value: 'paper-light', label: 'Paper Light (cream, flat)' },
   ];
 
   /** Curated IANA zones. Covers Dave (CT), the most common US zones,
@@ -52,7 +52,7 @@
     { value: 'Europe/London', label: 'London' },
     { value: 'Europe/Paris', label: 'Paris / Berlin' },
     { value: 'Asia/Tokyo', label: 'Tokyo' },
-    { value: 'Asia/Shanghai', label: 'Shanghai' }
+    { value: 'Asia/Shanghai', label: 'Shanghai' },
   ];
 
   async function saveTheme(next: string): Promise<void> {

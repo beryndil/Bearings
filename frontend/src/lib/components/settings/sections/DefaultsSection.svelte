@@ -14,14 +14,14 @@
   async function saveModel(next: string): Promise<void> {
     const trimmed = next.trim();
     await preferences.update({
-      default_model: trimmed === '' ? null : next
+      default_model: trimmed === '' ? null : next,
     });
   }
 
   async function saveWorkdir(next: string): Promise<void> {
     const trimmed = next.trim();
     await preferences.update({
-      default_working_dir: trimmed === '' ? null : next
+      default_working_dir: trimmed === '' ? null : next,
     });
   }
 </script>

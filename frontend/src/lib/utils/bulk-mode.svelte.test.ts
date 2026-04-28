@@ -10,7 +10,7 @@ function msg(id: string, role: 'user' | 'assistant' = 'user'): api.Message {
     content: `m${id}`,
     thinking: null,
     created_at: '0',
-    session_id: 's1'
+    session_id: 's1',
   };
 }
 

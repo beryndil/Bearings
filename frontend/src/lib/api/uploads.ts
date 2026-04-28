@@ -70,7 +70,7 @@ function xhrPostJson<T>(
         // UI can render an indeterminate bar instead of a fake 0%.
         onProgress({
           loaded: e.loaded,
-          total: e.lengthComputable ? e.total : null
+          total: e.lengthComputable ? e.total : null,
         });
       };
     }
@@ -111,10 +111,7 @@ function xhrPostJson<T>(
  * `onProgress` is optional — the drop pipeline passes a callback that
  * tees into a Svelte store so a multi-MB upload paints a real bar
  * instead of an opaque spinner. */
-export function uploadFile(
-  file: File,
-  onProgress?: (p: UploadProgress) => void
-): Promise<Upload> {
+export function uploadFile(file: File, onProgress?: (p: UploadProgress) => void): Promise<Upload> {
   const form = new FormData();
   // Field name must match the FastAPI handler's `file: UploadFile`
   // parameter. `file.name` is the browser-reported filename; the

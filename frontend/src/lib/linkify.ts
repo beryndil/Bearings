@@ -64,10 +64,7 @@ const ABS_PATH_RE = new RegExp(`${PATH_LB}/(?:${PATH_CHAR}+/)+${PATH_CHAR}+`, 'g
 // `REL_EXT_TAIL_RE` then requires a `.<ext>` suffix to keep the
 // false-positive surface narrow — `frontend/src/lib/foo.ts` matches,
 // `foo/bar` does not.
-const REL_PATH_RE = new RegExp(
-  `${PATH_LB}(?:\\.{1,2}/)?${PATH_CHAR}+(?:/${PATH_CHAR}+)+`,
-  'g'
-);
+const REL_PATH_RE = new RegExp(`${PATH_LB}(?:\\.{1,2}/)?${PATH_CHAR}+(?:/${PATH_CHAR}+)+`, 'g');
 const REL_EXT_TAIL_RE = /\.[A-Za-z][A-Za-z0-9]{0,7}$/;
 
 const TRAILING_PUNCT_RE = /[.,:;!?'")\]}]+$/;
@@ -150,7 +147,7 @@ function collectPaths(text: string, baseDir: string | null, out: Match[]): void 
   const passes: Array<{ re: RegExp; requireExt: boolean }> = [
     { re: HOME_PATH_RE, requireExt: false },
     { re: ABS_PATH_RE, requireExt: false },
-    { re: REL_PATH_RE, requireExt: true }
+    { re: REL_PATH_RE, requireExt: true },
   ];
   for (const { re, requireExt } of passes) {
     for (const m of text.matchAll(re)) {

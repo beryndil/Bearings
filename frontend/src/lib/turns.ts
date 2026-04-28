@@ -24,7 +24,7 @@ function empty(key: string, user: Message | null): Turn {
     toolCalls: [],
     streamingContent: '',
     streamingThinking: '',
-    isStreaming: false
+    isStreaming: false,
   };
 }
 

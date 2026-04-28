@@ -29,7 +29,7 @@ import type { TargetType } from '$lib/context-menu/types';
 const EMPTY_TARGET_CONFIG: api.TargetMenuConfig = Object.freeze({
   pinned: Object.freeze([]) as readonly string[] as string[],
   hidden: Object.freeze([]) as readonly string[] as string[],
-  shortcuts: Object.freeze({}) as Record<string, string>
+  shortcuts: Object.freeze({}) as Record<string, string>,
 });
 
 /** Always-safe default. Used whenever hydrate receives a missing or
@@ -39,7 +39,7 @@ const EMPTY_TARGET_CONFIG: api.TargetMenuConfig = Object.freeze({
  * right-click; this default keeps the registry rendering built-in
  * ordering until the backend catches up. */
 const EMPTY_MENU_CONFIG: api.MenuConfig = Object.freeze({
-  by_target: Object.freeze({}) as Record<string, api.TargetMenuConfig>
+  by_target: Object.freeze({}) as Record<string, api.TargetMenuConfig>,
 });
 
 /** Runtime shape check for payloads coming off the wire. TypeScript

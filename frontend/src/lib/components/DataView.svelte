@@ -79,7 +79,7 @@
     children,
     loadingSnippet,
     errorSnippet,
-    emptySnippet
+    emptySnippet,
   }: Props = $props();
 </script>
 
@@ -132,10 +132,7 @@
     {#if emptySnippet}
       {@render emptySnippet()}
     {:else}
-      <p
-        class="px-4 py-6 text-sm text-slate-500"
-        data-testid="dataview-empty"
-      >
+      <p class="px-4 py-6 text-sm text-slate-500" data-testid="dataview-empty">
         {emptyLabel}
       </p>
     {/if}

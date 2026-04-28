@@ -21,9 +21,9 @@ describe('SettingsSelect', () => {
         options: [
           { value: 'a', label: 'A' },
           { value: 'b', label: 'B' },
-          { value: 'c', label: 'C' }
-        ]
-      }
+          { value: 'c', label: 'C' },
+        ],
+      },
     });
     const sel = getByLabelText('Theme') as HTMLSelectElement;
     expect(sel.value).toBe('b');
@@ -38,10 +38,10 @@ describe('SettingsSelect', () => {
         value: 'a',
         options: [
           { value: 'a', label: 'A' },
-          { value: 'b', label: 'B' }
+          { value: 'b', label: 'B' },
         ],
-        onChange
-      }
+        onChange,
+      },
     });
     const sel = getByLabelText('Theme') as HTMLSelectElement;
     await fireEvent.change(sel, { target: { value: 'b' } });

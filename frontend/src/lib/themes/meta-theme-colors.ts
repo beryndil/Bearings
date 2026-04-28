@@ -25,8 +25,8 @@
 
 export const THEME_META_COLORS: Record<string, string> = {
   'midnight-glass': '#0A0E1C',
-  'default': '#020617',
-  'paper-light': '#FAF7F0'
+  default: '#020617',
+  'paper-light': '#FAF7F0',
 };
 
 /** Default for first-paint when no theme has been picked yet. Mirrors

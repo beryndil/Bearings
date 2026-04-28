@@ -42,7 +42,7 @@
     highlightQuery,
     thresholdPx = 480,
     disabled = false,
-    sessionId = null
+    sessionId = null,
   }: Props = $props();
 
   const STORAGE_PREFIX = 'bearings:msg:expanded:';
@@ -144,7 +144,7 @@
 <div class="collapsible-body" data-testid="collapsible-body">
   <div
     bind:this={inner}
-    class="prose prose-invert prose-sm max-w-none collapsible-inner"
+    class="collapsible-inner prose prose-sm prose-invert max-w-none"
     class:is-folded={hydrated && shouldFold}
     style="--collapsed-max: {thresholdPx}px;"
     use:highlight={highlightQuery}
@@ -158,8 +158,8 @@
     <div class="mt-1 flex justify-center">
       <button
         type="button"
-        class="text-[10px] uppercase tracking-wider text-slate-400 hover:text-slate-200
-          px-2 py-0.5 rounded border border-slate-700 bg-slate-900/60"
+        class="rounded border border-slate-700 bg-slate-900/60 px-2
+          py-0.5 text-[10px] uppercase tracking-wider text-slate-400 hover:text-slate-200"
         onclick={() => setExpanded(!userExpanded)}
         data-testid="collapse-toggle"
         aria-expanded={userExpanded}

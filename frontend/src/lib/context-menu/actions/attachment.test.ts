@@ -18,7 +18,7 @@ const COMPOSER: AttachmentTarget = {
   filename: 'file.png',
   size_bytes: 1024,
   sessionId: 's-1',
-  messageId: null
+  messageId: null,
 };
 
 const SENT: AttachmentTarget = {
@@ -28,7 +28,7 @@ const SENT: AttachmentTarget = {
   filename: 'sent.txt',
   size_bytes: 256,
   sessionId: 's-1',
-  messageId: 'm-1'
+  messageId: 'm-1',
 };
 
 describe('attachment.ts — action-ID stability', () => {
@@ -39,7 +39,7 @@ describe('attachment.ts — action-ID stability', () => {
       'attachment.copy_path',
       'attachment.open_in.editor',
       'attachment.open_in.file_explorer',
-      'attachment.remove'
+      'attachment.remove',
     ]);
   });
 

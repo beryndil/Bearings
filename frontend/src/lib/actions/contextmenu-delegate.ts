@@ -40,11 +40,7 @@ export type ContextMenuDelegateBinding = {
  * ancestor that carries `attr`. Returns null when no match is found.
  * Used for the code-block lookup — the `<pre>` and `<code>` sit
  * inside the wrapper `<div data-bearings-code-block>`. */
-function closestWithin(
-  el: Element | null,
-  root: Element,
-  attr: string
-): HTMLElement | null {
+function closestWithin(el: Element | null, root: Element, attr: string): HTMLElement | null {
   let node: Element | null = el;
   while (node && node !== root) {
     if (node instanceof HTMLElement && node.hasAttribute(attr)) return node;
@@ -81,17 +77,14 @@ function readCodeBlock(
     text,
     language: lang && lang.length > 0 ? lang : null,
     sessionId: binding.sessionId,
-    messageId: binding.messageId
+    messageId: binding.messageId,
   };
 }
 
 /** Extract the link payload from an anchor. `text` is the anchor's
  * visible label; for image-only links the `alt` attr is carried
  * instead so copy actions still produce something useful. */
-function readLink(
-  anchor: HTMLAnchorElement,
-  binding: ContextMenuDelegateBinding
-): LinkTarget {
+function readLink(anchor: HTMLAnchorElement, binding: ContextMenuDelegateBinding): LinkTarget {
   const href = anchor.getAttribute('href') ?? '';
   const visible = (anchor.textContent ?? '').trim();
   const img = visible.length === 0 ? anchor.querySelector('img') : null;
@@ -101,7 +94,7 @@ function readLink(
     href,
     text,
     sessionId: binding.sessionId,
-    messageId: binding.messageId
+    messageId: binding.messageId,
   };
 }
 
@@ -169,7 +162,7 @@ export function contextmenuDelegate(
       pressedOn = null;
       if (!payload) return; // fall through to outer article menu
       contextMenu.open(payload, x, y, false);
-    }
+    },
   });
 
   node.addEventListener('contextmenu', onContextMenu);
@@ -187,6 +180,6 @@ export function contextmenuDelegate(
       node.removeEventListener('contextmenu', onContextMenu);
       node.removeEventListener('pointerdown', onPointerDown, { capture: true });
       longpressHandle.destroy();
-    }
+    },
   };
 }

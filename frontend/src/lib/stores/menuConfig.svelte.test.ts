@@ -22,8 +22,8 @@ describe('menuConfig.hydrate', () => {
   it('replaces the in-memory config with the provided payload', () => {
     menuConfig.hydrate({
       by_target: {
-        session: { pinned: ['session.pin'], hidden: [], shortcuts: {} }
-      }
+        session: { pinned: ['session.pin'], hidden: [], shortcuts: {} },
+      },
     });
     expect(menuConfig.loaded).toBe(true);
     expect(menuConfig.error).toBeNull();
@@ -61,13 +61,7 @@ describe('menuConfig.hydrate', () => {
     // Shapes we've seen or could plausibly see from a half-upgraded
     // backend or a misconfigured proxy: object without `by_target`,
     // `by_target` as an array, primitive payload, etc.
-    const badShapes = [
-      {},
-      { by_target: [] },
-      { by_target: null },
-      'not an object',
-      42
-    ];
+    const badShapes = [{}, { by_target: [] }, { by_target: null }, 'not an object', 42];
     for (const shape of badShapes) {
       menuConfig.hydrate(shape as unknown as MenuConfig);
       expect(menuConfig.error).toContain('stale backend');
@@ -90,9 +84,9 @@ describe('menuConfig.forTarget', () => {
         message: {
           pinned: ['message.copy_id'],
           hidden: ['message.delete'],
-          shortcuts: { 'message.pin': 'ctrl+p' }
-        }
-      }
+          shortcuts: { 'message.pin': 'ctrl+p' },
+        },
+      },
     });
     const cfg = menuConfig.forTarget('message');
     expect(cfg.pinned).toEqual(['message.copy_id']);
@@ -104,7 +98,7 @@ describe('menuConfig.forTarget', () => {
 describe('menuConfig.init', () => {
   it('fetches /api/ui-config and stores the context_menus payload', async () => {
     const payload: MenuConfig = {
-      by_target: { tag: { pinned: ['tag.rename'], hidden: [], shortcuts: {} } }
+      by_target: { tag: { pinned: ['tag.rename'], hidden: [], shortcuts: {} } },
     };
     vi.stubGlobal(
       'fetch',
@@ -116,7 +110,7 @@ describe('menuConfig.init', () => {
         },
         async text() {
           return '';
-        }
+        },
       }))
     );
     await menuConfig.init();
@@ -136,7 +130,7 @@ describe('menuConfig.init', () => {
         },
         async text() {
           return 'boom';
-        }
+        },
       }))
     );
     await menuConfig.init();

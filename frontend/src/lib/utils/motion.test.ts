@@ -21,7 +21,7 @@ function installMatchMedia(matches: boolean): MatchMediaShim {
     removeListener: () => {},
     addEventListener: () => {},
     removeEventListener: () => {},
-    dispatchEvent: () => false
+    dispatchEvent: () => false,
   });
   vi.stubGlobal('window', { matchMedia: shim });
   return shim;

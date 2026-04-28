@@ -20,7 +20,7 @@
 <div class="mt-2 border-t border-slate-800 pt-1">
   <button
     type="button"
-    class="w-full flex items-center justify-between px-1 py-0.5 text-[11px]
+    class="flex w-full items-center justify-between px-1 py-0.5 text-[11px]
       uppercase tracking-wider text-slate-400 hover:text-slate-200"
     aria-expanded={!collapsed}
     aria-controls="closed-sessions-group"
@@ -33,7 +33,7 @@
   {#if !collapsed}
     <ul
       id="closed-sessions-group"
-      class="flex flex-col gap-0.5 mt-1"
+      class="mt-1 flex flex-col gap-0.5"
       data-testid="closed-sessions-list"
     >
       {#each closedList as session (session.id)}

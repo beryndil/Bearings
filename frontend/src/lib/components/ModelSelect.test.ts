@@ -16,7 +16,7 @@ describe('ModelSelect', () => {
 
   test('known value surfaces as the selected option, no custom input', () => {
     const { getByRole, queryByLabelText } = render(ModelSelect, {
-      value: 'claude-opus-4-7'
+      value: 'claude-opus-4-7',
     });
     const select = getByRole('combobox', { name: 'Model' }) as HTMLSelectElement;
     expect(select.value).toBe('claude-opus-4-7');
@@ -25,7 +25,7 @@ describe('ModelSelect', () => {
 
   test('unknown value lands in Custom mode with the input visible', () => {
     const { getByRole, getByLabelText } = render(ModelSelect, {
-      value: 'claude-sonnet-5-0-preview-20280101'
+      value: 'claude-sonnet-5-0-preview-20280101',
     });
     const select = getByRole('combobox', { name: 'Model' }) as HTMLSelectElement;
     expect(select.value).toBe('__custom__');
@@ -35,7 +35,7 @@ describe('ModelSelect', () => {
 
   test('picking Custom from the dropdown clears value and reveals input', async () => {
     const { getByRole, getByLabelText } = render(ModelSelect, {
-      value: 'claude-opus-4-7'
+      value: 'claude-opus-4-7',
     });
     const select = getByRole('combobox', { name: 'Model' }) as HTMLSelectElement;
     await fireEvent.change(select, { target: { value: '__custom__' } });

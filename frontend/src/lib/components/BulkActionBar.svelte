@@ -29,9 +29,7 @@
       const active = document.activeElement as HTMLElement | null;
       if (
         active &&
-        (active.tagName === 'INPUT' ||
-          active.tagName === 'TEXTAREA' ||
-          active.isContentEditable)
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
       ) {
         return;
       }
@@ -57,8 +55,8 @@
 </script>
 
 <div
-  class="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 rounded-lg border border-slate-700
-    bg-slate-900 shadow-2xl px-4 py-2 flex items-center gap-3"
+  class="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3
+    rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 shadow-2xl"
   role="toolbar"
   aria-label="Bulk message actions"
   data-testid="bulk-action-bar"
@@ -68,7 +66,7 @@
   </span>
   <button
     type="button"
-    class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs text-white
+    class="rounded bg-emerald-600 px-3 py-1.5 text-xs text-white hover:bg-emerald-500
       disabled:opacity-50"
     disabled={count === 0}
     title="Move selected messages (m)"
@@ -79,7 +77,7 @@
   </button>
   <button
     type="button"
-    class="rounded bg-emerald-700 hover:bg-emerald-600 px-3 py-1.5 text-xs text-white
+    class="rounded bg-emerald-700 px-3 py-1.5 text-xs text-white hover:bg-emerald-600
       disabled:opacity-50"
     disabled={count === 0}
     title="Move selected messages into a new session (s)"
@@ -90,7 +88,7 @@
   </button>
   <button
     type="button"
-    class="rounded bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-200"
+    class="rounded bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700"
     title="Leave bulk mode (Esc)"
     onclick={onCancel}
     data-testid="bulk-cancel"

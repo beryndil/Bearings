@@ -15,7 +15,7 @@ import {
   type ContextUsageState,
   type LiveToolCall,
   type SessionState,
-  type TimelineItem
+  type TimelineItem,
 } from './conversation/reducer';
 
 // Re-export so existing callers (components, tests) keep importing
@@ -27,7 +27,7 @@ export {
   type ContextUsageState,
   type LiveToolCall,
   type TimelineItem,
-  type Turn
+  type Turn,
 };
 
 const PAGE_SIZE = 50;
@@ -200,10 +200,10 @@ class ConversationStore {
       const [session, page, todos] = await Promise.all([
         api.getSession(sessionId),
         api.listMessagesPage(sessionId, { limit: PAGE_SIZE }),
-        api.getSessionTodos(sessionId)
+        api.getSessionTodos(sessionId),
       ]);
       const toolCalls = await api.listToolCalls(sessionId, {
-        messageIds: page.messages.map((m) => m.id)
+        messageIds: page.messages.map((m) => m.id),
       });
       // Don't wipe in-flight streaming state. We're refreshing the
       // completed-message window from the DB; the ring-buffer replay
@@ -212,7 +212,7 @@ class ConversationStore {
       state.hasMore = page.hasMore;
       state.toolCalls = [
         ...toolCalls.map(hydrateToolCall),
-        ...state.toolCalls.filter((tc) => !toolCalls.some((row) => row.id === tc.id))
+        ...state.toolCalls.filter((tc) => !toolCalls.some((row) => row.id === tc.id)),
       ];
       state.completedMessageIds = new Set(page.messages.map((m) => m.id));
       // Rebuild the turns + timeline view caches from the freshly
@@ -247,7 +247,7 @@ class ConversationStore {
           percentage: session.last_context_pct,
           totalTokens: session.last_context_tokens,
           maxTokens: session.last_context_max,
-          isAutoCompactEnabled: true
+          isAutoCompactEnabled: true,
         };
       }
       // Returned so AgentConnection.connect() can seed its
@@ -271,7 +271,7 @@ class ConversationStore {
     try {
       const page = await api.listMessagesPage(this.sessionId, {
         before: first.created_at,
-        limit: PAGE_SIZE
+        limit: PAGE_SIZE,
       });
       // Now that listToolCalls is scoped to the visible message window
       // (see load()), paginating older messages has to pull the
@@ -291,10 +291,7 @@ class ConversationStore {
       // the tool_calls fetch — the DB row wins (finalised output).
       const hydrated = olderToolCalls.map(hydrateToolCall);
       const hydratedIds = new Set(hydrated.map((tc) => tc.id));
-      state.toolCalls = [
-        ...hydrated,
-        ...state.toolCalls.filter((tc) => !hydratedIds.has(tc.id))
-      ];
+      state.toolCalls = [...hydrated, ...state.toolCalls.filter((tc) => !hydratedIds.has(tc.id))];
       // Older messages prepend to the array → rebuild both caches so
       // the new turns land at the top in chronological order. Audits
       // tied to those older positions will resort on the next
@@ -326,11 +323,7 @@ class ConversationStore {
     state.pendingApproval = null;
   }
 
-  pushUserMessage(
-    sessionId: string,
-    content: string,
-    attachments: MessageAttachment[] = []
-  ): void {
+  pushUserMessage(sessionId: string, content: string, attachments: MessageAttachment[] = []): void {
     const state = this.ensureState(sessionId);
     const msg: api.Message = {
       id: crypto.randomUUID().replaceAll('-', ''),
@@ -343,7 +336,7 @@ class ConversationStore {
       // optimistic row matches the shape `GET /messages` returns
       // for pre-0027 rows — keeps render-branch code that checks
       // `msg.attachments?.length` honest.
-      attachments: attachments.length > 0 ? attachments : null
+      attachments: attachments.length > 0 ? attachments : null,
     };
     state.messages = [...state.messages, msg];
     // Append a matching open user turn + timeline item so the new
@@ -379,7 +372,7 @@ class ConversationStore {
       },
       refreshMessages: (sessionId) => {
         void this.refreshMessages(sessionId);
-      }
+      },
     });
   }
 
@@ -396,7 +389,7 @@ class ConversationStore {
     state.messages = [
       ...state.messages.slice(0, idx),
       { ...state.messages[idx], ...message },
-      ...state.messages.slice(idx + 1)
+      ...state.messages.slice(idx + 1),
     ];
     // The patched message object is a fresh reference; existing Turn
     // entries still point at the stale one. Rebuild the view caches

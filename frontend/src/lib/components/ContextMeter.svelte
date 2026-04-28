@@ -96,7 +96,7 @@
       class: classes,
       tokens: formatTokens(context.totalTokens),
       percent: `${Math.round(context.percentage)}%`,
-      title
+      title,
     };
   });
 </script>

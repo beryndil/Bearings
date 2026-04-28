@@ -72,9 +72,7 @@ export function collectPaletteEntries(
       // share the parent's target, so enumerate them inline.
       if (action.submenu) {
         const children =
-          typeof action.submenu === 'function'
-            ? action.submenu(target)
-            : action.submenu;
+          typeof action.submenu === 'function' ? action.submenu(target) : action.submenu;
         for (const child of children) {
           entries.push(buildEntry(child, target, action.label));
         }
@@ -103,7 +101,7 @@ function buildEntry(
     target,
     action,
     disabledReason: action.disabled?.(target) ?? null,
-    advanced: action.advanced === true
+    advanced: action.advanced === true,
   };
 }
 
@@ -125,10 +123,7 @@ export function rankEntry(entry: PaletteEntry, q: string): number {
 }
 
 /** Filter + rank entries for a query. Ties break on label asc. */
-export function filterEntries(
-  entries: readonly PaletteEntry[],
-  query: string
-): PaletteEntry[] {
+export function filterEntries(entries: readonly PaletteEntry[], query: string): PaletteEntry[] {
   const q = query.trim().toLowerCase();
   const scored: { entry: PaletteEntry; rank: number }[] = [];
   for (const entry of entries) {

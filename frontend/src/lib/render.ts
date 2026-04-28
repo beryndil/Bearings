@@ -20,7 +20,7 @@ const SHIKI_THEME_NAME = 'bearings-css-vars';
 const cssVarsTheme = createCssVariablesTheme({
   name: SHIKI_THEME_NAME,
   variablePrefix: '--shiki-',
-  fontStyle: true
+  fontStyle: true,
 });
 
 // Preloaded at highlighter init: the langs that dominate agent chat / tool
@@ -40,7 +40,7 @@ const ON_DEMAND_LANGS = [
   'sql',
   'rust',
   'go',
-  'toml'
+  'toml',
 ] as const;
 
 const ALL_LANGS: readonly string[] = [...PRELOAD_LANGS, ...ON_DEMAND_LANGS];
@@ -59,7 +59,7 @@ function ensureHighlighter(): Promise<void> {
   if (highlighterPromise) return highlighterPromise;
   highlighterPromise = createHighlighter({
     themes: [cssVarsTheme],
-    langs: [...PRELOAD_LANGS]
+    langs: [...PRELOAD_LANGS],
   }).then((h) => {
     highlighter = h;
   });
@@ -123,13 +123,13 @@ marked.use({
       }
       const fallback = `<pre class="shiki-fallback"><code>${escapeHtml(text)}</code></pre>`;
       return wrapCodeBlock(fallback, wrapperLang);
-    }
-  }
+    },
+  },
 });
 
 marked.setOptions({
   gfm: true,
-  breaks: true
+  breaks: true,
 });
 
 // Shiki emits `<pre class="shiki ...">` with inline `style="color:#..."` on
@@ -171,7 +171,7 @@ const SANITIZE_CONFIG = {
     'th',
     'thead',
     'tr',
-    'ul'
+    'ul',
   ],
   ALLOWED_ATTR: [
     'href',
@@ -181,8 +181,8 @@ const SANITIZE_CONFIG = {
     'class',
     'style',
     'data-bearings-code-block',
-    'data-language'
-  ]
+    'data-language',
+  ],
 };
 
 /** Renders Markdown text into an HTML string.

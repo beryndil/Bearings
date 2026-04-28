@@ -237,9 +237,7 @@
   </header>
 
   <div class="flex min-h-0 flex-1">
-    <aside
-      class="flex w-80 shrink-0 flex-col border-r border-slate-800 bg-slate-950"
-    >
+    <aside class="flex w-80 shrink-0 flex-col border-r border-slate-800 bg-slate-950">
       <div class="border-b border-slate-800 px-4 py-2">
         <input
           type="text"
@@ -261,68 +259,66 @@
           onRetry={() => loadIndex()}
           loadingLabel="Loading vault index"
         >
-        {#if searchHits !== null}
-          <section class="px-2 py-2">
-            <header class="px-2 pb-2 text-xs uppercase text-slate-500">
-              {searchHits.length} hit{searchHits.length === 1 ? '' : 's'}
-              {#if searchTruncated}
-                <span class="text-amber-400">(truncated — narrow query)</span>
+          {#if searchHits !== null}
+            <section class="px-2 py-2">
+              <header class="px-2 pb-2 text-xs uppercase text-slate-500">
+                {searchHits.length} hit{searchHits.length === 1 ? '' : 's'}
+                {#if searchTruncated}
+                  <span class="text-amber-400">(truncated — narrow query)</span>
+                {/if}
+              </header>
+              {#if searchError}
+                <p class="px-2 py-2 text-sm text-rose-400">{searchError}</p>
               {/if}
-            </header>
-            {#if searchError}
-              <p class="px-2 py-2 text-sm text-rose-400">{searchError}</p>
-            {/if}
-            <ul class="space-y-1">
-              {#each searchHits as hit (hit.path + ':' + hit.line)}
-                {@const entry = [...(index?.plans ?? []), ...(index?.todos ?? [])].find(
-                  (e) => e.path === hit.path
-                )}
+              <ul class="space-y-1">
+                {#each searchHits as hit (hit.path + ':' + hit.line)}
+                  {@const entry = [...(index?.plans ?? []), ...(index?.todos ?? [])].find(
+                    (e) => e.path === hit.path
+                  )}
+                  <li>
+                    <button
+                      type="button"
+                      class="w-full rounded px-2 py-1 text-left text-sm hover:bg-slate-900"
+                      class:bg-slate-900={selectedPath === hit.path}
+                      onclick={() => entry && selectEntry(entry)}
+                      disabled={!entry}
+                    >
+                      <div class="truncate text-slate-200">
+                        {entry?.title ?? entry?.slug ?? hit.path.split('/').pop()}
+                      </div>
+                      <div class="truncate text-xs text-slate-500">
+                        line {hit.line}: {hit.snippet}
+                      </div>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          {:else if filteredList.length === 0}
+            <p class="px-4 py-6 text-sm text-slate-500">
+              {currentList.length === 0 ? 'No docs in this bucket.' : 'No matches for the filter.'}
+            </p>
+          {:else}
+            <ul class="space-y-0.5 px-2 py-2">
+              {#each filteredList as entry (entry.path)}
                 <li>
                   <button
                     type="button"
-                    class="w-full rounded px-2 py-1 text-left text-sm hover:bg-slate-900"
-                    class:bg-slate-900={selectedPath === hit.path}
-                    onclick={() => entry && selectEntry(entry)}
-                    disabled={!entry}
+                    class="block w-full rounded px-2 py-1.5 text-left hover:bg-slate-900"
+                    class:bg-slate-900={selectedPath === entry.path}
+                    onclick={() => selectEntry(entry)}
                   >
-                    <div class="truncate text-slate-200">
-                      {entry?.title ?? entry?.slug ?? hit.path.split('/').pop()}
+                    <div class="truncate text-sm text-slate-200">
+                      {entry.title ?? entry.slug}
                     </div>
                     <div class="truncate text-xs text-slate-500">
-                      line {hit.line}: {hit.snippet}
+                      {formatMtime(entry.mtime)} · {formatSize(entry.size)}
                     </div>
                   </button>
                 </li>
               {/each}
             </ul>
-          </section>
-        {:else if filteredList.length === 0}
-          <p class="px-4 py-6 text-sm text-slate-500">
-            {currentList.length === 0
-              ? 'No docs in this bucket.'
-              : 'No matches for the filter.'}
-          </p>
-        {:else}
-          <ul class="space-y-0.5 px-2 py-2">
-            {#each filteredList as entry (entry.path)}
-              <li>
-                <button
-                  type="button"
-                  class="block w-full rounded px-2 py-1.5 text-left hover:bg-slate-900"
-                  class:bg-slate-900={selectedPath === entry.path}
-                  onclick={() => selectEntry(entry)}
-                >
-                  <div class="truncate text-sm text-slate-200">
-                    {entry.title ?? entry.slug}
-                  </div>
-                  <div class="truncate text-xs text-slate-500">
-                    {formatMtime(entry.mtime)} · {formatSize(entry.size)}
-                  </div>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
+          {/if}
         </DataView>
       </div>
     </aside>

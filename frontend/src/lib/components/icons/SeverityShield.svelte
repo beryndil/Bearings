@@ -49,15 +49,12 @@
        without relying on a separate drop shadow. -->
   <path
     d="M8 1.2 L2.8 3 V7.6 C2.8 10.9 5 13.4 8 14.8 C11 13.4 13.2 10.9 13.2 7.6 V3 Z"
-    fill={fill}
+    {fill}
     stroke="rgba(0,0,0,0.35)"
     stroke-width="0.8"
     stroke-linejoin="round"
   />
   <!-- Subtle highlight stripe on the upper-left bevel so tinted fills
        still read as a 3D object instead of a flat blob. -->
-  <path
-    d="M4.2 3.6 L8 2.4 V6.2 L4.2 7.1 Z"
-    fill="rgba(255,255,255,0.18)"
-  />
+  <path d="M4.2 3.6 L8 2.4 V6.2 L4.2 7.1 Z" fill="rgba(255,255,255,0.18)" />
 </svg>

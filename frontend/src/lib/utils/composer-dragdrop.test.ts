@@ -24,9 +24,7 @@ describe('parseUriList', () => {
   });
 
   it('decodes percent-escaped paths so spaces and unicode round-trip', () => {
-    expect(parseUriList('file:///home/dave/My%20Notes.md')).toEqual([
-      '/home/dave/My Notes.md'
-    ]);
+    expect(parseUriList('file:///home/dave/My%20Notes.md')).toEqual(['/home/dave/My Notes.md']);
   });
 
   it('swallows malformed URIs without throwing', () => {
@@ -37,14 +35,14 @@ describe('parseUriList', () => {
 describe('hasFiles', () => {
   it('is true when DataTransfer.types contains Files', () => {
     const evt = {
-      dataTransfer: { types: ['Files', 'text/uri-list'] }
+      dataTransfer: { types: ['Files', 'text/uri-list'] },
     } as unknown as DragEvent;
     expect(hasFiles(evt)).toBe(true);
   });
 
   it('is false when types lacks Files', () => {
     const evt = {
-      dataTransfer: { types: ['text/plain'] }
+      dataTransfer: { types: ['text/plain'] },
     } as unknown as DragEvent;
     expect(hasFiles(evt)).toBe(false);
   });
@@ -59,7 +57,7 @@ describe('extractPaths', () => {
     return {
       getData(fmt: string) {
         return payloads[fmt] ?? '';
-      }
+      },
     } as unknown as DataTransfer;
   }
 
@@ -79,7 +77,7 @@ describe('extractPaths', () => {
   it('dedupes paths surfacing in multiple formats', () => {
     const dt = fakeDataTransfer({
       'text/uri-list': 'file:///shared',
-      'text/plain': '/shared'
+      'text/plain': '/shared',
     });
     const { paths } = extractPaths(dt);
     expect(paths).toEqual(['/shared']);

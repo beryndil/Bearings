@@ -15,11 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentEvent } from '$lib/api';
-import {
-  TOOL_OUTPUT_CAP_CHARS,
-  capToolOutput,
-  conversation
-} from './conversation.svelte';
+import { TOOL_OUTPUT_CAP_CHARS, capToolOutput, conversation } from './conversation.svelte';
 
 function startCall(sessionId: string, toolCallId: string, name = 'Bash'): AgentEvent {
   return {
@@ -27,7 +23,7 @@ function startCall(sessionId: string, toolCallId: string, name = 'Bash'): AgentE
     session_id: sessionId,
     tool_call_id: toolCallId,
     name,
-    input: {}
+    input: {},
   };
 }
 
@@ -36,7 +32,7 @@ function delta(sessionId: string, toolCallId: string, text: string): AgentEvent 
     type: 'tool_output_delta',
     session_id: sessionId,
     tool_call_id: toolCallId,
-    delta: text
+    delta: text,
   };
 }
 
@@ -52,7 +48,7 @@ function endCall(
     tool_call_id: toolCallId,
     ok,
     output,
-    error: null
+    error: null,
   };
 }
 
@@ -125,9 +121,7 @@ describe('tool_output_delta reducer', () => {
     const sid = uniqueSession('unknown');
     conversation.sessionId = sid;
     // No start emitted; the delta should no-op rather than crash.
-    expect(() =>
-      conversation.handleEvent(delta(sid, 'never-started', 'x'))
-    ).not.toThrow();
+    expect(() => conversation.handleEvent(delta(sid, 'never-started', 'x'))).not.toThrow();
     expect(conversation.toolCalls).toEqual([]);
   });
 
@@ -181,16 +175,12 @@ describe('tool_output_delta reducer', () => {
 });
 
 describe('tool_progress reducer', () => {
-  function progress(
-    sessionId: string,
-    toolCallId: string,
-    elapsedMs: number
-  ): AgentEvent {
+  function progress(sessionId: string, toolCallId: string, elapsedMs: number): AgentEvent {
     return {
       type: 'tool_progress',
       session_id: sessionId,
       tool_call_id: toolCallId,
-      elapsed_ms: elapsedMs
+      elapsed_ms: elapsedMs,
     };
   }
 
@@ -217,9 +207,7 @@ describe('tool_progress reducer', () => {
   it('ignores tool_progress for unknown tool call ids (no crash)', () => {
     const sid = uniqueSession('progress-unknown');
     conversation.sessionId = sid;
-    expect(() =>
-      conversation.handleEvent(progress(sid, 'never-started', 3000))
-    ).not.toThrow();
+    expect(() => conversation.handleEvent(progress(sid, 'never-started', 3000))).not.toThrow();
     expect(conversation.toolCalls).toEqual([]);
   });
 
@@ -259,7 +247,7 @@ describe('approval reducer', () => {
       request_id: requestId,
       tool_name: toolName,
       input: { plan: '# do stuff' },
-      tool_use_id: 'tu_1'
+      tool_use_id: 'tu_1',
     };
   }
 
@@ -272,7 +260,7 @@ describe('approval reducer', () => {
       type: 'approval_resolved',
       session_id: sessionId,
       request_id: requestId,
-      decision
+      decision,
     };
   }
 
@@ -323,7 +311,7 @@ describe('todo_write_update reducer', () => {
     return {
       type: 'todo_write_update',
       session_id: sessionId,
-      todos
+      todos,
     };
   }
 
@@ -341,7 +329,7 @@ describe('todo_write_update reducer', () => {
     conversation.handleEvent(
       todoUpdate(sid, [
         { content: 'Read the spec', active_form: 'Reading the spec', status: 'in_progress' },
-        { content: 'Write the code', active_form: 'Writing the code', status: 'pending' }
+        { content: 'Write the code', active_form: 'Writing the code', status: 'pending' },
       ])
     );
     expect(conversation.todos).toHaveLength(2);
@@ -355,14 +343,14 @@ describe('todo_write_update reducer', () => {
     conversation.handleEvent(
       todoUpdate(sid, [
         { content: 'A', active_form: null, status: 'in_progress' },
-        { content: 'B', active_form: null, status: 'pending' }
+        { content: 'B', active_form: null, status: 'pending' },
       ])
     );
     conversation.handleEvent(
       todoUpdate(sid, [
         { content: 'A', active_form: null, status: 'completed' },
         { content: 'B', active_form: null, status: 'in_progress' },
-        { content: 'C', active_form: null, status: 'pending' }
+        { content: 'C', active_form: null, status: 'pending' },
       ])
     );
     expect(conversation.todos).toHaveLength(3);
@@ -424,7 +412,7 @@ describe('in-place tail mutation (item 29 / perf audit refactor)', () => {
       type: 'message_complete',
       session_id: sessionId,
       message_id: messageId,
-      cost_usd: cost
+      cost_usd: cost,
     };
   }
 

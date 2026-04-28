@@ -31,8 +31,8 @@
 
 {#if startedAt !== null}
   <span
-    class="inline-flex items-center gap-2 text-[10px] uppercase tracking-wider
-      px-2 py-1 rounded bg-amber-900/70 text-amber-100 border border-amber-700"
+    class="inline-flex items-center gap-2 rounded border border-amber-700
+      bg-amber-900/70 px-2 py-1 text-[10px] uppercase tracking-wider text-amber-100"
     role="status"
     aria-live="polite"
     data-testid="stop-undo-inline"
@@ -40,7 +40,7 @@
     <span>Stopping {remainingSec}s</span>
     <button
       type="button"
-      class="text-amber-200 hover:text-white font-medium"
+      class="font-medium text-amber-200 hover:text-white"
       onclick={() => agent.cancelPendingStop()}
       data-testid="stop-undo-button"
     >

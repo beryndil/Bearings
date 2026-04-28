@@ -173,10 +173,7 @@ class SessionsWsConnection {
   }
 
   private scheduleReconnect(): void {
-    const delay = Math.min(
-      BASE_RETRY_DELAY_MS * 2 ** this.retryCount,
-      MAX_RETRY_DELAY_MS
-    );
+    const delay = Math.min(BASE_RETRY_DELAY_MS * 2 ** this.retryCount, MAX_RETRY_DELAY_MS);
     this.retryCount += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;

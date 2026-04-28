@@ -96,9 +96,7 @@ describe('linkify — absolute path detection', () => {
 describe('linkify — relative path detection', () => {
   it('wraps a relative path with extension when baseDir is provided', () => {
     const out = linkify('edit frontend/src/lib/foo.ts please', BASE_DIR);
-    expect(out).toContain(
-      'href="file:///home/beryndil/Projects/Bearings/frontend/src/lib/foo.ts"'
-    );
+    expect(out).toContain('href="file:///home/beryndil/Projects/Bearings/frontend/src/lib/foo.ts"');
     expect(out).toContain('>frontend/src/lib/foo.ts</a>');
   });
 

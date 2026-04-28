@@ -30,16 +30,12 @@
     nextHistory,
     prevHistory,
     resetHistory,
-    type HistoryState
+    type HistoryState,
   } from '$lib/input-history';
   import * as api from '$lib/api';
   import type { MessageAttachment } from '$lib/api/sessions';
   import * as fsApi from '$lib/api/fs';
-  import {
-    ATTACHMENT_TOKEN_REGEX,
-    formatAttachmentToken,
-    formatBytes
-  } from '$lib/attachments';
+  import { ATTACHMENT_TOKEN_REGEX, formatAttachmentToken, formatBytes } from '$lib/attachments';
   import CommandMenu from './CommandMenu.svelte';
   import { contextmenu } from '$lib/actions/contextmenu';
   import type { DragDropController } from '$lib/utils/composer-dragdrop-handlers.svelte';
@@ -53,7 +49,7 @@
   };
 
   let {
-    dragdrop
+    dragdrop,
   }: {
     dragdrop: DragDropController;
   } = $props();
@@ -143,9 +139,7 @@
   let commandEntriesSessionId = $state<string | null>(null);
   let commandMenu: { handleKey: (e: KeyboardEvent) => boolean } | undefined = $state();
 
-  const commandMenuOpen = $derived(
-    promptText.startsWith('/') && !/\s/.test(promptText)
-  );
+  const commandMenuOpen = $derived(promptText.startsWith('/') && !/\s/.test(promptText));
   const commandQuery = $derived(commandMenuOpen ? promptText.slice(1) : '');
 
   $effect(() => {
@@ -348,17 +342,13 @@
    * Exported so the parent's `DragDropController` (constructed before
    * this component mounts) can dispatch into the composer once it's
    * available. */
-  export function attachFileAtCursor(
-    path: string,
-    filename?: string,
-    sizeBytes?: number
-  ): void {
+  export function attachFileAtCursor(path: string, filename?: string, sizeBytes?: number): void {
     const n = nextAttachmentN;
     nextAttachmentN += 1;
     const baseName = filename ?? path.split('/').filter(Boolean).pop() ?? 'file';
     composerAttachments = [
       ...composerAttachments,
-      { n, path, filename: baseName, size_bytes: sizeBytes ?? 0 }
+      { n, path, filename: baseName, size_bytes: sizeBytes ?? 0 },
     ];
     insertAtCursor(formatAttachmentToken(n));
   }
@@ -426,7 +416,7 @@
       const result = await fsApi.pickFile({
         start,
         multiple: true,
-        title: 'Attach a file to the prompt'
+        title: 'Attach a file to the prompt',
       });
       if (result.cancelled) return;
       for (const p of result.paths) attachFileAtCursor(p);
@@ -475,13 +465,14 @@
 
 {#if dragdrop.dropDiagnostic}
   <div
-    class="border-t border-amber-900/50 bg-amber-950/40 px-4 py-2 flex items-start gap-2"
+    class="flex items-start gap-2 border-t border-amber-900/50 bg-amber-950/40 px-4 py-2"
     data-testid="drop-diagnostic"
   >
-    <pre class="text-[11px] text-amber-200 whitespace-pre-wrap flex-1 font-mono">{dragdrop.dropDiagnostic}</pre>
+    <pre
+      class="flex-1 whitespace-pre-wrap font-mono text-[11px] text-amber-200">{dragdrop.dropDiagnostic}</pre>
     <button
       type="button"
-      class="text-amber-400 hover:text-amber-200 text-xs"
+      class="text-xs text-amber-400 hover:text-amber-200"
       aria-label="Dismiss drop diagnostic"
       onclick={() => (dragdrop.dropDiagnostic = null)}
     >
@@ -491,7 +482,7 @@
 {/if}
 
 <form
-  class="relative border-t border-slate-800 px-4 py-3 flex flex-col gap-2"
+  class="relative flex flex-col gap-2 border-t border-slate-800 px-4 py-3"
   onsubmit={(e) => {
     e.preventDefault();
     onSend();
@@ -505,10 +496,10 @@
     onSelect={onSelectCommand}
     onClose={onCloseCommandMenu}
   />
-  <div class="flex gap-2 items-end">
+  <div class="flex items-end gap-2">
     <textarea
-      class="flex-1 rounded bg-slate-950 border border-slate-800 px-3 py-2 text-sm
-        resize-none focus:outline-none focus:border-slate-600 disabled:opacity-50"
+      class="flex-1 resize-none rounded border border-slate-800 bg-slate-950 px-3 py-2
+        text-sm focus:border-slate-600 focus:outline-none disabled:opacity-50"
       rows="1"
       placeholder={sessions.selectedId
         ? 'Send a prompt (Enter · Shift+Enter for newline · / for commands · Ctrl+V to paste files)'
@@ -522,8 +513,8 @@
     ></textarea>
     <button
       type="submit"
-      class="rounded bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-sm
-        disabled:opacity-50 disabled:cursor-not-allowed"
+      class="rounded bg-emerald-600 px-3 py-2 text-sm hover:bg-emerald-500
+        disabled:cursor-not-allowed disabled:opacity-50"
       disabled={!sessions.selectedId || agent.state !== 'open' || !promptText.trim()}
     >
       Send
@@ -544,12 +535,12 @@
               filename: att.filename,
               size_bytes: att.size_bytes,
               sessionId: sessions.selectedId,
-              messageId: null
-            }
+              messageId: null,
+            },
           }}
         >
           <span class="text-slate-500">[File {att.n}]</span>
-          <span class="truncate max-w-[220px]">{att.filename}</span>
+          <span class="max-w-[220px] truncate">{att.filename}</span>
           {#if att.size_bytes}
             <span class="text-slate-500">·</span>
             <span class="text-slate-500">{formatBytes(att.size_bytes)}</span>
@@ -571,7 +562,7 @@
       type="button"
       class="inline-flex items-center gap-1.5 rounded border border-slate-800
         bg-slate-900 px-2.5 py-1 text-xs text-slate-300 hover:border-slate-600
-        hover:text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
       onclick={onPickFile}
       disabled={!sessions.selectedId || picking}
       title="Attach a file path via native dialog (honors session working dir)"
@@ -584,7 +575,7 @@
       type="button"
       class="inline-flex items-center gap-1.5 rounded border border-slate-800
         bg-slate-900 px-2.5 py-1 text-xs text-slate-300 hover:border-slate-600
-        hover:text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
       onclick={onBrowseClick}
       disabled={!sessions.selectedId || dragdrop.uploading}
       title="Browse via the browser's file picker (no compositor deps)"
@@ -601,8 +592,6 @@
       class="hidden"
       data-testid="file-input"
     />
-    <span class="text-[10px] text-slate-500">
-      or drag · Ctrl+V to paste files
-    </span>
+    <span class="text-[10px] text-slate-500"> or drag · Ctrl+V to paste files </span>
   </div>
 </form>

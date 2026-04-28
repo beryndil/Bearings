@@ -24,7 +24,7 @@ function cp(overrides: Partial<Checkpoint> & { id?: string } = {}): Checkpoint {
     message_id: 'm-1',
     label: null,
     created_at: '2026-04-22T00:00:00Z',
-    ...rest
+    ...rest,
   };
 }
 
@@ -45,7 +45,7 @@ function session(overrides: Partial<Session> = {}): Session {
     error_pending: false,
     tag_ids: [],
     checklist_item_id: null,
-    ...overrides
+    ...overrides,
   } as Session;
 }
 
@@ -65,7 +65,7 @@ function queueResponses(queue: Fake[]): void {
         },
         async text() {
           return typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-        }
+        },
       };
     })
   );
@@ -74,7 +74,7 @@ function queueResponses(queue: Fake[]): void {
 describe('checkpoints store', () => {
   it('load populates the cache for a session', async () => {
     queueResponses([
-      { ok: true, body: [cp({ id: '1', label: 'mid' }), cp({ id: '2', label: 'end' })] }
+      { ok: true, body: [cp({ id: '1', label: 'mid' }), cp({ id: '2', label: 'end' })] },
     ]);
     await checkpoints.load('s-1');
     const list = checkpoints.forSession('s-1');
@@ -90,7 +90,7 @@ describe('checkpoints store', () => {
   it('create prepends the new checkpoint to the cache', async () => {
     queueResponses([
       { ok: true, body: [cp({ id: '1' })] }, // load
-      { ok: true, body: cp({ id: '2', label: 'fresh' }) } // create
+      { ok: true, body: cp({ id: '2', label: 'fresh' }) }, // create
     ]);
     await checkpoints.load('s-1');
     const created = await checkpoints.create('s-1', 'm-2', 'fresh');
@@ -102,7 +102,7 @@ describe('checkpoints store', () => {
   it('remove is optimistic and restores on server failure', async () => {
     queueResponses([
       { ok: true, body: [cp({ id: '1' })] }, // load
-      { ok: false, status: 500, body: 'boom' } // delete fails
+      { ok: false, status: 500, body: 'boom' }, // delete fails
     ]);
     await checkpoints.load('s-1');
     const removed = await checkpoints.remove('s-1', 'cp-1');
@@ -114,7 +114,7 @@ describe('checkpoints store', () => {
   it('remove drops the row on a 204', async () => {
     queueResponses([
       { ok: true, body: [cp({ id: '1' }), cp({ id: '2' })] }, // load
-      { ok: true, status: 204, body: null } // delete OK
+      { ok: true, status: 204, body: null }, // delete OK
     ]);
     await checkpoints.load('s-1');
     const removed = await checkpoints.remove('s-1', 'cp-1');
@@ -123,9 +123,7 @@ describe('checkpoints store', () => {
   });
 
   it('fork upserts the new session into the sessions store', async () => {
-    queueResponses([
-      { ok: true, body: session({ id: 's-fork', title: 'branch' }) }
-    ]);
+    queueResponses([{ ok: true, body: session({ id: 's-fork', title: 'branch' }) }]);
     const forked = await checkpoints.fork('s-1', 'cp-1');
     expect(forked?.id).toBe('s-fork');
     expect(sessions.list.some((s) => s.id === 's-fork')).toBe(true);

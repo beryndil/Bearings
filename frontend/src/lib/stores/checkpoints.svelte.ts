@@ -65,7 +65,7 @@ class CheckpointsStore {
     try {
       const created = await api.createCheckpoint(sessionId, {
         message_id: messageId,
-        label
+        label,
       });
       const prev = this.cache[sessionId] ?? [];
       this.cache = { ...this.cache, [sessionId]: [created, ...prev] };

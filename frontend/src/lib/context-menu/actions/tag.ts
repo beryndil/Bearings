@@ -55,7 +55,7 @@ export const TAG_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookupTag(t.id);
       return row ? !row.pinned : false;
-    }
+    },
   },
   {
     id: 'tag.unpin',
@@ -72,7 +72,7 @@ export const TAG_ACTIONS: readonly Action[] = [
       if (!t) return false;
       const row = lookupTag(t.id);
       return row ? row.pinned : false;
-    }
+    },
   },
   {
     id: 'tag.copy_name',
@@ -84,7 +84,7 @@ export const TAG_ACTIONS: readonly Action[] = [
       const row = lookupTag(t.id);
       if (!row) return;
       await writeClipboard(row.name);
-    }
+    },
   },
   {
     id: 'tag.edit',
@@ -92,7 +92,7 @@ export const TAG_ACTIONS: readonly Action[] = [
     section: 'edit',
     handler: () => notYetImplemented('tag.edit'),
     disabled: () =>
-      'The pencil icon on the tag row opens the editor; context-menu wiring lands in Phase 4a.3'
+      'The pencil icon on the tag row opens the editor; context-menu wiring lands in Phase 4a.3',
   },
   {
     id: 'tag.delete',
@@ -101,8 +101,8 @@ export const TAG_ACTIONS: readonly Action[] = [
     destructive: true,
     advanced: true,
     handler: () => notYetImplemented('tag.delete'),
-    disabled: () => 'Deleting a tag detaches it from every session — wiring lands in Phase 4a.3'
-  }
+    disabled: () => 'Deleting a tag detaches it from every session — wiring lands in Phase 4a.3',
+  },
 ];
 
 export const TAG_CHIP_ACTIONS: readonly Action[] = [
@@ -116,7 +116,7 @@ export const TAG_CHIP_ACTIONS: readonly Action[] = [
       const row = lookupTag(t.tagId);
       if (!row) return;
       await writeClipboard(row.name);
-    }
+    },
   },
   {
     id: 'tag_chip.detach',
@@ -142,6 +142,6 @@ export const TAG_CHIP_ACTIONS: readonly Action[] = [
       // we can't route through attach/detach without a session to
       // detach from.
       return !!(t && t.sessionId);
-    }
-  }
+    },
+  },
 ];

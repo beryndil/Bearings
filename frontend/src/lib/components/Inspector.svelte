@@ -40,9 +40,7 @@
   let agentOpen = $state(true);
   let contextOpen = $state(false);
   let scrollContainer: HTMLElement | undefined = $state();
-  const running = $derived(
-    conversation.toolCalls.filter((t) => t.ok === null).length
-  );
+  const running = $derived(conversation.toolCalls.filter((t) => t.ok === null).length);
   // Aggregate signal so stickToBottom re-evaluates whenever a new call
   // arrives or any call's output/error grows.
   const toolStreamSignal = $derived(
@@ -164,44 +162,47 @@
 
 <aside
   bind:this={scrollContainer}
-  class="h-full bg-slate-900 overflow-y-auto border-l border-slate-800 p-4 flex flex-col gap-3"
+  class="flex h-full flex-col gap-3 overflow-y-auto border-l border-slate-800 bg-slate-900 p-4"
 >
   <details class="disclosure-group" bind:open={contextOpen}>
-    <summary class="flex items-baseline justify-between gap-2 cursor-pointer">
+    <summary class="flex cursor-pointer items-baseline justify-between gap-2">
       <span class="text-sm uppercase tracking-wider text-slate-400">Context</span>
       {#if systemPrompt}
-        <span class="text-[10px] text-slate-500 font-mono">
+        <span class="font-mono text-[10px] text-slate-500">
           ~{systemPrompt.total_tokens} tok
         </span>
       {/if}
     </summary>
 
     {#if !sessions.selected}
-      <p class="text-slate-500 text-sm mt-3">Select a session to inspect its system prompt.</p>
+      <p class="mt-3 text-sm text-slate-500">Select a session to inspect its system prompt.</p>
     {:else if contextLoading}
-      <p class="text-slate-500 text-sm mt-3">Loading…</p>
+      <p class="mt-3 text-sm text-slate-500">Loading…</p>
     {:else if contextError}
-      <p class="text-rose-400 text-sm mt-3">Failed: {contextError}</p>
+      <p class="mt-3 text-sm text-rose-400">Failed: {contextError}</p>
     {:else if systemPrompt}
-      <ul class="flex flex-col gap-2 mt-3">
+      <ul class="mt-3 flex flex-col gap-2">
         {#each systemPrompt.layers as layer, i (`${layer.kind}:${layer.name}:${i}`)}
           <li class="rounded border border-slate-800 bg-slate-950/40 p-2 text-xs">
             <div class="flex items-center justify-between gap-2">
-              <span class="font-mono font-medium truncate">{layer.name}</span>
-              <span class="{layerBadgeClasses(layer.kind)} px-1.5 py-0.5 rounded text-[10px] uppercase">
+              <span class="truncate font-mono font-medium">{layer.name}</span>
+              <span
+                class="{layerBadgeClasses(layer.kind)} rounded px-1.5 py-0.5 text-[10px] uppercase"
+              >
                 {layer.kind}
               </span>
             </div>
-            <div class="text-[10px] text-slate-500 mt-0.5">~{layer.token_count} tok</div>
+            <div class="mt-0.5 text-[10px] text-slate-500">~{layer.token_count} tok</div>
             <details class="mt-2">
-              <summary class="cursor-pointer text-slate-400 text-[11px]">content</summary>
-              <pre class="mt-1 text-[10px] text-slate-300 whitespace-pre-wrap break-all">{layer.content}</pre>
+              <summary class="cursor-pointer text-[11px] text-slate-400">content</summary>
+              <pre
+                class="mt-1 whitespace-pre-wrap break-all text-[10px] text-slate-300">{layer.content}</pre>
             </details>
           </li>
         {/each}
       </ul>
     {:else}
-      <p class="text-slate-500 text-sm mt-3">Open to load.</p>
+      <p class="mt-3 text-sm text-slate-500">Open to load.</p>
     {/if}
 
     {#if sessions.selected}
@@ -213,20 +214,20 @@
           <span class="text-[10px] text-slate-600">last layer — always wins</span>
         </div>
         <textarea
-          class="rounded bg-slate-950 border border-slate-800 px-2 py-2 text-xs
-            focus:outline-none focus:border-slate-600 resize-y min-h-[4rem]"
+          class="min-h-[4rem] resize-y rounded border border-slate-800 bg-slate-950 px-2
+            py-2 text-xs focus:border-slate-600 focus:outline-none"
           rows="4"
           placeholder="One-off instructions for this session…"
           bind:value={instructionsDraft}
         ></textarea>
         {#if instructionsError}
-          <p class="text-rose-400 text-[11px]">{instructionsError}</p>
+          <p class="text-[11px] text-rose-400">{instructionsError}</p>
         {/if}
         <div class="flex items-center justify-end gap-1.5">
           {#if instructionsDirty}
             <button
               type="button"
-              class="text-[11px] rounded bg-slate-800 hover:bg-slate-700 px-2 py-1"
+              class="rounded bg-slate-800 px-2 py-1 text-[11px] hover:bg-slate-700"
               onclick={resetInstructions}
               disabled={instructionsSaving}
             >
@@ -235,7 +236,7 @@
           {/if}
           <button
             type="button"
-            class="text-[11px] rounded bg-emerald-600 hover:bg-emerald-500 px-2 py-1
+            class="rounded bg-emerald-600 px-2 py-1 text-[11px] hover:bg-emerald-500
               disabled:opacity-50"
             onclick={saveInstructions}
             disabled={!instructionsDirty || instructionsSaving}
@@ -248,28 +249,30 @@
   </details>
 
   <details class="disclosure-group" bind:open={agentOpen}>
-    <summary class="flex items-baseline justify-between gap-2 cursor-pointer">
-      <span class="text-sm uppercase tracking-wider text-slate-400">
-        Agent
-      </span>
-      <span class="text-[10px] text-slate-500 font-mono truncate">
+    <summary class="flex cursor-pointer items-baseline justify-between gap-2">
+      <span class="text-sm uppercase tracking-wider text-slate-400"> Agent </span>
+      <span class="truncate font-mono text-[10px] text-slate-500">
         {#if sessions.selected}
           {sessions.selected.model}
         {/if}
       </span>
     </summary>
 
-    <div class="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
-      <span>{conversation.toolCalls.length} tool call{conversation.toolCalls.length === 1 ? '' : 's'}</span>
+    <div class="mt-2 flex items-center gap-2 text-[11px] text-slate-500">
+      <span
+        >{conversation.toolCalls.length} tool call{conversation.toolCalls.length === 1
+          ? ''
+          : 's'}</span
+      >
       {#if running > 0}
-        <span class="bg-amber-900 text-amber-300 px-1.5 py-0.5 rounded text-[9px] uppercase">
+        <span class="rounded bg-amber-900 px-1.5 py-0.5 text-[9px] uppercase text-amber-300">
           {running} running
         </span>
       {/if}
     </div>
 
     {#if conversation.toolCalls.length === 0}
-      <p class="text-slate-500 text-sm mt-3">No tool calls yet.</p>
+      <p class="mt-3 text-sm text-slate-500">No tool calls yet.</p>
     {:else}
       <div
         use:stickToBottom={toolStreamSignal}
@@ -278,15 +281,15 @@
       >
         {#each conversation.toolCalls as call, i (call.id)}
           {@const mark = callMarker(call.ok)}
-          <pre
-            class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"><span
-              class="text-emerald-400">$ {call.name}</span> <span
-              class={mark.cls}>{mark.glyph}</span> <span
-              class="text-slate-500">{elapsed(call.startedAt, call.finishedAt)}</span>{#if call.outputTruncated} <span
-              class="text-amber-400">[truncated]</span>{/if}
+          <pre class="whitespace-pre-wrap break-all {i > 0 ? 'mt-3' : ''}"><span
+              class="text-emerald-400">$ {call.name}</span
+            > <span class={mark.cls}>{mark.glyph}</span> <span class="text-slate-500"
+              >{elapsed(call.startedAt, call.finishedAt)}</span
+            >{#if call.outputTruncated}
+              <span class="text-amber-400">[truncated]</span>{/if}
 {JSON.stringify(call.input, null, 2)}{#if call.output !== null}
-{call.output}{/if}{#if call.error}
-<span class="text-rose-400">error: {call.error}</span>{/if}</pre>
+              {call.output}{/if}{#if call.error}
+              <span class="text-rose-400">error: {call.error}</span>{/if}</pre>
         {/each}
       </div>
     {/if}

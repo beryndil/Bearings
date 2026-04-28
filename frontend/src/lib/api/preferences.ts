@@ -30,9 +30,7 @@ export type PreferencesPatch = Partial<{
 
 import { jsonFetch } from './core';
 
-export function fetchPreferences(
-  fetchImpl: typeof fetch = fetch
-): Promise<Preferences> {
+export function fetchPreferences(fetchImpl: typeof fetch = fetch): Promise<Preferences> {
   return jsonFetch<Preferences>(fetchImpl, '/api/preferences');
 }
 
@@ -43,6 +41,6 @@ export function patchPreferences(
   return jsonFetch<Preferences>(fetchImpl, '/api/preferences', {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
   });
 }

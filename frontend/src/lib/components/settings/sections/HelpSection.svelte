@@ -32,11 +32,7 @@
   import SettingsLink from '../SettingsLink.svelte';
   import { uiActions } from '$lib/stores/ui_actions.svelte';
   import { fetchVersion } from '$lib/api/version';
-  import {
-    buildFeedbackUrl,
-    composeEnv,
-    type FeedbackKind
-  } from '$lib/utils/feedback';
+  import { buildFeedbackUrl, composeEnv, type FeedbackKind } from '$lib/utils/feedback';
 
   const README_URL = 'https://github.com/Beryndil/Bearings#readme';
   const DOCS_URL = 'https://github.com/Beryndil/Bearings/tree/main/docs';

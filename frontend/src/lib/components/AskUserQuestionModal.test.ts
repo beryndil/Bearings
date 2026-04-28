@@ -9,9 +9,7 @@ afterEach(cleanup);
 // Shape AskUserQuestion actually puts on the wire — the modal parses
 // `request.input.questions` and renders each entry. Test helper keeps
 // the call sites terse and makes it easy to tweak per-test fixtures.
-function fakeRequest(
-  overrides: Partial<ApprovalRequestEvent> = {}
-): ApprovalRequestEvent {
+function fakeRequest(overrides: Partial<ApprovalRequestEvent> = {}): ApprovalRequestEvent {
   return {
     type: 'approval_request',
     session_id: 'sess-1',
@@ -25,13 +23,13 @@ function fakeRequest(
           multiSelect: false,
           options: [
             { label: 'Orient', description: 'Report where we are' },
-            { label: 'Review', description: 'Check git status' }
-          ]
-        }
-      ]
+            { label: 'Review', description: 'Check git status' },
+          ],
+        },
+      ],
     },
     tool_use_id: 'tu_ask',
-    ...overrides
+    ...overrides,
   };
 }
 
@@ -40,7 +38,7 @@ describe('AskUserQuestionModal', () => {
     const { getByText } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond: vi.fn(() => true)
+      onRespond: vi.fn(() => true),
     });
     expect(getByText('Focus')).toBeInTheDocument();
     expect(getByText('What should I focus on?')).toBeInTheDocument();
@@ -53,7 +51,7 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond: vi.fn(() => true)
+      onRespond: vi.fn(() => true),
     });
     // No selection + no "Other" text → required answer missing →
     // Submit must stay off. Prevents an empty-answer allow that would
@@ -76,7 +74,7 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     await fireEvent.click(getByTestId('ask-option-0-0'));
     await fireEvent.click(getByTestId('ask-submit'));
@@ -91,11 +89,11 @@ describe('AskUserQuestionModal', () => {
           multiSelect: false,
           options: [
             { label: 'Orient', description: 'Report where we are' },
-            { label: 'Review', description: 'Check git status' }
-          ]
-        }
+            { label: 'Review', description: 'Check git status' },
+          ],
+        },
       ],
-      answers: { 'What should I focus on?': 'Orient' }
+      answers: { 'What should I focus on?': 'Orient' },
     });
   });
 
@@ -114,19 +112,19 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     // Click a pre-baked option first to prove that a typed "Other"
     // wins. Users commonly scan options, then decide none fit and
     // type their own — the typed text is the explicit signal.
     await fireEvent.click(getByTestId('ask-option-0-0'));
     await fireEvent.input(getByTestId('ask-other-0'), {
-      target: { value: 'Something else entirely' }
+      target: { value: 'Something else entirely' },
     });
     await fireEvent.click(getByTestId('ask-submit'));
     const call = onRespond.mock.calls[0];
     expect(call[3]).toMatchObject({
-      answers: { 'What should I focus on?': 'Something else entirely' }
+      answers: { 'What should I focus on?': 'Something else entirely' },
     });
   });
 
@@ -152,23 +150,23 @@ describe('AskUserQuestionModal', () => {
               multiSelect: true,
               options: [
                 { label: 'Alpha', description: '' },
-                { label: 'Beta', description: '' }
-              ]
-            }
-          ]
-        }
+                { label: 'Beta', description: '' },
+              ],
+            },
+          ],
+        },
       }),
       connected: true,
-      onRespond
+      onRespond,
     });
     await fireEvent.click(getByTestId('ask-option-0-0'));
     await fireEvent.click(getByTestId('ask-option-0-1'));
     await fireEvent.input(getByTestId('ask-other-0'), {
-      target: { value: 'Gamma' }
+      target: { value: 'Gamma' },
     });
     await fireEvent.click(getByTestId('ask-submit'));
     expect(onRespond.mock.calls[0][3]).toMatchObject({
-      answers: { 'Which features?': 'Alpha, Beta, Gamma' }
+      answers: { 'Which features?': 'Alpha, Beta, Gamma' },
     });
   });
 
@@ -187,7 +185,7 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     await fireEvent.click(getByTestId('ask-cancel'));
     expect(onRespond).toHaveBeenCalledWith('req-1', 'deny', 'user cancelled');
@@ -197,7 +195,7 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: false,
-      onRespond: vi.fn(() => true)
+      onRespond: vi.fn(() => true),
     });
     expect(getByTestId('ask-submit')).toBeDisabled();
     expect(getByTestId('ask-cancel')).toBeDisabled();
@@ -218,7 +216,7 @@ describe('AskUserQuestionModal', () => {
     render(AskUserQuestionModal, {
       request: fakeRequest(),
       connected: true,
-      onRespond
+      onRespond,
     });
     // If Escape propagated, the outer spy would fire. Same invariant
     // as ApprovalModal: silent-allow on dismiss is worse than a deny.
@@ -237,7 +235,7 @@ describe('AskUserQuestionModal', () => {
     const { getByTestId } = render(AskUserQuestionModal, {
       request: fakeRequest({ input: { not: 'questions' } }),
       connected: true,
-      onRespond: vi.fn(() => true)
+      onRespond: vi.fn(() => true),
     });
     // Protocol-mismatch guard: rather than crash on `.map` of
     // undefined, show an explanation and let the user Cancel.

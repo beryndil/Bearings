@@ -16,14 +16,14 @@ function audit(overrides: Partial<ReorgAudit> = {}): ReorgAudit {
     message_count: 3,
     op: 'move',
     created_at: '2026-04-21T15:30:00Z',
-    ...overrides
+    ...overrides,
   };
 }
 
 describe('ReorgAuditDivider', () => {
   it('renders a "Moved N messages to …" line for a move', () => {
     const { getByTestId, getByText } = render(ReorgAuditDivider, {
-      audit: audit({ op: 'move', message_count: 3 })
+      audit: audit({ op: 'move', message_count: 3 }),
     });
     expect(getByTestId('reorg-audit-divider')).toBeInTheDocument();
     // Verb + plural + target title land as one block of text.
@@ -33,7 +33,7 @@ describe('ReorgAuditDivider', () => {
 
   it('pluralizes correctly for a single-message move', () => {
     const { getByText } = render(ReorgAuditDivider, {
-      audit: audit({ message_count: 1 })
+      audit: audit({ message_count: 1 }),
     });
     // Single message → "1 message" not "1 messages".
     expect(getByText(/Moved 1 message to/)).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe('ReorgAuditDivider', () => {
 
   it('uses the right verb for each op', () => {
     const { getByText, unmount } = render(ReorgAuditDivider, {
-      audit: audit({ op: 'split' })
+      audit: audit({ op: 'split' }),
     });
     expect(getByText(/Split off 3 messages to/)).toBeInTheDocument();
     unmount();
@@ -54,7 +54,7 @@ describe('ReorgAuditDivider', () => {
     const onJumpTo = vi.fn();
     const { getByTestId } = render(ReorgAuditDivider, {
       audit: audit({ target_session_id: 'target-abc' }),
-      onJumpTo
+      onJumpTo,
     });
     await fireEvent.click(getByTestId('reorg-audit-jump'));
     expect(onJumpTo).toHaveBeenCalledExactlyOnceWith('target-abc');
@@ -64,7 +64,7 @@ describe('ReorgAuditDivider', () => {
     const onJumpTo = vi.fn();
     const { queryByTestId, getByTestId } = render(ReorgAuditDivider, {
       audit: audit({ target_session_id: null, target_title_snapshot: 'gone' }),
-      onJumpTo
+      onJumpTo,
     });
     // No clickable jump button when the target is gone — rendered as
     // plain italic text with an explicit "(deleted session)" marker.
@@ -76,14 +76,14 @@ describe('ReorgAuditDivider', () => {
 
   it('renders "(untitled)" when the snapshot is null', () => {
     const { getByText } = render(ReorgAuditDivider, {
-      audit: audit({ target_title_snapshot: null })
+      audit: audit({ target_title_snapshot: null }),
     });
     expect(getByText('"(untitled)"')).toBeInTheDocument();
   });
 
   it('tags the DOM with audit metadata for downstream queries', () => {
     const { getByTestId } = render(ReorgAuditDivider, {
-      audit: audit({ id: 77, op: 'split' })
+      audit: audit({ id: 77, op: 'split' }),
     });
     const el = getByTestId('reorg-audit-divider');
     expect(el.getAttribute('data-audit-id')).toBe('77');
