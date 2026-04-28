@@ -63,6 +63,11 @@ EXPECTED_TABLES = frozenset(
         # primitive) and the templates table (arch §1.1.3).
         "checkpoints",
         "templates",
+        # Item 1.6 addition — durable mirror of the autonomous
+        # checklist driver's run state per arch §1.1.4 + behavior/
+        # checklists.md §"Run-control surface" (state machine,
+        # counters, terminal outcome).
+        "auto_driver_runs",
     }
 )
 

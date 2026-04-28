@@ -362,6 +362,126 @@ CHECKLIST_DRIVER_MAX_FOLLOWUP_DEPTH: Final[int] = 3
 # days (default 7)").
 BEARINGS_TODO_RECENT_DEFAULT_DAYS: Final[int] = 7
 
+# Auto-driver per-leg turn cap. Decided-and-documented (behavior doc is
+# silent on this cap): bound the inner ``run_turn`` loop so a runaway
+# leg cannot spin forever waiting for a sentinel. 20 turns chosen as
+# generous-but-finite — most items resolve in 3-7 turns; a leg that has
+# emitted nothing actionable after 20 turns is treated as
+# ``failure_reason = "leg_turn_cap_exceeded"`` and the leg-cap path
+# advances per failure-policy.
+CHECKLIST_DRIVER_MAX_TURNS_PER_LEG: Final[int] = 20
+
+# Auto-driver pressure-watchdog nudge text. Per behavior/checklists.md
+# §"Pressure-watchdog handoff request" — "the driver injects one nudge
+# turn ('please emit a handoff plug now') before treating a quiet turn
+# as a silent-exit failure". The exact wording is observable to the
+# user (one extra turn appears in the chat) so it lives here, not
+# inline.
+CHECKLIST_DRIVER_PRESSURE_NUDGE_TEXT: Final[str] = (
+    "please emit a handoff plug now — the leg's context-window pressure "
+    "has crossed the watchdog threshold."
+)
+
+# Auto-driver run-state alphabet. Mirrors the schema CHECK constraint on
+# ``auto_driver_runs.state`` (per ``schema.sql``). The dataclass row
+# mirror in ``db/auto_driver_runs.py`` validates against this set so a
+# bad write fails at construction time rather than at INSERT time.
+AUTO_DRIVER_STATE_IDLE: Final[str] = "idle"
+AUTO_DRIVER_STATE_RUNNING: Final[str] = "running"
+AUTO_DRIVER_STATE_PAUSED: Final[str] = "paused"
+AUTO_DRIVER_STATE_FINISHED: Final[str] = "finished"
+AUTO_DRIVER_STATE_ERRORED: Final[str] = "errored"
+KNOWN_AUTO_DRIVER_STATES: Final[frozenset[str]] = frozenset(
+    {
+        AUTO_DRIVER_STATE_IDLE,
+        AUTO_DRIVER_STATE_RUNNING,
+        AUTO_DRIVER_STATE_PAUSED,
+        AUTO_DRIVER_STATE_FINISHED,
+        AUTO_DRIVER_STATE_ERRORED,
+    }
+)
+
+# Auto-driver failure-policy alphabet. Per behavior/checklists.md
+# §"Run-control surface" the user picks ``halt`` (default) or ``skip``
+# from a dropdown next to Start. The choice applies to the next Start;
+# in-flight runs honor the policy they were started with.
+AUTO_DRIVER_FAILURE_POLICY_HALT: Final[str] = "halt"
+AUTO_DRIVER_FAILURE_POLICY_SKIP: Final[str] = "skip"
+KNOWN_AUTO_DRIVER_FAILURE_POLICIES: Final[frozenset[str]] = frozenset(
+    {AUTO_DRIVER_FAILURE_POLICY_HALT, AUTO_DRIVER_FAILURE_POLICY_SKIP}
+)
+
+# Item non-completion category alphabet, carried on
+# ``checklist_items.blocked_reason_category``. Per behavior/checklists.md
+# §"Item-status colors" the user observes blocked (amber), failed (red)
+# and skipped (grey) as distinct colors; the schema's ``blocked_*``
+# columns serve as the generic "non-completion observable" surface
+# (decided-and-documented — the schema header comment names the columns
+# as the sentinel-blocked surface, but the same triple naturally carries
+# any non-completion category, and the alternative — three parallel
+# ``<state>_at`` columns — would triplicate the schema for no semantic
+# gain). The category drives the pip color the UI renders.
+ITEM_OUTCOME_BLOCKED: Final[str] = "blocked"
+ITEM_OUTCOME_FAILED: Final[str] = "failed"
+ITEM_OUTCOME_SKIPPED: Final[str] = "skipped"
+KNOWN_ITEM_OUTCOMES: Final[frozenset[str]] = frozenset(
+    {ITEM_OUTCOME_BLOCKED, ITEM_OUTCOME_FAILED, ITEM_OUTCOME_SKIPPED}
+)
+
+# Sentinel kind alphabet. Per behavior/checklists.md §"Sentinels
+# (auto-pause / failure / completion)" the user observes six sentinel
+# kinds the working agent emits; a malformed / incomplete sentinel is
+# silently ignored (the parser must not act on a half-emitted block).
+# Decided-and-documented: the wire format is the
+# ``<bearings:sentinel kind="..." />`` tag form; rationale lives in
+# ``agent/sentinel.py``'s docstring.
+SENTINEL_KIND_ITEM_DONE: Final[str] = "item_done"
+SENTINEL_KIND_HANDOFF: Final[str] = "handoff"
+SENTINEL_KIND_FOLLOWUP_BLOCKING: Final[str] = "followup_blocking"
+SENTINEL_KIND_FOLLOWUP_NONBLOCKING: Final[str] = "followup_nonblocking"
+SENTINEL_KIND_ITEM_BLOCKED: Final[str] = "item_blocked"
+SENTINEL_KIND_ITEM_FAILED: Final[str] = "item_failed"
+KNOWN_SENTINEL_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        SENTINEL_KIND_ITEM_DONE,
+        SENTINEL_KIND_HANDOFF,
+        SENTINEL_KIND_FOLLOWUP_BLOCKING,
+        SENTINEL_KIND_FOLLOWUP_NONBLOCKING,
+        SENTINEL_KIND_ITEM_BLOCKED,
+        SENTINEL_KIND_ITEM_FAILED,
+    }
+)
+
+# Driver outcome strings observed by the user on the status line freeze
+# (per behavior/checklists.md §"Run-control surface"). Templates so the
+# item-N substitution is explicit at the call site.
+DRIVER_OUTCOME_COMPLETED: Final[str] = "Completed"
+DRIVER_OUTCOME_HALTED_FAILURE_TEMPLATE: Final[str] = "Halted: failure on item {n}"
+DRIVER_OUTCOME_HALTED_MAX_ITEMS: Final[str] = "Halted: max items"
+DRIVER_OUTCOME_HALTED_STOPPED: Final[str] = "Halted: stopped by user"
+DRIVER_OUTCOME_HALTED_EMPTY: Final[str] = "Halted: empty"
+
+# Spawned-by alphabet for ``paired_chats.spawned_by``. Mirrors the
+# schema CHECK constraint.
+PAIRED_CHAT_SPAWNED_BY_USER: Final[str] = "user"
+PAIRED_CHAT_SPAWNED_BY_DRIVER: Final[str] = "driver"
+KNOWN_PAIRED_CHAT_SPAWNED_BY: Final[frozenset[str]] = frozenset(
+    {PAIRED_CHAT_SPAWNED_BY_USER, PAIRED_CHAT_SPAWNED_BY_DRIVER}
+)
+
+# Checklist item label / notes / blocked-reason maxima. Mirrors the
+# label-cap pattern used for tag names / template names so user-facing
+# labels share a single character budget.
+CHECKLIST_ITEM_LABEL_MAX_LENGTH: Final[int] = 500
+CHECKLIST_ITEM_NOTES_MAX_LENGTH: Final[int] = 30_000
+CHECKLIST_ITEM_BLOCKED_REASON_MAX_LENGTH: Final[int] = 4_000
+
+# Sort-order step between siblings. Decided-and-documented: leave gaps
+# so a future "insert between A and B" works without a full renumber
+# (assign mid-point). The :func:`reorder` path renumbers compactly when
+# the gap collapses below the step.
+CHECKLIST_SORT_ORDER_STEP: Final[int] = 100
+
 # ---------------------------------------------------------------------------
 # Checkpoints + templates (item 1.3; arch §1.1.3 db/checkpoints.py +
 # db/templates.py; arch §5 #12 — Bearings owns its named-snapshot
@@ -571,11 +691,24 @@ assert frozenset({VAULT_KIND_PLAN, VAULT_KIND_TODO}) == KNOWN_VAULT_KINDS
 
 __all__ = [
     "ADVISOR_TOOL_BETA_HEADER",
+    "AUTO_DRIVER_FAILURE_POLICY_HALT",
+    "AUTO_DRIVER_FAILURE_POLICY_SKIP",
+    "AUTO_DRIVER_STATE_ERRORED",
+    "AUTO_DRIVER_STATE_FINISHED",
+    "AUTO_DRIVER_STATE_IDLE",
+    "AUTO_DRIVER_STATE_PAUSED",
+    "AUTO_DRIVER_STATE_RUNNING",
     "BEARINGS_TODO_RECENT_DEFAULT_DAYS",
     "CHECKLIST_DRIVER_MAX_FOLLOWUP_DEPTH",
     "CHECKLIST_DRIVER_MAX_ITEMS_PER_RUN",
     "CHECKLIST_DRIVER_MAX_LEGS_PER_ITEM",
+    "CHECKLIST_DRIVER_MAX_TURNS_PER_LEG",
     "CHECKLIST_DRIVER_PRESSURE_HANDOFF_THRESHOLD_PCT",
+    "CHECKLIST_DRIVER_PRESSURE_NUDGE_TEXT",
+    "CHECKLIST_ITEM_BLOCKED_REASON_MAX_LENGTH",
+    "CHECKLIST_ITEM_LABEL_MAX_LENGTH",
+    "CHECKLIST_ITEM_NOTES_MAX_LENGTH",
+    "CHECKLIST_SORT_ORDER_STEP",
     "CHECKPOINT_LABEL_MAX_LENGTH",
     "DEFAULT_ADVISOR_MAX_USES_HAIKU",
     "DEFAULT_ADVISOR_MAX_USES_SONNET",
@@ -591,20 +724,35 @@ __all__ = [
     "DEFAULT_TOOL_OUTPUT_CAP_CHARS",
     "DEFAULT_VAULT_PLAN_ROOT",
     "DEFAULT_VAULT_TODO_GLOB",
+    "DRIVER_OUTCOME_COMPLETED",
+    "DRIVER_OUTCOME_HALTED_EMPTY",
+    "DRIVER_OUTCOME_HALTED_FAILURE_TEMPLATE",
+    "DRIVER_OUTCOME_HALTED_MAX_ITEMS",
+    "DRIVER_OUTCOME_HALTED_STOPPED",
     "EFFORT_LEVEL_TO_SDK",
     "EXECUTOR_FALLBACK_MODEL",
     "EXECUTOR_MODEL_FULL_ID_PREFIX",
     "HISTORY_PRIME_MAX_CHARS",
+    "ITEM_OUTCOME_BLOCKED",
+    "ITEM_OUTCOME_FAILED",
+    "ITEM_OUTCOME_SKIPPED",
+    "KNOWN_AUTO_DRIVER_FAILURE_POLICIES",
+    "KNOWN_AUTO_DRIVER_STATES",
     "KNOWN_EFFORT_LEVELS",
     "KNOWN_EXECUTOR_MODELS",
+    "KNOWN_ITEM_OUTCOMES",
+    "KNOWN_PAIRED_CHAT_SPAWNED_BY",
     "KNOWN_ROUTING_SOURCES",
     "KNOWN_SDK_PERMISSION_MODES",
     "KNOWN_SDK_SETTING_SOURCES",
+    "KNOWN_SENTINEL_KINDS",
     "KNOWN_VAULT_KINDS",
     "MAX_CHECKPOINTS_PER_SESSION",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
     "OVERRIDE_RATE_WINDOW_DAYS",
+    "PAIRED_CHAT_SPAWNED_BY_DRIVER",
+    "PAIRED_CHAT_SPAWNED_BY_USER",
     "PCT_MAX",
     "PCT_MIN",
     "PERMISSION_PROFILE_ALLOWED_TOOLS",
@@ -618,6 +766,12 @@ __all__ = [
     "RING_BUFFER_MAX",
     "ROUTING_PREVIEW_DEBOUNCE",
     "ROUTING_PREVIEW_DEBOUNCE_MS",
+    "SENTINEL_KIND_FOLLOWUP_BLOCKING",
+    "SENTINEL_KIND_FOLLOWUP_NONBLOCKING",
+    "SENTINEL_KIND_HANDOFF",
+    "SENTINEL_KIND_ITEM_BLOCKED",
+    "SENTINEL_KIND_ITEM_DONE",
+    "SENTINEL_KIND_ITEM_FAILED",
     "STREAM_HEARTBEAT_INTERVAL_S",
     "STREAM_MAX_DELTA_CHARS",
     "STREAM_MAX_TOOL_OUTPUT_CHARS",

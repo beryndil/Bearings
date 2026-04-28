@@ -269,6 +269,60 @@ CREATE INDEX IF NOT EXISTS idx_paired_chats_chat_session_id
     ON paired_chats(chat_session_id);
 
 -- ---------------------------------------------------------------------------
+-- auto_driver_runs — autonomous-driver run-control state for a checklist.
+--
+-- Per docs/behavior/checklists.md §"Run-control surface" the user starts /
+-- stops / pauses / skips the autonomous walker on a checklist; the status
+-- line they see ("Running — item N of M, leg K, X failures") is materialised
+-- from this table's counters. Per docs/architecture-v1.md §1.1.4 the
+-- ``Driver`` class owns the in-memory state machine; this table is the
+-- *durable* mirror so a server restart can rehydrate a still-running driver
+-- per docs/behavior/checklists.md ("If the server restarts mid-run, the run
+-- is rehydrated on next boot — drivers in `running` state at shutdown
+-- re-attach to a fresh leg").
+--
+-- The state alphabet ('idle', 'running', 'paused', 'finished', 'errored')
+-- is the user-observable lifecycle from checklists.md §"Run-control surface"
+-- — pause is conceptually a soft stop in v1, but is kept distinct from
+-- 'idle' so a paused-and-resumable run is distinguishable from a never-yet-
+-- started checklist.
+--
+-- failure_policy + visit_existing capture the per-Start configuration (per
+-- checklists.md "the choice applies to the next Start; in-flight runs honor
+-- the policy they were started with"). Counters mirror the status line's
+-- live ticks (items_completed, items_failed, items_blocked, items_skipped,
+-- legs_spawned). current_item_id points at the item the driver is currently
+-- driving; outcome + outcome_reason carry the terminal status that freezes
+-- the line on completion.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS auto_driver_runs (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    checklist_id             TEXT    NOT NULL,
+    state                    TEXT    NOT NULL CHECK (state IN ('idle', 'running', 'paused', 'finished', 'errored')),
+    failure_policy           TEXT    NOT NULL DEFAULT 'halt' CHECK (failure_policy IN ('halt', 'skip')),
+    visit_existing           INTEGER NOT NULL DEFAULT 0 CHECK (visit_existing IN (0, 1)),
+    items_completed          INTEGER NOT NULL DEFAULT 0,
+    items_failed             INTEGER NOT NULL DEFAULT 0,
+    items_blocked            INTEGER NOT NULL DEFAULT 0,
+    items_skipped            INTEGER NOT NULL DEFAULT 0,
+    items_attempted          INTEGER NOT NULL DEFAULT 0,
+    legs_spawned             INTEGER NOT NULL DEFAULT 0,
+    current_item_id          INTEGER,
+    outcome                  TEXT,
+    outcome_reason           TEXT,
+    started_at               TEXT    NOT NULL,
+    updated_at               TEXT    NOT NULL,
+    finished_at              TEXT,
+    FOREIGN KEY (checklist_id)    REFERENCES sessions(id)         ON DELETE CASCADE,
+    FOREIGN KEY (current_item_id) REFERENCES checklist_items(id)  ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_driver_runs_checklist_id_started_at
+    ON auto_driver_runs(checklist_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_auto_driver_runs_state
+    ON auto_driver_runs(state) WHERE state IN ('running', 'paused');
+
+-- ---------------------------------------------------------------------------
 -- tag_routing_rules — per-tag routing rules, evaluated in priority order
 -- before system_routing_rules. Schema verbatim from
 -- docs/model-routing-v1-spec.md §3.

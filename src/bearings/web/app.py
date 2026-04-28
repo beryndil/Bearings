@@ -30,9 +30,11 @@ from __future__ import annotations
 import aiosqlite
 from fastapi import FastAPI, WebSocket
 
+from bearings.agent.auto_driver_runtime import AutoDriverRegistry, build_registry
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
 from bearings.config.settings import VaultCfg
+from bearings.web.routes.checklists import router as checklists_router
 from bearings.web.routes.memories import router as memories_router
 from bearings.web.routes.tags import router as tags_router
 from bearings.web.routes.vault import router as vault_router
@@ -46,6 +48,7 @@ def create_app(
     heartbeat_interval_s: float = STREAM_HEARTBEAT_INTERVAL_S,
     db_connection: aiosqlite.Connection | None = None,
     vault_cfg: VaultCfg | None = None,
+    auto_driver_registry: AutoDriverRegistry | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -66,6 +69,12 @@ def create_app(
     ``~/.claude/plans`` + ``~/Projects/**/TODO.md``); tests inject a
     cfg whose roots / globs target a ``tmp_path`` so the vault
     surface is deterministic.
+
+    ``auto_driver_registry`` is the live-driver registry the
+    checklist run-control routes (item 1.6) dispatch
+    stop / skip-current signals through. Defaults to a fresh
+    :class:`AutoDriverRegistry` so each app has its own driver fleet
+    (important for parallel test runs that must not share state).
     """
     if heartbeat_interval_s <= 0:
         raise ValueError(f"heartbeat_interval_s must be > 0 (got {heartbeat_interval_s})")
@@ -75,6 +84,9 @@ def create_app(
     app.state.heartbeat_interval_s = heartbeat_interval_s
     app.state.db_connection = db_connection
     app.state.vault_cfg = vault_cfg if vault_cfg is not None else VaultCfg()
+    app.state.auto_driver_registry = (
+        auto_driver_registry if auto_driver_registry is not None else build_registry()
+    )
 
     @app.websocket("/ws/sessions/{session_id}")
     async def stream_endpoint(websocket: WebSocket, session_id: str) -> None:
@@ -99,6 +111,7 @@ def create_app(
     app.include_router(tags_router)
     app.include_router(memories_router)
     app.include_router(vault_router)
+    app.include_router(checklists_router)
     return app
 
 
