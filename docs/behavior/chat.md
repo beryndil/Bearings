@@ -38,7 +38,7 @@ Each turn is one user message followed by zero or more tool calls and exactly on
 * **Tool-work drawer** (collapsible `<details>`) — one row per tool call. Each row shows tool name, an elapsed-time readout that ticks live while the call is running, and a chevron to expand inline output. Output streams in as it arrives (see [tool-output-streaming](tool-output-streaming.md)). Failed calls render in red. A "⤴ TOOLS" jump button appears on the assistant bubble when the drawer was collapsed during the streaming turn.
 * **Assistant bubble** — Markdown body, optional thinking block (collapsible, dim), per-message routing badge (per spec §5) in the corner, "Ask for more detail" button hovering on the right edge.
 * **Routing badge** (per spec §5) — short label such as `Sonnet`, `Sonnet → Opus×2`, `Haiku → Opus×1`, `Opus xhigh`. Hovering reveals the routing reason ("matched tag rule: bearings/architect — Hard architectural reasoning").
-* **Per-message usage column** (per spec §5) — input / output / cache-read tokens for the executor and (when present) the advisor, surfaced in the inspector’s per-message timeline (see Inspector Routing in [paired-chats](paired-chats.md) — *no, see below: chat owns the per-turn surface; the Inspector subsections sit alongside it*).
+* **Per-message usage column** (per spec §5) — input / output / cache-read tokens for the executor and (when present) the advisor, surfaced in the inspector’s per-message timeline (see Inspector Routing — cross-referenced in §What the user does NOT see in chat).
 
 ## Conversation rendering
 
