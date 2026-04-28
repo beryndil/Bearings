@@ -32,8 +32,10 @@ from fastapi import FastAPI, WebSocket
 
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
+from bearings.config.settings import VaultCfg
 from bearings.web.routes.memories import router as memories_router
 from bearings.web.routes.tags import router as tags_router
+from bearings.web.routes.vault import router as vault_router
 from bearings.web.runner_factory import build_in_process_factory
 from bearings.web.streaming import SINCE_SEQ_QUERY_PARAM, serve_session_stream
 
@@ -43,6 +45,7 @@ def create_app(
     runner_factory: RunnerFactory | None = None,
     heartbeat_interval_s: float = STREAM_HEARTBEAT_INTERVAL_S,
     db_connection: aiosqlite.Connection | None = None,
+    vault_cfg: VaultCfg | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -53,10 +56,16 @@ def create_app(
     ``heartbeat_interval_s`` is exposed for tests that want a short
     interval; production callers should leave the default.
 
-    ``db_connection`` enables the tags + memories REST routes. If
-    ``None`` the routers are still mounted but every handler returns
-    503 (per :func:`bearings.web.routes.tags._db`); this matches the
-    streaming-only contract item 1.2 ships under.
+    ``db_connection`` enables the tags + memories + vault REST routes.
+    If ``None`` the routers are still mounted but every handler
+    returns 503 (per :func:`bearings.web.routes.tags._db`); this
+    matches the streaming-only contract item 1.2 ships under.
+
+    ``vault_cfg`` is the :class:`VaultCfg` the vault routes scan with.
+    Defaults to a fresh ``VaultCfg()`` (which points at
+    ``~/.claude/plans`` + ``~/Projects/**/TODO.md``); tests inject a
+    cfg whose roots / globs target a ``tmp_path`` so the vault
+    surface is deterministic.
     """
     if heartbeat_interval_s <= 0:
         raise ValueError(f"heartbeat_interval_s must be > 0 (got {heartbeat_interval_s})")
@@ -65,6 +74,7 @@ def create_app(
     app.state.runner_factory = factory
     app.state.heartbeat_interval_s = heartbeat_interval_s
     app.state.db_connection = db_connection
+    app.state.vault_cfg = vault_cfg if vault_cfg is not None else VaultCfg()
 
     @app.websocket("/ws/sessions/{session_id}")
     async def stream_endpoint(websocket: WebSocket, session_id: str) -> None:
@@ -88,6 +98,7 @@ def create_app(
 
     app.include_router(tags_router)
     app.include_router(memories_router)
+    app.include_router(vault_router)
     return app
 
 

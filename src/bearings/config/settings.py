@@ -40,7 +40,7 @@ import os
 from pathlib import Path
 from typing import Final
 
-from pydantic import Field
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -53,6 +53,8 @@ from bearings.config.constants import (
     DEFAULT_HOST,
     DEFAULT_PORT,
     DEFAULT_TOOL_OUTPUT_CAP_CHARS,
+    DEFAULT_VAULT_PLAN_ROOT,
+    DEFAULT_VAULT_TODO_GLOB,
     OVERRIDE_RATE_REVIEW_THRESHOLD,
     PCT_MAX,
     PCT_MIN,
@@ -66,6 +68,34 @@ from bearings.config.constants import (
 _XDG_CONFIG_HOME_ENV: Final[str] = "XDG_CONFIG_HOME"
 _XDG_CONFIG_HOME_DEFAULT: Final[Path] = Path("~/.config").expanduser()
 _BEARINGS_CONFIG_RELPATH: Final[Path] = Path("bearings") / "config.toml"
+
+
+class VaultCfg(BaseModel):  # type: ignore[explicit-any]
+    # ``disallow_any_explicit`` flags the Pydantic metaclass surface;
+    # the ignore is the same narrow carve-out :class:`Settings` makes.
+    """Vault sub-config — plan-root directories + TODO glob patterns.
+
+    Per ``docs/architecture-v1.md`` §1.1.2 a ``VaultCfg`` lives under
+    :class:`Settings`; per ``docs/behavior/vault.md`` §"Vault entry
+    types" the user configures plan roots (where each ``.md`` is a
+    plan, non-recursive) and TODO globs (where matching files are
+    surfaced as todo entries, recursive globbing supported via ``**``).
+
+    Both fields default to single-element tuples sourced from
+    :data:`bearings.config.constants.DEFAULT_VAULT_PLAN_ROOT` and
+    :data:`bearings.config.constants.DEFAULT_VAULT_TODO_GLOB`. A user
+    who installs Bearings without ever editing config sees the
+    expected ``~/.claude/plans/*.md`` + ``~/Projects/**/TODO.md``
+    surface; a power user can override via TOML (``vault.plan_roots``
+    / ``vault.todo_globs`` accept lists). The ``frozen=True`` config
+    keeps the model hashable so a downstream consumer can include it
+    in a dataclass cache key.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    plan_roots: tuple[Path, ...] = Field(default=(DEFAULT_VAULT_PLAN_ROOT,))
+    todo_globs: tuple[str, ...] = Field(default=(DEFAULT_VAULT_TODO_GLOB,))
 
 
 def xdg_config_path() -> Path:
@@ -142,6 +172,14 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
         le=PCT_MAX,
     )
 
+    # Vault configuration (item 1.5; arch §1.1.2). The default-factory
+    # produces a fresh :class:`VaultCfg` per ``Settings`` instance so a
+    # frozen sub-config never accidentally shares identity across
+    # constructions; the values themselves come from
+    # :data:`bearings.config.constants` so the no-inline-literals gate
+    # holds.
+    vault: VaultCfg = Field(default_factory=VaultCfg)
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -175,4 +213,4 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
         )
 
 
-__all__ = ["Settings", "xdg_config_path"]
+__all__ = ["Settings", "VaultCfg", "xdg_config_path"]

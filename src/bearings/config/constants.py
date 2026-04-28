@@ -463,6 +463,92 @@ TAG_MEMORY_TITLE_MAX_LENGTH: Final[int] = 200
 # budget so up to two large memories can coexist.
 TAG_MEMORY_BODY_MAX_LENGTH: Final[int] = 30_000
 
+# ---------------------------------------------------------------------------
+# Vault (item 1.5; arch §1.1.3 ``db/vault.py`` + §1.1.5
+# ``web/routes/vault.py``; behavior surface in
+# ``docs/behavior/vault.md``).
+# ---------------------------------------------------------------------------
+
+# Default plan-root directory. Per ``docs/behavior/vault.md`` §"Vault
+# entry types" — "Plans — `.md` files directly under any configured
+# plan root (e.g. `~/.claude/plans/`)". Resolved at import time so
+# downstream code never re-expands ``~``.
+DEFAULT_VAULT_PLAN_ROOT: Final[Path] = Path("~/.claude/plans").expanduser()
+
+# Default TODO-glob pattern. Per vault.md §"Vault entry types" —
+# "Todos — `TODO.md` files matched by the configured glob set (e.g.
+# `~/Projects/**/TODO.md`)". Stored as a string template because
+# :func:`glob.iglob` accepts the absolute pattern verbatim;
+# :class:`pathlib.Path`'s ``**`` expansion has subtler semantics that
+# the recursive-glob path doesn't need here.
+DEFAULT_VAULT_TODO_GLOB: Final[str] = str(Path("~/Projects/**/TODO.md").expanduser())
+
+# Vault-entry kind discriminator alphabet. Mirrors the schema's
+# ``CHECK (kind IN ('plan', 'todo'))`` constraint so a future schema
+# amendment is a one-line edit here plus a one-line edit in
+# ``schema.sql``.
+VAULT_KIND_PLAN: Final[str] = "plan"
+VAULT_KIND_TODO: Final[str] = "todo"
+KNOWN_VAULT_KINDS: Final[frozenset[str]] = frozenset({VAULT_KIND_PLAN, VAULT_KIND_TODO})
+
+# Per-line snippet cap for search hits. Per vault.md §"Search
+# semantics" — "a snippet of the matching line (trimmed to a hard cap;
+# long single-line entries wrap inside the snippet container)". Chosen
+# wide enough that a typical line of prose fits in full while keeping
+# pathological JSON-blob lines from saturating the response.
+VAULT_SEARCH_SNIPPET_MAX_CHARS: Final[int] = 240
+
+# Vault search result hard-cap. Per vault.md §"Search semantics" —
+# "Result count has a hard cap; when the cap is reached the user sees
+# a 'showing first N — narrow your query for more' indicator". The
+# server returns at most this many hits and a ``capped`` flag so the
+# pane stays scannable.
+VAULT_SEARCH_RESULT_CAP: Final[int] = 200
+
+# Vault file body soft-cap. Vault docs are user-authored markdown; the
+# largest plan in this rebuild is ≈60 KB, but a runaway TODO.md could
+# hit pathological sizes. 1 MiB chosen so a runaway file returns a
+# truncated body marker rather than wedging the API. Mirrors
+# :data:`STREAM_MAX_TOOL_OUTPUT_CHARS` to keep the truncation
+# vocabulary consistent across surfaces.
+VAULT_BODY_MAX_CHARS: Final[int] = 1_048_576
+
+# Body-truncation marker. Mirrors
+# :data:`STREAM_TRUNCATION_MARKER_TEMPLATE` — same wording, same
+# ``{n}`` placeholder for chars-elided count, so two different
+# truncation surfaces look identical in the rendered body.
+VAULT_BODY_TRUNCATION_MARKER_TEMPLATE: Final[str] = "\n[truncated — {n} chars elided]"
+
+# Redaction keyword set. Per vault.md §"Redaction rendering" —
+# "Detects common secret shapes (high-entropy strings adjacent to
+# keywords like `key`, `token`, `secret`, `password`)". The matcher
+# applies these case-insensitively against the left-hand side of an
+# ``=``/``:`` separator; values that follow are masked.
+VAULT_REDACTION_KEYWORDS: Final[frozenset[str]] = frozenset(
+    {"key", "token", "secret", "password", "passwd", "apikey", "api_key", "auth"}
+)
+
+# Minimum length of a redaction value. Below this, a token-looking
+# fragment is too short to be a real secret in practice (e.g.
+# ``key=on``); the heuristic skips the match to avoid false positives
+# on short config flags. Vault.md is silent on the threshold so this
+# is decided-and-documented.
+VAULT_REDACTION_MIN_VALUE_CHARS: Final[int] = 12
+
+# Mask glyph for redacted values (vault.md §"Redaction rendering" —
+# "replaces the visible text with a `••••••••` mask"). Eight bullets
+# matches the spec mock; expressed as repetition of the single Unicode
+# bullet so a cosmetic change is one tweak.
+VAULT_REDACTION_MASK_GLYPH: Final[str] = "•" * 8
+
+# Vault path safety: the maximum number of path components a single
+# search result line is allowed to scan before bailing — defensive
+# bound against pathological binary files that slipped past the
+# extension filter. Vault docs are markdown (``.md`` filter at
+# scan time) so this rarely fires; the bound prevents a one-off
+# rogue file from monopolising the search loop.
+VAULT_SEARCH_MAX_LINES_PER_DOC: Final[int] = 100_000
+
 
 # Self-consistency: every profile that appears in the resolution tables
 # below must also appear in :data:`PERMISSION_PROFILE_NAMES`, and every
@@ -476,6 +562,11 @@ assert set(PERMISSION_PROFILE_ALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
 assert set(PERMISSION_PROFILE_DISALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
 assert set(PERMISSION_PROFILE_TO_SDK_MODE.values()) <= KNOWN_SDK_PERMISSION_MODES
 assert STREAM_HEARTBEAT_INTERVAL_S == WS_IDLE_PING_INTERVAL_S
+
+# Vault kind alphabet must mirror schema.sql's CHECK constraint so a
+# scan that produces an unsupported kind fails at the dataclass
+# validator before it reaches the DB.
+assert frozenset({VAULT_KIND_PLAN, VAULT_KIND_TODO}) == KNOWN_VAULT_KINDS
 
 
 __all__ = [
@@ -498,6 +589,8 @@ __all__ = [
     "DEFAULT_TEMPLATE_MODEL",
     "DEFAULT_TEMPLATE_PERMISSION_PROFILE",
     "DEFAULT_TOOL_OUTPUT_CAP_CHARS",
+    "DEFAULT_VAULT_PLAN_ROOT",
+    "DEFAULT_VAULT_TODO_GLOB",
     "EFFORT_LEVEL_TO_SDK",
     "EXECUTOR_FALLBACK_MODEL",
     "EXECUTOR_MODEL_FULL_ID_PREFIX",
@@ -507,6 +600,7 @@ __all__ = [
     "KNOWN_ROUTING_SOURCES",
     "KNOWN_SDK_PERMISSION_MODES",
     "KNOWN_SDK_SETTING_SOURCES",
+    "KNOWN_VAULT_KINDS",
     "MAX_CHECKPOINTS_PER_SESSION",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
@@ -543,6 +637,16 @@ __all__ = [
     "USAGE_HEADROOM_WINDOW_DAYS",
     "USAGE_POLL_INTERVAL",
     "USAGE_POLL_INTERVAL_S",
+    "VAULT_BODY_MAX_CHARS",
+    "VAULT_BODY_TRUNCATION_MARKER_TEMPLATE",
+    "VAULT_KIND_PLAN",
+    "VAULT_KIND_TODO",
+    "VAULT_REDACTION_KEYWORDS",
+    "VAULT_REDACTION_MASK_GLYPH",
+    "VAULT_REDACTION_MIN_VALUE_CHARS",
+    "VAULT_SEARCH_MAX_LINES_PER_DOC",
+    "VAULT_SEARCH_RESULT_CAP",
+    "VAULT_SEARCH_SNIPPET_MAX_CHARS",
     "WS_IDLE_PING_INTERVAL",
     "WS_IDLE_PING_INTERVAL_S",
 ]
