@@ -65,13 +65,13 @@ async def test_concrete_async_callable_satisfies_protocol() -> None:
     assignable to :class:`RunnerFactory`."""
 
     async def build(session_id: str) -> SessionRunner:
-        # Item 1.1 leaves SessionRunner empty; item 1.2 fills it.
-        del session_id
-        return SessionRunner()
+        # Item 1.2 fills the body — session id is now required.
+        return SessionRunner(session_id)
 
     factory: RunnerFactory = build
     runner = await factory("sess-1")
     assert isinstance(runner, SessionRunner)
+    assert runner.session_id == "sess-1"
 
 
 def test_runner_status_is_frozen_with_routing_decision() -> None:
@@ -297,9 +297,11 @@ def test_runner_factory_protocol_resolvable() -> None:
     ``typing.get_type_hints``)."""
     hints = get_type_hints(RunnerFactory.__call__)
     assert hints.get("return") is SessionRunner
-    # The module-level export surface is exactly what arch §4.5 names.
+    # The module-level export surface — arch §4.5's three names plus
+    # the ``StreamEntry`` alias item 1.2 added for the web layer.
     assert set(runner_module.__all__) == {
         "RunnerFactory",
         "RunnerStatus",
         "SessionRunner",
+        "StreamEntry",
     }

@@ -169,6 +169,44 @@ PRESSURE_INJECT_THRESHOLD_PCT: Final[float] = 70.0
 DEFAULT_TOOL_OUTPUT_CAP_CHARS: Final[int] = 8000
 
 # ---------------------------------------------------------------------------
+# Streaming-protocol defaults (item 1.2; docs/behavior/tool-output-streaming.md)
+# ---------------------------------------------------------------------------
+
+# Per-event ``ToolOutputDelta.delta`` cap for the wire protocol. The behavior
+# doc (``docs/behavior/tool-output-streaming.md`` §"Very-long-output
+# truncation rules") prescribes user-visible soft/hard caps for display
+# and persistence; this constant is the *transport*-level cap that keeps
+# any single WebSocket frame from exceeding a tractable size. Backend
+# splits oversized deltas into multiple :class:`ToolOutputDelta` events
+# preserving total payload (codepoint-safe — Python ``str`` slicing splits
+# at codepoints). 64 KiB chosen so a typical 100k tool-output payload
+# becomes ≤2 frames; larger values risk client-side rendering hitches.
+STREAM_MAX_DELTA_CHARS: Final[int] = 64_000
+
+# Hard cap on total per-tool-call output bytes streamed through the
+# protocol. Beyond this cap the runner emits a :class:`ToolOutputDelta`
+# carrying the truncation marker (``[truncated — N chars elided]``) and
+# drops further deltas for that ``tool_call_id``. Per behavior doc
+# §"Very-long-output truncation rules" — "the marker always appears at
+# the end of the persisted body". 1 MiB chosen as a generous ceiling
+# that comfortably accommodates `cargo build` / `pytest -v` style
+# outputs while keeping any single tool's runaway loop from saturating
+# the per-runner ring buffer.
+STREAM_MAX_TOOL_OUTPUT_CHARS: Final[int] = 1_048_576
+
+# Truncation marker template. ``{n}`` is the chars-elided count; the
+# template includes the surrounding brackets to keep the contract
+# inline-literal-free at the call site. Behavior-doc-mandated wording.
+STREAM_TRUNCATION_MARKER_TEMPLATE: Final[str] = "\n[truncated — {n} chars elided]"
+
+# Heartbeat ping interval for idle WebSocket connections. Aliases
+# :data:`WS_IDLE_PING_INTERVAL_S` so the streaming layer's import surface
+# names the concern at the call site without forcing every consumer to
+# know which subsystem owns the underlying interval. The two MUST stay
+# numerically equal (asserted at module import below).
+STREAM_HEARTBEAT_INTERVAL_S: Final[float] = WS_IDLE_PING_INTERVAL_S
+
+# ---------------------------------------------------------------------------
 # Session module vocabulary (arch §4.1, §4.8; SDK shapes verified via
 # context7 ``/anthropics/claude-agent-sdk-python`` queried 2026-04-28)
 # ---------------------------------------------------------------------------
@@ -336,6 +374,7 @@ assert set(PERMISSION_PROFILE_TO_SDK_MODE) == PERMISSION_PROFILE_NAMES
 assert set(PERMISSION_PROFILE_ALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
 assert set(PERMISSION_PROFILE_DISALLOWED_TOOLS) == PERMISSION_PROFILE_NAMES
 assert set(PERMISSION_PROFILE_TO_SDK_MODE.values()) <= KNOWN_SDK_PERMISSION_MODES
+assert STREAM_HEARTBEAT_INTERVAL_S == WS_IDLE_PING_INTERVAL_S
 
 
 __all__ = [
@@ -376,6 +415,10 @@ __all__ = [
     "RING_BUFFER_MAX",
     "ROUTING_PREVIEW_DEBOUNCE",
     "ROUTING_PREVIEW_DEBOUNCE_MS",
+    "STREAM_HEARTBEAT_INTERVAL_S",
+    "STREAM_MAX_DELTA_CHARS",
+    "STREAM_MAX_TOOL_OUTPUT_CHARS",
+    "STREAM_TRUNCATION_MARKER_TEMPLATE",
     "TCP_PORT_MAX",
     "TCP_PORT_MIN",
     "TOOL_PROGRESS_INTERVAL",

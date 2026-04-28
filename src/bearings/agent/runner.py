@@ -1,64 +1,87 @@
-"""Runner-fleet types crossing the ``agent`` ⇄ ``web`` boundary.
+"""Per-session runner — ring buffer + subscriber set + emit + idle reap.
 
-Item 1.1 lays the type surface; item 1.2 fills in the worker loop +
-prompt queue + ring buffer + subscriber set per arch §1.1.4. Two
-shapes land in this file now because every other module in the
-``agent`` layer that needs to compose with the runner fleet (notably
-:class:`bearings.agent.session.SessionConfig` consumers like
-``agent/auto_driver.py``) has to import them at type-check time.
+Item 1.1 declared the type surface (``SessionRunner`` placeholder,
+:class:`RunnerStatus`, :class:`RunnerFactory` Protocol). Item 1.2 fills
+the body per arch §1.1.4: a per-session ring buffer of streamed
+:class:`AgentEvent` items, a subscriber set the WS handler joins on
+connect, and an :meth:`emit` method the agent-side glue (item 1.3+)
+calls when the SDK produces text/thinking/tool-output deltas.
 
-Both types are deliberately minimal: :class:`SessionRunner` is an
-empty placeholder class so :class:`RunnerFactory`'s ``__call__``
-return type resolves; :class:`RunnerStatus` is the frozen-dataclass
-shape arch §4.11 names. Item 1.2 expands ``SessionRunner``'s body
-(adds ``stream(prompt)``, ``interrupt()``, ``set_model(...)``, and the
-worker-loop machinery) without changing the public class name.
+Three design decisions worth naming, all derived from arch + behavior:
 
-The :class:`RunnerFactory` Protocol breaks the v0.17.x cycle that arch
-§3.2 documents: in v0.17.x ``agent/auto_driver_runtime.py`` did a
-function-local
-``from bearings.api.ws_agent import build_runner`` to get past the
-upper-layer reference; in v1 the binding is injected at app
-construction by ``web/runner_factory.py``, and the ``agent`` layer
-takes the Protocol as a constructor argument. The cycle-prevention
-test in ``tests/test_session_runner_factory.py`` AST-walks every
-``*.py`` under ``src/bearings/agent/`` and fails on any
-``bearings.web.*`` or ``bearings.cli.*`` import.
+1. **Ring buffer ⊆ subscriber fan-out.**
+   Every emit appends to the ring buffer first, then fans out to every
+   live subscriber's queue. The buffer is capped at
+   :data:`bearings.config.constants.RING_BUFFER_MAX`; oldest entries
+   drop on overflow. A new subscriber's :meth:`subscribe` call is
+   atomic vs. concurrent ``emit`` (single-threaded asyncio: no awaits
+   inside the critical section). Per
+   ``docs/behavior/tool-output-streaming.md`` §"Reconnect / replay" the
+   user observes: "any chunks the agent emitted while the client was
+   away are replayed in order — the user sees the tool row's body fill
+   in retroactively." That's a since-seq replay against this buffer.
+
+2. **ToolOutputDelta chunking.**
+   The behavior doc §"Multi-byte safety" reads: "the streaming chunks
+   are split on safe boundaries … so a chunk never splits a multibyte
+   UTF-8 codepoint." Python's ``str`` is codepoint-indexed already
+   (slicing a ``str`` never splits within a codepoint), so the chunker
+   uses ``str``-level slicing and is codepoint-safe by construction.
+   :data:`bearings.config.constants.STREAM_MAX_DELTA_CHARS` caps any
+   single :class:`ToolOutputDelta` event the wire carries; oversized
+   deltas split into N events, each ≤ the cap.
+
+3. **Hard-cap truncation.**
+   Per behavior doc §"Very-long-output truncation rules" — "the marker
+   always appears at the end of the persisted body, never in the
+   middle." :data:`bearings.config.constants.STREAM_MAX_TOOL_OUTPUT_CHARS`
+   caps total chars per ``tool_call_id``; once exceeded, the runner
+   emits one final :class:`ToolOutputDelta` carrying
+   :data:`bearings.config.constants.STREAM_TRUNCATION_MARKER_TEMPLATE`
+   formatted with the elided count, then drops further deltas for that
+   ``tool_call_id`` until a :class:`ToolCallEnd` resets the counter.
+
+The streaming-source side (``agent/session.py:stream``) is item 1.3+
+territory; item 1.2 leaves a clean ``emit``-from-anywhere surface so
+the integration test can drive the runner directly without booting the
+SDK subprocess. Per the auditor's 1.1 a1 note: ``session.py`` (406
+lines) is left untouched in 1.2 because the streaming work is purely
+additive in ``web/`` + this module — no growth in ``session.py``.
 
 References:
 
-* ``docs/architecture-v1.md`` §3.1 (layer rules), §3.2 (cycle
-  catalogue), §4.5 (``RunnerFactory`` Protocol shape), §4.11
-  (``RunnerStatus`` shape).
+* ``docs/architecture-v1.md`` §1.1.4 — runner ≤450 lines (the one
+  documented over-cap exception); ring buffer + subscriber set live
+  here.
+* ``docs/architecture-v1.md`` §3.1, §3.2 — layer rules; runner does
+  not import :mod:`bearings.web`.
+* ``docs/architecture-v1.md`` §4.5 — :class:`RunnerFactory` Protocol.
+* ``docs/architecture-v1.md`` §4.11 — :class:`RunnerStatus` shape.
+* ``docs/behavior/tool-output-streaming.md`` — load-bearing for the
+  emit / chunk / truncate / replay choices above.
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Protocol
 
+from bearings.agent.events import AgentEvent, ToolCallEnd, ToolOutputDelta
 from bearings.agent.routing import RoutingDecision
+from bearings.config.constants import (
+    RING_BUFFER_MAX,
+    STREAM_MAX_DELTA_CHARS,
+    STREAM_MAX_TOOL_OUTPUT_CHARS,
+    STREAM_TRUNCATION_MARKER_TEMPLATE,
+)
 
-
-class SessionRunner:
-    """Placeholder — item 1.2 attaches the worker loop and queues.
-
-    Item 1.1 declares the class so :class:`RunnerFactory`'s ``__call__``
-    return type resolves at type-check and at runtime. Item 1.2 (the
-    streaming-protocol item) adds:
-
-    * a worker task that consumes a prompt queue;
-    * a per-session ring buffer for WS replay;
-    * a subscriber set + idle-reap signal;
-    * forwarding methods (``stream``, ``interrupt``, ``set_model``,
-      ``set_permission_mode``) that delegate to the wrapped
-      :class:`bearings.agent.session.AgentSession`.
-
-    Per arch §1.1.4 the runner is the one file in the ``agent``
-    package allowed to exceed the §FileSize 400-line cap (≤450 lines).
-    Item 1.1 leaves the body empty so the placeholder doesn't drift in
-    advance of 1.2's design.
-    """
+# A buffered (seq, event) pair — sequence number for ``since_seq``
+# replay, the event payload itself for fan-out. Aliased so the
+# subscriber-side type stays readable at call sites.
+type StreamEntry = tuple[int, AgentEvent]
 
 
 @dataclass(frozen=True)
@@ -77,6 +100,257 @@ class RunnerStatus:
     routing_decision: RoutingDecision | None
 
 
+class SessionRunner:
+    """Per-session runner: ring buffer + subscriber fan-out + emit.
+
+    Construction takes the session id (load-bearing — every
+    :class:`AgentEvent` carries it for client-side routing). The
+    optional ``ring_buffer_max`` keyword exists for tests that want a
+    smaller buffer to exercise overflow-drop without emitting 5000
+    events.
+
+    Lifecycle: the runner is created by
+    :class:`bearings.web.runner_factory` (the FastAPI-aware concrete
+    factory; cycle break per arch §3.2). The agent-side glue (item
+    1.3+) calls :meth:`emit` to publish events; WS handlers call
+    :meth:`subscribe` to attach. Idle-reap and worker-loop hooks are
+    type-surface only at this stage — item 1.3+ wires the SDK
+    subprocess to them.
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        *,
+        ring_buffer_max: int = RING_BUFFER_MAX,
+    ) -> None:
+        if not session_id:
+            raise ValueError("SessionRunner.session_id must be non-empty")
+        if ring_buffer_max <= 0:
+            raise ValueError(f"SessionRunner.ring_buffer_max must be > 0 (got {ring_buffer_max})")
+        self.session_id = session_id
+        self._ring_buffer_max = ring_buffer_max
+        self._buffer: deque[StreamEntry] = deque(maxlen=ring_buffer_max)
+        self._next_seq: int = 1
+        self._subscribers: set[asyncio.Queue[StreamEntry]] = set()
+        # Per-tool-call cumulative chars-streamed counter. Reset on
+        # ``ToolCallEnd``. Drives the hard-cap truncation per behavior
+        # doc §"Very-long-output truncation rules".
+        self._tool_output_chars: dict[str, int] = {}
+        # Per-tool-call "already truncated" flag — once a truncation
+        # marker has been emitted for a tool_call_id, further deltas
+        # are silently dropped (the marker stays at the end of the
+        # body per behavior doc).
+        self._tool_truncated: set[str] = set()
+        # Status snapshot fans out alongside events on subscribe so
+        # the WS first frame can paint the badge before the next
+        # ``MessageComplete`` arrives (arch §4.11).
+        self._status: RunnerStatus = RunnerStatus(
+            is_running=False,
+            is_awaiting_user=False,
+            routing_decision=None,
+        )
+
+    # -- properties --------------------------------------------------
+
+    @property
+    def last_seq(self) -> int:
+        """The most recently assigned seq, or ``0`` before any emit."""
+        return self._next_seq - 1
+
+    @property
+    def status(self) -> RunnerStatus:
+        """Current status snapshot. Mutate via :meth:`set_status`."""
+        return self._status
+
+    @property
+    def subscriber_count(self) -> int:
+        """Number of currently-attached subscriber queues."""
+        return len(self._subscribers)
+
+    @property
+    def ring_buffer_size(self) -> int:
+        """Current ring buffer depth (≤ ``ring_buffer_max``)."""
+        return len(self._buffer)
+
+    # -- mutation ----------------------------------------------------
+
+    def set_status(self, status: RunnerStatus) -> None:
+        """Replace the status snapshot. Future subscribers see the new
+        snapshot; existing subscribers are not notified — status
+        changes ride alongside the next emitted event in v1."""
+        self._status = status
+
+    async def emit(self, event: AgentEvent) -> int:
+        """Append ``event`` to the ring buffer and fan out to subscribers.
+
+        Returns the seq the event was assigned (or, for chunked /
+        truncated emissions, the seq of the last sub-event published).
+
+        Behaviour by event type:
+
+        * :class:`ToolOutputDelta` — chunked at
+          :data:`bearings.config.constants.STREAM_MAX_DELTA_CHARS` and
+          hard-capped at
+          :data:`bearings.config.constants.STREAM_MAX_TOOL_OUTPUT_CHARS`
+          per behavior doc.
+        * :class:`ToolCallEnd` — resets the per-tool-call counter so a
+          subsequent tool call with the same id (extremely rare; only
+          possible if the SDK reuses an id) starts fresh.
+        * Every other event — published as-is, one seq, no chunking.
+
+        Single-threaded asyncio: no awaits inside the critical section,
+        so this method is atomic w.r.t. concurrent :meth:`subscribe`
+        calls in the same event loop.
+        """
+        if isinstance(event, ToolOutputDelta):
+            return await self._emit_tool_output_delta(event)
+        if isinstance(event, ToolCallEnd):
+            self._tool_output_chars.pop(event.tool_call_id, None)
+            self._tool_truncated.discard(event.tool_call_id)
+            return self._publish(event)
+        return self._publish(event)
+
+    # -- subscribe / unsubscribe ------------------------------------
+
+    def subscribe(
+        self,
+        *,
+        since_seq: int = 0,
+    ) -> tuple[list[StreamEntry], asyncio.Queue[StreamEntry]]:
+        """Atomic snapshot + queue registration.
+
+        Returns a pair: the list of buffered entries with seq >
+        ``since_seq`` (oldest first), and a new :class:`asyncio.Queue`
+        the subscriber drains for live events arriving after the
+        snapshot. Caller is responsible for calling :meth:`unsubscribe`
+        on disconnect; :class:`bearings.web.streaming.serve_session_stream`
+        does this from a ``try/finally``.
+
+        ``since_seq=0`` (the default) replays everything still in the
+        ring buffer. A larger value resumes from a known point —
+        per behavior doc §"Reconnect / replay" the user sees "any
+        chunks the agent emitted while the client was away are
+        replayed in order."
+
+        Single-threaded asyncio: synchronous body (no awaits) means
+        emit and subscribe never interleave. The replay snapshot is
+        therefore exactly the ring buffer's state at the moment of
+        the call, and the queue captures every event from that
+        moment forward.
+        """
+        if since_seq < 0:
+            raise ValueError(f"since_seq must be >= 0 (got {since_seq})")
+        queue: asyncio.Queue[StreamEntry] = asyncio.Queue()
+        replay: list[StreamEntry] = [(seq, event) for seq, event in self._buffer if seq > since_seq]
+        self._subscribers.add(queue)
+        return replay, queue
+
+    def unsubscribe(self, queue: asyncio.Queue[StreamEntry]) -> None:
+        """Remove ``queue`` from the subscriber set; idempotent."""
+        self._subscribers.discard(queue)
+
+    # -- internal helpers -------------------------------------------
+
+    async def _emit_tool_output_delta(self, event: ToolOutputDelta) -> int:
+        """Apply hard-cap truncation + chunking per behavior doc."""
+        tool_call_id = event.tool_call_id
+        # Already truncated — drop further deltas until ToolCallEnd.
+        if tool_call_id in self._tool_truncated:
+            return self.last_seq
+        already = self._tool_output_chars.get(tool_call_id, 0)
+        remaining = STREAM_MAX_TOOL_OUTPUT_CHARS - already
+        if remaining <= 0:
+            # Should not be reachable (we set the truncated flag the
+            # moment we cross the cap below), but guard defensively.
+            self._tool_truncated.add(tool_call_id)
+            return self.last_seq
+        delta = event.delta
+        # Trim to the per-tool-call cap.
+        if len(delta) > remaining:
+            head = delta[:remaining]
+            elided = len(delta) - remaining
+            self._tool_truncated.add(tool_call_id)
+            self._tool_output_chars[tool_call_id] = STREAM_MAX_TOOL_OUTPUT_CHARS
+            self._publish_chunked_delta(
+                tool_call_id=tool_call_id,
+                session_id=event.session_id,
+                payload=head,
+            )
+            marker = STREAM_TRUNCATION_MARKER_TEMPLATE.format(n=elided)
+            return self._publish(
+                ToolOutputDelta(
+                    session_id=event.session_id,
+                    tool_call_id=tool_call_id,
+                    delta=marker,
+                )
+            )
+        # Within the cap — chunk and publish.
+        self._tool_output_chars[tool_call_id] = already + len(delta)
+        last_seq = self._publish_chunked_delta(
+            tool_call_id=tool_call_id,
+            session_id=event.session_id,
+            payload=delta,
+        )
+        return self.last_seq if last_seq is None else last_seq
+
+    def _publish_chunked_delta(
+        self,
+        *,
+        tool_call_id: str,
+        session_id: str,
+        payload: str,
+    ) -> int | None:
+        """Split ``payload`` into ≤ STREAM_MAX_DELTA_CHARS chunks and
+        publish each as its own :class:`ToolOutputDelta`.
+
+        Returns the seq of the last published chunk, or ``None`` if the
+        payload was empty (no event published).
+        """
+        if not payload:
+            return None
+        last: int | None = None
+        for chunk in _chunk(payload, STREAM_MAX_DELTA_CHARS):
+            last = self._publish(
+                ToolOutputDelta(
+                    session_id=session_id,
+                    tool_call_id=tool_call_id,
+                    delta=chunk,
+                )
+            )
+        return last
+
+    def _publish(self, event: AgentEvent) -> int:
+        """Assign a seq, append to ring buffer, fan out to subscribers."""
+        seq = self._next_seq
+        self._next_seq += 1
+        entry: StreamEntry = (seq, event)
+        self._buffer.append(entry)
+        # ``put_nowait`` is correct: the queues are unbounded
+        # (default-constructed in :meth:`subscribe`) so the call never
+        # raises :class:`asyncio.QueueFull`. A future bound on the
+        # subscriber queue would change this contract; the auditor on
+        # any such change must revisit backpressure semantics.
+        for queue in self._subscribers:
+            queue.put_nowait(entry)
+        return seq
+
+
+def _chunk(payload: str, size: int) -> Iterable[str]:
+    """Yield ``payload`` in ``size``-character slices.
+
+    Python ``str`` indexing is codepoint-safe, so this never splits a
+    multibyte UTF-8 codepoint mid-sequence (per behavior doc
+    §"Multi-byte safety"). Bytes-level boundary safety is the SDK's
+    responsibility upstream; once we have a Python ``str``, codepoint
+    safety is guaranteed by the language.
+    """
+    if size <= 0:
+        raise ValueError(f"_chunk size must be > 0 (got {size})")
+    for offset in range(0, len(payload), size):
+        yield payload[offset : offset + size]
+
+
 class RunnerFactory(Protocol):
     """Arch §4.5 — async factory that materialises a runner for ``session_id``.
 
@@ -92,4 +366,4 @@ class RunnerFactory(Protocol):
     async def __call__(self, session_id: str) -> SessionRunner: ...
 
 
-__all__ = ["RunnerFactory", "RunnerStatus", "SessionRunner"]
+__all__ = ["RunnerFactory", "RunnerStatus", "SessionRunner", "StreamEntry"]
