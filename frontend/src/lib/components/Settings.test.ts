@@ -300,6 +300,21 @@ describe('Settings', () => {
     await findByText('MIT ↗');
   });
 
+  it('About section surfaces the Credits row alongside License', async () => {
+    stubFetchByUrl({
+      '/api/version': { version: '0.20.7', build: '1714075200000000000' },
+    });
+    const { getByTestId, findByText } = render(Settings, {
+      props: { open: true },
+    });
+
+    await fireEvent.click(getByTestId('settings-rail-about'));
+    // The "Credits" title and "View ↗" trailing label together
+    // pin the row — trailing alone is too generic to be diagnostic.
+    await findByText('Credits');
+    await findByText('View ↗');
+  });
+
   it('?settings=privacy on the URL lands the dialog on the Privacy pane', async () => {
     stubFetchByUrl({
       '/api/health': {

@@ -114,12 +114,17 @@
     </a>
   </div>
 
-  <!-- Identity card: build identifier + repo + license. Useful for
-       bug reports and links the user actually clicks; the hero
-       version is enough at-a-glance, this is the operational detail.
-       License row is required by §16 of the standards spec and §15
-       (About surfaces it). MIT is intentional — every other Beryndil
-       project uses Unlicense; Bearings deviates per its own spec. -->
+  <!-- Identity card: build identifier + repo + license + credits.
+       Useful for bug reports and links the user actually clicks; the
+       hero version is enough at-a-glance, this is the operational
+       detail. License row is required by §16 of the standards spec
+       and §15 (About surfaces it). MIT is intentional — every other
+       Beryndil project uses Unlicense; Bearings deviates per its own
+       spec. Credits sits next to License because the two are the
+       same shape of information (attribution); the convention here
+       follows HelpSection's README/Docs rows — link out to `main`
+       on GitHub so the credits track the running source without a
+       per-release bump. -->
   <SettingsCard>
     <SettingsLink
       title="Build"
@@ -139,6 +144,13 @@
       description="Bearings is released under the MIT License."
       href="https://github.com/Beryndil/Bearings/blob/main/LICENSE"
       trailing="MIT ↗"
+    />
+    <SettingsDivider inset />
+    <SettingsLink
+      title="Credits"
+      description="Open-source projects Bearings is built on."
+      href="https://github.com/Beryndil/Bearings/blob/main/CREDITS.md"
+      trailing="View ↗"
     />
   </SettingsCard>
 
