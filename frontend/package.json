@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && node ../scripts/check-no-any.mjs",
     "check:no-any": "node ../scripts/check-no-any.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "vitest run"
   },
   "devDependencies": {
@@ -22,6 +24,9 @@
     "autoprefixer": "^10.4.20",
     "jsdom": "^29.0.2",
     "postcss": "^8.4.49",
+    "prettier": "3.8.3",
+    "prettier-plugin-svelte": "3.5.1",
+    "prettier-plugin-tailwindcss": "0.8.0",
     "svelte": "^5.1.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^3.4.14",
