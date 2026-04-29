@@ -57,6 +57,33 @@ export const API_ROUTING_PREVIEW_ENDPOINT = `${API_BASE}/routing/preview`;
  */
 export const API_QUOTA_CURRENT_ENDPOINT = `${API_BASE}/quota/current`;
 
+/**
+ * ``GET /api/quota/history?days=7`` — rolling-window quota snapshots
+ * for the InspectorUsage "Headroom remaining" chart (spec §7
+ * "Quota efficiency" + §10 "Headroom remaining chart"). Response
+ * shape: ``QuotaSnapshot[]`` (oldest-first per
+ * :func:`bearings.web.routes.quota.get_history`).
+ */
+export const API_QUOTA_HISTORY_ENDPOINT = `${API_BASE}/quota/history`;
+
+/**
+ * ``GET /api/usage/by_model?period=week`` — InspectorUsage by-model
+ * table source (spec §7 "Quota efficiency" + §10 "By model table").
+ * Response shape: ``UsageByModelRow[]`` per
+ * :class:`bearings.web.models.usage.UsageByModelRow`, mirrored on
+ * :interface:`UsageByModelRow` in ``api/usage.ts``.
+ */
+export const API_USAGE_BY_MODEL_ENDPOINT = `${API_BASE}/usage/by_model`;
+
+/**
+ * ``GET /api/usage/override_rates?days=14`` — InspectorUsage
+ * "Rules to review" source (spec §8 "Override-rate calculation"
+ * + §10 "Rules to review list" — rules with override rate > 30 %
+ * over the last 14 days). Mirrored on :interface:`OverrideRateOut`
+ * in ``api/usage.ts``.
+ */
+export const API_USAGE_OVERRIDE_RATES_ENDPOINT = `${API_BASE}/usage/override_rates`;
+
 // ---- WebSocket streaming surface ------------------------------------------
 
 /**
@@ -213,12 +240,64 @@ export const QUOTA_BAR_RED_PCT = 0.95;
  * Routing-source values mirrored from
  * :data:`bearings.config.constants.KNOWN_ROUTING_SOURCES` (spec §App
  * A enum). The dialog reads ``quota_downgrade`` to decide when to
- * render the downgrade banner with the "Use anyway" override; the
- * other source values are part of the spec alphabet but not yet
- * referenced from this layer (later items consume them).
+ * render the downgrade banner with the "Use anyway" override;
+ * InspectorRouting (item 2.6) reads every value to render the
+ * source label inside "Why this model?".
  */
 export const ROUTING_SOURCE_TAG_RULE = "tag_rule";
+export const ROUTING_SOURCE_SYSTEM_RULE = "system_rule";
+export const ROUTING_SOURCE_DEFAULT = "default";
+export const ROUTING_SOURCE_MANUAL = "manual";
 export const ROUTING_SOURCE_QUOTA_DOWNGRADE = "quota_downgrade";
+export const ROUTING_SOURCE_MANUAL_OVERRIDE_QUOTA = "manual_override_quota";
+export const ROUTING_SOURCE_UNKNOWN_LEGACY = "unknown_legacy";
+
+/**
+ * Full routing-source alphabet. Mirrors backend
+ * :data:`bearings.config.constants.KNOWN_ROUTING_SOURCES` (spec §App
+ * A). Iterated by the InspectorRouting "Why this model?" surface so
+ * a future source addition lights up automatically.
+ */
+export const KNOWN_ROUTING_SOURCES = [
+  ROUTING_SOURCE_TAG_RULE,
+  ROUTING_SOURCE_SYSTEM_RULE,
+  ROUTING_SOURCE_DEFAULT,
+  ROUTING_SOURCE_MANUAL,
+  ROUTING_SOURCE_QUOTA_DOWNGRADE,
+  ROUTING_SOURCE_MANUAL_OVERRIDE_QUOTA,
+  ROUTING_SOURCE_UNKNOWN_LEGACY,
+] as const;
+export type RoutingSource = (typeof KNOWN_ROUTING_SOURCES)[number];
+
+// ---- Inspector usage / override-rate windows + thresholds ----------------
+
+/**
+ * InspectorUsage headroom-chart window (spec §7 "Quota efficiency" +
+ * §10 "Headroom remaining chart" — "rolling 7-day plot of overall
+ * bucket and Sonnet bucket consumption, with reset markers").
+ * Mirrors backend :data:`USAGE_HEADROOM_WINDOW_DAYS` in
+ * ``src/bearings/config/constants.py:97`` so the chart range and the
+ * ``GET /api/quota/history?days=N`` default agree.
+ */
+export const USAGE_HEADROOM_WINDOW_DAYS = 7;
+
+/**
+ * Override-rate "Review:" threshold (spec §8 — "Rules with
+ * override_rate > 0.30 over the last 14 days are surfaced ... as
+ * 'Review:' highlighted rows" + §10 "Rules to review list — rules
+ * with override rate > 30 % in the last 14 days, click to jump to
+ * the rule editor"). Mirrors backend
+ * :data:`OVERRIDE_RATE_REVIEW_THRESHOLD` in
+ * ``src/bearings/config/constants.py:87``.
+ */
+export const OVERRIDE_RATE_REVIEW_THRESHOLD = 0.3;
+
+/**
+ * Override-rate rolling window (spec §8 + §10). Mirrors backend
+ * :data:`OVERRIDE_RATE_WINDOW_DAYS` in
+ * ``src/bearings/config/constants.py:92``.
+ */
+export const OVERRIDE_RATE_WINDOW_DAYS = 14;
 
 // ---- Routing alphabet (mirrors backend ``KNOWN_*``) -----------------------
 
@@ -292,18 +371,31 @@ export const DEFAULT_ADVISOR_MAX_USES_HAIKU = 3;
 export const INSPECTOR_TAB_AGENT = "agent";
 export const INSPECTOR_TAB_CONTEXT = "context";
 export const INSPECTOR_TAB_INSTRUCTIONS = "instructions";
+/**
+ * Routing subsection (spec §10 "Modified: Inspector 'Routing'
+ * subsection"). Lit by item 2.6 — the Inspector shell switches on
+ * the id to render :class:`InspectorRouting`.
+ */
+export const INSPECTOR_TAB_ROUTING = "routing";
+/**
+ * Usage subsection (spec §10 "New: Usage tab in the inspector").
+ * Lit by item 2.6 — the Inspector shell switches on the id to
+ * render :class:`InspectorUsage`.
+ */
+export const INSPECTOR_TAB_USAGE = "usage";
 
 /**
- * Tabs the inspector currently exposes. Item 2.6's executor extends
- * this tuple with ``"routing"`` and ``"usage"`` once
- * :class:`InspectorRouting` / :class:`InspectorUsage` exist; the shell
- * itself has no per-tab branching outside the body switch (see
- * ``Inspector.svelte``), so the only refactor 2.6 lands is *additive*.
+ * Tabs the inspector exposes. Item 2.6 appended ``"routing"`` and
+ * ``"usage"`` (per spec §10 inspector decomposition) — the shell's
+ * body switch grew two cases; the tab strip itself iterates this
+ * tuple so the new tabs appear without further refactor.
  */
 export const KNOWN_INSPECTOR_TABS = [
   INSPECTOR_TAB_AGENT,
   INSPECTOR_TAB_CONTEXT,
   INSPECTOR_TAB_INSTRUCTIONS,
+  INSPECTOR_TAB_ROUTING,
+  INSPECTOR_TAB_USAGE,
 ] as const;
 export type InspectorTabId = (typeof KNOWN_INSPECTOR_TABS)[number];
 
@@ -351,6 +443,8 @@ export const INSPECTOR_STRINGS = {
     [INSPECTOR_TAB_AGENT]: "Agent",
     [INSPECTOR_TAB_CONTEXT]: "Context",
     [INSPECTOR_TAB_INSTRUCTIONS]: "Instructions",
+    [INSPECTOR_TAB_ROUTING]: "Routing",
+    [INSPECTOR_TAB_USAGE]: "Usage",
   } as const satisfies Record<InspectorTabId, string>,
   // Agent subsection — exposes the active session's agent config.
   // Items 2.6 + 1.8 add advisor / effort / fallback fields by widening
@@ -387,6 +481,87 @@ export const INSPECTOR_STRINGS = {
   instructionsHeading: "Instructions",
   instructionsBodyLabel: "Session instructions",
   instructionsEmpty: "No per-session instructions set.",
+  // Routing subsection (spec §10 "Modified: Inspector 'Routing'
+  // subsection"). The current-decision card surfaces the four
+  // routing-decision fields the spec lists; the timeline + advisor
+  // totals + quota delta read the per-message routing/usage projection
+  // from item 1.9. The "Why this model?" expandable per assistant
+  // message renders the rule eval chain (source + matched_rule_id +
+  // reason) — the full ``evaluated_rules`` list is a future widening
+  // (item 1.9 surfaces ``matched_rule_id`` only on the wire today).
+  routingHeading: "Routing",
+  routingLoading: "Loading routing data…",
+  routingError: "Couldn't load routing data.",
+  routingEmpty: "No assistant turns yet — routing data appears after the first reply.",
+  routingCurrentHeading: "Current routing",
+  routingCurrentExecutorLabel: "Executor",
+  routingCurrentAdvisorLabel: "Advisor",
+  routingCurrentAdvisorNone: "(none)",
+  routingCurrentEffortLabel: "Effort",
+  routingCurrentSourceLabel: "Source",
+  routingCurrentReasonLabel: "Reason",
+  routingTotalsHeading: "Session totals",
+  routingTotalsAdvisorCallsLabel: "Advisor calls",
+  routingTotalsAdvisorTokensLabel: "Advisor tokens",
+  routingTotalsExecutorTokensLabel: "Executor tokens",
+  routingQuotaDeltaHeading: "Quota delta this session",
+  routingQuotaDeltaOverallLabel: "Overall bucket",
+  routingQuotaDeltaSonnetLabel: "Sonnet bucket",
+  routingTimelineHeading: "Per-message timeline",
+  routingTimelineEmpty: "No assistant messages with routing data yet.",
+  routingTimelineWhyLabel: "Why this model?",
+  routingTimelineMatchedRuleLabel: "Matched rule",
+  routingTimelineNoMatchedRule: "(no rule — fallback default)",
+  // Routing-source presentation labels (spec §App A enum). Mirror the
+  // wire alphabet via :const:`KNOWN_ROUTING_SOURCES`.
+  routingSourceLabels: {
+    [ROUTING_SOURCE_TAG_RULE]: "Tag rule",
+    [ROUTING_SOURCE_SYSTEM_RULE]: "System rule",
+    [ROUTING_SOURCE_DEFAULT]: "Default",
+    [ROUTING_SOURCE_MANUAL]: "Manual",
+    [ROUTING_SOURCE_QUOTA_DOWNGRADE]: "Quota downgrade",
+    [ROUTING_SOURCE_MANUAL_OVERRIDE_QUOTA]: "Manual override (quota)",
+    [ROUTING_SOURCE_UNKNOWN_LEGACY]: "Unknown (legacy)",
+  } as const satisfies Record<RoutingSource, string>,
+  // Usage subsection (spec §10 "New: Usage tab in the inspector").
+  // Strings match the four widgets the spec enumerates: headroom
+  // chart, by-model table, advisor-effectiveness widget, rules-to-
+  // review list.
+  usageHeading: "Usage",
+  usageLoading: "Loading usage data…",
+  usageError: "Couldn't load usage data.",
+  usageHeadroomHeading: "Headroom remaining",
+  usageHeadroomCaption: "Rolling 7-day plot of overall + Sonnet bucket consumption.",
+  usageHeadroomEmpty: "No quota snapshots in the last 7 days.",
+  usageHeadroomOverallLabel: "Overall",
+  usageHeadroomSonnetLabel: "Sonnet",
+  usageHeadroomCapturedAtLabel: "Captured at",
+  usageByModelHeading: "By model",
+  usageByModelEmpty: "No per-model token totals in the last 7 days.",
+  usageByModelColModel: "Model",
+  usageByModelColRole: "Role",
+  usageByModelColInputTokens: "Input",
+  usageByModelColOutputTokens: "Output",
+  usageByModelColAdvisorCalls: "Advisor calls",
+  usageByModelColCacheReadTokens: "Cache read",
+  usageByModelColSessions: "Sessions",
+  usageAdvisorEffectivenessHeading: "Advisor effectiveness",
+  usageAdvisorEffectivenessEmpty:
+    "Not enough data — the advisor effectiveness widget needs at least one session with advisor calls.",
+  usageAdvisorEffectivenessCallsPerSessionLabel: "Calls per session",
+  usageAdvisorEffectivenessShareLabel: "Advisor token share",
+  usageAdvisorEffectivenessQualReadLabel: "Read",
+  usageAdvisorEffectivenessQualPulling: "Advisor is pulling its weight.",
+  usageAdvisorEffectivenessQualMarginal: "Advisor contribution is marginal.",
+  usageAdvisorEffectivenessQualUnused: "Advisor is rarely consulted.",
+  usageRulesToReviewHeading: "Rules to review",
+  usageRulesToReviewCaption: "Rules whose override rate exceeded 30% over the last 14 days.",
+  usageRulesToReviewEmpty: "No rules over the review threshold — routing is healthy.",
+  usageRulesToReviewColKind: "Kind",
+  usageRulesToReviewColRuleId: "Rule",
+  usageRulesToReviewColRate: "Override rate",
+  usageRulesToReviewColFired: "Fired",
+  usageRulesToReviewColOverridden: "Overridden",
 } as const;
 
 // ---- New-session dialog string table -------------------------------------

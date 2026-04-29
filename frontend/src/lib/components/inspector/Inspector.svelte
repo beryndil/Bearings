@@ -15,15 +15,16 @@
    *   does NOT see in chat" enumerates the Routing + Usage subsections
    *   item 2.6 will plug in here.
    *
-   * Item 2.5 produces the shell + the first three subsections. Item 2.6
-   * adds Routing + Usage by:
+   * Item 2.5 shipped the shell + the first three subsections. Item 2.6
+   * lit up Routing + Usage by:
    *
    * 1. Extending :data:`KNOWN_INSPECTOR_TABS` in ``config.ts``;
-   * 2. Adding the new subsection components in ``components/inspector/``;
-   * 3. Adding two cases to the body switch below.
+   * 2. Adding :class:`InspectorRouting` + :class:`InspectorUsage` in
+   *    ``components/inspector/``;
+   * 3. Appending two cases to the body switch below.
    *
    * The shell has no per-tab logic outside the body switch — the tab
-   * strip itself iterates :data:`KNOWN_INSPECTOR_TABS` so the new tab
+   * strip itself iterates :data:`KNOWN_INSPECTOR_TABS` so each new tab
    * appears the moment the constants tuple grows.
    *
    * The store-prop seam mirrors :class:`SessionList` — production
@@ -36,6 +37,8 @@
     INSPECTOR_TAB_AGENT,
     INSPECTOR_TAB_CONTEXT,
     INSPECTOR_TAB_INSTRUCTIONS,
+    INSPECTOR_TAB_ROUTING,
+    INSPECTOR_TAB_USAGE,
     KNOWN_INSPECTOR_TABS,
     type InspectorTabId,
   } from "../../config";
@@ -47,6 +50,8 @@
   import InspectorAgent from "./InspectorAgent.svelte";
   import InspectorContext from "./InspectorContext.svelte";
   import InspectorInstructions from "./InspectorInstructions.svelte";
+  import InspectorRouting from "./InspectorRouting.svelte";
+  import InspectorUsage from "./InspectorUsage.svelte";
 
   interface Props {
     /**
@@ -117,6 +122,10 @@
       <InspectorContext {session} />
     {:else if activeTabId === INSPECTOR_TAB_INSTRUCTIONS}
       <InspectorInstructions {session} />
+    {:else if activeTabId === INSPECTOR_TAB_ROUTING}
+      <InspectorRouting {session} />
+    {:else if activeTabId === INSPECTOR_TAB_USAGE}
+      <InspectorUsage {session} />
     {/if}
   </div>
 </div>

@@ -21,7 +21,11 @@
  * ``quota_state`` block on the routing-preview response, so a
  * failure here never blocks session creation.
  */
-import { API_QUOTA_CURRENT_ENDPOINT } from "../config";
+import {
+  API_QUOTA_CURRENT_ENDPOINT,
+  API_QUOTA_HISTORY_ENDPOINT,
+  USAGE_HEADROOM_WINDOW_DAYS,
+} from "../config";
 import { getJson, type RequestOptions } from "./client";
 
 /**
@@ -58,4 +62,29 @@ export async function getCurrentQuota(
     requestOptions.signal = options.signal;
   }
   return await getJson<QuotaSnapshot>(API_QUOTA_CURRENT_ENDPOINT, requestOptions);
+}
+
+/**
+ * Fetch the rolling-window quota history (oldest first).
+ *
+ * Default window is :data:`USAGE_HEADROOM_WINDOW_DAYS` (7 days per
+ * spec §10 "Headroom remaining chart"); the parameter is a positive
+ * integer ≤ 365 enforced by FastAPI on the wire.
+ *
+ * Used by :class:`InspectorUsage` (item 2.6) to render the headroom
+ * chart. An empty array is a valid response (fresh app with no
+ * snapshots yet).
+ *
+ * @throws :class:`ApiError` on non-2xx (503 when ``db_connection``
+ *   is missing on ``app.state``).
+ */
+export async function getQuotaHistory(
+  options: { days?: number; signal?: AbortSignal } = {},
+): Promise<QuotaSnapshot[]> {
+  const days = options.days ?? USAGE_HEADROOM_WINDOW_DAYS;
+  const requestOptions: RequestOptions = { query: [["days", String(days)]] };
+  if (options.signal !== undefined) {
+    requestOptions.signal = options.signal;
+  }
+  return await getJson<QuotaSnapshot[]>(API_QUOTA_HISTORY_ENDPOINT, requestOptions);
 }

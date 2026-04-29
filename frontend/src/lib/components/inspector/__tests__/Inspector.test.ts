@@ -18,6 +18,8 @@ import {
   INSPECTOR_TAB_AGENT,
   INSPECTOR_TAB_CONTEXT,
   INSPECTOR_TAB_INSTRUCTIONS,
+  INSPECTOR_TAB_ROUTING,
+  INSPECTOR_TAB_USAGE,
   KNOWN_INSPECTOR_TABS,
   type InspectorTabId,
 } from "../../../config";
@@ -94,6 +96,8 @@ describe("Inspector shell — default-tab landing", () => {
     expect(getByTestId("inspector-agent")).toBeInTheDocument();
     expect(queryByTestId("inspector-context")).toBeNull();
     expect(queryByTestId("inspector-instructions")).toBeNull();
+    expect(queryByTestId("inspector-routing")).toBeNull();
+    expect(queryByTestId("inspector-usage")).toBeNull();
   });
 });
 
@@ -160,13 +164,17 @@ describe("Inspector shell — empty session", () => {
     expect(getAllByTestId("inspector-tab")).toHaveLength(KNOWN_INSPECTOR_TABS.length);
   });
 
-  it("agrees with the documented Agent / Context / Instructions tab ids", () => {
+  it("agrees with the documented Agent / Context / Instructions / Routing / Usage tab ids", () => {
     // Keeps the shell honest against ``KNOWN_INSPECTOR_TABS`` — any
     // re-ordering or rename without touching this assertion is loud.
+    // Item 2.6 appended Routing + Usage; the order is the on-screen
+    // order of the tab strip and the spec §10 inspector enumeration.
     expect(KNOWN_INSPECTOR_TABS).toEqual([
       INSPECTOR_TAB_AGENT,
       INSPECTOR_TAB_CONTEXT,
       INSPECTOR_TAB_INSTRUCTIONS,
+      INSPECTOR_TAB_ROUTING,
+      INSPECTOR_TAB_USAGE,
     ]);
   });
 });
