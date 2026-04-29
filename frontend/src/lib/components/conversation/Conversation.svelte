@@ -1,0 +1,149 @@
+<script lang="ts">
+  /**
+   * Main conversation pane — list of message turns + scroll anchor.
+   *
+   * Behavior anchors:
+   *
+   * - ``docs/behavior/chat.md`` §"opens an existing chat" — selecting
+   *   a session reconnects this pane; the body renders message turns
+   *   in chronological order.
+   * - ``docs/behavior/tool-output-streaming.md`` §"Scroll-anchor
+   *   behavior" — auto-scroll engages while the user is at the
+   *   bottom; scrolling up disengages and surfaces the "Jump to
+   *   bottom" affordance; scrolling back to the bottom re-engages.
+   * - ``docs/behavior/tool-output-streaming.md`` §"Reconnect / replay" —
+   *   the WS subscription resumes via ``since_seq`` from the
+   *   conversation store's ``lastSeq``.
+   *
+   * The pane is presentational + lifecycle: hydrate history on mount
+   * + on session-id change, subscribe/disconnect via the agent WS
+   * client, render the typed turns, manage scroll anchor.
+   */
+  import { onMount } from "svelte";
+
+  import { connectSession, disconnectSession } from "../../agent.svelte";
+  import { listMessages } from "../../api/messages";
+  import { CONVERSATION_STRINGS } from "../../config";
+  import {
+    conversationStore,
+    hydrateTurns,
+    resetConversation,
+    setError,
+    setLoading,
+  } from "../../stores/conversation.svelte";
+  import MessageTurn from "./MessageTurn.svelte";
+
+  interface Props {
+    sessionId: string | null;
+  }
+
+  const { sessionId }: Props = $props();
+
+  let bodyEl: HTMLDivElement | null = $state(null);
+  let atBottom = $state(true);
+  let showJumpAffordance = $state(false);
+
+  $effect(() => {
+    const sid = sessionId;
+    if (sid === null) {
+      resetConversation(null);
+      disconnectSession();
+      return;
+    }
+    let cancelled = false;
+    resetConversation(sid);
+    setLoading(true);
+    void (async () => {
+      try {
+        const rows = await listMessages(sid);
+        if (cancelled) return;
+        hydrateTurns(sid, rows);
+      } catch (error) {
+        if (cancelled) return;
+        setError(error instanceof Error ? error : new Error(String(error)));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+      if (!cancelled) {
+        connectSession(sid);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      disconnectSession();
+    };
+  });
+
+  // Auto-scroll on each turn-list change while the user is at the
+  // bottom (per behavior doc §"Scroll-anchor behavior"). The
+  // ``conversationStore.turns`` proxy read inside the effect makes
+  // this reactive without explicit subscriptions.
+  $effect(() => {
+    // Reactive read — without it Svelte 5 doesn't track this
+    // dependency.
+    void conversationStore.turns.length;
+    if (bodyEl !== null && atBottom) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  });
+
+  function handleScroll(): void {
+    if (bodyEl === null) return;
+    const dist = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight;
+    // ~16px slack so a fractional-pixel scroll position still counts
+    // as "at the bottom" (catches Hyprland HiDPI rounding).
+    atBottom = dist < 16;
+    showJumpAffordance = !atBottom;
+  }
+
+  function jumpToBottom(): void {
+    if (bodyEl === null) return;
+    bodyEl.scrollTop = bodyEl.scrollHeight;
+    atBottom = true;
+    showJumpAffordance = false;
+  }
+
+  onMount(() => {
+    if (bodyEl !== null) {
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+  });
+</script>
+
+<section class="conversation flex h-full flex-col" data-testid="conversation">
+  <div
+    bind:this={bodyEl}
+    class="conversation__body flex-1 overflow-y-auto"
+    data-testid="conversation-body"
+    onscroll={handleScroll}
+  >
+    {#if conversationStore.loading && conversationStore.turns.length === 0}
+      <p class="px-4 py-3 text-sm text-fg-muted" data-testid="conversation-loading">
+        {CONVERSATION_STRINGS.loadingTranscript}
+      </p>
+    {:else if conversationStore.error !== null}
+      <p class="px-4 py-3 text-sm text-red-400" data-testid="conversation-error">
+        {CONVERSATION_STRINGS.loadFailed}
+      </p>
+    {:else if conversationStore.turns.length === 0}
+      <p class="px-4 py-3 text-sm text-fg-muted" data-testid="conversation-empty">
+        {CONVERSATION_STRINGS.emptyTranscript}
+      </p>
+    {:else}
+      {#each conversationStore.turns as turn (turn.id)}
+        <MessageTurn {turn} />
+      {/each}
+    {/if}
+  </div>
+
+  {#if showJumpAffordance}
+    <button
+      type="button"
+      class="conversation__jump self-end rounded bg-surface-2 px-3 py-1 text-xs text-fg-strong shadow"
+      data-testid="conversation-jump-to-bottom"
+      onclick={jumpToBottom}
+    >
+      {CONVERSATION_STRINGS.scrollToBottomLabel}
+    </button>
+  {/if}
+</section>

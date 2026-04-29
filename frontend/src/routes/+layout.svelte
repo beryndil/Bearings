@@ -30,6 +30,7 @@
 
   import { SIDEBAR_STRINGS } from "$lib/config";
   import SessionList from "$lib/components/sidebar/SessionList.svelte";
+  import Conversation from "$lib/components/conversation/Conversation.svelte";
 
   interface Props {
     children?: Snippet;
@@ -80,14 +81,16 @@
       </p>
     </header>
     <section
-      class="app-shell__main-body p-4 text-fg"
+      class="app-shell__main-body text-fg"
       data-testid="app-shell-main-body"
       aria-label="Conversation body"
     >
-      {#if children}
+      {#if selectedSessionId !== null}
+        <Conversation sessionId={selectedSessionId} />
+      {:else if children}
         {@render children()}
       {:else}
-        <p class="text-fg-muted">No session selected.</p>
+        <p class="p-4 text-fg-muted">No session selected.</p>
       {/if}
     </section>
     <footer

@@ -26,6 +26,49 @@ export const API_TAGS_ENDPOINT = `${API_BASE}/tags`;
 export const sessionTagsEndpoint = (sessionId: string): string =>
   `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/tags`;
 
+/**
+ * ``GET /api/sessions/{id}/messages`` — per-session transcript fetch
+ * surface (item 1.9; ``src/bearings/web/routes/messages.py``). The
+ * SvelteKit client reads it once on session-select to hydrate the
+ * conversation pane with the persisted history; live deltas arrive
+ * over the WebSocket below.
+ */
+export const sessionMessagesEndpoint = (sessionId: string): string =>
+  `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/messages`;
+
+/** ``GET /api/messages/{id}`` — single-row fetch (inspector "Why this model?"). */
+export const messageEndpoint = (messageId: string): string =>
+  `${API_BASE}/messages/${encodeURIComponent(messageId)}`;
+
+// ---- WebSocket streaming surface ------------------------------------------
+
+/**
+ * Per-session WebSocket path the runtime fans out
+ * :class:`bearings.agent.events.AgentEvent` frames over (item 1.2;
+ * ``src/bearings/web/streaming.py``). Vite's dev proxy forwards
+ * ``/ws/*`` to the FastAPI backend on the configured port.
+ */
+export const sessionStreamPath = (sessionId: string): string =>
+  `/ws/sessions/${encodeURIComponent(sessionId)}`;
+
+/**
+ * Resume cursor parameter — mirrors :data:`bearings.web.streaming.SINCE_SEQ_QUERY_PARAM`.
+ * The reconnect path appends ``?since_seq=<n>`` so the server replays
+ * everything past ``n`` from its ring buffer per
+ * ``docs/behavior/tool-output-streaming.md`` §"Reconnect / replay".
+ */
+export const WS_SINCE_SEQ_QUERY_PARAM = "since_seq";
+
+/**
+ * Frame ``kind`` values mirror :data:`bearings.web.serialize.FRAME_KIND_*`.
+ * The discriminator literal a parsed envelope carries — used by
+ * :func:`parseStreamFrame` in ``api/streaming.ts`` to dispatch to the
+ * event vs heartbeat branch without re-deciding spelling at the call
+ * site.
+ */
+export const WS_FRAME_KIND_EVENT = "event";
+export const WS_FRAME_KIND_HEARTBEAT = "heartbeat";
+
 // ---- Session-kind alphabet (mirrors backend ``KNOWN_SESSION_KINDS``) ------
 
 /** Chat-kind session — composer + transcript per ``docs/behavior/chat.md``. */
@@ -56,6 +99,56 @@ export const TAG_GROUP_SEPARATOR = "/";
  * record's values without touching component bodies. Keys are stable
  * identifiers; values are the English presentation strings.
  */
+/**
+ * Conversation-pane string table — chat.md §"opens an existing chat"
+ * + §"What a message turn looks like" presentation strings, factored
+ * out of components per coding-standards "i18n-ready string tables".
+ */
+export const CONVERSATION_STRINGS = {
+  emptyTranscript: "No messages yet. Send one to start the turn.",
+  loadingTranscript: "Loading conversation…",
+  loadFailed: "Couldn't load the transcript.",
+  toolDrawerLabel: "Tool calls",
+  toolDrawerOpenLabel: "Open tool calls",
+  toolDrawerCloseLabel: "Close tool calls",
+  toolDrawerJumpLabel: "⤴ TOOLS",
+  toolStatusOk: "Completed",
+  toolStatusError: "Failed",
+  toolStatusRunning: "Running",
+  toolOutputExpand: "Show full output",
+  toolOutputCollapse: "Collapse output",
+  // Behavior doc §"Very-long-output truncation rules" — wording mirrors
+  // backend STREAM_TRUNCATION_MARKER_TEMPLATE for visual consistency.
+  truncationLabel: "[truncated — more bytes elided]",
+  routingBadgeTooltipFallback: "Routing reason unavailable",
+  pairedChatBreadcrumbPrefix: "↳",
+  pairedChatBreadcrumbDeleted: "(checklist deleted)",
+  pairedChatBreadcrumbAriaLabel: "Paired checklist breadcrumb",
+  errorBubbleLabel: "Error",
+  scrollToBottomLabel: "↓ Jump to bottom",
+} as const;
+
+/**
+ * Soft display cap on a single tool-call's body. Behavior doc
+ * (``docs/behavior/tool-output-streaming.md`` §"Very-long-output
+ * truncation rules") prescribes a soft cap that folds the middle
+ * inside an inline expander while keeping head/tail bookends visible.
+ * Mirrors the backend ``DEFAULT_TOOL_OUTPUT_CAP_CHARS`` (8000) so the
+ * UI cap and the persistence cap agree by default — a runaway tool
+ * past the persistence hard cap (1 MiB) is also past this display
+ * cap, so the UI's truncation marker only renders when the persisted
+ * body itself is truncated.
+ */
+export const CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS = 8000;
+
+/**
+ * ``rel`` attribute for outbound anchors per chat.md §"Conversation
+ * rendering" — "rendered as anchors that open in a new tab with
+ * ``noopener noreferrer``". Pulled out of the linkifier so a future
+ * security review can grep one place rather than chasing call sites.
+ */
+export const CHAT_LINK_REL = "noopener noreferrer";
+
 export const SIDEBAR_STRINGS = {
   heading: "Bearings",
   versionTag: "v0.18.0-dev",
