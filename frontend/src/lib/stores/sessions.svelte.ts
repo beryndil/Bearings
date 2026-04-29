@@ -120,7 +120,19 @@ class SessionStore {
     this.error = null;
     try {
       const created = await api.createSession(body);
-      this.list = [created, ...this.list];
+      // Mirror `spawnFromReply`: drop any duplicate (the `/ws/sessions`
+      // upsert broadcast races us). Without the filter, fast localhost
+      // delivers the broadcast frame BEFORE the POST response, and
+      // `applyUpsert` has already inserted the row — unconditionally
+      // unshifting here then produced two rows with the same `id` in
+      // `this.list`. The keyed-each at SessionList.svelte:361 saw
+      // duplicate keys, Svelte 5 logged `each_key_duplicate`, and
+      // fell back to a non-keyed re-render of all open-session rows.
+      // For sidebars with 100+ rows that fallback is a 1-2 second
+      // main-thread block — long enough on Wayland to freeze the
+      // compositor, and the user typically hard-reloaded before the
+      // wedge self-resolved (which is why hard-reload "fixed" it).
+      this.list = [created, ...this.list.filter((s) => s.id !== created.id)];
       this.select(created.id);
       return created;
     } catch (e) {
