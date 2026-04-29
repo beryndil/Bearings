@@ -227,6 +227,16 @@ class AgentCfg(BaseModel):
     # request degrades to the heuristic and the response's `notes`
     # field surfaces the fallback to the UI.
     enable_llm_reorg_analyze: bool = False
+    # Auto-suggest titles plan (`~/.claude/plans/auto-suggesting-titles.md`).
+    # Whether `POST /sessions/{id}/suggest_titles` is allowed to spawn
+    # an in-process one-shot `claude_agent_sdk.query(...)` call to
+    # propose three candidate titles for an existing session based on
+    # its recent messages. Disabled by default for the same reason the
+    # reorg-analyze knob is — the prompt needs dogfooding before it
+    # ships on. When False, the route returns 503 with a hint pointing
+    # the user at this config key; the SessionEdit modal surfaces the
+    # message inline so the operator knows exactly which flag to flip.
+    enable_llm_title_suggest: bool = False
 
 
 class StorageCfg(BaseModel):
