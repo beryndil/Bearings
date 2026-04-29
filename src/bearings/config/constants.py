@@ -251,6 +251,16 @@ KNOWN_ROUTING_SOURCES: Final[frozenset[str]] = frozenset(
     }
 )
 
+# Spec §3 "Match types" alphabet — what ``RoutingRule.match_type`` /
+# ``SystemRoutingRule.match_type`` may be. Mirrors the SQL CHECK
+# constraint on ``tag_routing_rules.match_type`` /
+# ``system_routing_rules.match_type``; lifted into a constant so the
+# DB-layer dataclass validator and the API-layer Pydantic input model
+# share the alphabet.
+KNOWN_MATCH_TYPES: Final[frozenset[str]] = frozenset(
+    {"keyword", "regex", "length_gt", "length_lt", "always"}
+)
+
 # SDK ``permission_mode`` literal alphabet, per
 # ``claude_agent_sdk.ClaudeAgentOptions`` (context7 query
 # ``/anthropics/claude-agent-sdk-python`` 2026-04-28). Note both

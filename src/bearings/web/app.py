@@ -32,14 +32,18 @@ from fastapi import FastAPI, WebSocket
 
 from bearings.agent.auto_driver_runtime import AutoDriverRegistry, build_registry
 from bearings.agent.prompt_dispatch import RateLimiter
+from bearings.agent.quota import QuotaPoller
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
 from bearings.config.settings import VaultCfg
 from bearings.web.routes.checklists import router as checklists_router
 from bearings.web.routes.memories import router as memories_router
 from bearings.web.routes.paired_chats import router as paired_chats_router
+from bearings.web.routes.quota import router as quota_router
+from bearings.web.routes.routing import router as routing_router
 from bearings.web.routes.sessions import router as sessions_router
 from bearings.web.routes.tags import router as tags_router
+from bearings.web.routes.usage import router as usage_router
 from bearings.web.routes.vault import router as vault_router
 from bearings.web.runner_factory import build_in_process_factory
 from bearings.web.streaming import SINCE_SEQ_QUERY_PARAM, serve_session_stream
@@ -53,6 +57,7 @@ def create_app(
     vault_cfg: VaultCfg | None = None,
     auto_driver_registry: AutoDriverRegistry | None = None,
     prompt_rate_limiter: RateLimiter | None = None,
+    quota_poller: QuotaPoller | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -98,6 +103,13 @@ def create_app(
     app.state.prompt_rate_limiter = (
         prompt_rate_limiter if prompt_rate_limiter is not None else RateLimiter()
     )
+    # Optional quota poller (item 1.8; spec §4). The poller is
+    # ``None``-able because tests routinely construct apps without
+    # network access; the routing-preview + quota endpoints
+    # gracefully fall back to the latest persisted snapshot when no
+    # poller is wired. Production callers (``cli/serve.py`` once item
+    # 1.10 lands) attach a real poller via the lifespan event.
+    app.state.quota_poller = quota_poller
 
     @app.websocket("/ws/sessions/{session_id}")
     async def stream_endpoint(websocket: WebSocket, session_id: str) -> None:
@@ -125,6 +137,9 @@ def create_app(
     app.include_router(checklists_router)
     app.include_router(sessions_router)
     app.include_router(paired_chats_router)
+    app.include_router(routing_router)
+    app.include_router(quota_router)
+    app.include_router(usage_router)
     return app
 
 

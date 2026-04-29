@@ -60,7 +60,13 @@ async def build_session_config_from_template(
     * a :class:`RoutingDecision` built from the template's executor /
       advisor / effort fields, sourced as ``"manual"`` (the user
       selected this template intentionally — spec §App A reserves
-      ``"tag_rule"`` / ``"system_rule"`` for the routing evaluator);
+      ``"tag_rule"`` / ``"system_rule"`` for the routing evaluator).
+      Item 1.8 considered swapping this path to call
+      :func:`bearings.agent.routing.evaluate`; rejected because a
+      template *is* the user's explicit routing choice — running the
+      evaluator on top would mean a tag rule could silently override
+      the template the user picked, which contradicts the
+      new-session-dialog precedence per ``docs/behavior/chat.md``;
     * the template's permission profile;
     * ``db=connection`` so the resulting session can persist its turns;
     * SDK-default values for the rest (the template intentionally does

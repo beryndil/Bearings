@@ -102,6 +102,14 @@ CREATE TABLE IF NOT EXISTS messages (
     effort_level             TEXT,
     routing_source           TEXT,
     routing_reason           TEXT,
+    -- spec §App A ``RoutingDecision.matched_rule_id`` projection.
+    -- Not enumerated in spec §5's ALTER list but required by §8's
+    -- per-rule override-rate aggregator. Item 1.8 spec-gap fix —
+    -- without this column the rolling override-rate aggregator
+    -- cannot attribute overrides to individual rules. NULL when the
+    -- routing source is 'manual' / 'manual_override_quota' /
+    -- 'unknown_legacy' / 'default' (no rule fired).
+    matched_rule_id          INTEGER,
     -- spec §5 per-model usage columns (from ResultMessage.model_usage)
     executor_input_tokens    INTEGER,
     executor_output_tokens   INTEGER,

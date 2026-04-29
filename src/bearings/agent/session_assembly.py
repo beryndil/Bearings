@@ -40,26 +40,33 @@ Overlay precedence (most-specific wins; tested in
    per ``docs/behavior/chat.md`` §"When the user creates a chat":
    what the user typed in the form is what the session gets.
 
-Routing-decision plumbing (item 1.8 forward-carry):
+Routing-decision plumbing (item 1.8 swap-in):
 
-The assembler emits a :class:`RoutingDecision` whose ``source`` is
-``"manual"`` when the executor/advisor came from the user's explicit
-input or a template, ``"default"`` when no input or rule fired
-(pure global default fallback). The full evaluator
-(``agent/routing.py:evaluate``) lands in item 1.8 — it will replace
-the placeholder shape produced here with a tag-rule / system-rule
-match against the first user message. The DB row's ``routing_*``
-columns persist the placeholder until 1.8's first turn evaluates.
-This is shape **(a) pass-through stub** per the item plug's choice
-matrix (decided-and-documented; rationale: the data shape persists
-correctly day 1 — 1.8 is a swap-in, not a schema migration).
+The assembler now invokes the real
+:func:`bearings.agent.routing.evaluate` when ``first_message`` is
+supplied AND no explicit routing-field override is. In that path the
+pure evaluator walks tag rules → system rules → absolute fallback
+(spec §3) and :func:`bearings.agent.quota.apply_quota_guard` folds
+quota-aware downgrades (spec §4) on top. ``RoutingDecision.source``
+takes its real spec values (``tag_rule`` / ``system_rule`` /
+``default`` / ``quota_downgrade``) instead of the item-1.7
+placeholder ``manual`` / ``default`` pair.
+
+When ``first_message`` is absent (paired-chat spawn, auto-driver leg
+session, any caller that materialises a session before the first
+user prompt is in hand) the assembler still emits the placeholder
+``manual`` / ``default`` shape — these flows have no message to feed
+the evaluator and the row needs *some* routing decision at create
+time. Item 1.9's per-message persistence path then carries the real
+evaluation result on the first user message of those flows.
 """
 
 from __future__ import annotations
 
 import aiosqlite
 
-from bearings.agent.routing import RoutingDecision
+from bearings.agent.quota import apply_quota_guard, load_latest
+from bearings.agent.routing import RoutingDecision, evaluate
 from bearings.agent.session import PermissionProfile, SessionConfig
 from bearings.agent.tags import resolve_default_model, resolve_working_dir
 from bearings.config.constants import (
@@ -69,6 +76,7 @@ from bearings.config.constants import (
     DEFAULT_TEMPLATE_MODEL,
     DEFAULT_TEMPLATE_PERMISSION_PROFILE,
 )
+from bearings.db import routing as routing_db
 from bearings.db import tags as tags_db
 from bearings.db import templates as templates_db
 from bearings.db.tags import Tag
@@ -96,6 +104,7 @@ async def build_session_config(
     advisor_max_uses: int | None = None,
     effort_level: str | None = None,
     permission_profile: str | None = None,
+    first_message: str | None = None,
 ) -> SessionConfig:
     """Compose a :class:`SessionConfig` from layered defaults.
 
@@ -118,12 +127,23 @@ async def build_session_config(
         advisor_max_uses: Explicit advisor max-uses pick.
         effort_level: Explicit effort label.
         permission_profile: Explicit permission profile name.
+        first_message: Optional first user message — when supplied,
+            :func:`bearings.agent.routing.evaluate` walks the
+            tag-rule + system-rule chain (spec §3) and
+            :func:`bearings.agent.quota.apply_quota_guard` folds
+            quota-aware downgrades. Passing ``None`` keeps the
+            placeholder ``manual``/``default`` behaviour for callers
+            that materialise a session before the first prompt is in
+            hand (paired-chat spawn, auto-driver leg session).
 
     Returns:
-        A frozen :class:`SessionConfig` with a placeholder
-        :class:`RoutingDecision`. The decision's ``source`` is
-        ``"manual"`` if any explicit field was supplied or the template
-        contributed; ``"default"`` for the pure global-default fallback.
+        A frozen :class:`SessionConfig`. When ``first_message`` is
+        provided and no routing-field override is supplied, the
+        decision's ``source`` is the spec §App A real value
+        (``tag_rule`` / ``system_rule`` / ``default`` /
+        ``quota_downgrade``); otherwise ``"manual"`` if any explicit
+        routing field was supplied or the template contributed,
+        ``"default"`` for the pure global-default fallback.
 
     Raises:
         SessionAssemblyError: Working directory could not be resolved
@@ -199,20 +219,39 @@ async def build_session_config(
             "or pick a template with working_dir_default"
         )
 
-    # Build the placeholder routing decision (item 1.8 swap-in target).
-    decision = RoutingDecision(
-        executor_model=resolved_model,
-        advisor_model=resolved_advisor,
-        advisor_max_uses=resolved_advisor_max,
-        effort_level=resolved_effort,
-        source=source,
-        reason=_build_reason(
-            source=source,
-            template_name=None if template is None else template.name,
-            tag_count=len(tags),
-        ),
-        matched_rule_id=None,
+    # Item 1.8 swap-in: when a first user message is supplied AND
+    # no explicit routing-field override is, run the real evaluator.
+    # Otherwise fall back to the manual/default placeholder shape so
+    # paired-chat spawns + auto-driver leg sessions (which have no
+    # message at create time) still produce a valid SessionConfig.
+    decision: RoutingDecision
+    no_routing_override = (
+        model is None
+        and advisor_model is None
+        and advisor_max_uses is None
+        and effort_level is None
+        and template is None
     )
+    if first_message is not None and no_routing_override:
+        decision = await _evaluate_with_guard(
+            connection,
+            tags=tags,
+            first_message=first_message,
+        )
+    else:
+        decision = RoutingDecision(
+            executor_model=resolved_model,
+            advisor_model=resolved_advisor,
+            advisor_max_uses=resolved_advisor_max,
+            effort_level=resolved_effort,
+            source=source,
+            reason=_build_reason(
+                source=source,
+                template_name=None if template is None else template.name,
+                tag_count=len(tags),
+            ),
+            matched_rule_id=None,
+        )
 
     profile = PermissionProfile(resolved_profile_name)
     return SessionConfig(
@@ -222,6 +261,39 @@ async def build_session_config(
         db=connection,
         permission_profile=profile,
     )
+
+
+async def _evaluate_with_guard(
+    connection: aiosqlite.Connection,
+    *,
+    tags: list[Tag],
+    first_message: str,
+) -> RoutingDecision:
+    """Run :func:`evaluate` + :func:`apply_quota_guard` against the live DB.
+
+    Loads enabled tag rules + enabled system rules + the latest
+    quota snapshot, then composes the two pure functions per spec
+    §3 (rule walk) and §4 (quota guard). Item 1.8 swap-in target
+    cited by the item-1.7 placeholder docstring.
+    """
+    tag_ids = [tag.id for tag in tags]
+    tags_with_rules = await routing_db.list_for_tags(
+        connection,
+        tag_ids,
+        enabled_only=True,
+    )
+    system_rules = await routing_db.list_system_rules(
+        connection,
+        enabled_only=True,
+    )
+    snapshot = await load_latest(connection)
+    raw_decision = evaluate(
+        first_message,
+        tags_with_rules,
+        system_rules,
+        snapshot,
+    )
+    return apply_quota_guard(raw_decision, snapshot)
 
 
 async def _load_tags(
