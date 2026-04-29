@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
@@ -70,7 +70,10 @@ class _BundleStaticFiles(StaticFiles):
         except Exception as exc:  # pragma: no cover - delegated below
             from starlette.exceptions import HTTPException as StarletteHTTPException
 
-            if not isinstance(exc, StarletteHTTPException) or exc.status_code != 404:
+            if (
+                not isinstance(exc, StarletteHTTPException)
+                or exc.status_code != status.HTTP_404_NOT_FOUND
+            ):
                 raise
             request = Request(scope)
             if request.method != "GET":
