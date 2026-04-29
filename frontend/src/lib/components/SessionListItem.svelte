@@ -132,13 +132,18 @@
             >
               <span
                 class="absolute inline-flex h-full w-full animate-ping
-                  rounded-full bg-red-400 opacity-60"
+                  rounded-full bg-red-500 opacity-60"
               ></span>
-              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600"></span>
             </span>
           {:else if indicator === 'orange'}
-            <!-- Orange flashing: agent is actively working a turn
-                 and not parked on a user decision. -->
+            <!-- Yellow flashing: agent is actively working a turn
+                 and not parked on a user decision. The indicator-state
+                 name (`'orange'`) is kept as the data-layer key so
+                 store/API/test contracts don't churn; only the rendered
+                 hue moved to yellow to widen the gap from the red
+                 "needs attention" state. -->
+
             <span
               class="relative inline-flex h-2.5 w-2.5 shrink-0"
               aria-label="Agent is working"
@@ -147,9 +152,9 @@
             >
               <span
                 class="absolute inline-flex h-full w-full animate-ping
-                  rounded-full bg-orange-400 opacity-60"
+                  rounded-full bg-yellow-300 opacity-60"
               ></span>
-              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500"></span>
+              <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-yellow-400"></span>
             </span>
           {:else if indicator === 'green'}
             <!-- Green solid: turn finished while the user was
