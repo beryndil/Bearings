@@ -102,6 +102,78 @@ export async function postJson<T>(
   return (await response.json()) as T;
 }
 
+/**
+ * Issue a PATCH against ``path`` with a JSON body, decode the JSON
+ * response, and return it cast to ``T``. Mirrors :func:`postJson`'s
+ * error contract. Used by the routing-rule editor (item 2.8) for the
+ * ``PATCH /api/routing/{id}`` + ``PATCH /api/routing/system/{id}`` +
+ * ``PATCH /api/tags/{id}/routing/reorder`` surfaces — all spec §9.
+ *
+ * Empty 204 responses are returned as ``undefined`` (cast to ``T``);
+ * callers that need a body should not type ``T`` as ``void``. The
+ * routing CRUD callers always type the response shape.
+ */
+export async function patchJson<T>(
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
+  return await sendJson<T>("PATCH", path, body, options);
+}
+
+/**
+ * Issue a DELETE against ``path``. The 204-no-content path returns
+ * ``undefined`` cast to ``T``; callers that expect ``void`` should
+ * type the call as ``deleteResource<void>(...)``.
+ */
+export async function deleteResource<T = void>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  return await sendJson<T>("DELETE", path, null, options);
+}
+
+async function sendJson<T>(
+  method: "PATCH" | "DELETE",
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
+  const url = options.query ? `${path}?${buildQuery(options.query)}` : path;
+  const init: RequestInit = {
+    method,
+    headers: { Accept: "application/json" },
+    signal: options.signal,
+  };
+  if (body !== null && body !== undefined) {
+    (init.headers as Record<string, string>)["Content-Type"] = "application/json";
+    init.body = JSON.stringify(body);
+  }
+  const response = await fetch(url, init);
+  if (response.status < HTTP_OK_MIN || response.status >= HTTP_OK_MAX) {
+    const errBody = await safeReadBody(response);
+    throw new ApiError(
+      response.status,
+      errBody,
+      `${method} ${path} → ${response.status} ${response.statusText}`,
+    );
+  }
+  if (response.status === HTTP_NO_CONTENT) {
+    return undefined as T;
+  }
+  // Some PATCH endpoints return JSON; some DELETE endpoints return 204
+  // with an empty body. Read the body once via ``text()`` and parse
+  // only when present so the caller can use the typed return without
+  // branching on the body length.
+  const text = await response.text();
+  if (text === "") {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
+}
+
+const HTTP_NO_CONTENT = 204;
+
 function buildQuery(entries: Iterable<readonly [string, string]>): string {
   const params = new URLSearchParams();
   for (const [key, value] of entries) {

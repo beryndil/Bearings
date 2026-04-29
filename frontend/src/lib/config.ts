@@ -301,6 +301,209 @@ export const KNOWN_ROUTING_SOURCES = [
 ] as const;
 export type RoutingSource = (typeof KNOWN_ROUTING_SOURCES)[number];
 
+// ---- Routing-rule CRUD endpoints (spec §9) ------------------------------
+
+/**
+ * ``GET /api/tags/{id}/routing`` / ``POST /api/tags/{id}/routing`` —
+ * tag-rule list + create surfaces consumed by
+ * :class:`RoutingRuleEditor` (item 2.8) per spec §9. Mirrors
+ * :func:`bearings.web.routes.routing.list_tag_rules` /
+ * :func:`create_tag_rule`.
+ */
+export const tagRoutingRulesEndpoint = (tagId: number): string =>
+  `${API_BASE}/tags/${tagId}/routing`;
+
+/**
+ * ``PATCH /api/routing/{id}`` / ``DELETE /api/routing/{id}`` — tag-rule
+ * update + delete surfaces (spec §9). The backend reserves
+ * ``PATCH /api/routing/system/{id}`` for system rules (item 1.8
+ * decided-and-documented).
+ */
+export const tagRoutingRuleEndpoint = (ruleId: number): string => `${API_BASE}/routing/${ruleId}`;
+
+/**
+ * ``PATCH /api/tags/{id}/routing/reorder`` — re-stamp tag-rule
+ * priorities to match the supplied id order (spec §9).
+ */
+export const tagRoutingReorderEndpoint = (tagId: number): string =>
+  `${API_BASE}/tags/${tagId}/routing/reorder`;
+
+/**
+ * ``GET /api/routing/system`` / ``POST /api/routing/system`` —
+ * system-rule list + create surfaces (spec §9).
+ */
+export const API_SYSTEM_ROUTING_RULES_ENDPOINT = `${API_BASE}/routing/system`;
+
+/**
+ * ``PATCH /api/routing/system/{id}`` / ``DELETE …`` — system-rule
+ * update + delete surfaces (spec §9). Spec §9 does NOT enumerate a
+ * dedicated system-rule reorder endpoint; the editor re-stamps
+ * priorities by issuing per-rule PATCHes (decided-and-documented in
+ * :class:`RoutingRuleEditor`).
+ */
+export const systemRoutingRuleEndpoint = (ruleId: number): string =>
+  `${API_BASE}/routing/system/${ruleId}`;
+
+// ---- Routing match-type alphabet (mirrors backend) -----------------------
+
+/**
+ * Match-type alphabet per spec §3:
+ *
+ * - ``keyword`` — case-insensitive substring against the first user
+ *   message; ``match_value`` is comma-separated; any match triggers.
+ * - ``regex`` — ``re.IGNORECASE`` regex against the first user
+ *   message. Invalid regex disables the rule (spec §3 "Invalid
+ *   regexes disable the rule and surface an error in the editor").
+ * - ``length_gt`` / ``length_lt`` — message length in characters
+ *   compared against ``int(match_value)``.
+ * - ``always`` — unconditional; used as the lowest-priority fallback
+ *   in system rules (priority 1000 in the seeded set per spec §3).
+ *
+ * Values mirror the backend
+ * :data:`bearings.config.constants.KNOWN_ROUTING_MATCH_TYPES` (spec
+ * §3 schema CHECK constraint). Drift between the two surfaces is a
+ * behavioural bug caught by the backend's ``CHECK`` clause the first
+ * time a rule of an unknown type reaches the route.
+ */
+export const ROUTING_MATCH_TYPE_KEYWORD = "keyword";
+export const ROUTING_MATCH_TYPE_REGEX = "regex";
+export const ROUTING_MATCH_TYPE_LENGTH_GT = "length_gt";
+export const ROUTING_MATCH_TYPE_LENGTH_LT = "length_lt";
+export const ROUTING_MATCH_TYPE_ALWAYS = "always";
+export const KNOWN_ROUTING_MATCH_TYPES = [
+  ROUTING_MATCH_TYPE_KEYWORD,
+  ROUTING_MATCH_TYPE_REGEX,
+  ROUTING_MATCH_TYPE_LENGTH_GT,
+  ROUTING_MATCH_TYPE_LENGTH_LT,
+  ROUTING_MATCH_TYPE_ALWAYS,
+] as const;
+export type RoutingMatchType = (typeof KNOWN_ROUTING_MATCH_TYPES)[number];
+
+/**
+ * Rule-kind discriminator for the ``RoutingRuleEditor`` ``kind`` prop
+ * — the editor branches on this to pick the tag-rule vs system-rule
+ * endpoint set. Mirrors the ``rule_kind`` column on
+ * :class:`OverrideRateOut` (item 1.8 override-rate aggregator).
+ *
+ * The full alphabet (``ROUTING_RULE_KIND_SYSTEM``,
+ * ``KNOWN_ROUTING_RULE_KINDS``, ``RoutingRuleKind``) is deliberately
+ * not re-exported in v1 — the editor's ``Props`` union is the single
+ * consumer of the system-side discriminant and binds the literal
+ * ``"system"`` directly. The full alphabet returns when a second
+ * consumer (a kind-aware filter, a future API client) needs it.
+ */
+export const ROUTING_RULE_KIND_TAG = "tag";
+
+/**
+ * Default ``priority`` for a freshly added rule. Mirrors the backend
+ * column defaults (``DEFAULT 100`` on tag rules, ``DEFAULT 1000`` on
+ * system rules) per spec §3 schema. Tag rules pack at 100; new
+ * system rules slot at 500 — between the seeded keyword/length rules
+ * (10–60) and the ``always`` fallback (1000) so user-added rules
+ * appear neither at the very top nor below the workhorse default.
+ */
+export const ROUTING_RULE_DEFAULT_PRIORITY_TAG = 100;
+export const ROUTING_RULE_DEFAULT_PRIORITY_SYSTEM = 500;
+
+/**
+ * Default ``advisor_max_uses`` for a freshly added rule (mirrors
+ * spec §2 default-policy table — Sonnet executor, the rule editor's
+ * starting executor → 5 advisor calls). Backend default is also 5
+ * via the ``advisor_max_uses INTEGER DEFAULT 5`` column on both rule
+ * tables (spec §3 schema).
+ */
+export const ROUTING_RULE_DEFAULT_ADVISOR_MAX_USES = 5;
+
+// ---- Routing-rule editor strings (spec §3 + §10) ------------------------
+
+/**
+ * UI strings for :class:`RoutingRuleEditor` + :class:`RuleRow` +
+ * :class:`TestAgainstMessageDialog` (item 2.8). Cites spec §3 (rule
+ * editing surface) + §10 ("Modified: Routing rule editor" widget +
+ * the deterministic "Test against message" dialog) + §8 ("Review:"
+ * highlight prefix on rules whose override rate exceeds
+ * :data:`OVERRIDE_RATE_REVIEW_THRESHOLD`).
+ *
+ * Pulled out of components per coding-standards
+ * §"i18n-ready string tables".
+ */
+export const ROUTING_EDITOR_STRINGS = {
+  // Top-level pane labels (spec §10 "Modified: Routing rule editor").
+  paneAriaLabelTag: "Tag routing rules",
+  paneAriaLabelSystem: "System routing rules",
+  headingTag: "Tag routing rules",
+  headingSystem: "System routing rules",
+  loading: "Loading routing rules…",
+  loadFailed: "Couldn't load routing rules.",
+  saveFailed: "Couldn't save the rule.",
+  reorderFailed: "Couldn't reorder rules.",
+  emptyTag: "No tag rules yet — add one to override the system defaults.",
+  emptySystem: "No system rules yet — add one as a global fallback.",
+  addRuleLabel: "Add rule",
+  // Per spec §8: "Rules with override_rate > 0.30 over the last 14 days
+  // are surfaced in the routing rule editor as 'Review:' highlighted
+  // rows." The prefix is the literal string the spec calls out.
+  reviewPrefix: "Review:",
+  reviewTooltipTemplate: "Override rate {pct}% over the last {days} days — review this rule.",
+  // Per-row column labels (spec §10 row layout — priority, match-type,
+  // match-value, executor, advisor, enabled, effort, reason).
+  rowAriaLabelTemplate: "Routing rule {ruleId}",
+  rowDragHandleAriaLabel: "Drag to reorder",
+  rowPriorityLabel: "Priority",
+  rowMatchTypeLabel: "Match",
+  rowMatchValueLabel: "Value",
+  rowMatchValuePlaceholderKeyword: "comma-separated keywords",
+  rowMatchValuePlaceholderRegex: "case-insensitive regex",
+  rowMatchValuePlaceholderLength: "length threshold (chars)",
+  rowMatchValueDisabledAlways: "(no value — always matches)",
+  rowMatchValueInvalidRegex: "Invalid regex — rule disabled until fixed.",
+  rowExecutorLabel: "Executor",
+  rowAdvisorLabel: "Advisor",
+  rowAdvisorMaxUsesLabel: "Max calls",
+  rowEffortLabel: "Effort",
+  rowReasonLabel: "Reason",
+  rowReasonPlaceholder: "Explain why this rule fires (shown in UI when matched).",
+  rowEnabledLabel: "Enabled",
+  rowSeededIndicatorLabel: "Seeded",
+  rowSeededIndicatorTitle: "Shipped default rule — disable rather than delete.",
+  // Per-row action labels (spec §10 "Right-click ⋮: Test against
+  // message, Duplicate, Disable, Delete").
+  actionTestLabel: "Test against message",
+  actionDuplicateLabel: "Duplicate",
+  actionDisableLabel: "Disable",
+  actionEnableLabel: "Enable",
+  actionDeleteLabel: "Delete",
+  actionDeleteConfirmTemplate: "Delete this rule? This cannot be undone.",
+  actionMenuAriaLabel: "Rule actions",
+  // Test-against-message dialog (spec §10: "deterministic dialog —
+  // it evaluates the rule's match condition against pasted text and
+  // shows the resulting routing decision. No LLM call. Test inputs
+  // are not stored").
+  testDialogTitle: "Test against message",
+  testDialogAriaLabel: "Test rule against message",
+  testDialogIntro:
+    "Paste a message to evaluate against this rule. The check runs locally — no LLM, no save.",
+  testDialogMessageLabel: "Message",
+  testDialogMessagePlaceholder: "Paste the first user message here…",
+  testDialogEvaluateLabel: "Evaluate",
+  testDialogCloseLabel: "Close",
+  testDialogResultMatched: "Rule matched.",
+  testDialogResultMissed: "Rule did not match.",
+  testDialogResultExecutorLabel: "Would route to executor",
+  testDialogResultAdvisorLabel: "Advisor",
+  testDialogResultEffortLabel: "Effort",
+  testDialogResultReasonLabel: "Reason",
+  testDialogInvalidRegex: "Invalid regex — fix the rule before testing.",
+  // Match-type display labels (spec §3 alphabet → user-visible).
+  matchTypeLabels: {
+    [ROUTING_MATCH_TYPE_KEYWORD]: "keyword",
+    [ROUTING_MATCH_TYPE_REGEX]: "regex",
+    [ROUTING_MATCH_TYPE_LENGTH_GT]: "length >",
+    [ROUTING_MATCH_TYPE_LENGTH_LT]: "length <",
+    [ROUTING_MATCH_TYPE_ALWAYS]: "always",
+  } as const satisfies Record<RoutingMatchType, string>,
+} as const;
+
 // ---- Inspector usage / override-rate windows + thresholds ----------------
 
 /**
