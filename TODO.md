@@ -8,6 +8,32 @@ verbatim at `TODO-archive-2026-04-22.md` next to this file.
 
 ---
 
+## Auto-suggest titles v1.1 — bulk retitle from checklist view — 2026-04-29
+
+v1 ships the per-session ✨ button in `SessionEdit.svelte` (plan
+`~/.claude/plans/auto-suggesting-titles.md`). The natural follow-up
+is bulk retitle on the master-checklist view: one click loops
+`POST /sessions/{id}/suggest_titles` over each linked-chat split,
+shows a preview-then-apply confirm sheet, and PATCHes the chosen
+title per row. Earns its keep on the multi-fix-audit pattern where
+6+ splits get spawned with similar generic titles.
+
+Open shape questions: serial vs parallel calls (parallel = faster
+but harder to throttle if the operator has 30 splits); single
+preview sheet vs per-row inline preview.
+
+## Auto-suggest titles — swap to Haiku for cost — 2026-04-29
+
+Today the suggester reuses the source session's model (typically
+Opus 4.7 / Sonnet 4.6) per the `enable_llm_reorg_analyze` parity
+choice. A title-summarizer call doesn't need that horsepower —
+swapping to Haiku 4.5 cuts cost ~10× per click. Add a config knob
+`agent.title_suggest_model: str | None = None` that overrides the
+session model when set; recommend `"claude-haiku-4-5"` in the
+default config the installer drops.
+
+---
+
 ## Test-suite flake: `test_awaiting_endpoint_includes_blocked_paired_sessions` — 2026-04-29
 
 `tests/test_routes_sessions.py:666` uses the deprecated

@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-04-29
+
+Auto-suggest session titles. The SessionEdit modal grows a `✨`
+button next to the Title input that drives a one-shot LLM call to
+propose three candidate titles based on the session's recent
+messages — narrow / medium / wide abstraction levels. Click a
+candidate to fill the input; the user still saves manually so a
+bad pick is never destructive.
+
+Mirrors the existing `enable_llm_reorg_analyze` pattern in
+`src/bearings/db/_reorg_analyze.py` 1:1 — same SDK, same retry
+loop, same JSON-block extraction, same `query_fn` test seam, same
+config-gate idiom. Title suggestion has no deterministic fallback
+(unlike reorg-analyze's heuristic), so disabled-in-config and
+all-retries-failed both surface as 503 with a reason string the
+modal renders inline.
+
+Plan: `~/.claude/plans/auto-suggesting-titles.md`. Bulk retitle
+from the checklist view and a Haiku swap for cost are logged in
+`TODO.md` as v1.1 follow-ups.
+
+### Added
+
+- `agent.enable_llm_title_suggest: bool = False` config gate. Default
+  off — the route 503s with a hint pointing the operator at this key
+  until they flip it.
+- `src/bearings/agent/title_suggester.py` — one-shot LLM caller
+  mirroring `_reorg_analyze.llm_analyze`. 200-msg cap with head/tail
+  sampling, 400 chars/msg, two-attempt retry, `query_fn` test seam,
+  60-char title clamp, three-candidate output validator.
+- `POST /api/sessions/{session_id}/suggest_titles` returning
+  `{titles: [string, string, string]}` on success. 404/400/503
+  matrix.
+- `SessionEdit.svelte` `✨` button + suggestion-pill list + inline
+  error surface.
+- 19 tests covering the suggester (14) and the route (5), including
+  the disabled-by-default config gate, the happy path with a
+  monkeypatched SDK driver, and the all-retries-failed 503 path.
+
 ## [0.21.0] - 2026-04-26
 
 Cross-session prompt injection. The HTTP facade for the same
