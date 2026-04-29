@@ -102,6 +102,7 @@ async def test_invalid_role_rejected_at_dataclass(
             effort_level=None,
             routing_source=None,
             routing_reason=None,
+            matched_rule_id=None,
             executor_input_tokens=None,
             executor_output_tokens=None,
             advisor_input_tokens=None,

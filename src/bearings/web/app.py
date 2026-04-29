@@ -38,6 +38,7 @@ from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
 from bearings.config.settings import VaultCfg
 from bearings.web.routes.checklists import router as checklists_router
 from bearings.web.routes.memories import router as memories_router
+from bearings.web.routes.messages import router as messages_router
 from bearings.web.routes.paired_chats import router as paired_chats_router
 from bearings.web.routes.quota import router as quota_router
 from bearings.web.routes.routing import router as routing_router
@@ -136,6 +137,7 @@ def create_app(
     app.include_router(vault_router)
     app.include_router(checklists_router)
     app.include_router(sessions_router)
+    app.include_router(messages_router)
     app.include_router(paired_chats_router)
     app.include_router(routing_router)
     app.include_router(quota_router)

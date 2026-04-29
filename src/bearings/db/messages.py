@@ -5,28 +5,40 @@ query that touches ``messages``. Per ``docs/model-routing-v1-spec.md``
 §5 the table carries per-model routing/usage columns from day 1
 (see ``schema.sql`` — ``executor_model`` / ``advisor_model`` /
 ``effort_level`` / ``routing_source`` / ``routing_reason`` plus the
-five usage columns); item 1.7 lays the user-message INSERT path that
-the prompt endpoint uses, leaving the assistant-turn persistence for
-item 1.2/1.3's streaming integration.
+five usage columns); item 1.7 laid the user-message INSERT path that
+the prompt endpoint uses; item 1.8 added ``matched_rule_id`` for the
+override-rate aggregator; item 1.9 wires the assistant-turn INSERT
+path that captures :class:`bearings.agent.routing.RoutingDecision`
+plus ``ResultMessage.model_usage`` into the per-message row.
 
-Public surface (item-1.7 narrow slice):
+Public surface:
 
 * :class:`Message` — frozen dataclass row mirror with
-  ``__post_init__`` validation.
+  ``__post_init__`` validation. Carries every spec §5 routing/usage
+  column plus the spec §App A ``matched_rule_id`` projection.
 * :func:`insert_user`, :func:`insert_system` — non-routing rows
   (``role='user'`` / ``'system'``); the routing/usage columns stay
-  NULL and are filled at assistant-turn persist time.
+  NULL.
+* :func:`insert_assistant` — assistant-turn row carrying the active
+  :class:`bearings.agent.routing.RoutingDecision` + the projected
+  per-model token counts from ``ResultMessage.model_usage`` (item
+  1.9; spec §5 + arch §5 #3). Called by
+  :mod:`bearings.agent.persistence`.
 * :func:`get`, :func:`list_for_session`, :func:`count_for_session` —
-  read paths the WS handler + the prompt endpoint use.
-* :func:`bump_session_message_count` — increment ``sessions.message_count``
-  in lockstep with a row insert. Internal helper but exposed so the
-  prompt endpoint can call it inside the same transaction the user-row
-  insert uses.
+  read paths the WS handler, the prompt endpoint, and the messages
+  API (item 1.9 ``GET /api/sessions/{id}/messages``) use.
 
 Per ``docs/behavior/prompt-endpoint.md`` §"Observability of the queued
 prompt" — "The user message is durably persisted **before** the runner
 begins the turn." That guarantees a 202 ack survives a server crash
 between accept and turn-start; the prompt is replayed on next boot.
+
+Per spec §5 "Backfill for legacy data" the routing/usage columns are
+nullable; pre-v1 rows carry ``NULL`` on every column and analytics
+queries filter via ``routing_source IS NULL`` or
+``routing_source = 'unknown_legacy'``. The schema.sql defaults
+encode this contract — see the column-by-column commentary at the
+top of ``insert_assistant``.
 """
 
 from __future__ import annotations
@@ -47,9 +59,16 @@ class Message:
     """Row mirror for the ``messages`` table.
 
     The routing/usage columns are nullable — only assistant rows
-    (filled by the per-turn persistence path, item 1.2+/1.3+) carry
-    them. User rows leave them ``None``, which the analytics queries
-    filter out via ``routing_source IS NULL``.
+    (filled by :func:`insert_assistant` from
+    :mod:`bearings.agent.persistence`) carry them. User and system
+    rows leave them ``None``, which the analytics queries filter out
+    via ``routing_source IS NULL``.
+
+    ``matched_rule_id`` mirrors :attr:`bearings.agent.routing.RoutingDecision.matched_rule_id`
+    per spec §App A and is used by :class:`bearings.agent.override_aggregator.OverrideAggregator`
+    (item 1.8) to attribute overrides back to individual rules. ``None`` for
+    rows whose routing source is ``'manual'`` / ``'manual_override_quota'`` /
+    ``'unknown_legacy'`` / ``'default'`` (no rule fired).
     """
 
     id: str
@@ -62,6 +81,7 @@ class Message:
     effort_level: str | None
     routing_source: str | None
     routing_reason: str | None
+    matched_rule_id: int | None
     executor_input_tokens: int | None
     executor_output_tokens: int | None
     advisor_input_tokens: int | None
@@ -82,6 +102,20 @@ class Message:
         # stdout); user rows are validated at the API boundary against
         # the prompt-endpoint's "non-empty after stripping whitespace"
         # rule, so this dataclass does not gate on user-row content.
+        # Token counters are non-negative when set (NULL = legacy /
+        # not-yet-captured row per spec §5 "Backfill for legacy data").
+        for field_name, value in (
+            ("executor_input_tokens", self.executor_input_tokens),
+            ("executor_output_tokens", self.executor_output_tokens),
+            ("advisor_input_tokens", self.advisor_input_tokens),
+            ("advisor_output_tokens", self.advisor_output_tokens),
+            ("advisor_calls_count", self.advisor_calls_count),
+            ("cache_read_tokens", self.cache_read_tokens),
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+        ):
+            if value is not None and value < 0:
+                raise ValueError(f"Message.{field_name} must be >= 0 if set (got {value})")
 
 
 async def insert_user(
@@ -139,6 +173,7 @@ async def _insert(
         effort_level=None,
         routing_source=None,
         routing_reason=None,
+        matched_rule_id=None,
         executor_input_tokens=None,
         executor_output_tokens=None,
         advisor_input_tokens=None,
@@ -160,6 +195,112 @@ async def _insert(
     fetched = await get(connection, message_id)
     if fetched is None:  # pragma: no cover — INSERT just succeeded
         raise RuntimeError(f"messages._insert: row {message_id!r} vanished after INSERT")
+    return fetched
+
+
+async def insert_assistant(
+    connection: aiosqlite.Connection,
+    *,
+    session_id: str,
+    content: str,
+    executor_model: str,
+    advisor_model: str | None,
+    effort_level: str,
+    routing_source: str,
+    routing_reason: str,
+    matched_rule_id: int | None,
+    executor_input_tokens: int | None,
+    executor_output_tokens: int | None,
+    advisor_input_tokens: int | None,
+    advisor_output_tokens: int | None,
+    advisor_calls_count: int,
+    cache_read_tokens: int | None,
+) -> Message:
+    """Insert an assistant-role row carrying the spec §5 routing + usage fields.
+
+    Called by :func:`bearings.agent.persistence.persist_assistant_turn`
+    at message-completion time per spec §11 build-step 6 ("Wire
+    executor/advisor/effort/source/reason into the agent call path.
+    Read ``ResultMessage.model_usage`` and persist to message rows").
+    The five routing fields project the active
+    :class:`bearings.agent.routing.RoutingDecision`; the six token
+    fields project ``ResultMessage.model_usage`` via
+    :func:`bearings.agent.persistence.extract_model_usage`.
+
+    Per spec §5 "Backfill for legacy data" all six token fields are
+    nullable so legacy ``unknown_legacy`` rows can be migrated with
+    NULLs where the data is unavailable; the migration in item 3.2
+    populates what it can. ``advisor_calls_count`` is required (not
+    NULL) because the SDK always reports a count (zero if no advisor
+    call was made on this turn) — the column carries an explicit
+    ``DEFAULT 0`` in schema.sql for the same reason.
+
+    Bumps ``sessions.message_count`` in the same transaction so the
+    sidebar count never lies relative to the row.
+    """
+    timestamp = now_iso()
+    message_id = new_id(MESSAGE_ID_PREFIX)
+    # Construct + validate the dataclass first; surfaces shape errors
+    # before any DB write occurs (atomicity holds because the entire
+    # method runs inside one connection's implicit transaction).
+    Message(
+        id=message_id,
+        session_id=session_id,
+        role="assistant",
+        content=content,
+        created_at=timestamp,
+        executor_model=executor_model,
+        advisor_model=advisor_model,
+        effort_level=effort_level,
+        routing_source=routing_source,
+        routing_reason=routing_reason,
+        matched_rule_id=matched_rule_id,
+        executor_input_tokens=executor_input_tokens,
+        executor_output_tokens=executor_output_tokens,
+        advisor_input_tokens=advisor_input_tokens,
+        advisor_output_tokens=advisor_output_tokens,
+        advisor_calls_count=advisor_calls_count,
+        cache_read_tokens=cache_read_tokens,
+        input_tokens=None,
+        output_tokens=None,
+    )
+    await connection.execute(
+        "INSERT INTO messages ("
+        "id, session_id, role, content, created_at, "
+        "executor_model, advisor_model, effort_level, "
+        "routing_source, routing_reason, matched_rule_id, "
+        "executor_input_tokens, executor_output_tokens, "
+        "advisor_input_tokens, advisor_output_tokens, "
+        "advisor_calls_count, cache_read_tokens"
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            message_id,
+            session_id,
+            "assistant",
+            content,
+            timestamp,
+            executor_model,
+            advisor_model,
+            effort_level,
+            routing_source,
+            routing_reason,
+            matched_rule_id,
+            executor_input_tokens,
+            executor_output_tokens,
+            advisor_input_tokens,
+            advisor_output_tokens,
+            advisor_calls_count,
+            cache_read_tokens,
+        ),
+    )
+    await connection.execute(
+        "UPDATE sessions SET message_count = message_count + 1, updated_at = ? WHERE id = ?",
+        (timestamp, session_id),
+    )
+    await connection.commit()
+    fetched = await get(connection, message_id)
+    if fetched is None:  # pragma: no cover — INSERT just succeeded
+        raise RuntimeError(f"messages.insert_assistant: row {message_id!r} vanished after INSERT")
     return fetched
 
 
@@ -235,6 +376,7 @@ async def count_for_session(
 _SELECT_MESSAGE_COLUMNS = (
     "SELECT id, session_id, role, content, created_at, "
     "executor_model, advisor_model, effort_level, routing_source, routing_reason, "
+    "matched_rule_id, "
     "executor_input_tokens, executor_output_tokens, advisor_input_tokens, "
     "advisor_output_tokens, advisor_calls_count, cache_read_tokens, "
     "input_tokens, output_tokens FROM messages"
@@ -254,14 +396,15 @@ def _row_to_message(row: aiosqlite.Row | tuple[object, ...]) -> Message:
         effort_level=None if row[7] is None else str(row[7]),
         routing_source=None if row[8] is None else str(row[8]),
         routing_reason=None if row[9] is None else str(row[9]),
-        executor_input_tokens=None if row[10] is None else int(str(row[10])),
-        executor_output_tokens=None if row[11] is None else int(str(row[11])),
-        advisor_input_tokens=None if row[12] is None else int(str(row[12])),
-        advisor_output_tokens=None if row[13] is None else int(str(row[13])),
-        advisor_calls_count=None if row[14] is None else int(str(row[14])),
-        cache_read_tokens=None if row[15] is None else int(str(row[15])),
-        input_tokens=None if row[16] is None else int(str(row[16])),
-        output_tokens=None if row[17] is None else int(str(row[17])),
+        matched_rule_id=None if row[10] is None else int(str(row[10])),
+        executor_input_tokens=None if row[11] is None else int(str(row[11])),
+        executor_output_tokens=None if row[12] is None else int(str(row[12])),
+        advisor_input_tokens=None if row[13] is None else int(str(row[13])),
+        advisor_output_tokens=None if row[14] is None else int(str(row[14])),
+        advisor_calls_count=None if row[15] is None else int(str(row[15])),
+        cache_read_tokens=None if row[16] is None else int(str(row[16])),
+        input_tokens=None if row[17] is None else int(str(row[17])),
+        output_tokens=None if row[18] is None else int(str(row[18])),
     )
 
 
@@ -270,6 +413,7 @@ __all__ = [
     "Message",
     "count_for_session",
     "get",
+    "insert_assistant",
     "insert_system",
     "insert_user",
     "list_for_session",

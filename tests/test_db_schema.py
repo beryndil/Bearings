@@ -80,6 +80,11 @@ EXPECTED_MESSAGES_ROUTING_COLUMNS: dict[str, str] = {
     "effort_level": "TEXT",
     "routing_source": "TEXT",
     "routing_reason": "TEXT",
+    # spec §App A ``RoutingDecision.matched_rule_id`` projection (item
+    # 1.8 schema column required by spec §8 override-rate aggregator;
+    # item 1.9 wires the read/write path through ``Message`` +
+    # ``MessageOut``).
+    "matched_rule_id": "INTEGER",
     "executor_input_tokens": "INTEGER",
     "executor_output_tokens": "INTEGER",
     "advisor_input_tokens": "INTEGER",
