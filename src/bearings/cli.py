@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import shutil
 import subprocess
 import sys
@@ -584,6 +585,22 @@ def _handle_serve_command(args: argparse.Namespace) -> int:
         return 2
     if cfg.profile.show_banner:
         _print_profile_banner(cfg, fh=sys.stdout)
+    # Wire a root handler BEFORE uvicorn.run so application loggers
+    # (bearings.*) reach the journal. uvicorn's default LOGGING_CONFIG
+    # only attaches handlers to `uvicorn`, `uvicorn.error`, and
+    # `uvicorn.access`; everything else propagates to root, which has
+    # no handler by default → messages hit the WARNING-level lastResort
+    # and INFO/DEBUG vanish silently. Discovered while shipping the
+    # ws_agent D1 diagnostic logs (plan-a-way-to-agile-pillow.md): the
+    # WS-accept lines logged fine (uvicorn-owned), but the application's
+    # `log.info` calls in ws_agent.py never reached journalctl. uvicorn
+    # uses `disable_existing_loggers=False`, so a root handler set here
+    # survives uvicorn's dictConfig and catches everything that
+    # propagates up from `bearings.*` loggers.
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
     uvicorn.run(
         "bearings.server:create_app",
         factory=True,
