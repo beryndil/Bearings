@@ -45,6 +45,33 @@ picker can resize columns) or leave it scoped inline. No regression
 risk; documenting so a future component author doesn't sprout a
 parallel inline style for "theme-aware sizing."
 
+## Item 2.9 — theme server-sync layer (deferred)
+
+`docs/behavior/themes.md` §"Persistence boundary" prescribes
+**per-account, server-synced** theme persistence with a "couldn't save
+your theme" toast when the preferences PATCH fails. v1 ships
+**localStorage-only** persistence: the runtime store reads / writes
+``localStorage["bearings-theme-v1"]`` and listens to the browser-native
+``storage`` event for cross-tab parity. Decision rationale:
+
+- Bearings v1 is a single-user localhost app — "per account" degenerates
+  to "the only account on this device", which is what localStorage
+  already keys on.
+- The arch §1.1.5 routes table lists ``web/routes/preferences.py``, but
+  no preferences route, Pydantic models, or DB table exist yet. Adding
+  schema + route + tests would expand this frontend item into a backend
+  concern that a separate item should own (alongside other per-user
+  preferences like the display timezone the doc mentions).
+- The store interface is forward-compatible: a future item adds
+  ``persistThemeToServer(theme)`` behind the same
+  :func:`saveTheme` / :func:`loadTheme` shape used by the localStorage
+  layer today, then re-points the toast copy at the network failure.
+
+Action when the preferences route lands: extend
+``frontend/src/lib/themes/persistence.ts`` to call the API client,
+keeping localStorage as the synchronous boot-time read so the no-flash
+guarantee holds.
+
 ## Item 2.1 — `{@html}` sanitization layer
 
 Item 2.1 wires `marked` + `shiki` in `frontend/src/lib/render.ts` and

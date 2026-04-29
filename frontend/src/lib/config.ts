@@ -1059,6 +1059,385 @@ export const CHECKLIST_STRINGS = {
   driverOutcomeHaltedFailureTemplate: "Halted: failure on item {itemId}",
 } as const;
 
+// ---- Themes (item 2.9; mirrors ``docs/behavior/themes.md`` §"Theme picker UI") ----
+
+/**
+ * The three themes shipped in v1, per ``docs/behavior/themes.md``
+ * §"Theme picker UI". Identifiers are wire-shaped strings written into
+ * ``data-theme`` on the document root and into the localStorage value;
+ * adding a fourth theme means appending one entry to this alphabet plus
+ * a matching CSS variable block in :file:`src/app.css`.
+ */
+export const THEME_MIDNIGHT_GLASS = "midnight-glass";
+export const THEME_DEFAULT = "default";
+export const THEME_PAPER_LIGHT = "paper-light";
+
+export const KNOWN_THEMES = [THEME_MIDNIGHT_GLASS, THEME_DEFAULT, THEME_PAPER_LIGHT] as const;
+export type ThemeId = (typeof KNOWN_THEMES)[number];
+
+/**
+ * Mobile-chrome / address-bar color per theme — written to the
+ * ``<meta name="theme-color">`` tag on theme change per
+ * ``docs/behavior/themes.md`` §"What gets re-themed live". Values
+ * mirror the ``--bearings-surface-0`` rgb tuple from
+ * :file:`frontend/src/app.css` rendered as a hex literal so the
+ * runtime can write a single ``#rrggbb`` string into the meta content
+ * without a CSS-variable read.
+ */
+export const THEME_COLOR_HEX: Record<ThemeId, string> = {
+  [THEME_MIDNIGHT_GLASS]: "#0e1729",
+  [THEME_DEFAULT]: "#111827",
+  [THEME_PAPER_LIGHT]: "#faf7f0",
+} as const;
+
+/**
+ * ``data-theme`` attribute name + storage key. Pulled out as named
+ * constants so tests + boot script + runtime store agree by import,
+ * not by literal duplication. The ``-v1`` suffix on the storage key
+ * lets a future migration rotate the namespace without trampling the
+ * old value (the old key reads as missing, the OS fallback applies,
+ * the runtime writes the v2 namespace on next pick).
+ */
+export const THEME_DATA_ATTR_NAME = "data-theme";
+export const THEME_STORAGE_KEY = "bearings-theme-v1";
+export const THEME_META_NAME = "theme-color";
+
+/**
+ * Theme picker + Appearance section UI strings. Anchors to
+ * ``docs/behavior/themes.md`` §"Theme picker UI" (option labels +
+ * caption) + §"Failure modes" (toast copy).
+ */
+export const THEME_STRINGS = {
+  appearanceHeading: "Appearance",
+  pickerLabel: "Theme",
+  pickerAriaLabel: "Theme",
+  pickerCaption: "Saved per device. Applies immediately.",
+  saveFailedToast: "Couldn't save your theme — try again.",
+  themeLabels: {
+    [THEME_MIDNIGHT_GLASS]: "Midnight Glass (warm-navy, glass panels)",
+    [THEME_DEFAULT]: "Default (Tailwind classic dark)",
+    [THEME_PAPER_LIGHT]: "Paper Light (cream, flat)",
+  } as const satisfies Record<ThemeId, string>,
+} as const;
+
+// ---- Keyboard shortcuts (item 2.9; mirrors ``docs/behavior/keyboard-shortcuts.md``) ----
+
+/**
+ * Keybinding action identifiers — every chord listed in the behavior
+ * doc §"Bindings (v1)" lands at one of these IDs. The dispatch layer
+ * looks up a registered handler by id, so a future menu entry / palette
+ * row can fire the same id and inherit the chord automatically.
+ */
+export const KEYBINDING_ACTION_NEW_CHAT_DEFAULTS = "create.new_chat_with_defaults";
+export const KEYBINDING_ACTION_NEW_CHAT_BARE = "create.new_chat_bare";
+export const KEYBINDING_ACTION_TEMPLATE_PICKER = "create.template_picker";
+export const KEYBINDING_ACTION_SIDEBAR_DOWN = "navigate.sidebar_down";
+export const KEYBINDING_ACTION_SIDEBAR_UP = "navigate.sidebar_up";
+export const KEYBINDING_ACTION_SIDEBAR_DOWN_FORCE = "navigate.sidebar_down_force";
+export const KEYBINDING_ACTION_SIDEBAR_UP_FORCE = "navigate.sidebar_up_force";
+export const KEYBINDING_ACTION_SIDEBAR_JUMP_PREFIX = "navigate.sidebar_jump_";
+export const KEYBINDING_ACTION_ESC_CASCADE = "focus.esc_cascade";
+export const KEYBINDING_ACTION_TOGGLE_CHEAT_SHEET = "help.toggle_cheat_sheet";
+export const KEYBINDING_ACTION_TOGGLE_PENDING_OPS = "help.toggle_pending_ops";
+export const KEYBINDING_ACTION_TOGGLE_COMMAND_PALETTE = "palette.toggle";
+export const KEYBINDING_ACTION_FOCUS_SIDEBAR_SEARCH = "palette.focus_sidebar_search";
+
+/**
+ * Keybinding-context discriminator — context the chord is *allowed* to
+ * fire in. The dispatch routes a chord by inspecting two focus flags
+ * (composer focused, modal open) per
+ * ``docs/behavior/keyboard-shortcuts.md`` §"Contexts (sidebar focused,
+ * conversation focused, modal open)".
+ *
+ * The full context alphabet (sidebar / conversation / inspector /
+ * checklist / context_menu) is implicit in v1 — the dispatcher
+ * doesn't tag bindings by named context, it gates on the two flags
+ * + the binding's ``global`` field. The full alphabet is reintroduced
+ * here when a future binding (e.g. a checklist-only chord) needs the
+ * finer-grained routing.
+ */
+
+/**
+ * Cheat-sheet section ids (the headings in
+ * ``docs/behavior/keyboard-shortcuts.md`` §"Bindings (v1)"). The cheat
+ * sheet groups every registered binding under one of these.
+ */
+export const KEYBINDING_SECTION_CREATE = "create";
+export const KEYBINDING_SECTION_NAVIGATE = "navigate";
+export const KEYBINDING_SECTION_FOCUS = "focus";
+export const KEYBINDING_SECTION_HELP = "help";
+export const KEYBINDING_SECTION_COMMAND_PALETTE = "command_palette";
+
+/**
+ * UI strings for the cheat sheet + section headings. Anchored to
+ * ``docs/behavior/keyboard-shortcuts.md`` §"What the user sees".
+ */
+export const KEYBOARD_SHORTCUT_STRINGS = {
+  cheatSheetTitle: "Keyboard shortcuts",
+  cheatSheetAriaLabel: "Keyboard shortcuts cheat sheet",
+  cheatSheetCloseLabel: "Close",
+  sectionLabels: {
+    [KEYBINDING_SECTION_CREATE]: "Create",
+    [KEYBINDING_SECTION_NAVIGATE]: "Navigate (sidebar)",
+    [KEYBINDING_SECTION_FOCUS]: "Focus",
+    [KEYBINDING_SECTION_HELP]: "Help",
+    [KEYBINDING_SECTION_COMMAND_PALETTE]: "Command palette",
+  } as const,
+  actionLabels: {
+    [KEYBINDING_ACTION_NEW_CHAT_DEFAULTS]: "Open the new-chat dialog",
+    [KEYBINDING_ACTION_NEW_CHAT_BARE]: "Open the new-chat dialog (no defaults)",
+    [KEYBINDING_ACTION_TEMPLATE_PICKER]: "Open the template picker",
+    [KEYBINDING_ACTION_SIDEBAR_DOWN]: "Move sidebar selection down",
+    [KEYBINDING_ACTION_SIDEBAR_UP]: "Move sidebar selection up",
+    [KEYBINDING_ACTION_SIDEBAR_DOWN_FORCE]: "Move sidebar selection down (works in inputs)",
+    [KEYBINDING_ACTION_SIDEBAR_UP_FORCE]: "Move sidebar selection up (works in inputs)",
+    [KEYBINDING_ACTION_ESC_CASCADE]: "Close overlay / blur input",
+    [KEYBINDING_ACTION_TOGGLE_CHEAT_SHEET]: "Toggle this cheat sheet",
+    [KEYBINDING_ACTION_TOGGLE_PENDING_OPS]: "Toggle pending-operations card",
+    [KEYBINDING_ACTION_TOGGLE_COMMAND_PALETTE]: "Toggle the command palette",
+    [KEYBINDING_ACTION_FOCUS_SIDEBAR_SEARCH]: "Focus the sidebar search field",
+  } as const,
+  jumpToSlotLabelTemplate: "Jump to sidebar slot {n}",
+  duplicateChordError:
+    "Duplicate keybinding chord registered — fail-fast at boot per docs/behavior/keyboard-shortcuts.md §Conflict resolution.",
+} as const;
+
+// ---- Context menus (item 2.9; mirrors ``docs/behavior/context-menus.md``) ----
+
+/**
+ * Context-menu *target* identifiers — each surface that opens its own
+ * menu has a stable target id. The action-list registry is keyed by
+ * target. Values are wire-shaped strings to match the
+ * ``menus.toml`` override contract per
+ * ``docs/behavior/context-menus.md`` §"Per-target action lists".
+ */
+export const MENU_TARGET_SESSION = "session";
+export const MENU_TARGET_MESSAGE = "message";
+export const MENU_TARGET_TAG = "tag";
+export const MENU_TARGET_TAG_CHIP = "tag_chip";
+export const MENU_TARGET_TOOL_CALL = "tool_call";
+export const MENU_TARGET_CODE_BLOCK = "code_block";
+export const MENU_TARGET_LINK = "link";
+export const MENU_TARGET_CHECKPOINT = "checkpoint";
+export const MENU_TARGET_MULTI_SELECT = "multi_select";
+export const MENU_TARGET_ATTACHMENT = "attachment";
+export const MENU_TARGET_PENDING_OPERATION = "pending_operation";
+
+export const KNOWN_MENU_TARGETS = [
+  MENU_TARGET_SESSION,
+  MENU_TARGET_MESSAGE,
+  MENU_TARGET_TAG,
+  MENU_TARGET_TAG_CHIP,
+  MENU_TARGET_TOOL_CALL,
+  MENU_TARGET_CODE_BLOCK,
+  MENU_TARGET_LINK,
+  MENU_TARGET_CHECKPOINT,
+  MENU_TARGET_MULTI_SELECT,
+  MENU_TARGET_ATTACHMENT,
+  MENU_TARGET_PENDING_OPERATION,
+] as const;
+export type MenuTargetId = (typeof KNOWN_MENU_TARGETS)[number];
+
+/**
+ * Section identifiers per ``docs/behavior/context-menus.md`` §"Common
+ * behavior across every menu" — actions inside a menu are grouped into
+ * fixed sections, rendered top-to-bottom in this order.
+ */
+export const MENU_SECTION_PRIMARY = "primary";
+export const MENU_SECTION_NAVIGATE = "navigate";
+export const MENU_SECTION_CREATE = "create";
+export const MENU_SECTION_EDIT = "edit";
+export const MENU_SECTION_VIEW = "view";
+export const MENU_SECTION_COPY = "copy";
+export const MENU_SECTION_ORGANIZE = "organize";
+export const MENU_SECTION_DESTRUCTIVE = "destructive";
+
+/**
+ * Section render order — the menu walks this tuple top-to-bottom and
+ * renders one section per non-empty bucket, with a thin rule between
+ * non-empty sections.
+ */
+export const MENU_SECTION_ORDER = [
+  MENU_SECTION_PRIMARY,
+  MENU_SECTION_NAVIGATE,
+  MENU_SECTION_CREATE,
+  MENU_SECTION_EDIT,
+  MENU_SECTION_VIEW,
+  MENU_SECTION_COPY,
+  MENU_SECTION_ORGANIZE,
+  MENU_SECTION_DESTRUCTIVE,
+] as const;
+export type MenuSectionId = (typeof MENU_SECTION_ORDER)[number];
+
+// Per-target action ids — public identifiers per the doc's §"Per-target
+// action lists" table. ``menus.toml`` references these by id; renaming
+// breaks user overrides, so each id is a stable string.
+export const MENU_ACTION_SESSION_OPEN_IN_NEW_TAB = "session.open_in_new_tab";
+export const MENU_ACTION_SESSION_RENAME = "session.rename";
+export const MENU_ACTION_SESSION_EDIT_TAGS = "session.edit_tags";
+export const MENU_ACTION_SESSION_CHANGE_MODEL = "session.change_model";
+export const MENU_ACTION_SESSION_DUPLICATE = "session.duplicate";
+export const MENU_ACTION_SESSION_SAVE_AS_TEMPLATE = "session.save_as_template";
+export const MENU_ACTION_SESSION_FORK_FROM_LAST_MESSAGE = "session.fork.from_last_message";
+export const MENU_ACTION_SESSION_PIN = "session.pin";
+export const MENU_ACTION_SESSION_UNPIN = "session.unpin";
+export const MENU_ACTION_SESSION_ARCHIVE = "session.archive";
+export const MENU_ACTION_SESSION_REOPEN = "session.reopen";
+export const MENU_ACTION_SESSION_COPY_ID = "session.copy_id";
+export const MENU_ACTION_SESSION_COPY_TITLE = "session.copy_title";
+export const MENU_ACTION_SESSION_COPY_SHARE_LINK = "session.copy_share_link";
+export const MENU_ACTION_SESSION_DELETE = "session.delete";
+
+export const MENU_ACTION_MESSAGE_JUMP_TO_TURN = "message.jump_to_turn";
+export const MENU_ACTION_MESSAGE_COPY_CONTENT = "message.copy_content";
+export const MENU_ACTION_MESSAGE_COPY_AS_MARKDOWN = "message.copy_as_markdown";
+export const MENU_ACTION_MESSAGE_COPY_ID = "message.copy_id";
+export const MENU_ACTION_MESSAGE_PIN = "message.pin";
+export const MENU_ACTION_MESSAGE_HIDE_FROM_CONTEXT = "message.hide_from_context";
+export const MENU_ACTION_MESSAGE_MOVE_TO_SESSION = "message.move_to_session";
+export const MENU_ACTION_MESSAGE_SPLIT_HERE = "message.split_here";
+export const MENU_ACTION_MESSAGE_FORK_FROM_HERE = "message.fork.from_here";
+export const MENU_ACTION_MESSAGE_REGENERATE = "message.regenerate";
+export const MENU_ACTION_MESSAGE_REGENERATE_IN_PLACE = "message.regenerate.in_place";
+export const MENU_ACTION_MESSAGE_DELETE = "message.delete";
+
+export const MENU_ACTION_TAG_PIN = "tag.pin";
+export const MENU_ACTION_TAG_UNPIN = "tag.unpin";
+export const MENU_ACTION_TAG_COPY_NAME = "tag.copy_name";
+export const MENU_ACTION_TAG_EDIT = "tag.edit";
+export const MENU_ACTION_TAG_DELETE = "tag.delete";
+
+export const MENU_ACTION_TAG_CHIP_COPY_NAME = "tag_chip.copy_name";
+export const MENU_ACTION_TAG_CHIP_DETACH = "tag_chip.detach";
+
+export const MENU_ACTION_TOOL_CALL_COPY_NAME = "tool_call.copy.name";
+export const MENU_ACTION_TOOL_CALL_COPY_INPUT = "tool_call.copy.input";
+export const MENU_ACTION_TOOL_CALL_COPY_OUTPUT = "tool_call.copy.output";
+export const MENU_ACTION_TOOL_CALL_COPY_ID = "tool_call.copy.id";
+export const MENU_ACTION_TOOL_CALL_RETRY = "tool_call.retry";
+
+export const MENU_ACTION_CODE_BLOCK_COPY = "code_block.copy";
+export const MENU_ACTION_CODE_BLOCK_COPY_WITH_FENCE = "code_block.copy_with_fence";
+export const MENU_ACTION_CODE_BLOCK_SAVE_TO_FILE = "code_block.save_to_file";
+export const MENU_ACTION_CODE_BLOCK_OPEN_IN_EDITOR = "code_block.open_in.editor";
+
+export const MENU_ACTION_LINK_COPY_URL = "link.copy_url";
+export const MENU_ACTION_LINK_COPY_TEXT = "link.copy_text";
+export const MENU_ACTION_LINK_OPEN_NEW_TAB = "link.open_new_tab";
+export const MENU_ACTION_LINK_OPEN_IN_EDITOR = "link.open_in.editor";
+
+// Phase 14 — Checkpoint surface.
+export const MENU_ACTION_CHECKPOINT_FORK = "checkpoint.fork";
+export const MENU_ACTION_CHECKPOINT_COPY_LABEL = "checkpoint.copy_label";
+export const MENU_ACTION_CHECKPOINT_COPY_ID = "checkpoint.copy_id";
+export const MENU_ACTION_CHECKPOINT_DELETE = "checkpoint.delete";
+
+export const MENU_ACTION_MULTI_SELECT_CLEAR = "multi_select.clear";
+export const MENU_ACTION_MULTI_SELECT_TAG = "multi_select.tag";
+export const MENU_ACTION_MULTI_SELECT_UNTAG = "multi_select.untag";
+export const MENU_ACTION_MULTI_SELECT_CLOSE = "multi_select.close";
+export const MENU_ACTION_MULTI_SELECT_EXPORT = "multi_select.export";
+export const MENU_ACTION_MULTI_SELECT_DELETE = "multi_select.delete";
+
+// Phase 15 — Attachment surface.
+export const MENU_ACTION_ATTACHMENT_COPY_PATH = "attachment.copy_path";
+export const MENU_ACTION_ATTACHMENT_COPY_FILENAME = "attachment.copy_filename";
+export const MENU_ACTION_ATTACHMENT_OPEN_IN_EDITOR = "attachment.open_in.editor";
+export const MENU_ACTION_ATTACHMENT_OPEN_IN_FILE_EXPLORER = "attachment.open_in.file_explorer";
+export const MENU_ACTION_ATTACHMENT_REMOVE = "attachment.remove";
+
+// Phase 16 — Pending operation surface.
+export const MENU_ACTION_PENDING_OPERATION_RESOLVE = "pending_operation.resolve";
+export const MENU_ACTION_PENDING_OPERATION_DISMISS = "pending_operation.dismiss";
+export const MENU_ACTION_PENDING_OPERATION_COPY_NAME = "pending_operation.copy_name";
+export const MENU_ACTION_PENDING_OPERATION_COPY_COMMAND = "pending_operation.copy_command";
+export const MENU_ACTION_PENDING_OPERATION_OPEN_IN_EDITOR = "pending_operation.open_in.editor";
+
+/**
+ * Context-menu UI strings + per-action labels. Pulled out of
+ * components per coding-standards §"i18n-ready string tables".
+ *
+ * Labels mirror the visible text in
+ * ``docs/behavior/context-menus.md`` §"Per-target action lists" tables.
+ */
+export const CONTEXT_MENU_STRINGS = {
+  rootAriaLabel: "Context menu",
+  staleTargetMessage: "this object no longer exists.",
+  advancedRevealedCaption: "Advanced actions revealed (Shift)",
+  destructiveConfirmTitle: "Confirm",
+  destructiveCancelLabel: "Cancel",
+  destructiveConfirmLabel: "Confirm",
+  actionLabels: {
+    [MENU_ACTION_SESSION_OPEN_IN_NEW_TAB]: "Open in new tab",
+    [MENU_ACTION_SESSION_RENAME]: "Rename…",
+    [MENU_ACTION_SESSION_EDIT_TAGS]: "Edit tags…",
+    [MENU_ACTION_SESSION_CHANGE_MODEL]: "Change model for continuation",
+    [MENU_ACTION_SESSION_DUPLICATE]: "Duplicate",
+    [MENU_ACTION_SESSION_SAVE_AS_TEMPLATE]: "Save as template…",
+    [MENU_ACTION_SESSION_FORK_FROM_LAST_MESSAGE]: "Fork from last message",
+    [MENU_ACTION_SESSION_PIN]: "Pin session",
+    [MENU_ACTION_SESSION_UNPIN]: "Unpin session",
+    [MENU_ACTION_SESSION_ARCHIVE]: "Archive session",
+    [MENU_ACTION_SESSION_REOPEN]: "Reopen session",
+    [MENU_ACTION_SESSION_COPY_ID]: "Copy session ID",
+    [MENU_ACTION_SESSION_COPY_TITLE]: "Copy session title",
+    [MENU_ACTION_SESSION_COPY_SHARE_LINK]: "Copy share link",
+    [MENU_ACTION_SESSION_DELETE]: "Delete session",
+    [MENU_ACTION_MESSAGE_JUMP_TO_TURN]: "Scroll into view",
+    [MENU_ACTION_MESSAGE_COPY_CONTENT]: "Copy message text",
+    [MENU_ACTION_MESSAGE_COPY_AS_MARKDOWN]: "Copy as Markdown",
+    [MENU_ACTION_MESSAGE_COPY_ID]: "Copy message ID",
+    [MENU_ACTION_MESSAGE_PIN]: "Pin to turn header",
+    [MENU_ACTION_MESSAGE_HIDE_FROM_CONTEXT]: "Hide from context window",
+    [MENU_ACTION_MESSAGE_MOVE_TO_SESSION]: "Move to session…",
+    [MENU_ACTION_MESSAGE_SPLIT_HERE]: "Split here…",
+    [MENU_ACTION_MESSAGE_FORK_FROM_HERE]: "Fork from this message",
+    [MENU_ACTION_MESSAGE_REGENERATE]: "Regenerate from this message…",
+    [MENU_ACTION_MESSAGE_REGENERATE_IN_PLACE]: "Regenerate (rewrite in place)",
+    [MENU_ACTION_MESSAGE_DELETE]: "Delete message",
+    [MENU_ACTION_TAG_PIN]: "Pin tag",
+    [MENU_ACTION_TAG_UNPIN]: "Unpin tag",
+    [MENU_ACTION_TAG_COPY_NAME]: "Copy tag name",
+    [MENU_ACTION_TAG_EDIT]: "Edit tag…",
+    [MENU_ACTION_TAG_DELETE]: "Delete tag",
+    [MENU_ACTION_TAG_CHIP_COPY_NAME]: "Copy tag name",
+    [MENU_ACTION_TAG_CHIP_DETACH]: "Remove tag from session",
+    [MENU_ACTION_TOOL_CALL_COPY_NAME]: "Copy tool name",
+    [MENU_ACTION_TOOL_CALL_COPY_INPUT]: "Copy tool input",
+    [MENU_ACTION_TOOL_CALL_COPY_OUTPUT]: "Copy tool output",
+    [MENU_ACTION_TOOL_CALL_COPY_ID]: "Copy tool call ID",
+    [MENU_ACTION_TOOL_CALL_RETRY]: "Retry tool call",
+    [MENU_ACTION_CODE_BLOCK_COPY]: "Copy code",
+    [MENU_ACTION_CODE_BLOCK_COPY_WITH_FENCE]: "Copy with Markdown fence",
+    [MENU_ACTION_CODE_BLOCK_SAVE_TO_FILE]: "Save to file…",
+    [MENU_ACTION_CODE_BLOCK_OPEN_IN_EDITOR]: "Open in editor",
+    [MENU_ACTION_LINK_COPY_URL]: "Copy link URL",
+    [MENU_ACTION_LINK_COPY_TEXT]: "Copy link text",
+    [MENU_ACTION_LINK_OPEN_NEW_TAB]: "Open in new tab",
+    [MENU_ACTION_LINK_OPEN_IN_EDITOR]: "Open in editor",
+    [MENU_ACTION_CHECKPOINT_FORK]: "Fork from here",
+    [MENU_ACTION_CHECKPOINT_COPY_LABEL]: "Copy label",
+    [MENU_ACTION_CHECKPOINT_COPY_ID]: "Copy checkpoint ID",
+    [MENU_ACTION_CHECKPOINT_DELETE]: "Delete checkpoint",
+    [MENU_ACTION_MULTI_SELECT_CLEAR]: "Clear selection",
+    [MENU_ACTION_MULTI_SELECT_TAG]: "Add tag",
+    [MENU_ACTION_MULTI_SELECT_UNTAG]: "Remove tag",
+    [MENU_ACTION_MULTI_SELECT_CLOSE]: "Close sessions",
+    [MENU_ACTION_MULTI_SELECT_EXPORT]: "Export as JSON",
+    [MENU_ACTION_MULTI_SELECT_DELETE]: "Delete sessions",
+    [MENU_ACTION_ATTACHMENT_COPY_PATH]: "Copy path",
+    [MENU_ACTION_ATTACHMENT_COPY_FILENAME]: "Copy filename",
+    [MENU_ACTION_ATTACHMENT_OPEN_IN_EDITOR]: "Open in editor",
+    [MENU_ACTION_ATTACHMENT_OPEN_IN_FILE_EXPLORER]: "Reveal in file explorer",
+    [MENU_ACTION_ATTACHMENT_REMOVE]: "Remove from message",
+    [MENU_ACTION_PENDING_OPERATION_RESOLVE]: "Mark resolved",
+    [MENU_ACTION_PENDING_OPERATION_DISMISS]: "Dismiss",
+    [MENU_ACTION_PENDING_OPERATION_COPY_NAME]: "Copy name",
+    [MENU_ACTION_PENDING_OPERATION_COPY_COMMAND]: "Copy command",
+    [MENU_ACTION_PENDING_OPERATION_OPEN_IN_EDITOR]: "Open directory in editor",
+  } as const,
+} as const;
+
 // ---- Derivations -----------------------------------------------------------
 
 /**

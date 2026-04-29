@@ -1,0 +1,101 @@
+/**
+ * Theme persistence — read/write to localStorage + OS-color-scheme
+ * fallback. The store owns "what theme is active"; this module owns
+ * "where does the persisted choice live, and what does the OS report
+ * when no choice is on file."
+ *
+ * Behavior anchors:
+ *
+ * - ``docs/behavior/themes.md`` §"Persistence boundary" — per-device
+ *   persistence; the doc prescribes server-sync as well, deferred
+ *   to a future item per ``TODO.md`` §"Item 2.9 — theme server-sync
+ *   layer (deferred)".
+ * - §"Theme picker UI" — first-paint default: ``paper-light`` when
+ *   the OS reports a light scheme, ``midnight-glass`` otherwise.
+ * - §"Failure modes" — a localStorage write failure (quota / private
+ *   mode) translates to the "couldn't save your theme" toast; the
+ *   active theme reverts to whatever the previously-saved value was.
+ *   The doc's "removed theme" branch — a persisted name no longer in
+ *   :data:`KNOWN_THEMES` resolves to the OS fallback — is the
+ *   ``isThemeId`` guard below.
+ */
+import {
+  KNOWN_THEMES,
+  THEME_MIDNIGHT_GLASS,
+  THEME_PAPER_LIGHT,
+  THEME_STORAGE_KEY,
+  type ThemeId,
+} from "../config";
+
+/**
+ * OS color-scheme fallback per the doc's first-paint rules.
+ * Returns the dark theme on non-DOM environments (SSR / prerender)
+ * since :file:`src/app.html` boots with ``midnight-glass``.
+ */
+export function resolveOsFallbackTheme(): ThemeId {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return THEME_MIDNIGHT_GLASS;
+  }
+  return window.matchMedia("(prefers-color-scheme: light)").matches
+    ? THEME_PAPER_LIGHT
+    : THEME_MIDNIGHT_GLASS;
+}
+
+/**
+ * Type guard — returns true when the value is one of the alphabet's
+ * known theme ids. A persisted value that is neither in the alphabet
+ * nor a string is treated as unset (the "removed theme" branch in
+ * the doc's failure modes).
+ */
+export function isThemeId(value: unknown): value is ThemeId {
+  return typeof value === "string" && (KNOWN_THEMES as readonly string[]).includes(value);
+}
+
+/**
+ * Read the persisted theme from localStorage. Returns ``null`` if no
+ * persisted value exists (first paint), the value is invalid (a future
+ * removed theme), or storage is inaccessible (private mode / SSR).
+ *
+ * The caller layers OS fallback on top of the ``null`` case via
+ * :func:`resolveOsFallbackTheme`.
+ */
+export function loadStoredTheme(): ThemeId | null {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return isThemeId(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the chosen theme. Returns ``true`` on success, ``false`` on
+ * failure (quota / private mode / SSR). The caller surfaces the
+ * "couldn't save your theme" toast on ``false`` and reverts the local
+ * preview to whatever was on file before per the doc §"Failure modes".
+ */
+export function saveStoredTheme(theme: ThemeId): boolean {
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+    return false;
+  }
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Boot-time resolver — the single function the runtime store calls
+ * once at construction to settle on an initial value. Persisted →
+ * persisted; absent → OS fallback. Order matters: the persisted
+ * value beats the OS fallback so a user who picked ``default`` on a
+ * Linux laptop running a dark color scheme keeps the explicit choice.
+ */
+export function resolveBootTheme(): ThemeId {
+  return loadStoredTheme() ?? resolveOsFallbackTheme();
+}

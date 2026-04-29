@@ -31,6 +31,9 @@
   import Conversation from "$lib/components/conversation/Conversation.svelte";
   import ChecklistView from "$lib/components/checklist/ChecklistView.svelte";
   import Inspector from "$lib/components/inspector/Inspector.svelte";
+  import ThemeProvider from "$lib/themes/ThemeProvider.svelte";
+  import KeybindingsProvider from "$lib/keyboard/KeybindingsProvider.svelte";
+  import ContextMenuProvider from "$lib/context-menu/ContextMenuProvider.svelte";
   import { sessionsStore } from "$lib/stores/sessions.svelte";
   import { inspectorStore, setActiveSession } from "$lib/stores/inspector.svelte";
 
@@ -68,71 +71,78 @@
   }
 </script>
 
-<div class="app-shell" data-testid="app-shell">
-  <aside
-    class="app-shell__sidebar border-r border-border bg-surface-1"
-    data-testid="app-shell-sidebar"
-    aria-label="Sessions sidebar"
-  >
-    <header class="app-shell__sidebar-header border-b border-border p-3">
-      <h1 class="font-mono text-sm text-fg-strong">{SIDEBAR_STRINGS.heading}</h1>
-      <p class="text-xs text-fg-muted">{SIDEBAR_STRINGS.versionTag}</p>
-    </header>
-    <div class="app-shell__sidebar-body" data-testid="app-shell-sidebar-body">
-      <SessionList {selectedSessionId} onSelect={handleSelectSession} />
-    </div>
-  </aside>
+<ThemeProvider>
+  <KeybindingsProvider>
+    <ContextMenuProvider>
+      <div class="app-shell" data-testid="app-shell">
+        <aside
+          class="app-shell__sidebar border-r border-border bg-surface-1"
+          data-testid="app-shell-sidebar"
+          aria-label="Sessions sidebar"
+        >
+          <header class="app-shell__sidebar-header border-b border-border p-3">
+            <h1 class="font-mono text-sm text-fg-strong">{SIDEBAR_STRINGS.heading}</h1>
+            <p class="text-xs text-fg-muted">{SIDEBAR_STRINGS.versionTag}</p>
+          </header>
+          <div class="app-shell__sidebar-body" data-testid="app-shell-sidebar-body">
+            <SessionList {selectedSessionId} onSelect={handleSelectSession} />
+          </div>
+        </aside>
 
-  <main
-    class="app-shell__main bg-surface-0"
-    data-testid="app-shell-main"
-    aria-label="Conversation pane"
-  >
-    <header
-      class="app-shell__main-header border-b border-border p-3"
-      data-testid="app-shell-main-header"
-    >
-      <p class="text-sm text-fg-muted">
-        Conversation header — model dropdown, quota bars, paired-checklist breadcrumb (item 2.3).
-      </p>
-    </header>
-    <section
-      class="app-shell__main-body text-fg"
-      data-testid="app-shell-main-body"
-      aria-label="Conversation body"
-    >
-      {#if selectedSessionId !== null && activeSession?.kind === SESSION_KIND_CHECKLIST}
-        <ChecklistView
-          checklistId={selectedSessionId}
-          availableChats={sessionsStore.sessions.filter(
-            (row) => row.kind !== SESSION_KIND_CHECKLIST && row.closed_at === null,
-          )}
-          onSelectChat={handleSelectSession}
-        />
-      {:else if selectedSessionId !== null}
-        <Conversation sessionId={selectedSessionId} />
-      {:else if children}
-        {@render children()}
-      {:else}
-        <p class="p-4 text-fg-muted">No session selected.</p>
-      {/if}
-    </section>
-    <footer
-      class="app-shell__main-composer border-t border-border bg-surface-1 p-3"
-      data-testid="app-shell-main-composer"
-    >
-      <p class="text-sm text-fg-muted">Composer — multi-line input + send (item 2.3).</p>
-    </footer>
-  </main>
+        <main
+          class="app-shell__main bg-surface-0"
+          data-testid="app-shell-main"
+          aria-label="Conversation pane"
+        >
+          <header
+            class="app-shell__main-header border-b border-border p-3"
+            data-testid="app-shell-main-header"
+          >
+            <p class="text-sm text-fg-muted">
+              Conversation header — model dropdown, quota bars, paired-checklist breadcrumb (item
+              2.3).
+            </p>
+          </header>
+          <section
+            class="app-shell__main-body text-fg"
+            data-testid="app-shell-main-body"
+            aria-label="Conversation body"
+          >
+            {#if selectedSessionId !== null && activeSession?.kind === SESSION_KIND_CHECKLIST}
+              <ChecklistView
+                checklistId={selectedSessionId}
+                availableChats={sessionsStore.sessions.filter(
+                  (row) => row.kind !== SESSION_KIND_CHECKLIST && row.closed_at === null,
+                )}
+                onSelectChat={handleSelectSession}
+              />
+            {:else if selectedSessionId !== null}
+              <Conversation sessionId={selectedSessionId} />
+            {:else if children}
+              {@render children()}
+            {:else}
+              <p class="p-4 text-fg-muted">No session selected.</p>
+            {/if}
+          </section>
+          <footer
+            class="app-shell__main-composer border-t border-border bg-surface-1 p-3"
+            data-testid="app-shell-main-composer"
+          >
+            <p class="text-sm text-fg-muted">Composer — multi-line input + send (item 2.3).</p>
+          </footer>
+        </main>
 
-  <aside
-    class="app-shell__inspector border-l border-border bg-surface-1"
-    data-testid="app-shell-inspector"
-    aria-label="Inspector"
-  >
-    <Inspector session={activeSession} />
-  </aside>
-</div>
+        <aside
+          class="app-shell__inspector border-l border-border bg-surface-1"
+          data-testid="app-shell-inspector"
+          aria-label="Inspector"
+        >
+          <Inspector session={activeSession} />
+        </aside>
+      </div>
+    </ContextMenuProvider>
+  </KeybindingsProvider>
+</ThemeProvider>
 
 <style>
   /*
