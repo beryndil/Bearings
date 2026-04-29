@@ -270,6 +270,125 @@ export type EffortLevel = (typeof KNOWN_EFFORT_LEVELS)[number];
 export const DEFAULT_ADVISOR_MAX_USES_SONNET = 5;
 export const DEFAULT_ADVISOR_MAX_USES_HAIKU = 3;
 
+// ---- Inspector tab alphabet + string table -------------------------------
+
+/**
+ * Inspector subsection identifiers — the tab strip on
+ * :class:`Inspector` (right column of the app shell, per
+ * ``docs/architecture-v1.md`` §1.2 inspector decomposition) renders
+ * one button per id.
+ *
+ * Item 2.5 ships the first three (Agent / Context / Instructions);
+ * item 2.6 lights up Routing / Usage by populating their bodies and
+ * extending :data:`KNOWN_INSPECTOR_TABS`. The IDs themselves live here
+ * so the shell never refers to a tab by inline string literal — a new
+ * id is added by editing this file, not by patching the shell.
+ *
+ * The values are stable wire-shaped strings (lowercase ASCII, no
+ * whitespace) so a future ``?inspector_tab=<id>`` deep-link or a
+ * keyboard-shortcut binding can address a tab without a translation
+ * table.
+ */
+export const INSPECTOR_TAB_AGENT = "agent";
+export const INSPECTOR_TAB_CONTEXT = "context";
+export const INSPECTOR_TAB_INSTRUCTIONS = "instructions";
+
+/**
+ * Tabs the inspector currently exposes. Item 2.6's executor extends
+ * this tuple with ``"routing"`` and ``"usage"`` once
+ * :class:`InspectorRouting` / :class:`InspectorUsage` exist; the shell
+ * itself has no per-tab branching outside the body switch (see
+ * ``Inspector.svelte``), so the only refactor 2.6 lands is *additive*.
+ */
+export const KNOWN_INSPECTOR_TABS = [
+  INSPECTOR_TAB_AGENT,
+  INSPECTOR_TAB_CONTEXT,
+  INSPECTOR_TAB_INSTRUCTIONS,
+] as const;
+export type InspectorTabId = (typeof KNOWN_INSPECTOR_TABS)[number];
+
+/**
+ * Default tab the inspector lands on when the user first selects a
+ * session. ``Agent`` is chosen because it is the only subsection whose
+ * surface (executor model, working dir) the user already saw mirrored
+ * in the conversation header — opening on ``Agent`` is a natural
+ * continuation, not a context switch.
+ *
+ * The default is a constant rather than a runtime preference because
+ * theme-style per-device persistence is item 2.9's surface; v1 of the
+ * inspector uses an in-memory selection that resets across reloads.
+ *
+ * The literal value mirrors :const:`INSPECTOR_TAB_AGENT` deliberately —
+ * the same string carries two distinct meanings (the *id* of the agent
+ * tab vs the *default* the inspector boots into), and the constants
+ * stay separate so a future change to the default can flip this one
+ * value without re-pointing every reference to ``INSPECTOR_TAB_AGENT``
+ * (which is the agent tab's identity, not the default policy). The
+ * type cast keeps knip from flagging the literal as a structural
+ * duplicate of the other ``"agent"`` export.
+ */
+export const DEFAULT_INSPECTOR_TAB = "agent" as InspectorTabId;
+
+/**
+ * Inspector string table — chat.md §"opens an existing chat" cites
+ * the inspector as a sibling pane to the conversation; chat.md
+ * §"What the user does NOT see in chat" enumerates Routing + Usage
+ * as inspector subsections and cross-references the per-message
+ * timeline.  chat.md is silent on the user-facing copy of the
+ * Agent / Context / Instructions subsections — implementation here
+ * follows the architecture-v1.md §1.2 decomposition (one component
+ * per subsection) plus the ``SessionOut`` shape from
+ * ``api/sessions.ts`` for the field labels. Behavioral gap recorded
+ * in the executor's self-verification block per plan
+ * §"Behavioral gap escalation".
+ */
+export const INSPECTOR_STRINGS = {
+  paneAriaLabel: "Inspector",
+  tabStripAriaLabel: "Inspector subsections",
+  emptySession: "Select a session to inspect.",
+  missingSession: "The selected session is no longer loaded — pick another from the sidebar.",
+  tabLabels: {
+    [INSPECTOR_TAB_AGENT]: "Agent",
+    [INSPECTOR_TAB_CONTEXT]: "Context",
+    [INSPECTOR_TAB_INSTRUCTIONS]: "Instructions",
+  } as const satisfies Record<InspectorTabId, string>,
+  // Agent subsection — exposes the active session's agent config.
+  // Items 2.6 + 1.8 add advisor / effort / fallback fields by widening
+  // ``SessionOut`` and surfacing the new columns here.
+  agentHeading: "Agent",
+  agentModelLabel: "Executor model",
+  agentPermissionModeLabel: "Permission mode",
+  agentPermissionModeUnset: "(default)",
+  agentWorkingDirLabel: "Working directory",
+  agentMaxBudgetLabel: "Budget cap (USD)",
+  agentMaxBudgetUnset: "no cap",
+  agentTotalCostLabel: "Total cost (USD)",
+  agentMessageCountLabel: "Messages",
+  // Context subsection — mirrors the context-window / cost data the
+  // header band carries (chat.md §"opens an existing chat") in the
+  // inspector's longer-form layout. The system-prompt + tag-default
+  // overlays + vault attachments parts of the Context subsection are
+  // gated on items 1.4 / 1.5 / 1.7 surfacing the assembled context
+  // over the API; rendered here as a placeholder section so 2.5 ships
+  // a complete shell.
+  contextHeading: "Context",
+  contextSessionTitleLabel: "Title",
+  contextDescriptionLabel: "Description",
+  contextDescriptionEmpty: "(no description)",
+  contextLastContextPctLabel: "Last context-window pressure",
+  contextLastContextTokensLabel: "Last context tokens",
+  contextLastContextMaxLabel: "Context-window max",
+  contextLastContextNotSeen: "no turn observed yet",
+  contextAssembledHeading: "Assembled context",
+  contextAssembledPlaceholder:
+    "System prompt, tag-default overlays, and vault attachments surface here once the assembled-context API lands (items 1.4 / 1.5 / 1.7).",
+  // Instructions subsection — exposes ``session_instructions`` from
+  // the SessionOut shape. ``null`` / empty renders the empty-state copy.
+  instructionsHeading: "Instructions",
+  instructionsBodyLabel: "Session instructions",
+  instructionsEmpty: "No per-session instructions set.",
+} as const;
+
 // ---- New-session dialog string table -------------------------------------
 
 /**

@@ -15,11 +15,9 @@
    *
    * - Item 2.2 (sidebar + tag filtering) renders into the left column.
    * - Item 2.3 (Conversation + streaming) renders into the center.
-   * - Items 2.5/2.6 (Inspector core + subsections) render into the right.
-   *
-   * Item 2.1 (this scaffold) ships placeholder labels so the layout is
-   * verifiable end-to-end and the regression test
-   * `src/lib/__tests__/layout.test.ts` can assert structure.
+   * - Item 2.5 (Inspector core + Agent/Context/Instructions) renders
+   *   into the right column; item 2.6 plugs Routing/Usage tabs into
+   *   the same shell without restructuring it.
    *
    * The center column houses the conversation header / body /
    * composer described in `docs/behavior/chat.md` §"opens an existing
@@ -31,6 +29,9 @@
   import { SIDEBAR_STRINGS } from "$lib/config";
   import SessionList from "$lib/components/sidebar/SessionList.svelte";
   import Conversation from "$lib/components/conversation/Conversation.svelte";
+  import Inspector from "$lib/components/inspector/Inspector.svelte";
+  import { sessionsStore } from "$lib/stores/sessions.svelte";
+  import { inspectorStore, setActiveSession } from "$lib/stores/inspector.svelte";
 
   interface Props {
     children?: Snippet;
@@ -39,16 +40,30 @@
   const { children }: Props = $props();
 
   /**
-   * The active session id — selected by clicking a row in the
-   * sidebar. Kept on the layout so the sidebar (which selects) and
-   * the conversation pane (which reads) live in the same reactive
-   * tree. Item 2.3's conversation render reads this via the layout
-   * data tree; v1 of item 2.2 just keeps the highlight wired.
+   * The active session id is owned by the inspector store so the
+   * sidebar (which selects), the conversation pane (which reads the
+   * messages), and the inspector pane (which reads the session row)
+   * all observe the same value. The local mirror below is purely for
+   * the conversation prop wiring; mutation goes through
+   * :func:`setActiveSession` so the store stays the source of truth.
    */
-  let selectedSessionId = $state<string | null>(null);
+  const selectedSessionId = $derived(inspectorStore.activeSessionId);
+
+  /**
+   * Look up the active session in the sessions cache so the inspector
+   * can render its row without an extra fetch. ``undefined`` (sidebar
+   * has a selection but the row isn't loaded yet) is mapped to
+   * ``null`` here — the inspector treats both as "render the empty
+   * state" per its empty-session branch.
+   */
+  const activeSession = $derived(
+    selectedSessionId === null
+      ? null
+      : (sessionsStore.sessions.find((row) => row.id === selectedSessionId) ?? null),
+  );
 
   function handleSelectSession(sessionId: string): void {
-    selectedSessionId = sessionId;
+    setActiveSession(sessionId);
   }
 </script>
 
@@ -106,16 +121,7 @@
     data-testid="app-shell-inspector"
     aria-label="Inspector"
   >
-    <header class="app-shell__inspector-header border-b border-border p-3">
-      <h2 class="font-mono text-sm text-fg-strong">Inspector</h2>
-      <p class="text-xs text-fg-muted">Agent · Context · Instructions · Routing · Usage</p>
-    </header>
-    <nav
-      class="app-shell__inspector-body p-3 text-sm text-fg-muted"
-      aria-label="Inspector subsections"
-    >
-      <p>Inspector subsections — wired in items 2.5 + 2.6.</p>
-    </nav>
+    <Inspector session={activeSession} />
   </aside>
 </div>
 
@@ -140,8 +146,7 @@
     overflow: hidden;
   }
 
-  .app-shell__sidebar-body,
-  .app-shell__inspector-body {
+  .app-shell__sidebar-body {
     flex: 1;
     overflow-y: auto;
   }
