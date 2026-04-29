@@ -54,6 +54,7 @@ from .sessions import (
     SessionOut,
     SessionUpdate,
 )
+from .suggest_titles import SuggestTitlesResult
 from .tags import TagCreate, TagGroup, TagMemoryOut, TagMemoryPut, TagOut, TagUpdate
 from .templates import TemplateCreate, TemplateInstantiateRequest, TemplateOut
 from .tools import TodoItemOut, TodosOut, ToolCallOut
@@ -114,6 +115,7 @@ __all__ = [
     "SessionExportBundle",
     "SessionOut",
     "SessionUpdate",
+    "SuggestTitlesResult",
     "SystemPromptLayerOut",
     "SystemPromptOut",
     "TagCreate",
