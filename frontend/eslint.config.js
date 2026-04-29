@@ -13,7 +13,17 @@ import globals from "globals";
 export default [
   {
     // Generated SvelteKit + build outputs are out of scope.
-    ignores: ["node_modules/", "build/", "dist/", ".svelte-kit/", "../src/bearings/web/dist/"],
+    ignores: [
+      "node_modules/",
+      "build/",
+      "dist/",
+      ".svelte-kit/",
+      "../src/bearings/web/dist/",
+      // Playwright runtime artefacts (item 3.1).
+      "playwright-report/",
+      "test-results/",
+      "playwright/.cache/",
+    ],
   },
   js.configs.recommended,
   {

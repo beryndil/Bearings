@@ -99,7 +99,11 @@ docstring-code-format = true
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src", "tests"]
+# ``scripts/`` is included so cross-system tooling (the consistency
+# lint script from item 3.1) gets the same strict-type treatment as
+# production code. mypy silently ignores the non-``.py`` shell scripts
+# in that directory.
+files = ["src", "tests", "scripts"]
 warn_unused_configs = true
 warn_unreachable = true
 disallow_any_explicit = true

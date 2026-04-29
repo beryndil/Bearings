@@ -45,6 +45,13 @@ frontend/build/
 frontend/dist/
 frontend/coverage/
 
+# Playwright — runtime artefacts (item 3.1). The `e2e/` source tree is
+# tracked; only the run-output directories are ignored.
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright/.cache/
+
 # Local data + secrets
 .env
 .env.local

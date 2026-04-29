@@ -28,9 +28,10 @@ References:
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 
 import aiosqlite
-from fastapi import FastAPI, WebSocket
+from fastapi import APIRouter, FastAPI, WebSocket
 
 from bearings import __version__
 from bearings.agent.auto_driver_runtime import AutoDriverRegistry, build_registry
@@ -93,6 +94,7 @@ def create_app(
     uploads_cfg: UploadsCfg | None = None,
     fs_cfg: FsCfg | None = None,
     shell_cfg: ShellCfg | None = None,
+    extra_routers: Iterable[APIRouter] | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -119,6 +121,12 @@ def create_app(
     stop / skip-current signals through. Defaults to a fresh
     :class:`AutoDriverRegistry` so each app has its own driver fleet
     (important for parallel test runs that must not share state).
+
+    ``extra_routers`` is an injection seam used by E2E test harnesses
+    (item 3.1; ``scripts/e2e_server.py``) to mount a debug router
+    *before* the static-bundle mount so its endpoints take precedence
+    over the SPA fallback. Production callers leave this ``None`` —
+    no production code path uses it.
     """
     if heartbeat_interval_s <= 0:
         raise ValueError(f"heartbeat_interval_s must be > 0 (got {heartbeat_interval_s})")
@@ -203,6 +211,13 @@ def create_app(
     app.include_router(diag_router, tags=[ROUTE_TAG_DIAG])
     app.include_router(health_router, tags=[ROUTE_TAG_HEALTH])
     app.include_router(metrics_router, tags=[ROUTE_TAG_METRICS])
+    # E2E harness extension seam (item 3.1) — extra routers mount
+    # *between* the production routers and the static bundle so debug
+    # endpoints take precedence over the SPA fallback. Production
+    # callers always pass ``None``.
+    if extra_routers is not None:
+        for extra in extra_routers:
+            app.include_router(extra)
     # SvelteKit static bundle — mounted last so every API/WS route
     # registered above takes precedence (item 2.1; arch §1.1.5
     # ``web/static.py``). Idempotent on a missing ``dist/`` so

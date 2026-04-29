@@ -2,7 +2,8 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
     "src/**/+{page,layout,server,error}.{ts,svelte}",
-    "src/**/*.{test,spec}.{ts,svelte.ts}"
+    "src/**/*.{test,spec}.{ts,svelte.ts}",
+    "e2e/**/*.spec.ts"
   ],
-  "project": ["src/**/*.{ts,svelte}"]
+  "project": ["src/**/*.{ts,svelte}", "e2e/**/*.ts"]
 }
