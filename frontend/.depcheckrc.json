@@ -8,10 +8,22 @@
     "prettier",
     "prettier-plugin-svelte",
     "eslint",
+    "@eslint/js",
     "eslint-config-prettier",
     "eslint-plugin-svelte",
     "@typescript-eslint/eslint-plugin",
-    "@typescript-eslint/parser"
+    "@typescript-eslint/parser",
+    "globals",
+    "@sveltejs/adapter-static",
+    "@sveltejs/vite-plugin-svelte",
+    "@testing-library/jest-dom",
+    "@testing-library/svelte",
+    "autoprefixer",
+    "jsdom",
+    "postcss",
+    "tailwindcss",
+    "vitest"
   ],
-  "skip-missing": false
+  "ignore-patterns": ["node_modules", ".svelte-kit", "build", "dist", "../src/bearings/web/dist"],
+  "skip-missing": true
 }

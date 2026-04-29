@@ -1,0 +1,65 @@
+/*
+ * Bearings global stylesheet.
+ *
+ * Tailwind utility layers — order matters: base → components →
+ * utilities. The CSS variables below define the three-theme system
+ * documented in `docs/behavior/themes.md`. Item 2.1 ships the
+ * Midnight Glass default; items 2.9 wires the picker that swaps
+ * `data-theme` on `<html>` to switch palettes synchronously.
+ *
+ * Token convention: every theme defines the same variable names. Any
+ * Svelte component bound to `bg-surface-1`, `text-fg`, etc. via
+ * Tailwind's color extension in `tailwind.config.js` re-tints
+ * automatically when `data-theme` flips.
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Midnight Glass — default warm-navy with glass panels. */
+  :root,
+  [data-theme="midnight-glass"] {
+    --bearings-surface-0: 14 23 41; /* deep navy app background */
+    --bearings-surface-1: 22 33 56; /* sidebar / inspector panels */
+    --bearings-surface-2: 32 47 75; /* elevated cards / hovered rows */
+    --bearings-fg: 220 226 240;
+    --bearings-fg-muted: 148 163 196;
+    --bearings-fg-strong: 244 247 255;
+    --bearings-accent: 110 168 254;
+    --bearings-accent-muted: 64 110 200;
+    --bearings-border: 48 64 96;
+  }
+
+  /* Default — Tailwind classic dark. */
+  [data-theme="default"] {
+    --bearings-surface-0: 17 24 39;
+    --bearings-surface-1: 31 41 55;
+    --bearings-surface-2: 55 65 81;
+    --bearings-fg: 229 231 235;
+    --bearings-fg-muted: 156 163 175;
+    --bearings-fg-strong: 249 250 251;
+    --bearings-accent: 96 165 250;
+    --bearings-accent-muted: 59 130 246;
+    --bearings-border: 75 85 99;
+  }
+
+  /* Paper Light — cream, flat. */
+  [data-theme="paper-light"] {
+    --bearings-surface-0: 250 247 240;
+    --bearings-surface-1: 244 240 230;
+    --bearings-surface-2: 234 228 213;
+    --bearings-fg: 33 41 51;
+    --bearings-fg-muted: 90 99 110;
+    --bearings-fg-strong: 11 17 25;
+    --bearings-accent: 25 91 168;
+    --bearings-accent-muted: 70 130 180;
+    --bearings-border: 196 188 168;
+  }
+
+  html,
+  body {
+    @apply h-full bg-surface-0 text-fg antialiased;
+  }
+}

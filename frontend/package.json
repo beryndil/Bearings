@@ -2,31 +2,52 @@
   "name": "bearings-frontend",
   "version": "0.18.0-dev0",
   "private": true,
-  "description": "Bearings v1 SvelteKit frontend (skeleton — full scaffold lands in item 2.1).",
+  "description": "Bearings v1 SvelteKit frontend.",
   "type": "module",
   "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "knip": "knip",
-    "ts-prune": "ts-prune",
-    "depcheck": "depcheck"
+    "ts-prune": "ts-prune --ignore '.svelte-kit/|vite.config.ts'",
+    "depcheck": "depcheck",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@sveltejs/adapter-static": "^3.0.5",
+    "@sveltejs/kit": "^2.8.0",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@testing-library/jest-dom": "^6.6.0",
+    "@testing-library/svelte": "^5.2.4",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "autoprefixer": "^10.4.20",
     "depcheck": "^1.4.7",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-svelte": "^2.45.0",
+    "globals": "^17.5.0",
+    "jsdom": "^25.0.1",
     "knip": "^5.0.0",
+    "postcss": "^8.4.49",
     "prettier": "^3.3.0",
     "prettier-plugin-svelte": "^3.2.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
+    "tailwindcss": "^3.4.14",
     "ts-prune": "^0.10.3",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  },
+  "dependencies": {
+    "marked": "^14.1.3",
+    "shiki": "^1.24.0"
   }
 }

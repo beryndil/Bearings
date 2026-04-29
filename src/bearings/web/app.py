@@ -77,6 +77,7 @@ from bearings.web.routes.uploads import router as uploads_router
 from bearings.web.routes.usage import router as usage_router
 from bearings.web.routes.vault import router as vault_router
 from bearings.web.runner_factory import build_in_process_factory
+from bearings.web.static import mount_static_bundle
 from bearings.web.streaming import SINCE_SEQ_QUERY_PARAM, serve_session_stream
 
 
@@ -202,6 +203,11 @@ def create_app(
     app.include_router(diag_router, tags=[ROUTE_TAG_DIAG])
     app.include_router(health_router, tags=[ROUTE_TAG_HEALTH])
     app.include_router(metrics_router, tags=[ROUTE_TAG_METRICS])
+    # SvelteKit static bundle — mounted last so every API/WS route
+    # registered above takes precedence (item 2.1; arch §1.1.5
+    # ``web/static.py``). Idempotent on a missing ``dist/`` so
+    # backend-only test runs do not need a built frontend.
+    mount_static_bundle(app)
     return app
 
 

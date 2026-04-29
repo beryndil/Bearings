@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en" data-theme="midnight-glass">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      Theme-color meta — the no-flash boot script in
+      `src/lib/themes/boot.ts` (item 2.9) updates this on cold boot before
+      the runtime theme module loads. For 2.1 we ship a sensible default
+      that matches the `midnight-glass` surface; the runtime corrects
+      any drift on the next tick (per docs/behavior/themes.md
+      §"Persistence boundary").
+    -->
+    <meta name="theme-color" content="#0e1729" />
+    <title>Bearings</title>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div id="app-root" style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

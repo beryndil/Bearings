@@ -1,0 +1,57 @@
+# Bearings v1 rebuild — deferred / orphaned work
+
+Append the moment work is deferred or an error is passed on, per the
+project CLAUDE.md "TODO.md Discipline" rule. Scheduled work belongs in
+the master checklist (id `0f6e4006fb1d4340bda9983af3432064`), not here.
+
+## Deferred from item 2.1 (SvelteKit scaffolding + app shell)
+
+The scaffold establishes empty directories under `frontend/src/lib/`
+mirroring `docs/architecture-v1.md` §1.2. Each one tracks a future
+item per the plan's build order:
+
+- `frontend/src/lib/themes/` — runtime theme provider, no-flash boot
+  script, theme-color meta updater. **Item 2.9** wires the picker per
+  `docs/behavior/themes.md` and tracks `data-theme` on `<html>`.
+  Default theme during 2.1: Midnight Glass (set in `app.html`).
+- `frontend/src/lib/keyboard/` — keybindings registry + cheat-sheet
+  generator. **Item 2.9** registers every chord listed in
+  `docs/behavior/keyboard-shortcuts.md` §"Bindings (v1)".
+- `frontend/src/lib/context-menu/` — palette + registry + actions/.
+  **Item 2.9** hooks the right-click handler per
+  `docs/behavior/context-menus.md`.
+- `frontend/src/lib/api/` — typed fetch clients per backend route
+  group. Items 2.2-2.10 add files as their feature lands; 2.4 (new
+  session) adds `routing.ts` / `quota.ts` first.
+- `frontend/src/lib/stores/` — Svelte 5 runes stores. Item 2.2 adds
+  `sessions.svelte.ts` + `tags.svelte.ts`; 2.3 adds
+  `conversation.svelte.ts`; 2.4-2.6 add routing / quota / usage
+  stores per spec §6 + §10.
+- `frontend/src/lib/components/{conversation,sidebar,inspector,settings,checklist,routing,vault,reorg,menus,icons,modals,feedback,common,pending}/`
+  — populated by items 2.2-2.10 per arch §1.2 component groups. Each
+  is a `.gitkeep` placeholder until the feature item lands.
+- `frontend/src/lib/actions/`, `frontend/src/lib/utils/` — Svelte
+  actions + pure helpers; populated incrementally by 2.2+.
+
+## Item 2.1 — small inline-styling decision logged for 2.9 review
+
+`+layout.svelte` carries a tiny `<style>` block containing the grid
+geometry (`grid-template-columns: 16rem ... 20rem`). Tailwind has
+arbitrary-value utility classes (`grid-cols-[16rem_minmax(0,_1fr)_20rem]`)
+that could express the same thing — but the column widths are likely
+to flex with theme density (item 2.9). **Item 2.9** should revisit:
+either lift the geometry to `app.css` CSS variables (so the theme
+picker can resize columns) or leave it scoped inline. No regression
+risk; documenting so a future component author doesn't sprout a
+parallel inline style for "theme-aware sizing."
+
+## Item 2.1 — `{@html}` sanitization layer
+
+Item 2.1 wires `marked` + `shiki` in `frontend/src/lib/render.ts` and
+exercises it via `src/lib/__tests__/render.test.ts`, but does NOT use
+`{@html}` at the SPA shell layer. **Item 2.3** owns the sanitization
+contract for live conversation Markdown — when the renderer feeds
+real user content into `{@html}`, that surface needs a DOMPurify (or
+equivalent) sanitizer in line with chat.md's auto-link / file-path
+linkifier rules. Don't ship the first `{@html}` of user content
+without that layer.

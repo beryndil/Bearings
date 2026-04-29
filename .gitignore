@@ -1,11 +1,16 @@
-# Python
+# Python — repo-root build artifacts only. Anchored with leading
+# slash so the SvelteKit static-adapter output at
+# `src/bearings/web/dist/` (item 2.1) is NOT ignored — that bundle
+# ships inside the wheel via `[tool.hatch.build.targets.wheel]
+# packages = ["src/bearings"]` and is committed so a fresh clone
+# serves the UI without a Node toolchain.
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
 .eggs/
-build/
-dist/
+/build/
+/dist/
 *.so
 
 # uv / virtualenv
@@ -32,11 +37,13 @@ coverage.xml
 .idea/
 *.swp
 
-# Frontend
+# Frontend — install/cache artifacts. The static-adapter build output
+# lives at `src/bearings/web/dist/` (committed) per item 2.1.
 frontend/node_modules/
 frontend/.svelte-kit/
 frontend/build/
 frontend/dist/
+frontend/coverage/
 
 # Local data + secrets
 .env
