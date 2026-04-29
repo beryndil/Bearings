@@ -116,6 +116,59 @@ export const API_USAGE_BY_MODEL_ENDPOINT = `${API_BASE}/usage/by_model`;
  */
 export const API_USAGE_OVERRIDE_RATES_ENDPOINT = `${API_BASE}/usage/override_rates`;
 
+/**
+ * ``GET /api/vault`` — bucketed list of plans + todos per
+ * ``docs/behavior/vault.md`` §"When the user opens the vault". Re-scans
+ * the filesystem on every request (vault.md §"Failure modes" — "Stale
+ * mtime"). Item 1.5 (``src/bearings/web/routes/vault.py``).
+ */
+export const API_VAULT_ENDPOINT = `${API_BASE}/vault`;
+
+/**
+ * ``GET /api/vault/search?q=...`` — case-insensitive substring search
+ * across every vault doc (vault.md §"Search semantics"). Mirrored on
+ * :interface:`SearchResult` in ``api/vault.ts``.
+ */
+export const API_VAULT_SEARCH_ENDPOINT = `${API_BASE}/vault/search`;
+
+/**
+ * ``GET /api/vault/by-path?path=...`` — open one doc by absolute path;
+ * the linkifier handler dispatches here when a chat message body
+ * references a vault path (vault.md §"Tag association" — "When a vault
+ * doc's path appears inside a chat message body … the linkifier
+ * renders it as a clickable anchor. Clicking the anchor opens the doc
+ * in the vault pane in-place").
+ */
+export const API_VAULT_BY_PATH_ENDPOINT = `${API_BASE}/vault/by-path`;
+
+/**
+ * ``GET /api/vault/{id}`` — open one doc by cache id. The vault list
+ * surface uses this to fetch the body + redaction ranges when a row is
+ * selected (vault.md §"When the user opens the vault" — "Selecting a
+ * row opens the doc in a reading panel").
+ */
+export const vaultDocEndpoint = (vaultId: number): string => `${API_BASE}/vault/${vaultId}`;
+
+/**
+ * ``…/api/tags/{tag_id}/memories`` — base path for memory CRUD scoped
+ * to one tag (item 1.4; ``src/bearings/web/routes/memories.py``).
+ * GET returns the per-tag list (with optional ``?only_enabled=true``
+ * filter for the prompt-assembler consumer); POST creates a new
+ * memory under the tag. Per-doc folded behavior (chat.md +
+ * checklists.md + vault.md silent on the editor surface itself,
+ * arch §1.1.3 — "tag memories as system-prompt fragments").
+ */
+export const tagMemoriesEndpoint = (tagId: number): string =>
+  `${API_TAGS_ENDPOINT}/${tagId}/memories`;
+
+/**
+ * ``…/api/memories/{id}`` — direct addressable surface for a single
+ * memory (GET / PATCH / DELETE). The dual-surface (per-tag + direct)
+ * matches v0.17.x's UI which shows the editor in two places — inside
+ * the per-tag panel and as a flat list.
+ */
+export const memoryEndpoint = (memoryId: number): string => `${API_BASE}/memories/${memoryId}`;
+
 // ---- WebSocket streaming surface ------------------------------------------
 
 /**
@@ -1057,6 +1110,151 @@ export const CHECKLIST_STRINGS = {
   // Failure-on-item template (mirrors backend
   // ``DRIVER_OUTCOME_HALTED_FAILURE_TEMPLATE``).
   driverOutcomeHaltedFailureTemplate: "Halted: failure on item {itemId}",
+} as const;
+
+// ---- Vault (item 2.10; mirrors ``docs/behavior/vault.md``) ----------------
+
+/**
+ * Vault-entry kind alphabet — mirrors :data:`bearings.config.constants.
+ * VAULT_KIND_PLAN` / :data:`VAULT_KIND_TODO`. Discriminator on every
+ * :interface:`VaultEntryOut`. Plans bucket vs Todos bucket per
+ * vault.md §"Vault entry types".
+ */
+export const VAULT_KIND_PLAN = "plan";
+export const VAULT_KIND_TODO = "todo";
+export const KNOWN_VAULT_KINDS = [VAULT_KIND_PLAN, VAULT_KIND_TODO] as const;
+export type VaultKind = (typeof KNOWN_VAULT_KINDS)[number];
+
+/**
+ * Vault search result hard cap. Mirrors backend
+ * :data:`bearings.config.constants.VAULT_SEARCH_RESULT_CAP`. The
+ * frontend reads this only for the UI "showing first N — narrow your
+ * query for more" copy (per vault.md §"Search semantics") — the
+ * server enforces the cap and round-trips a ``capped`` flag, so the
+ * count is presentational rather than authoritative.
+ */
+export const VAULT_SEARCH_RESULT_CAP = 200;
+
+/**
+ * Per-line snippet display cap. Mirrors backend
+ * :data:`bearings.config.constants.VAULT_SEARCH_SNIPPET_MAX_CHARS`.
+ * The server already trims; the frontend uses this constant to cap
+ * the visible snippet column at the same width so a future server
+ * widening doesn't blow out the UI without an explicit decision here.
+ */
+export const VAULT_SEARCH_SNIPPET_MAX_CHARS = 240;
+
+/**
+ * Debounce window for the vault-pane search input — vault.md is
+ * silent on the exact value (only specifies that the query is
+ * "treated as a literal string"). Decided-and-documented at the
+ * routing-preview cadence (300 ms) so two reactive search surfaces
+ * across the app feel the same; revisit if the server-side rescan
+ * latency makes 300 ms feel sluggish.
+ */
+export const VAULT_SEARCH_DEBOUNCE_MS = 300;
+
+/**
+ * Mask glyph for masked redaction ranges in the reading panel.
+ * Mirrors backend :data:`bearings.config.constants.
+ * VAULT_REDACTION_MASK_GLYPH` so the on-wire detection and the
+ * client mask render identically (vault.md §"Redaction rendering" —
+ * "replaces the visible text with a `••••••••` mask").
+ */
+export const VAULT_REDACTION_MASK_GLYPH = "••••••••";
+
+/**
+ * UI strings for the vault pane. Pulled out of the component per
+ * coding-standards "i18n-ready string tables".
+ */
+export const VAULT_STRINGS = {
+  paneAriaLabel: "Vault",
+  paneHeading: "Vault",
+  searchAriaLabel: "Search vault",
+  searchPlaceholder: "Search plans + todos…",
+  loading: "Loading vault…",
+  loadFailed: "Couldn't load the vault index.",
+  emptyAll: "Vault is empty.",
+  emptyConfigTemplate: "No plans found under {plan_roots}. No TODO.md files match {todo_globs}.",
+  plansHeading: "Plans",
+  todosHeading: "Todos",
+  searchEmptyResults: "No matches.",
+  searchCappedTemplate: "Showing first {n} — narrow your query for more.",
+  searchHitTemplate: "{kind} · line {line}",
+  selectedReadingPanelLabel: "Reading panel",
+  selectedEmpty: "Select a doc to read.",
+  selectedReadFailed: "Unable to read.",
+  selectedTruncated: "Doc was very large — body truncated server-side.",
+  copyMarkdownLink: "Copy as Markdown link",
+  copyBody: "Copy doc body",
+  pasteMarkdownLinkIntoComposer: "Paste link into composer",
+  pasteBodyIntoComposer: "Paste body into composer",
+  redactionShow: "Show",
+  redactionHide: "Hide",
+  redactionAriaLabel: "Toggle redacted value",
+  pasteToastLinkPasted: "Pasted link into composer",
+  pasteToastBodyPasted: "Pasted body into composer",
+  pasteToastClipboardLink: "Copied Markdown link",
+  pasteToastClipboardBody: "Copied doc body",
+  pasteToastNoActiveSession: "No active chat session — open one first.",
+  // Per vault.md §"CRUD flow" the vault is read-only — no create /
+  // update / delete affordances in the UI. The string table
+  // intentionally omits any "delete doc" / "rename doc" / "new doc"
+  // labels so a coding-standards search cannot turn one up.
+} as const;
+
+// ---- Memories editor (item 2.10; folds across chat.md / checklists.md / vault.md) ----
+
+/**
+ * Tag-memory title length cap. Mirrors backend
+ * :data:`bearings.config.constants.TAG_MEMORY_TITLE_MAX_LENGTH`.
+ * The editor surfaces a character counter against this bound so a
+ * 422 from the API surface is unreachable through the form path.
+ */
+export const TAG_MEMORY_TITLE_MAX_LENGTH = 200;
+
+/**
+ * Tag-memory body length cap. Mirrors backend
+ * :data:`bearings.config.constants.TAG_MEMORY_BODY_MAX_LENGTH`.
+ * Memories are system-prompt fragments per arch §1.1.3; the cap
+ * bounds any single fragment so a runaway memory cannot saturate
+ * the prompt-prime budget.
+ */
+export const TAG_MEMORY_BODY_MAX_LENGTH = 30_000;
+
+/**
+ * UI strings for the memories editor. Memories are user-authored
+ * tag-scoped system-prompt fragments per arch §1.1.3 (vault is
+ * read-only — see :const:`VAULT_STRINGS`). Pulled out of the
+ * component per coding-standards "i18n-ready string tables".
+ */
+export const MEMORIES_STRINGS = {
+  paneAriaLabel: "Memories editor",
+  paneHeading: "Memories",
+  tagSelectorLabel: "Tag",
+  tagSelectorPlaceholder: "Pick a tag…",
+  tagSelectorEmpty: "No tags yet — create one in the new-session dialog.",
+  loading: "Loading memories…",
+  loadFailed: "Couldn't load memories for this tag.",
+  emptyForTag: "No memories yet on this tag.",
+  newButtonLabel: "New memory",
+  saveButtonLabel: "Save",
+  cancelButtonLabel: "Cancel",
+  deleteButtonLabel: "Delete",
+  editButtonLabel: "Edit",
+  enabledToggleLabel: "Enabled",
+  enabledHelp: "Disabled memories are hidden from the prompt assembler.",
+  titleLabel: "Title",
+  titlePlaceholder: "Short summary…",
+  bodyLabel: "Body",
+  bodyPlaceholder: "System-prompt fragment for this tag…",
+  validationTitleRequired: "Title is required.",
+  validationTitleTooLong: "Title is too long.",
+  validationBodyRequired: "Body is required.",
+  validationBodyTooLong: "Body is too long.",
+  deleteConfirmTemplate: "Delete memory {title}? This cannot be undone.",
+  pickTagFirst: "Pick a tag to view its memories.",
+  characterCountTemplate: "{used} / {max}",
 } as const;
 
 // ---- Themes (item 2.9; mirrors ``docs/behavior/themes.md`` §"Theme picker UI") ----

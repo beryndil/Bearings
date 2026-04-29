@@ -9,11 +9,15 @@ import { describe, expect, it } from "vitest";
 import {
   API_BASE,
   KNOWN_SESSION_KINDS,
+  KNOWN_VAULT_KINDS,
   SESSION_KIND_CHAT,
   SESSION_KIND_CHECKLIST,
   TAG_GROUP_SEPARATOR,
+  VAULT_KIND_PLAN,
+  VAULT_KIND_TODO,
   splitTagName,
   type SessionKind,
+  type VaultKind,
 } from "../config";
 
 describe("kind alphabet", () => {
@@ -32,6 +36,19 @@ describe("kind alphabet", () => {
 describe("API_BASE", () => {
   it("is the literal '/api' — vite proxies this prefix to the FastAPI backend", () => {
     expect(API_BASE).toBe("/api");
+  });
+});
+
+describe("vault kind alphabet", () => {
+  it("exposes 'plan' and 'todo' — matches backend KNOWN_VAULT_KINDS", () => {
+    expect(VAULT_KIND_PLAN).toBe("plan");
+    expect(VAULT_KIND_TODO).toBe("todo");
+    expect(KNOWN_VAULT_KINDS).toEqual([VAULT_KIND_PLAN, VAULT_KIND_TODO]);
+  });
+
+  it("VaultKind type accepts only the documented strings", () => {
+    const ok: VaultKind = VAULT_KIND_PLAN;
+    expect(KNOWN_VAULT_KINDS).toContain(ok);
   });
 });
 

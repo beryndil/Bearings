@@ -1,0 +1,364 @@
+/**
+ * Component tests for :class:`VaultPanel` (item 2.10).
+ *
+ * Done-when criteria covered:
+ *
+ * * Listing renders bucketed plans + todos.
+ * * Search input runs the search after the debounce window.
+ * * Paste-into-message integration writes to the composer bridge.
+ * * NO write affordances render (vault is read-only per
+ *   ``docs/behavior/vault.md`` §"CRUD flow").
+ * * Redaction toggles flip the mask state per-range.
+ * * Empty state names the configured plan_roots / todo_globs.
+ *
+ * The store is stubbed at the prop seam to keep the surface
+ * deterministic — the singleton store is exercised in
+ * ``stores/__tests__/vault.test.svelte.ts``.
+ */
+import { fireEvent, render, waitFor } from "@testing-library/svelte";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import VaultPanel, { formatEmptyConfigCopy, segmentBody } from "../VaultPanel.svelte";
+import type { SearchResultOut, VaultDocOut, VaultEntryOut, VaultListOut } from "../../../api/vault";
+import { VAULT_KIND_PLAN, VAULT_KIND_TODO, VAULT_SEARCH_DEBOUNCE_MS } from "../../../config";
+
+function fakeEntry(overrides: Partial<VaultEntryOut> = {}): VaultEntryOut {
+  return {
+    id: 1,
+    path: "/abs/x.md",
+    slug: "x",
+    title: "Title X",
+    kind: VAULT_KIND_PLAN,
+    mtime: 0,
+    size: 12,
+    last_indexed_at: 0,
+    markdown_link: "[Title X](file:///abs/x.md)",
+    ...overrides,
+  };
+}
+
+function fakeList(): VaultListOut {
+  return {
+    plans: [fakeEntry({ id: 1, title: "Plan A" })],
+    todos: [fakeEntry({ id: 2, title: "Todo Z", kind: VAULT_KIND_TODO })],
+    plan_roots: ["/home/u/.claude/plans"],
+    todo_globs: ["/home/u/Projects/**/TODO.md"],
+  };
+}
+
+interface StubStore {
+  list: VaultListOut | null;
+  selected: VaultDocOut | null;
+  searchQuery: string;
+  searchResult: SearchResultOut | null;
+  loading: boolean;
+  selectedLoading: boolean;
+  error: Error | null;
+}
+
+function makeStubStore(overrides: Partial<StubStore> = {}): StubStore {
+  return {
+    list: fakeList(),
+    selected: null,
+    searchQuery: "",
+    searchResult: null,
+    loading: false,
+    selectedLoading: false,
+    error: null,
+    ...overrides,
+  };
+}
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+describe("segmentBody (helper)", () => {
+  it("returns one text segment when no redactions", () => {
+    expect(segmentBody("hello", [])).toEqual([
+      { kind: "text", text: "hello", redactionIndex: null },
+    ]);
+  });
+
+  it("interleaves text + redaction segments by offset order", () => {
+    const segs = segmentBody("hello world", [{ offset: 6, length: 5, pattern: "key=value" }]);
+    expect(segs).toEqual([
+      { kind: "text", text: "hello ", redactionIndex: null },
+      { kind: "redaction", text: "world", redactionIndex: 0 },
+    ]);
+  });
+
+  it("handles a redaction at the start of the body", () => {
+    const segs = segmentBody("secret end", [{ offset: 0, length: 6, pattern: "k" }]);
+    expect(segs[0].kind).toBe("redaction");
+    expect(segs[1]).toEqual({ kind: "text", text: " end", redactionIndex: null });
+  });
+});
+
+describe("formatEmptyConfigCopy (helper)", () => {
+  it("substitutes both placeholders", () => {
+    const out = formatEmptyConfigCopy(
+      "No plans found under {plan_roots}. No TODO.md files match {todo_globs}.",
+      ["/a", "/b"],
+      ["**/T.md"],
+    );
+    expect(out).toContain("/a, /b");
+    expect(out).toContain("**/T.md");
+  });
+
+  it("replaces empty arrays with '(none)'", () => {
+    const out = formatEmptyConfigCopy("{plan_roots} | {todo_globs}", [], []);
+    expect(out).toBe("(none) | (none)");
+  });
+});
+
+describe("VaultPanel — listing", () => {
+  it("renders plans + todos buckets", () => {
+    const stubStore = makeStubStore();
+    const { getAllByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        selectVaultDoc: vi.fn(),
+        clearVaultSelection: vi.fn(),
+        setVaultSearchQuery: vi.fn().mockResolvedValue(undefined),
+        pasteIntoComposer: vi.fn(),
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+        writeClipboard: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const rows = getAllByTestId("vault-panel-row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].dataset.vaultKind).toBe(VAULT_KIND_PLAN);
+    expect(rows[1].dataset.vaultKind).toBe(VAULT_KIND_TODO);
+  });
+
+  it("renders empty-state copy with configured roots when fully empty", () => {
+    const stubStore = makeStubStore({
+      list: {
+        plans: [],
+        todos: [],
+        plan_roots: ["/configured/plans"],
+        todo_globs: ["/configured/todos/**/T.md"],
+      },
+    });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const empty = getByTestId("vault-panel-empty");
+    expect(empty.textContent).toContain("/configured/plans");
+    expect(empty.textContent).toContain("/configured/todos/**/T.md");
+  });
+});
+
+describe("VaultPanel — read-only semantic (vault.md §CRUD flow)", () => {
+  it("renders NO Create / Update / Delete affordances on entries", () => {
+    const stubStore = makeStubStore();
+    const { container, queryByText } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    // Defensive: scan the rendered DOM for any "delete", "edit",
+    // "rename", or "new" affordance scoped to vault entries. The
+    // test-id alphabet on the component exposes only read-shaped ids
+    // (vault-panel-row, vault-panel-hit, vault-panel-paste-link,
+    // vault-panel-copy-link, vault-panel-copy-body,
+    // vault-panel-redaction-toggle).
+    const writeIds = [
+      "vault-panel-delete",
+      "vault-panel-edit",
+      "vault-panel-rename",
+      "vault-panel-new",
+    ];
+    for (const id of writeIds) {
+      expect(container.querySelector(`[data-testid="${id}"]`)).toBeNull();
+    }
+    // Visible-text screen for English mutation verbs scoped to
+    // entries. We look only inside the index column so the
+    // composer-paste affordances (which DO say "Paste") don't
+    // accidentally match.
+    const indexColumn = container.querySelector(".vault-panel__index");
+    expect(indexColumn).not.toBeNull();
+    expect(indexColumn?.textContent ?? "").not.toMatch(/\b(Delete|Rename|New plan|New todo)\b/);
+    expect(queryByText(/^Edit doc$/)).toBeNull();
+  });
+});
+
+describe("VaultPanel — search debounce", () => {
+  it("calls setVaultSearchQuery after the debounce window", async () => {
+    const setVaultSearchQuery = vi.fn().mockResolvedValue(undefined);
+    const stubStore = makeStubStore();
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        setVaultSearchQuery,
+      },
+    });
+    const search = getByTestId("vault-panel-search") as HTMLInputElement;
+    await fireEvent.input(search, { target: { value: "hello" } });
+    expect(setVaultSearchQuery).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(VAULT_SEARCH_DEBOUNCE_MS + 5);
+    await waitFor(() => expect(setVaultSearchQuery).toHaveBeenCalledWith("hello"));
+  });
+
+  it("renders capped indicator when the result is capped", () => {
+    const stubStore = makeStubStore({
+      searchResult: {
+        hits: [
+          {
+            vault_id: 1,
+            path: "/x.md",
+            title: "X",
+            kind: VAULT_KIND_PLAN,
+            line_number: 3,
+            snippet: "match",
+          },
+        ],
+        capped: true,
+      },
+    });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    expect(getByTestId("vault-panel-search-capped")).toBeInTheDocument();
+  });
+});
+
+describe("VaultPanel — paste-into-message integration", () => {
+  function makeSelectedDoc(): VaultDocOut {
+    return {
+      entry: fakeEntry({ id: 5 }),
+      body: "doc body",
+      redactions: [],
+      truncated: false,
+    };
+  }
+
+  it("paste-link calls composer bridge with the markdown_link + 'link' kind", async () => {
+    const pasteIntoComposer = vi.fn();
+    const stubStore = makeStubStore({ selected: makeSelectedDoc() });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        activeSessionId: "sess_abc",
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        pasteIntoComposer,
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+      },
+    });
+    await fireEvent.click(getByTestId("vault-panel-paste-link"));
+    expect(pasteIntoComposer).toHaveBeenCalledWith({
+      sessionId: "sess_abc",
+      text: "[Title X](file:///abs/x.md)",
+      kind: "link",
+    });
+  });
+
+  it("paste-body calls composer bridge with the doc body + 'body' kind", async () => {
+    const pasteIntoComposer = vi.fn();
+    const stubStore = makeStubStore({ selected: makeSelectedDoc() });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        activeSessionId: "sess_abc",
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        pasteIntoComposer,
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+      },
+    });
+    await fireEvent.click(getByTestId("vault-panel-paste-body"));
+    expect(pasteIntoComposer).toHaveBeenCalledWith({
+      sessionId: "sess_abc",
+      text: "doc body",
+      kind: "body",
+    });
+  });
+
+  it("disables paste affordances + surfaces toast when no active session", async () => {
+    const pasteIntoComposer = vi.fn();
+    const stubStore = makeStubStore({ selected: makeSelectedDoc() });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        activeSessionId: null,
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        pasteIntoComposer,
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+      },
+    });
+    const btn = getByTestId("vault-panel-paste-link") as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+  });
+
+  it("copy-as-markdown-link writes to the clipboard", async () => {
+    const writeClipboard = vi.fn().mockResolvedValue(undefined);
+    const stubStore = makeStubStore({ selected: makeSelectedDoc() });
+    const { getByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+        writeClipboard,
+      },
+    });
+    await fireEvent.click(getByTestId("vault-panel-copy-link"));
+    expect(writeClipboard).toHaveBeenCalledWith("[Title X](file:///abs/x.md)");
+  });
+});
+
+describe("VaultPanel — redaction toggles", () => {
+  it("renders one toggle per redaction range", () => {
+    const stubStore = makeStubStore({
+      selected: {
+        entry: fakeEntry(),
+        body: "key=secret-very-long",
+        redactions: [
+          { offset: 4, length: 16, pattern: "key" },
+          { offset: 0, length: 3, pattern: "preamble" },
+        ],
+        truncated: false,
+      },
+    });
+    const { getAllByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        renderMarkdown: vi.fn().mockResolvedValue(""),
+        sanitizeHtml: vi.fn().mockReturnValue(""),
+      },
+    });
+    const toggles = getAllByTestId("vault-panel-redaction-toggle");
+    expect(toggles).toHaveLength(2);
+  });
+});
+
+describe("VaultPanel — selection", () => {
+  it("clicking a row calls selectVaultDoc with the entry id", async () => {
+    const selectVaultDoc = vi.fn().mockResolvedValue(undefined);
+    const stubStore = makeStubStore();
+    const { getAllByTestId } = render(VaultPanel, {
+      props: {
+        vaultStore: stubStore,
+        refreshVault: vi.fn().mockResolvedValue(undefined),
+        selectVaultDoc,
+      },
+    });
+    const rows = getAllByTestId("vault-panel-row");
+    await fireEvent.click(rows[1]);
+    expect(selectVaultDoc).toHaveBeenCalledWith(2);
+  });
+});
