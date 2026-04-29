@@ -78,6 +78,24 @@ from bearings.config.constants import (
     STREAM_TRUNCATION_MARKER_TEMPLATE,
 )
 
+
+@dataclass(frozen=True)
+class QueuedPrompt:
+    """One queued user prompt awaiting the runner's worker loop.
+
+    Per ``docs/behavior/prompt-endpoint.md`` §"What the user sees in the
+    UI when they POST during an in-flight turn" — "If multiple prompts
+    are POSTed back-to-back while a turn is running, they queue in
+    arrival order. The agent works through the queue one turn at a
+    time." The frozen dataclass carries the persisted message id (for
+    correlation with the WS ``message_start`` frame the runner emits
+    when it picks the prompt up) plus the user-facing content.
+    """
+
+    message_id: str
+    content: str
+
+
 # A buffered (seq, event) pair — sequence number for ``since_seq``
 # replay, the event payload itself for fan-out. Aliased so the
 # subscriber-side type stays readable at call sites.
@@ -150,6 +168,13 @@ class SessionRunner:
             is_awaiting_user=False,
             routing_decision=None,
         )
+        # FIFO queue of user prompts awaiting their turn. Per
+        # ``docs/behavior/prompt-endpoint.md`` §"What the user sees in
+        # the UI when they POST during an in-flight turn" — "queued in
+        # arrival order. The agent works through the queue one turn at
+        # a time." Item 1.7 lays the enqueue path; the worker-loop side
+        # (item 1.3+) drains via :meth:`pop_next_prompt`.
+        self._prompt_queue: deque[QueuedPrompt] = deque()
 
     # -- properties --------------------------------------------------
 
@@ -172,6 +197,59 @@ class SessionRunner:
     def ring_buffer_size(self) -> int:
         """Current ring buffer depth (≤ ``ring_buffer_max``)."""
         return len(self._buffer)
+
+    @property
+    def prompt_queue_depth(self) -> int:
+        """Number of queued prompts awaiting the worker loop.
+
+        Per ``docs/behavior/prompt-endpoint.md`` §"What the user sees in
+        the UI when they POST during an in-flight turn" the user
+        observes a ``queued`` badge while previous turns drain; the
+        depth read here is the count behind the in-flight turn.
+        """
+        return len(self._prompt_queue)
+
+    def enqueue_prompt(self, *, message_id: str, content: str) -> None:
+        """Append ``content`` to the FIFO prompt queue.
+
+        Per ``docs/behavior/prompt-endpoint.md`` §"What the user sees in
+        the UI when they POST during an in-flight turn":
+
+        * "The new prompt is queued behind the in-flight turn."
+        * "If multiple prompts are POSTed back-to-back while a turn is
+          running, they queue in arrival order."
+
+        The runner does not start a turn here — that's the worker
+        loop's job (item 1.3+ wiring). This method is intentionally
+        synchronous + cheap so the prompt-endpoint route handler
+        returns 202 in O(1) once persistence has succeeded.
+        """
+        if not message_id:
+            raise ValueError("enqueue_prompt: message_id must be non-empty")
+        if not content:
+            raise ValueError("enqueue_prompt: content must be non-empty")
+        self._prompt_queue.append(QueuedPrompt(message_id=message_id, content=content))
+
+    def pop_next_prompt(self) -> QueuedPrompt | None:
+        """Drain one prompt from the FIFO; ``None`` when empty.
+
+        Used by the worker loop (item 1.3+) to pick the next turn's
+        prompt. The behavior doc's "queue in arrival order" ordering
+        is FIFO; :class:`collections.deque` ``popleft`` matches.
+        """
+        if not self._prompt_queue:
+            return None
+        return self._prompt_queue.popleft()
+
+    def peek_next_prompt(self) -> QueuedPrompt | None:
+        """Return the next prompt without dequeuing; ``None`` when empty.
+
+        Used by tests + the WS handler's "next-up" introspection
+        surface; the worker loop drains via :meth:`pop_next_prompt`.
+        """
+        if not self._prompt_queue:
+            return None
+        return self._prompt_queue[0]
 
     # -- mutation ----------------------------------------------------
 
@@ -366,4 +444,4 @@ class RunnerFactory(Protocol):
     async def __call__(self, session_id: str) -> SessionRunner: ...
 
 
-__all__ = ["RunnerFactory", "RunnerStatus", "SessionRunner", "StreamEntry"]
+__all__ = ["QueuedPrompt", "RunnerFactory", "RunnerStatus", "SessionRunner", "StreamEntry"]

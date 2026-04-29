@@ -584,6 +584,117 @@ TAG_MEMORY_TITLE_MAX_LENGTH: Final[int] = 200
 TAG_MEMORY_BODY_MAX_LENGTH: Final[int] = 30_000
 
 # ---------------------------------------------------------------------------
+# Prompt endpoint (item 1.7; arch §1.1.5 ``web/routes/sessions.py``;
+# behavior surface in ``docs/behavior/prompt-endpoint.md``).
+#
+# The behavior doc is silent on the exact rate-limit numbers
+# ("per-session POST rate over the configured window") — values below
+# are decided-and-documented. Chosen to comfortably accommodate
+# orchestrator-driver bursts (an orchestrator dispatches a few prompts
+# in quick succession at handoff) while still throttling a runaway
+# loop. Tunable via ``Settings`` if usage shows the defaults are wrong.
+# ---------------------------------------------------------------------------
+
+# Per-session sliding window for the rate-limit gate (behavior doc
+# §"Rate-limit observable behavior"). One minute is short enough that
+# ``Retry-After`` is a tractable wait; long enough to absorb a tight
+# burst from a dispatcher.
+PROMPT_RATE_LIMIT_WINDOW: Final[timedelta] = timedelta(seconds=60)
+PROMPT_RATE_LIMIT_WINDOW_S: Final[int] = 60
+
+# Maximum POSTs per session per window. 30 chosen so a 10-step dispatch
+# loop has 3x headroom; the user-facing typing path never reaches
+# anything close because keystroke->Send is human-paced.
+PROMPT_RATE_LIMIT_MAX_PER_WINDOW: Final[int] = 30
+
+# Maximum prompt content length (characters). Behavior doc is silent on
+# a hard cap; the prompt assembler's history-prime budget upstream is
+# 60K chars (HISTORY_PRIME_MAX_CHARS), so a single user prompt above
+# that would never fit in a turn anyway. 64 KiB chosen as a generous
+# bound that still rejects pathological pastes and protects the runner
+# queue from a runaway client.
+PROMPT_CONTENT_MAX_CHARS: Final[int] = 64_000
+
+# Wire-shape ack body keys (behavior doc §"202 semantics" — the body is
+# a small JSON envelope with ``queued: true`` + ``session_id``). Pinned
+# as constants so a future shape edit touches one symbol per
+# coding-standards "no string-literal magic".
+PROMPT_ACK_QUEUED_KEY: Final[str] = "queued"
+PROMPT_ACK_SESSION_ID_KEY: Final[str] = "session_id"
+
+# ---------------------------------------------------------------------------
+# Sessions (item 1.7; arch §1.1.3 ``db/sessions.py``; behavior surface
+# in ``docs/behavior/chat.md`` + ``docs/behavior/paired-chats.md``).
+#
+# Session-row constants: kind alphabet, id prefix, title bounds. The
+# kind alphabet mirrors schema.sql's CHECK constraint.
+# ---------------------------------------------------------------------------
+
+# Session kind discriminator alphabet. Schema CHECK constraint:
+# ``kind IN ('chat', 'checklist')``. The kind partitions the session
+# table into two surfaces (chat = composer + transcript;
+# checklist = structured-list pane); the prompt-endpoint accepts both
+# (per behavior doc "only chat-kind and checklist-kind sessions are
+# runnable").
+SESSION_KIND_CHAT: Final[str] = "chat"
+SESSION_KIND_CHECKLIST: Final[str] = "checklist"
+KNOWN_SESSION_KINDS: Final[frozenset[str]] = frozenset({SESSION_KIND_CHAT, SESSION_KIND_CHECKLIST})
+
+# Session id prefix. ``ses_<32-hex>`` per the ``new_id`` convention in
+# ``db/_id.py`` so a stray id in a log line is self-describing.
+SESSION_ID_PREFIX: Final[str] = "ses"
+
+# Message id prefix. Each user / assistant / tool / system message row
+# carries a ``msg_<32-hex>`` primary key.
+MESSAGE_ID_PREFIX: Final[str] = "msg"
+
+# Session title cap. Sidebar rows render the title; cap chosen wide
+# enough for descriptive titles, narrow enough that a runaway label
+# does not bloat the row height.
+SESSION_TITLE_MAX_LENGTH: Final[int] = 500
+
+# Session description cap. The description (also called the "plug")
+# carries hand-off context for orchestrator/executor patterns; budget
+# matches checklist-item notes for consistency.
+SESSION_DESCRIPTION_MAX_LENGTH: Final[int] = 30_000
+
+# ---------------------------------------------------------------------------
+# Bearings CLI (item 1.7; arch §1.1.1 ``cli/`` package; behavior surface
+# in ``docs/behavior/bearings-cli.md``).
+#
+# Exit codes per behavior doc §"Common observable conventions":
+#   0 — success.
+#   1 — operation-level failure (always paired with stderr message).
+#   2 — usage / validation error (argparse-style stderr message).
+# ---------------------------------------------------------------------------
+
+CLI_EXIT_OK: Final[int] = 0
+CLI_EXIT_OPERATION_FAILURE: Final[int] = 1
+CLI_EXIT_USAGE_ERROR: Final[int] = 2
+
+# ``bearings todo check`` default max-age (behavior doc §"bearings todo
+# check" — "linter checks staleness"). Decided-and-documented (doc
+# silent on default): 30 days matches a typical project review cadence.
+BEARINGS_TODO_CHECK_DEFAULT_MAX_AGE_DAYS: Final[int] = 30
+
+# The TODO.md filename the walker recognises. Pinned constant so a
+# future per-project rename touches one symbol.
+BEARINGS_TODO_FILENAME: Final[str] = "TODO.md"
+
+# Heading level the parser recognises as an entry boundary. Behavior
+# doc §"bearings todo open" — entries are "## Heading" blocks; H1 is
+# the file title, H3+ is body subsection. Pinned so a future spec
+# tweak (e.g. H3 entries) is one edit.
+BEARINGS_TODO_ENTRY_HEADING_PREFIX: Final[str] = "## "
+
+# Walker depth cap — how deep below CWD the walker will descend looking
+# for TODO.md files. Decided-and-documented: typical projects are
+# ≤6 deep (monorepo-with-packages); 8 chosen as a generous bound that
+# stops a pathological ``find /`` from happening if the user mistakenly
+# runs the CLI from ``$HOME``.
+BEARINGS_TODO_WALK_MAX_DEPTH: Final[int] = 8
+
+# ---------------------------------------------------------------------------
 # Vault (item 1.5; arch §1.1.3 ``db/vault.py`` + §1.1.5
 # ``web/routes/vault.py``; behavior surface in
 # ``docs/behavior/vault.md``).
@@ -698,7 +809,11 @@ __all__ = [
     "AUTO_DRIVER_STATE_IDLE",
     "AUTO_DRIVER_STATE_PAUSED",
     "AUTO_DRIVER_STATE_RUNNING",
+    "BEARINGS_TODO_CHECK_DEFAULT_MAX_AGE_DAYS",
+    "BEARINGS_TODO_ENTRY_HEADING_PREFIX",
+    "BEARINGS_TODO_FILENAME",
     "BEARINGS_TODO_RECENT_DEFAULT_DAYS",
+    "BEARINGS_TODO_WALK_MAX_DEPTH",
     "CHECKLIST_DRIVER_MAX_FOLLOWUP_DEPTH",
     "CHECKLIST_DRIVER_MAX_ITEMS_PER_RUN",
     "CHECKLIST_DRIVER_MAX_LEGS_PER_ITEM",
@@ -710,6 +825,9 @@ __all__ = [
     "CHECKLIST_ITEM_NOTES_MAX_LENGTH",
     "CHECKLIST_SORT_ORDER_STEP",
     "CHECKPOINT_LABEL_MAX_LENGTH",
+    "CLI_EXIT_OK",
+    "CLI_EXIT_OPERATION_FAILURE",
+    "CLI_EXIT_USAGE_ERROR",
     "DEFAULT_ADVISOR_MAX_USES_HAIKU",
     "DEFAULT_ADVISOR_MAX_USES_SONNET",
     "DEFAULT_CHECKPOINT_LABEL_TEMPLATE",
@@ -746,8 +864,10 @@ __all__ = [
     "KNOWN_SDK_PERMISSION_MODES",
     "KNOWN_SDK_SETTING_SOURCES",
     "KNOWN_SENTINEL_KINDS",
+    "KNOWN_SESSION_KINDS",
     "KNOWN_VAULT_KINDS",
     "MAX_CHECKPOINTS_PER_SESSION",
+    "MESSAGE_ID_PREFIX",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
     "OVERRIDE_RATE_WINDOW_DAYS",
@@ -760,6 +880,12 @@ __all__ = [
     "PERMISSION_PROFILE_NAMES",
     "PERMISSION_PROFILE_TO_SDK_MODE",
     "PRESSURE_INJECT_THRESHOLD_PCT",
+    "PROMPT_ACK_QUEUED_KEY",
+    "PROMPT_ACK_SESSION_ID_KEY",
+    "PROMPT_CONTENT_MAX_CHARS",
+    "PROMPT_RATE_LIMIT_MAX_PER_WINDOW",
+    "PROMPT_RATE_LIMIT_WINDOW",
+    "PROMPT_RATE_LIMIT_WINDOW_S",
     "QUOTA_BAR_RED_PCT",
     "QUOTA_BAR_YELLOW_PCT",
     "QUOTA_THRESHOLD_PCT",
@@ -772,6 +898,11 @@ __all__ = [
     "SENTINEL_KIND_ITEM_BLOCKED",
     "SENTINEL_KIND_ITEM_DONE",
     "SENTINEL_KIND_ITEM_FAILED",
+    "SESSION_DESCRIPTION_MAX_LENGTH",
+    "SESSION_ID_PREFIX",
+    "SESSION_KIND_CHAT",
+    "SESSION_KIND_CHECKLIST",
+    "SESSION_TITLE_MAX_LENGTH",
     "STREAM_HEARTBEAT_INTERVAL_S",
     "STREAM_MAX_DELTA_CHARS",
     "STREAM_MAX_TOOL_OUTPUT_CHARS",

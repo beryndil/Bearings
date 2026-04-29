@@ -31,11 +31,14 @@ import aiosqlite
 from fastapi import FastAPI, WebSocket
 
 from bearings.agent.auto_driver_runtime import AutoDriverRegistry, build_registry
+from bearings.agent.prompt_dispatch import RateLimiter
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
 from bearings.config.settings import VaultCfg
 from bearings.web.routes.checklists import router as checklists_router
 from bearings.web.routes.memories import router as memories_router
+from bearings.web.routes.paired_chats import router as paired_chats_router
+from bearings.web.routes.sessions import router as sessions_router
 from bearings.web.routes.tags import router as tags_router
 from bearings.web.routes.vault import router as vault_router
 from bearings.web.runner_factory import build_in_process_factory
@@ -49,6 +52,7 @@ def create_app(
     db_connection: aiosqlite.Connection | None = None,
     vault_cfg: VaultCfg | None = None,
     auto_driver_registry: AutoDriverRegistry | None = None,
+    prompt_rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -87,6 +91,13 @@ def create_app(
     app.state.auto_driver_registry = (
         auto_driver_registry if auto_driver_registry is not None else build_registry()
     )
+    # Per-app rate limiter for the prompt endpoint (item 1.7;
+    # ``docs/behavior/prompt-endpoint.md`` §"Rate-limit observable
+    # behavior"). One limiter per app so parallel test runs do not
+    # share rate-limit state across the in-memory deque.
+    app.state.prompt_rate_limiter = (
+        prompt_rate_limiter if prompt_rate_limiter is not None else RateLimiter()
+    )
 
     @app.websocket("/ws/sessions/{session_id}")
     async def stream_endpoint(websocket: WebSocket, session_id: str) -> None:
@@ -112,6 +123,8 @@ def create_app(
     app.include_router(memories_router)
     app.include_router(vault_router)
     app.include_router(checklists_router)
+    app.include_router(sessions_router)
+    app.include_router(paired_chats_router)
     return app
 
 

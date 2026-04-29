@@ -157,7 +157,11 @@ verbose = 1
 # them codespell scans installed third-party packages and fails on their
 # typos which we cannot fix.
 skip = "*.lock,*.svg,*.min.*,docs/model-routing-v1-spec.md,frontend/node_modules,frontend/.svelte-kit,.venv,.git,.mypy_cache,.ruff_cache,.pytest_cache,htmlcov,dist,build"
-# Empty allowlist today; the key is reserved for future entries. Codespell
-# rejects an empty string for `ignore-words-list`, so we omit it until needed.
+# Allowlist intentional Pydantic-style ``*In`` request shape names
+# (``PromptIn`` ↦ "prompt in" / "prompting" false positives) — the
+# convention is established across ``web/models/*.py`` and the
+# alternatives (``PromptInput`` / ``PromptRequest``) are noisier than
+# the typo risk.
+ignore-words-list = "promptin"
 check-filenames = true
 check-hidden = true

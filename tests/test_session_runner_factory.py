@@ -298,8 +298,11 @@ def test_runner_factory_protocol_resolvable() -> None:
     hints = get_type_hints(RunnerFactory.__call__)
     assert hints.get("return") is SessionRunner
     # The module-level export surface — arch §4.5's three names plus
-    # the ``StreamEntry`` alias item 1.2 added for the web layer.
+    # the ``StreamEntry`` alias item 1.2 added for the web layer plus
+    # the ``QueuedPrompt`` dataclass item 1.7 added for the prompt
+    # endpoint's ``runner.enqueue_prompt()`` FIFO.
     assert set(runner_module.__all__) == {
+        "QueuedPrompt",
         "RunnerFactory",
         "RunnerStatus",
         "SessionRunner",
