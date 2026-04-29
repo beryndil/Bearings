@@ -112,6 +112,45 @@ The agent loop for a chat is implicit:
 * A long-idle session's runner is torn down server-side (the user observes nothing — the next send transparently spins it back up).
 * Closing a session drains its runner; subsequent prompts via [prompt-endpoint](prompt-endpoint.md) get a 409 until the session is reopened.
 
+## Inspector pane (non-routing subsections)
+
+The right column of the app shell hosts the **Inspector** pane: a tabbed surface that exposes the active session's per-row metadata in long form. Five tabs are wired today, in the order they render: **Agent**, **Context**, **Instructions**, **Routing**, **Usage**. The first three are described here; the routing-and-usage pair belongs to §"What the user does NOT see in chat" because it is governed by the routing spec.
+
+The pane is empty-state when no session is selected (boot, tag filter empties the list, sidebar selection cleared). Picking a session activates the last-selected tab; the active-tab choice is per-tab-strip and does not persist across page reloads.
+
+The shape the Inspector reads from the selected row mirrors the API's `SessionOut` envelope (the fields the conversation header band already summarises): `id`, `kind`, `title`, `description`, `session_instructions`, `working_dir`, `model`, `permission_mode`, `max_budget_usd`, `total_cost_usd`, `message_count`, `last_context_pct`, `last_context_tokens`, `last_context_max`, plus the housekeeping timestamps (`created_at`, `updated_at`, `last_viewed_at`, `last_completed_at`, `closed_at`) and flags (`pinned`, `error_pending`, `checklist_item_id`).
+
+### Agent
+
+Surfaces the executor-side configuration in a longer-form layout than the conversation header's compact row. The user sees a label/value grid with:
+
+* **Executor model** — current executor, mapped to its user-facing label (`Sonnet 4.6`, `Haiku 4.5`, `Opus 4.7`) using the same string table the new-session dialog uses; an unknown wire name renders as itself.
+* **Permission mode** — the SDK permission profile in force, or `(default)` when unset.
+* **Working directory** — absolute path, monospace, wrapping on long paths.
+* **Budget cap (USD)** — `max_budget_usd` formatted to two decimals, or `no cap` when unset.
+* **Total cost (USD)** — `total_cost_usd` formatted to two decimals.
+* **Messages** — the running message count.
+
+The Agent subsection shows the executor wire name only today; the routing-spec fields (advisor, effort, fallback model, beta headers) live in **Inspector Routing** because their UI copy is governed by the routing spec.
+
+### Context
+
+Mirrors the context-window / cost data the header band carries, plus the title and description that the sidebar row truncates. The user sees:
+
+* **Title** — full session title (no truncation).
+* **Description** — the session "plug" body, rendered with preserved line breaks; renders `(no description)` when null/empty.
+* **Last context-window pressure** — the most-recent turn's context-pressure as a whole-percent integer; `no turn observed yet` when the session has not yet completed an assistant turn.
+* **Last context tokens** — the most-recent turn's context-token count, locale-formatted with thousands separators; same `no turn observed yet` empty state.
+* **Context-window max** — the model's context-window cap for the most-recent turn, locale-formatted; same empty state.
+
+Below the grid is an **Assembled context** section. Today it renders a placeholder paragraph noting that the system prompt, tag-default overlays, and vault attachments will surface here once the assembled-context API lands. (The structure is in place so the visual layout is stable when those fields are wired through.)
+
+### Instructions
+
+Exposes the per-session free-text instructions (`session_instructions` on `SessionOut`). When the value is a non-empty (post-trim) string, the body renders inside a monospace pre-block with whitespace-preserving wrap. When the value is null, empty, or whitespace-only, the user sees the empty-state copy `No per-session instructions set.` — the renderer treats whitespace-only as empty so a stray newline does not masquerade as content.
+
+The Instructions subsection is read-only in v0.18.0 — the editor surface for the field lives in the SessionEdit modal (per arch §1.2 `components/modals/`), not in the Inspector body. Inspector renders a faithful view of the persisted value; round-tripping back through the editor preserves the exact text including leading/trailing whitespace inside the bubble.
+
 ## What the user does NOT see in chat
 
 These belong to other subsystems:

@@ -10,9 +10,14 @@ past Phase 0.
 | Concern | Location |
 |---|---|
 | Strategic plan + 29-item build order | `~/.claude/plans/bearings-v1-rebuild.md` |
+| Architectural decomposition | `docs/architecture-v1.md` |
 | Routing-feature spec | `docs/model-routing-v1-spec.md` |
+| Per-subsystem observable behavior | `docs/behavior/<subsystem>.md` |
 | Operational coding directives | `~/.claude/coding-standards.md` |
+| Release history | `CHANGELOG.md` |
 | Deferred / orphaned work | `TODO.md` (this repo) |
+| Reader-facing project README | `README.md` |
+| FastAPI OpenAPI export | `docs/openapi.json` |
 
 When the routing spec and coding standards both apply: spec provides
 *inputs* (numbers, dataclass shapes, endpoint surfaces, UI strings),
@@ -26,10 +31,18 @@ files; coding standards alone for everything else.
   hook rejects commits to any other branch.
 * Worktree: `/home/beryndil/Projects/Bearings-v1/`.
 * SDK: `claude-agent-sdk~=0.1.69` (compatible-release pin).
-* Python: ≥ 3.12. Type-checking: `mypy --strict`, no `Any`.
+* Python: ≥ 3.12. Type-checking: `mypy --strict`, no `Any` (carve-outs
+  for Pydantic metaclass surface only, declared with explicit
+  `# mypy: disable-error-code=explicit-any` per file).
+* Versioning: SemVer 2.0.0; package version pinned in `pyproject.toml`.
+  Conventional commits (`feat:` / `fix:` / `refactor:` / `docs:` /
+  `test:` / `chore:`).
 * Concurrent run vs v0.17.x: port **8788** (vs 8787),
   DB `~/.local/share/bearings-v1/` (vs `~/.local/share/bearings/`),
   systemd unit `bearings-v1.service` (vs `bearings.service`).
+* Inline literals downstream of `bearings.config.constants` are
+  forbidden — every spec-mandated number lives in the constants
+  module.
 
 ## First-time setup (per fresh checkout)
 
@@ -58,6 +71,36 @@ uv run pre-commit run --all-files
 CI runs the same gates plus `systemd-analyze verify` on the unit and
 `lychee` on every markdown file. See `.github/workflows/ci.yml`.
 
+The 12-tool stack is wired through `.pre-commit-config.yaml`:
+
+* **Backend (8):** ruff (lint + format), mypy `--strict`, pytest,
+  vulture, radon (cyclomatic complexity ≤ 10), interrogate (docstring
+  coverage ≥ 80 %), codespell, pip-audit `--strict`.
+* **Frontend (6):** eslint, prettier `--check`, svelte-check, knip,
+  ts-prune, depcheck. Gated on frontend file changes + the presence of
+  `frontend/node_modules/`.
+* **Repo-wide (1):** lychee on every Markdown file.
+
+## OpenAPI export
+
+`docs/openapi.json` is checked in. Regenerate it (must stay
+reproducible bit-for-bit on parsed-dict equality) via:
+
+```bash
+uv run python -c "
+import json
+from bearings.web.app import create_app
+spec = create_app().openapi()
+with open('docs/openapi.json', 'w') as f:
+    json.dump(spec, f, indent=2)
+    f.write('\n')
+"
+```
+
+The CHANGELOG entry for any item that changes the OpenAPI surface MUST
+include the regeneration in the same commit. `docs/openapi.json` is
+excluded from codespell.
+
 ## Reference-read protocol (binding on every executor)
 
 * Items 0.4 onward must NOT read any file under
@@ -66,18 +109,26 @@ CI runs the same gates plus `systemd-analyze verify` on the unit and
 * The auditor inspects the executor transcript for tool calls touching
   those paths. Any match → automatic GAPS regardless of output quality.
 * Behavioral specs at `docs/behavior/<subsystem>.md` (added in item 0.3)
-  are the only authoritative behavioral source past Phase 0.
+  are the only authoritative behavioral source past Phase 0. Doc gaps
+  surfaced during execution are landed via a behavior addendum (per
+  plan §"Behavioral gap escalation"), not by reading v0.17.x source.
 
 ## Item completion contract
 
-* Self-verification block precedes every DONE / DONE_WITH_CONCERNS post.
-  Format and rules: `~/.claude/plans/bearings-v1-rebuild.md`
-  §"Self-verification".
-* Status vocabulary: `DONE` · `DONE_WITH_CONCERNS` · `BLOCKED` (physical /
-  reachability / credential walls only) · `HANDED_OFF → <new_id>`.
-  `NEEDS_CONTEXT` is retired.
-* Decision discipline: never ask "A or B?" on code calls — decide and
-  move on per `~/.claude/rules/decision-discipline.md`.
+* **Self-verification block** precedes every DONE / DONE_WITH_CONCERNS
+  post. Format and rules: `~/.claude/plans/bearings-v1-rebuild.md`
+  §"Self-verification". Every Done-when criterion gets evidence; every
+  reference-read claim gets a transcript-grep proof; every gate gets
+  the verbatim command line.
+* **Status vocabulary**: `DONE` · `DONE_WITH_CONCERNS` · `BLOCKED`
+  (physical / reachability / credential walls only) ·
+  `HANDED_OFF → <new_id>`. `NEEDS_CONTEXT` is retired for autonomous
+  executor work.
+* **Decision discipline**: never ask "A or B?" on code calls — decide
+  and move on per `~/.claude/rules/decision-discipline.md`.
+* **Git discipline**: a commit means `git commit` AND `git push`. The
+  remote (origin/v1-rebuild) is the source of truth. `git status
+  --short` MUST be empty before posting DONE.
 
 ## TODO.md discipline
 
@@ -85,4 +136,6 @@ CI runs the same gates plus `systemd-analyze verify` on the unit and
 yet scheduled into a master-checklist item. Per the global directive,
 append the moment work is deferred or an error is passed on. Scheduled
 work belongs in the master checklist (id `0f6e4006fb1d4340bda9983af3432064`),
-not in `TODO.md`.
+not in `TODO.md`. When a deferral lands as part of a later item's
+output, strike it from `TODO.md` in the same commit that resolves it
+and cite the resolving commit hash in the entry's removal trailer.

@@ -1,0 +1,6035 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Bearings",
+    "description": "Localhost web UI that streams Claude Code agent sessions (v1 rebuild).",
+    "version": "0.18.0.dev0"
+  },
+  "paths": {
+    "/api/tags": {
+      "post": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Create Tag",
+        "description": "Create a tag; 409 if ``name`` is taken, 422 if the shape is bad.",
+        "operationId": "create_tag_api_tags_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "List Tags",
+        "description": "Every tag, alphabetical; optional ``?group=`` filter for the prefix.",
+        "operationId": "list_tags_api_tags_get",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagOut"
+                  },
+                  "title": "Response List Tags Api Tags Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-groups": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "List Tag Groups",
+        "description": "Distinct slash-prefix groups across the tag set.",
+        "operationId": "list_tag_groups_api_tag_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List Tag Groups Api Tag Groups Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags/{tag_id}": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Get Tag",
+        "description": "Fetch one tag; 404 if absent.",
+        "operationId": "get_tag_api_tags__tag_id__get",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Update Tag",
+        "description": "Replace a tag's mutable fields; 404 if absent, 409 on rename collision.",
+        "operationId": "update_tag_api_tags__tag_id__patch",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Delete Tag",
+        "description": "Delete one tag; cascades through ``session_tags`` + ``tag_memories``.",
+        "operationId": "delete_tag_api_tags__tag_id__delete",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/tags": {
+      "get": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "List Session Tags",
+        "description": "Every tag attached to ``session_id``, alphabetical.",
+        "operationId": "list_session_tags_api_sessions__session_id__tags_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagOut"
+                  },
+                  "title": "Response List Session Tags Api Sessions  Session Id  Tags Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/tags/{tag_id}": {
+      "put": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Attach Tag",
+        "description": "Attach a tag to a session; idempotent (200 either way).\n\nReturns the tag row. 404 if either FK is absent (raised as\n``IntegrityError`` from the DB layer when foreign-key enforcement\nis on).",
+        "operationId": "attach_tag_api_sessions__session_id__tags__tag_id__put",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "tags"
+        ],
+        "summary": "Detach Tag",
+        "description": "Detach a tag from a session; 404 if no such attachment existed.",
+        "operationId": "detach_tag_api_sessions__session_id__tags__tag_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags/{tag_id}/memories": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Create Memory",
+        "description": "Create a memory under ``tag_id``; 404 if the tag is absent.",
+        "operationId": "create_memory_api_tags__tag_id__memories_post",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagMemoryIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagMemoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "List Memories For Tag",
+        "description": "Every memory attached to ``tag_id``; ``only_enabled`` filters disabled.",
+        "operationId": "list_memories_for_tag_api_tags__tag_id__memories_get",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          },
+          {
+            "name": "only_enabled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Only Enabled"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TagMemoryOut"
+                  },
+                  "title": "Response List Memories For Tag Api Tags  Tag Id  Memories Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/memories/{memory_id}": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Get Memory",
+        "description": "Fetch one memory; 404 if absent.",
+        "operationId": "get_memory_api_memories__memory_id__get",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Memory Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagMemoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Update Memory",
+        "description": "Replace a memory's mutable fields; 404 if absent.",
+        "operationId": "update_memory_api_memories__memory_id__patch",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Memory Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagMemoryIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagMemoryOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Delete Memory",
+        "description": "Delete one memory; 404 if absent.",
+        "operationId": "delete_memory_api_memories__memory_id__delete",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Memory Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault": {
+      "get": {
+        "tags": [
+          "vault"
+        ],
+        "summary": "List Vault",
+        "description": "Re-scan the filesystem and return bucketed plans + todos.\n\nPer vault.md \u00a7\"Failure modes\" the index re-scans on every list\nrequest. Plans / todos sections come back already sorted\nnewest-mtime first by :func:`bearings.db.vault.list_all`.",
+        "operationId": "list_vault_api_vault_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultListOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault/search": {
+      "get": {
+        "tags": [
+          "vault"
+        ],
+        "summary": "Search Vault",
+        "description": "Run a substring search across every vault doc.\n\nPer vault.md \u00a7\"Search semantics\" the query is treated as a\nliteral string (no regex), case-insensitive, line-grained.\nRe-scans the filesystem first so the search reads fresh content.\nA blank query (whitespace only) returns an empty result.",
+        "operationId": "search_vault_api_vault_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Case-insensitive substring query.",
+              "title": "Q"
+            },
+            "description": "Case-insensitive substring query."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResultOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault/by-path": {
+      "get": {
+        "tags": [
+          "vault"
+        ],
+        "summary": "Get Vault Doc By Path",
+        "description": "Open a doc by absolute path; refuses paths outside the vault.\n\nPer vault.md \u00a7\"Failure modes\" \u2014 \"Path outside the vault.\nAttempts (e.g. via a hand-crafted URL) to open a path that is\nnot in the current index are refused \u2014 the user sees 'this path\nis outside the vault.' Symlinks are resolved before the\nallowlist check, so a symlink trick into the vault still\nresolves to the real path and is gated correctly\".\n\nThe handler rescans first so a brand-new doc on disk is\nreachable without a separate ``GET /api/vault`` call.",
+        "operationId": "get_vault_doc_by_path_api_vault_by_path_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Absolute path of a vault doc.",
+              "title": "Path"
+            },
+            "description": "Absolute path of a vault doc."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault/{vault_id}": {
+      "get": {
+        "tags": [
+          "vault"
+        ],
+        "summary": "Get Vault Doc",
+        "description": "Open one vault doc by cache id; 404 if absent.\n\nReads the raw body off disk, runs server-side redaction\ndetection, and returns the entry + body + redaction ranges +\ntruncated flag. Per vault.md \u00a7\"Redaction rendering\" the body is\nraw \u2014 the client masks visually and exposes a \"Show\" toggle per\nredaction.\n\nDoes NOT rescan first: callers that want freshness are expected\nto pull ``GET /api/vault`` (which always rescans) for the\ndiscovery handle, then call this endpoint for the specific id.\nRescanning here would invalidate the id mid-request when paths\nmove under the user's editor.",
+        "operationId": "get_vault_doc_api_vault__vault_id__get",
+        "parameters": [
+          {
+            "name": "vault_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Vault Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultDocOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/items": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Create Item",
+        "description": "Create a checklist item; ``parent_item_id`` is optional.",
+        "operationId": "create_item_api_checklists__checklist_id__items_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChecklistItemIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "List Items",
+        "description": "Every item under ``checklist_id``.",
+        "operationId": "list_items_api_checklists__checklist_id__items_get",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChecklistItemOut"
+                  },
+                  "title": "Response List Items Api Checklists  Checklist Id  Items Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}": {
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Get Overview",
+        "description": "Bundled items + active run for one paint.",
+        "operationId": "get_overview_api_checklists__checklist_id__get",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistOverviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}": {
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Get Item",
+        "description": "Fetch one item; 404 if absent.",
+        "operationId": "get_item_api_checklist_items__item_id__get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Update Item",
+        "description": "Patch label / notes (either or both).",
+        "operationId": "update_item_api_checklist_items__item_id__patch",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChecklistItemUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Delete Item",
+        "description": "Cascade-delete an item + subtree + paired_chats per FK.",
+        "operationId": "delete_item_api_checklist_items__item_id__delete",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/check": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Check Item",
+        "description": "Mark item checked (green).",
+        "operationId": "check_item_api_checklist_items__item_id__check_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/uncheck": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Uncheck Item",
+        "description": "Clear ``checked_at``.",
+        "operationId": "uncheck_item_api_checklist_items__item_id__uncheck_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/block": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Block Item",
+        "description": "Mark a non-completion outcome (blocked / failed / skipped).",
+        "operationId": "block_item_api_checklist_items__item_id__block_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/unblock": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Unblock Item",
+        "description": "Clear any non-completion outcome (back to not-yet-attempted).",
+        "operationId": "unblock_item_api_checklist_items__item_id__unblock_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/link": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Link Chat",
+        "description": "Link a chat session as the leaf's paired chat + record a leg.",
+        "operationId": "link_chat_api_checklist_items__item_id__link_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkChatIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/unlink": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Unlink Chat",
+        "description": "Clear the pair pointer (chat keeps its history).",
+        "operationId": "unlink_chat_api_checklist_items__item_id__unlink_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/legs": {
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "List Item Legs",
+        "description": "Every leg recorded for ``item_id`` (oldest-first).",
+        "operationId": "list_item_legs_api_checklist_items__item_id__legs_get",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PairedChatLegOut"
+                  },
+                  "title": "Response List Item Legs Api Checklist Items  Item Id  Legs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/move": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Move Item",
+        "description": "Reparent + optionally pin sort_order.",
+        "operationId": "move_item_api_checklist_items__item_id__move_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveItemIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/indent": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Indent Item",
+        "description": "Tab \u2014 nest under previous sibling.",
+        "operationId": "indent_item_api_checklist_items__item_id__indent_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/outdent": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Outdent Item",
+        "description": "Shift+Tab \u2014 pop one level out.",
+        "operationId": "outdent_item_api_checklist_items__item_id__outdent_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistItemOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/start": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Start Run",
+        "description": "Persist a ``running`` ``auto_driver_runs`` row.\n\nPer behavior/checklists.md the dispatch (live driver task spawn)\nis wired by the runtime registry; this route owns the durable\nstate. If a live registry is on app.state and a previous run is\nactive, we reject the start with 409 \u2014 one active run per\nchecklist at a time.",
+        "operationId": "start_run_api_checklists__checklist_id__run_start_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRunIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/stop": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Stop Run",
+        "description": "Cooperative stop on the active run; transitions to ``paused``.",
+        "operationId": "stop_run_api_checklists__checklist_id__run_stop_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/pause": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Pause Run",
+        "description": "Alias of stop \u2014 checklists.md notes pause and stop share wiring in v1.",
+        "operationId": "pause_run_api_checklists__checklist_id__run_pause_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/resume": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Resume Run",
+        "description": "Resume a ``paused`` run by transitioning it back to ``running``.\n\nPer behavior/checklists.md \"the user can re-Start later; the next\nrun resumes from the first unchecked item\" \u2014 the resume API is\nadditive on top of Start: if there's no paused run, 404; if the\nstate is already running, 409.",
+        "operationId": "resume_run_api_checklists__checklist_id__run_resume_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/skip-current": {
+      "post": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Skip Current",
+        "description": "Skip the item currently being driven, if any.",
+        "operationId": "skip_current_api_checklists__checklist_id__run_skip_current_post",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklists/{checklist_id}/run/status": {
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "Run Status",
+        "description": "Return the active-run row (or 404 when no run is active).",
+        "operationId": "run_status_api_checklists__checklist_id__run_status_get",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoDriverRunOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "List Sessions",
+        "description": "List sessions filtered by ``kind`` + ``include_closed`` + ``tag_ids``.\n\n``tag_ids`` is the sidebar tag-filter query surface from\n``docs/behavior/chat.md`` \u00a7 \"When the user creates a chat\" + the\nitem 2.2 done-when criterion (\"OR semantics across tags\"). Repeat\nthe parameter for multi-select filtering \u2014 ``?tag_ids=1&tag_ids=2``\nreturns sessions attached to tag 1 OR tag 2 (the standard FastAPI\nlist-query convention; a comma-list would have required custom\nparsing for no expressivity gain). Omitting the parameter applies\nno tag filter.",
+        "operationId": "list_sessions_api_sessions_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "include_closed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Include Closed"
+            }
+          },
+          {
+            "name": "tag_ids",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "integer"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tag Ids"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionOut"
+                  },
+                  "title": "Response List Sessions Api Sessions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Session",
+        "description": "Fetch one session by id; 404 if absent.",
+        "operationId": "get_session_api_sessions__session_id__get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Patch Session",
+        "description": "Title-only PATCH for v0.18.0; description editor lands later.",
+        "operationId": "patch_session_api_sessions__session_id__patch",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionTitleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session",
+        "description": "Cascade-delete a session row + messages + checkpoints.",
+        "operationId": "delete_session_api_sessions__session_id__delete",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/close": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Close Session",
+        "description": "Stamp ``closed_at`` so the prompt-endpoint returns 409 on next POST.",
+        "operationId": "close_session_api_sessions__session_id__close_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/reopen": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Reopen Session",
+        "description": "Clear ``closed_at`` per behavior doc \u00a7\"Reopen semantics\".",
+        "operationId": "reopen_session_api_sessions__session_id__reopen_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/prompt": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Prompt Session",
+        "description": "Inject a user-role prompt into a session's queue.\n\nPer ``docs/behavior/prompt-endpoint.md`` \u00a7\"202 semantics\" the\nsuccess response is 202 Accepted with ``Location:\n/api/sessions/<id>``, body ``{queued: true, session_id: <id>}``.\nFailure modes per \u00a7\"Failure responses\": 400 (empty content / bad\nkind), 404 (session missing), 409 (closed), 422 (Pydantic\nvalidation), 429 (rate limit).\n\nThe 422 path is handled by FastAPI / Pydantic *before* this body\nruns (a non-string ``content`` or missing key surfaces as 422\nautomatically). The 400 + 404 + 409 + 429 paths are mapped from\n:class:`PromptDispatchOutcome` below.",
+        "operationId": "prompt_session_api_sessions__session_id__prompt_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/messages": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "List Messages",
+        "description": "List messages for ``session_id``, oldest first.\n\nThe list endpoint 404s if no session matches ``session_id`` to\ndistinguish \"session does not exist\" from \"session has no\nmessages\" (an empty list is a valid response for a freshly-\ncreated session).",
+        "operationId": "list_messages_api_sessions__session_id__messages_get",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 1000,
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "If set, return the last N messages (most recent N) of the session.",
+              "title": "Limit"
+            },
+            "description": "If set, return the last N messages (most recent N) of the session."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MessageOut"
+                  },
+                  "title": "Response List Messages Api Sessions  Session Id  Messages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/messages/{message_id}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Get Message",
+        "description": "Fetch a single message by id; 404 if absent.",
+        "operationId": "get_message_api_messages__message_id__get",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checklist-items/{item_id}/spawn-chat": {
+      "post": {
+        "tags": [
+          "paired-chats"
+        ],
+        "summary": "Spawn Chat",
+        "description": "Materialise a fresh paired chat for the leaf, or return existing pair.\n\nPer ``docs/behavior/paired-chats.md`` \u00a7\"Spawning a new pair\":\n\n1. First click \u2014 201 Created with the new session id, title, etc.\n2. Subsequent clicks on an already-paired item \u2014 200 OK with the\n   existing pair (idempotency clause).\n3. Parent items / unknown items \u2014 422 / 404 respectively.\n4. Working directory unresolvable from parent + tags \u2014 422.",
+        "operationId": "spawn_chat_api_checklist_items__item_id__spawn_chat_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpawnPairedChatIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags/{tag_id}/routing": {
+      "get": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "List Tag Rules",
+        "description": "Every routing rule attached to ``tag_id``, ordered by priority.",
+        "operationId": "list_tag_rules_api_tags__tag_id__routing_get",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoutingRuleOut"
+                  },
+                  "title": "Response List Tag Rules Api Tags  Tag Id  Routing Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Create Tag Rule",
+        "description": "Create a tag rule; 422 on bad shape, 404 if the tag does not exist.",
+        "operationId": "create_tag_rule_api_tags__tag_id__routing_post",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingRuleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routing/{rule_id}": {
+      "patch": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Update Tag Rule",
+        "description": "Replace a tag rule's mutable fields; 404 if absent, 422 on bad shape.",
+        "operationId": "update_tag_rule_api_routing__rule_id__patch",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingRuleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Delete Tag Rule",
+        "description": "Delete a tag rule; 404 if it didn't exist.",
+        "operationId": "delete_tag_rule_api_routing__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tags/{tag_id}/routing/reorder": {
+      "patch": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Reorder Tag Rules",
+        "description": "Re-stamp priorities to match the supplied id order.",
+        "operationId": "reorder_tag_rules_api_tags__tag_id__routing_reorder_patch",
+        "parameters": [
+          {
+            "name": "tag_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Tag Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingReorderIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoutingRuleOut"
+                  },
+                  "title": "Response Reorder Tag Rules Api Tags  Tag Id  Routing Reorder Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routing/system": {
+      "get": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "List System Rules",
+        "description": "Every system rule, ordered by priority.",
+        "operationId": "list_system_rules_api_routing_system_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SystemRoutingRuleOut"
+                  },
+                  "type": "array",
+                  "title": "Response List System Rules Api Routing System Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Create System Rule",
+        "description": "Create a user-added system rule (``seeded = 0``).",
+        "operationId": "create_system_rule_api_routing_system_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemRoutingRuleIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemRoutingRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routing/system/{rule_id}": {
+      "patch": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Update System Rule",
+        "description": "Replace a system rule's mutable fields; preserves ``seeded``.",
+        "operationId": "update_system_rule_api_routing_system__rule_id__patch",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemRoutingRuleIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemRoutingRuleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Delete System Rule",
+        "description": "Delete a system rule; 404 if it didn't exist.",
+        "operationId": "delete_system_rule_api_routing_system__rule_id__delete",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routing/preview": {
+      "post": {
+        "tags": [
+          "routing"
+        ],
+        "summary": "Preview Routing",
+        "description": "Evaluate routing against the supplied tags + first message.\n\nThe new-session dialog calls this on every keystroke (debounced\n300ms per spec \u00a76) so the routing-preview line updates as the\nuser types. Body shape per spec \u00a79:\n``{ tags: [ids], message: \"...\" }``.\nResponse carries ``quota_downgrade_applied`` so the dialog can\nrender the yellow banner with the \"Use anyway\" override action.\n\nThe endpoint runs both ``evaluate`` (pure) and\n``apply_quota_guard`` (pure on top of the latest snapshot). If a\npoller is configured, ``poller.latest`` is the snapshot; otherwise\nthe route falls back to :func:`bearings.agent.quota.load_latest`.",
+        "operationId": "preview_routing_api_routing_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoutingPreviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutingPreviewOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quota/current": {
+      "get": {
+        "tags": [
+          "quota"
+        ],
+        "summary": "Get Current",
+        "description": "Most recent quota snapshot; 404 if the poller has never succeeded.\n\nThe poller's in-memory ``latest`` is preferred; the DB fallback\ncatches the case where the poller hasn't been started in this\nprocess (e.g. a test app, or a fresh restart before the first\nrefresh tick).",
+        "operationId": "get_current_api_quota_current_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaSnapshotOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quota/refresh": {
+      "post": {
+        "tags": [
+          "quota"
+        ],
+        "summary": "Refresh",
+        "description": "Force one immediate poll; 502 if the upstream is unreachable.\n\nThe endpoint requires a configured poller (the fetcher is\npoller-owned). 503 when no poller is on ``app.state`` \u2014 this is\ndistinct from the 502-on-fetcher-failure case which means the\npoller exists but couldn't reach upstream.",
+        "operationId": "refresh_api_quota_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaSnapshotOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quota/history": {
+      "get": {
+        "tags": [
+          "quota"
+        ],
+        "summary": "Get History",
+        "description": "Snapshots within ``days`` calendar days, oldest-first.",
+        "operationId": "get_history_api_quota_history_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "exclusiveMinimum": 0,
+              "description": "rolling window in days (1-365)",
+              "default": 7,
+              "title": "Days"
+            },
+            "description": "rolling window in days (1-365)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/QuotaSnapshotOut"
+                  },
+                  "title": "Response Get History Api Quota History Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage/by_model": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "By Model",
+        "description": "Token totals per model, split by executor/advisor role.\n\nAggregation: walks ``messages`` rows whose ``executor_model`` is\nset, summing the per-model token columns. Two pseudo-rows per\nmodel: one for the executor role, one for the advisor (when the\nadvisor was used on that turn). ``sessions`` is ``COUNT(DISTINCT\nsession_id)``.",
+        "operationId": "by_model_api_usage_by_model_get",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "week",
+              "title": "Period"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsageByModelRow"
+                  },
+                  "title": "Response By Model Api Usage By Model Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage/by_tag": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "By Tag",
+        "description": "Token totals per tag, joining ``session_tags`` to the messages.\n\nA session may carry multiple tags; this endpoint returns one row\nper (session, tag) pair, summed. The frontend then renders one row\nper tag with the per-tag total \u2014 multiple tags on the same\nsession count toward each tag, which matches the user-mental\nmodel (\"how much did I spend on architecture sessions?\").",
+        "operationId": "by_tag_api_usage_by_tag_get",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "week",
+              "title": "Period"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsageByTagRow"
+                  },
+                  "title": "Response By Tag Api Usage By Tag Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage/override_rates": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Override Rates",
+        "description": "Per-rule override rates for the last ``days`` days (spec \u00a79).",
+        "operationId": "override_rates_api_usage_override_rates_get",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "exclusiveMinimum": 0,
+              "description": "rolling window in days (1-365)",
+              "default": 14,
+              "title": "Days"
+            },
+            "description": "rolling window in days (1-365)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OverrideRateOut"
+                  },
+                  "title": "Response Override Rates Api Usage Override Rates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Post Upload",
+        "description": "Accept a multipart upload; store body + metadata; return the row.",
+        "operationId": "post_upload_api_uploads_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_post_upload_api_uploads_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "List Uploads",
+        "description": "List uploads newest-first.",
+        "operationId": "list_uploads_api_uploads_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "exclusiveMinimum": 0,
+              "description": "Max rows to return (1-1000).",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Max rows to return (1-1000)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads/{upload_id}": {
+      "get": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Get Upload",
+        "description": "Fetch one upload by id; 404 if absent.",
+        "operationId": "get_upload_api_uploads__upload_id__get",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Upload Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Delete Upload",
+        "description": "Remove the row + on-disk body; 404 if absent.",
+        "operationId": "delete_upload_api_uploads__upload_id__delete",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Upload Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/uploads/{upload_id}/content": {
+      "get": {
+        "tags": [
+          "uploads"
+        ],
+        "summary": "Get Upload Content",
+        "description": "Stream the on-disk body for ``upload_id``; 404 if absent.",
+        "operationId": "get_upload_content_api_uploads__upload_id__content_get",
+        "parameters": [
+          {
+            "name": "upload_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Upload Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fs/list": {
+      "get": {
+        "tags": [
+          "fs"
+        ],
+        "summary": "Get List",
+        "description": "List a directory under one of the configured allow-roots.",
+        "operationId": "get_list_api_fs_list_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Absolute path to list.",
+              "title": "Path"
+            },
+            "description": "Absolute path to list."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsListOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fs/read": {
+      "get": {
+        "tags": [
+          "fs"
+        ],
+        "summary": "Get Read",
+        "description": "Read a file's content as utf-8 text under one of the allow-roots.",
+        "operationId": "get_read_api_fs_read_get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Absolute path to read as utf-8 text.",
+              "title": "Path"
+            },
+            "description": "Absolute path to read as utf-8 text."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FsReadOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shell/exec": {
+      "post": {
+        "tags": [
+          "shell"
+        ],
+        "summary": "Post Exec",
+        "description": "Validate + dispatch ``payload.argv`` against the configured allowlist.",
+        "operationId": "post_exec_api_shell_exec_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellExecIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShellExecOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diag/server": {
+      "get": {
+        "tags": [
+          "diag"
+        ],
+        "summary": "Get Server",
+        "description": "Process-level diagnostics.",
+        "operationId": "get_server_api_diag_server_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDiagOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diag/sessions": {
+      "get": {
+        "tags": [
+          "diag"
+        ],
+        "summary": "Get Sessions",
+        "description": "Per-runner snapshot.",
+        "operationId": "get_sessions_api_diag_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerDiagListOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diag/drivers": {
+      "get": {
+        "tags": [
+          "diag"
+        ],
+        "summary": "Get Drivers",
+        "description": "Per-auto-driver-run snapshot.\n\nReads only ``running`` / ``paused`` rows from ``auto_driver_runs``\nso the wire response reflects active runs (terminal rows live in\nthe table for audit but are not \"active\" diagnostics).",
+        "operationId": "get_drivers_api_diag_drivers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriverDiagListOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/diag/quota": {
+      "get": {
+        "tags": [
+          "diag"
+        ],
+        "summary": "Get Quota Diag",
+        "description": "Quota-poller status.",
+        "operationId": "get_quota_diag_api_diag_quota_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaDiagOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Get Health",
+        "description": "Return the health snapshot \u2014 200 always; readiness in body.",
+        "operationId": "get_health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "summary": "Get Metrics",
+        "description": "Render Prometheus 0.0.4 text exposition for the active app.",
+        "operationId": "get_metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AutoDriverRunOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "checklist_id": {
+            "type": "string",
+            "title": "Checklist Id"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "failure_policy": {
+            "type": "string",
+            "title": "Failure Policy"
+          },
+          "visit_existing": {
+            "type": "boolean",
+            "title": "Visit Existing"
+          },
+          "items_completed": {
+            "type": "integer",
+            "title": "Items Completed"
+          },
+          "items_failed": {
+            "type": "integer",
+            "title": "Items Failed"
+          },
+          "items_blocked": {
+            "type": "integer",
+            "title": "Items Blocked"
+          },
+          "items_skipped": {
+            "type": "integer",
+            "title": "Items Skipped"
+          },
+          "items_attempted": {
+            "type": "integer",
+            "title": "Items Attempted"
+          },
+          "legs_spawned": {
+            "type": "integer",
+            "title": "Legs Spawned"
+          },
+          "current_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Item Id"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "outcome_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "checklist_id",
+          "state",
+          "failure_policy",
+          "visit_existing",
+          "items_completed",
+          "items_failed",
+          "items_blocked",
+          "items_skipped",
+          "items_attempted",
+          "legs_spawned",
+          "current_item_id",
+          "outcome",
+          "outcome_reason",
+          "started_at",
+          "updated_at",
+          "finished_at"
+        ],
+        "title": "AutoDriverRunOut",
+        "description": "Response shape for the auto-driver run row."
+      },
+      "Body_post_upload_api_uploads_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "The file body to upload."
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_post_upload_api_uploads_post"
+      },
+      "ChecklistItemIn": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "parent_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Item Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "ChecklistItemIn",
+        "description": "Request shape for ``POST /api/checklists/{id}/items`` (create).\n\nPer behavior/checklists.md the user types into the Add-item input;\nparent_item_id may be supplied so the API can support keyboard\nTab-nest at create time as well as drag-into-parent at create\ntime. ``notes`` is optional (the user expands the notes block\nafter create more often than at create time)."
+      },
+      "ChecklistItemOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "checklist_id": {
+            "type": "string",
+            "title": "Checklist Id"
+          },
+          "parent_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Item Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "chat_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Session Id"
+          },
+          "blocked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked At"
+          },
+          "blocked_reason_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason Category"
+          },
+          "blocked_reason_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason Text"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "checklist_id",
+          "parent_item_id",
+          "label",
+          "notes",
+          "sort_order",
+          "checked_at",
+          "chat_session_id",
+          "blocked_at",
+          "blocked_reason_category",
+          "blocked_reason_text",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChecklistItemOut",
+        "description": "Response shape for a single checklist item."
+      },
+      "ChecklistItemUpdate": {
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ChecklistItemUpdate",
+        "description": "Request shape for ``PATCH /api/checklist-items/{id}`` (edit).\n\nBoth fields are optional \u2014 the API distinguishes \"unchanged\" via\n``None``. Pydantic's ``extra=\"forbid\"`` rejects unknown keys."
+      },
+      "ChecklistOverviewOut": {
+        "properties": {
+          "checklist_id": {
+            "type": "string",
+            "title": "Checklist Id"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChecklistItemOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "active_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AutoDriverRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checklist_id",
+          "items",
+          "active_run"
+        ],
+        "title": "ChecklistOverviewOut",
+        "description": "Response shape for ``GET /api/checklists/{id}``.\n\nBundles the items list + the active-run row (if any) into one\npayload so the client renders the pane without two roundtrips."
+      },
+      "DriverDiagListOut": {
+        "properties": {
+          "drivers": {
+            "items": {
+              "$ref": "#/components/schemas/DriverDiagOut"
+            },
+            "type": "array",
+            "title": "Drivers"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "drivers"
+        ],
+        "title": "DriverDiagListOut",
+        "description": "Response shape for ``GET /api/diag/drivers``."
+      },
+      "DriverDiagOut": {
+        "properties": {
+          "checklist_id": {
+            "type": "string",
+            "title": "Checklist Id"
+          },
+          "run_id": {
+            "type": "integer",
+            "title": "Run Id"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "current_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Item Id"
+          },
+          "items_completed": {
+            "type": "integer",
+            "title": "Items Completed"
+          },
+          "items_failed": {
+            "type": "integer",
+            "title": "Items Failed"
+          },
+          "items_blocked": {
+            "type": "integer",
+            "title": "Items Blocked"
+          },
+          "items_skipped": {
+            "type": "integer",
+            "title": "Items Skipped"
+          },
+          "legs_spawned": {
+            "type": "integer",
+            "title": "Legs Spawned"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checklist_id",
+          "run_id",
+          "state",
+          "current_item_id",
+          "items_completed",
+          "items_failed",
+          "items_blocked",
+          "items_skipped",
+          "legs_spawned"
+        ],
+        "title": "DriverDiagOut",
+        "description": "One entry in ``GET /api/diag/drivers``."
+      },
+      "FsEntryOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "mtime": {
+            "type": "number",
+            "title": "Mtime"
+          },
+          "is_readable": {
+            "type": "boolean",
+            "title": "Is Readable"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "size",
+          "mtime",
+          "is_readable"
+        ],
+        "title": "FsEntryOut",
+        "description": "One directory entry."
+      },
+      "FsListOut": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/FsEntryOut"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "capped": {
+            "type": "boolean",
+            "title": "Capped"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "entries",
+          "capped"
+        ],
+        "title": "FsListOut",
+        "description": "Response shape for ``GET /api/fs/list``."
+      },
+      "FsReadOut": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "content",
+          "size",
+          "truncated"
+        ],
+        "title": "FsReadOut",
+        "description": "Response shape for ``GET /api/fs/read``."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthOut": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "uptime_s": {
+            "type": "number",
+            "title": "Uptime S"
+          },
+          "db_ok": {
+            "type": "boolean",
+            "title": "Db Ok"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "uptime_s",
+          "db_ok"
+        ],
+        "title": "HealthOut",
+        "description": "Response shape for ``GET /api/health``."
+      },
+      "LinkChatIn": {
+        "properties": {
+          "chat_session_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Chat Session Id"
+          },
+          "spawned_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Spawned By",
+            "default": "user"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "chat_session_id"
+        ],
+        "title": "LinkChatIn",
+        "description": "Request shape for ``POST /api/checklist-items/{id}/link``."
+      },
+      "MessageOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "executor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executor Model"
+          },
+          "advisor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Model"
+          },
+          "effort_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effort Level"
+          },
+          "routing_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Source"
+          },
+          "routing_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Reason"
+          },
+          "matched_rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Rule Id"
+          },
+          "executor_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executor Input Tokens"
+          },
+          "executor_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Executor Output Tokens"
+          },
+          "advisor_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Input Tokens"
+          },
+          "advisor_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Output Tokens"
+          },
+          "advisor_calls_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Calls Count"
+          },
+          "cache_read_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Read Tokens"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "role",
+          "content",
+          "created_at",
+          "executor_model",
+          "advisor_model",
+          "effort_level",
+          "routing_source",
+          "routing_reason",
+          "matched_rule_id",
+          "executor_input_tokens",
+          "executor_output_tokens",
+          "advisor_input_tokens",
+          "advisor_output_tokens",
+          "advisor_calls_count",
+          "cache_read_tokens",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "MessageOut",
+        "description": "Response shape for ``GET /api/sessions/{id}/messages`` rows.\n\nField order mirrors :class:`bearings.db.messages.Message` so the\nauditor can grep both files against the spec \u00a75 column list.\nRouting/usage fields are nullable across all rows: assistant\nrows persisted by item 1.9's\n:func:`bearings.agent.persistence.persist_assistant_turn` carry\nreal values; user / system rows + legacy\n``routing_source = 'unknown_legacy'`` rows carry ``None`` per\nspec \u00a75 \"Backfill for legacy data\"."
+      },
+      "MoveItemIn": {
+        "properties": {
+          "parent_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Item Id"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "MoveItemIn",
+        "description": "Request shape for ``POST /api/checklist-items/{id}/move``."
+      },
+      "OutcomeIn": {
+        "properties": {
+          "category": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Category"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "category"
+        ],
+        "title": "OutcomeIn",
+        "description": "Request shape for ``POST /api/checklist-items/{id}/block`` etc.\n\n``category`` is one of ``blocked`` / ``failed`` / ``skipped``.\n``reason`` is optional free-text."
+      },
+      "OverrideRateOut": {
+        "properties": {
+          "rule_kind": {
+            "type": "string",
+            "title": "Rule Kind"
+          },
+          "rule_id": {
+            "type": "integer",
+            "title": "Rule Id"
+          },
+          "fired_count": {
+            "type": "integer",
+            "title": "Fired Count"
+          },
+          "overridden_count": {
+            "type": "integer",
+            "title": "Overridden Count"
+          },
+          "rate": {
+            "type": "number",
+            "title": "Rate"
+          },
+          "review": {
+            "type": "boolean",
+            "title": "Review"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rule_kind",
+          "rule_id",
+          "fired_count",
+          "overridden_count",
+          "rate",
+          "review"
+        ],
+        "title": "OverrideRateOut",
+        "description": "One row of ``GET /api/usage/override_rates?days=14`` per spec \u00a79."
+      },
+      "PairedChatLegOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "checklist_item_id": {
+            "type": "integer",
+            "title": "Checklist Item Id"
+          },
+          "chat_session_id": {
+            "type": "string",
+            "title": "Chat Session Id"
+          },
+          "leg_number": {
+            "type": "integer",
+            "title": "Leg Number"
+          },
+          "spawned_by": {
+            "type": "string",
+            "title": "Spawned By"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "checklist_item_id",
+          "chat_session_id",
+          "leg_number",
+          "spawned_by",
+          "created_at",
+          "closed_at"
+        ],
+        "title": "PairedChatLegOut",
+        "description": "Response shape for one leg row."
+      },
+      "PromptIn": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 64000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "PromptIn",
+        "description": "Request shape for ``POST /api/sessions/{id}/prompt``.\n\nPer ``docs/behavior/prompt-endpoint.md`` \u00a7\"Request shape\" only\n``content`` is read; additional fields are ignored at the boundary.\nPydantic's ``extra=\"ignore\"`` realises that \u2014 clients can send a\nbody with ``role`` / ``attachments`` keys (defensive against future\nadditions) without rejection, but the values are dropped.\n\nThe ``min_length=1`` guard is on the Pydantic shape; the deeper\n\"non-empty after stripping whitespace\" rule lives in\n:func:`bearings.agent.prompt_dispatch.dispatch_prompt` so a client\nsending a string of pure whitespace surfaces the doc-mandated\ndetail message rather than a Pydantic validation error."
+      },
+      "QuotaDiagOut": {
+        "properties": {
+          "poller_configured": {
+            "type": "boolean",
+            "title": "Poller Configured"
+          },
+          "has_snapshot": {
+            "type": "boolean",
+            "title": "Has Snapshot"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "overall_used_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Used Pct"
+          },
+          "sonnet_used_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sonnet Used Pct"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "poller_configured",
+          "has_snapshot",
+          "captured_at",
+          "overall_used_pct",
+          "sonnet_used_pct"
+        ],
+        "title": "QuotaDiagOut",
+        "description": "Response shape for ``GET /api/diag/quota``."
+      },
+      "QuotaSnapshotOut": {
+        "properties": {
+          "captured_at": {
+            "type": "integer",
+            "title": "Captured At"
+          },
+          "overall_used_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Used Pct"
+          },
+          "sonnet_used_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sonnet Used Pct"
+          },
+          "overall_resets_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overall Resets At"
+          },
+          "sonnet_resets_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sonnet Resets At"
+          },
+          "raw_payload": {
+            "type": "string",
+            "title": "Raw Payload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "captured_at",
+          "overall_used_pct",
+          "sonnet_used_pct",
+          "overall_resets_at",
+          "sonnet_resets_at",
+          "raw_payload"
+        ],
+        "title": "QuotaSnapshotOut",
+        "description": "Response body for ``GET /api/quota/current`` + ``POST /refresh``.\n\nMirrors :class:`bearings.agent.quota.QuotaSnapshot`. ``raw_payload``\nis exposed as a string (the JSON the upstream returned) so the\nfrontend can opportunistically parse forward-compat fields without\nBearings having to schema them."
+      },
+      "RedactionOut": {
+        "properties": {
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "pattern": {
+            "type": "string",
+            "title": "Pattern"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "offset",
+          "length",
+          "pattern"
+        ],
+        "title": "RedactionOut",
+        "description": "One redaction range. Mirrors :class:`bearings.agent.vault.Redaction`."
+      },
+      "RoutingPreviewIn": {
+        "properties": {
+          "tags": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RoutingPreviewIn",
+        "description": "Request body for ``POST /api/routing/preview`` (spec \u00a79)."
+      },
+      "RoutingPreviewOut": {
+        "properties": {
+          "executor": {
+            "type": "string",
+            "title": "Executor"
+          },
+          "advisor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor"
+          },
+          "advisor_max_uses": {
+            "type": "integer",
+            "title": "Advisor Max Uses"
+          },
+          "effort": {
+            "type": "string",
+            "title": "Effort"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "matched_rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Rule Id"
+          },
+          "evaluated_rules": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Evaluated Rules"
+          },
+          "quota_downgrade_applied": {
+            "type": "boolean",
+            "title": "Quota Downgrade Applied"
+          },
+          "quota_state": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Quota State"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "executor",
+          "advisor",
+          "advisor_max_uses",
+          "effort",
+          "source",
+          "reason",
+          "matched_rule_id",
+          "evaluated_rules",
+          "quota_downgrade_applied",
+          "quota_state"
+        ],
+        "title": "RoutingPreviewOut",
+        "description": "Response body for ``POST /api/routing/preview`` per spec \u00a79.\n\nFields:\n\n* ``executor`` / ``advisor`` / ``advisor_max_uses`` / ``effort`` \u2014\n  the resolved decision after both ``evaluate()`` and\n  ``apply_quota_guard()``.\n* ``source`` / ``reason`` \u2014 spec \u00a7App A enum + free-text.\n* ``matched_rule_id`` \u2014 None when the absolute default fires.\n* ``evaluated_rules`` \u2014 debug surface (\"Why this model?\").\n* ``quota_downgrade_applied`` \u2014 boolean per spec \u00a79 contract:\n  ``True`` when the post-guard source is ``'quota_downgrade'``.\n* ``quota_state`` \u2014 the ``{overall_used_pct, sonnet_used_pct}``\n  snapshot at decision time, mirroring the per-message\n  persistence path (item 1.9)."
+      },
+      "RoutingReorderIn": {
+        "properties": {
+          "ids_in_priority_order": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 0,
+            "title": "Ids In Priority Order"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ids_in_priority_order"
+        ],
+        "title": "RoutingReorderIn",
+        "description": "Request body for ``PATCH /api/tags/{id}/routing/reorder`` (spec \u00a79)."
+      },
+      "RoutingRuleIn": {
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 100
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "match_type": {
+            "type": "string",
+            "title": "Match Type"
+          },
+          "match_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Value"
+          },
+          "executor_model": {
+            "type": "string",
+            "title": "Executor Model"
+          },
+          "advisor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Model"
+          },
+          "advisor_max_uses": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Advisor Max Uses",
+            "default": 5
+          },
+          "effort_level": {
+            "type": "string",
+            "title": "Effort Level",
+            "default": "auto"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "match_type",
+          "executor_model",
+          "reason"
+        ],
+        "title": "RoutingRuleIn",
+        "description": "Request body for tag rule POST/PATCH."
+      },
+      "RoutingRuleOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "tag_id": {
+            "type": "integer",
+            "title": "Tag Id"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "match_type": {
+            "type": "string",
+            "title": "Match Type"
+          },
+          "match_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Value"
+          },
+          "executor_model": {
+            "type": "string",
+            "title": "Executor Model"
+          },
+          "advisor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Model"
+          },
+          "advisor_max_uses": {
+            "type": "integer",
+            "title": "Advisor Max Uses"
+          },
+          "effort_level": {
+            "type": "string",
+            "title": "Effort Level"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "tag_id",
+          "priority",
+          "enabled",
+          "match_type",
+          "match_value",
+          "executor_model",
+          "advisor_model",
+          "advisor_max_uses",
+          "effort_level",
+          "reason",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "RoutingRuleOut",
+        "description": "Response body for tag rule endpoints."
+      },
+      "RunnerDiagListOut": {
+        "properties": {
+          "runners": {
+            "items": {
+              "$ref": "#/components/schemas/RunnerDiagOut"
+            },
+            "type": "array",
+            "title": "Runners"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "runners"
+        ],
+        "title": "RunnerDiagListOut",
+        "description": "Response shape for ``GET /api/diag/sessions``."
+      },
+      "RunnerDiagOut": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "is_running": {
+            "type": "boolean",
+            "title": "Is Running"
+          },
+          "is_awaiting_user": {
+            "type": "boolean",
+            "title": "Is Awaiting User"
+          },
+          "queue_length": {
+            "type": "integer",
+            "title": "Queue Length"
+          },
+          "ring_buffer_size": {
+            "type": "integer",
+            "title": "Ring Buffer Size"
+          },
+          "subscriber_count": {
+            "type": "integer",
+            "title": "Subscriber Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session_id",
+          "is_running",
+          "is_awaiting_user",
+          "queue_length",
+          "ring_buffer_size",
+          "subscriber_count"
+        ],
+        "title": "RunnerDiagOut",
+        "description": "One entry in ``GET /api/diag/sessions``."
+      },
+      "SearchHitOut": {
+        "properties": {
+          "vault_id": {
+            "type": "integer",
+            "title": "Vault Id"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "line_number": {
+            "type": "integer",
+            "title": "Line Number"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vault_id",
+          "path",
+          "title",
+          "kind",
+          "line_number",
+          "snippet"
+        ],
+        "title": "SearchHitOut",
+        "description": "One search hit row. Mirrors :class:`bearings.agent.vault.SearchHit`."
+      },
+      "SearchResultOut": {
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHitOut"
+            },
+            "type": "array",
+            "title": "Hits"
+          },
+          "capped": {
+            "type": "boolean",
+            "title": "Capped"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "hits",
+          "capped"
+        ],
+        "title": "SearchResultOut",
+        "description": "Response shape for ``GET /api/vault/search``.\n\n``capped`` reflects the \"showing first N \u2014 narrow your query for\nmore\" indicator from vault.md \u00a7\"Search semantics\"."
+      },
+      "ServerDiagOut": {
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "uptime_s": {
+            "type": "number",
+            "title": "Uptime S"
+          },
+          "pid": {
+            "type": "integer",
+            "title": "Pid"
+          },
+          "db_configured": {
+            "type": "boolean",
+            "title": "Db Configured"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version",
+          "uptime_s",
+          "pid",
+          "db_configured"
+        ],
+        "title": "ServerDiagOut",
+        "description": "Response shape for ``GET /api/diag/server``."
+      },
+      "SessionOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "session_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Instructions"
+          },
+          "working_dir": {
+            "type": "string",
+            "title": "Working Dir"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "permission_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Permission Mode"
+          },
+          "max_budget_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Budget Usd"
+          },
+          "total_cost_usd": {
+            "type": "number",
+            "title": "Total Cost Usd"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count"
+          },
+          "last_context_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Context Pct"
+          },
+          "last_context_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Context Tokens"
+          },
+          "last_context_max": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Context Max"
+          },
+          "pinned": {
+            "type": "boolean",
+            "title": "Pinned"
+          },
+          "error_pending": {
+            "type": "boolean",
+            "title": "Error Pending"
+          },
+          "checklist_item_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checklist Item Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "last_viewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Viewed At"
+          },
+          "last_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Completed At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "description",
+          "session_instructions",
+          "working_dir",
+          "model",
+          "permission_mode",
+          "max_budget_usd",
+          "total_cost_usd",
+          "message_count",
+          "last_context_pct",
+          "last_context_tokens",
+          "last_context_max",
+          "pinned",
+          "error_pending",
+          "checklist_item_id",
+          "created_at",
+          "updated_at",
+          "last_viewed_at",
+          "last_completed_at",
+          "closed_at"
+        ],
+        "title": "SessionOut",
+        "description": "Response shape for ``GET /api/sessions/{id}`` and the row list."
+      },
+      "SessionTitleUpdate": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "SessionTitleUpdate",
+        "description": "Request shape for ``PATCH /api/sessions/{id}`` \u2014 title-only."
+      },
+      "ShellExecIn": {
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Argv",
+            "description": "argv to dispatch (1-64 entries; each entry \u2264 4000 chars). argv[0] must be a member of the per-app shell allowlist."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "argv"
+        ],
+        "title": "ShellExecIn",
+        "description": "Request body for ``POST /api/shell/exec``."
+      },
+      "ShellExecOut": {
+        "properties": {
+          "exit_code": {
+            "type": "integer",
+            "title": "Exit Code"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "stdout": {
+            "type": "string",
+            "title": "Stdout"
+          },
+          "stderr": {
+            "type": "string",
+            "title": "Stderr"
+          },
+          "duration_s": {
+            "type": "number",
+            "title": "Duration S"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "exit_code",
+          "reason",
+          "stdout",
+          "stderr",
+          "duration_s"
+        ],
+        "title": "ShellExecOut",
+        "description": "Response body for ``POST /api/shell/exec``."
+      },
+      "SpawnPairedChatIn": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "plug": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plug"
+          },
+          "spawned_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Spawned By",
+            "default": "user"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "SpawnPairedChatIn",
+        "description": "Request shape for ``POST /api/checklist-items/{id}/spawn-chat``.\n\nPer ``docs/behavior/paired-chats.md`` \u00a7\"Spawning a new pair\" the\n``\ud83d\udcac Work on this`` click takes no arguments \u2014 the chat title\ndefaults to the item's label. The optional ``title`` and ``plug``\nfields cover the auto-driver leg-spawn path and a future \"spawn\nwith custom title\" UI affordance."
+      },
+      "StartRunIn": {
+        "properties": {
+          "failure_policy": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Failure Policy",
+            "default": "halt"
+          },
+          "visit_existing": {
+            "type": "boolean",
+            "title": "Visit Existing",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StartRunIn",
+        "description": "Request shape for ``POST /api/checklists/{id}/run/start``.\n\nPer behavior/checklists.md \u00a7\"Run-control surface\" the user picks\nfailure_policy \u2208 {halt, skip} (default halt) and the\nvisit_existing toggle before pressing Start."
+      },
+      "SystemRoutingRuleIn": {
+        "properties": {
+          "priority": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Priority",
+            "default": 1000
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "match_type": {
+            "type": "string",
+            "title": "Match Type"
+          },
+          "match_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Value"
+          },
+          "executor_model": {
+            "type": "string",
+            "title": "Executor Model"
+          },
+          "advisor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Model"
+          },
+          "advisor_max_uses": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Advisor Max Uses",
+            "default": 5
+          },
+          "effort_level": {
+            "type": "string",
+            "title": "Effort Level",
+            "default": "auto"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "match_type",
+          "executor_model",
+          "reason"
+        ],
+        "title": "SystemRoutingRuleIn",
+        "description": "Request body for system rule POST/PATCH."
+      },
+      "SystemRoutingRuleOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "match_type": {
+            "type": "string",
+            "title": "Match Type"
+          },
+          "match_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Value"
+          },
+          "executor_model": {
+            "type": "string",
+            "title": "Executor Model"
+          },
+          "advisor_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advisor Model"
+          },
+          "advisor_max_uses": {
+            "type": "integer",
+            "title": "Advisor Max Uses"
+          },
+          "effort_level": {
+            "type": "string",
+            "title": "Effort Level"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "seeded": {
+            "type": "boolean",
+            "title": "Seeded"
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "priority",
+          "enabled",
+          "match_type",
+          "match_value",
+          "executor_model",
+          "advisor_model",
+          "advisor_max_uses",
+          "effort_level",
+          "reason",
+          "seeded",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SystemRoutingRuleOut",
+        "description": "Response body for system rule endpoints."
+      },
+      "TagIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "working_dir": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Dir"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "TagIn",
+        "description": "Request body for ``POST /api/tags`` and ``PATCH /api/tags/{id}``.\n\nThe validators mirror :class:`bearings.db.tags.Tag.__post_init__`\nso a bad payload fails at the wire boundary with a 422 rather than\nsurfacing a 500 from the dataclass downstream. ``model_config``\nforbids extra fields so a typo (e.g. ``defaultModel`` instead of\n``default_model``) is rejected loudly."
+      },
+      "TagMemoryIn": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 30000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "TagMemoryIn",
+        "description": "Request body for memory create / update endpoints."
+      },
+      "TagMemoryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "tag_id": {
+            "type": "integer",
+            "title": "Tag Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "tag_id",
+          "title",
+          "body",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TagMemoryOut",
+        "description": "Response body for memory endpoints."
+      },
+      "TagOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model"
+          },
+          "working_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Working Dir"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color",
+          "default_model",
+          "working_dir",
+          "group",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TagOut",
+        "description": "Response body for tag endpoints.\n\n``group`` is computed from ``name`` (slash-namespace convention per\n:data:`bearings.config.constants.TAG_GROUP_SEPARATOR`) and exposed\nso the frontend filter panel doesn't have to re-parse it."
+      },
+      "UploadListOut": {
+        "properties": {
+          "uploads": {
+            "items": {
+              "$ref": "#/components/schemas/UploadOut"
+            },
+            "type": "array",
+            "title": "Uploads"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "uploads"
+        ],
+        "title": "UploadListOut",
+        "description": "Response shape for ``GET /api/uploads``."
+      },
+      "UploadOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "sha256",
+          "filename",
+          "mime_type",
+          "size",
+          "created_at"
+        ],
+        "title": "UploadOut",
+        "description": "One upload row, as returned by POST/GET endpoints."
+      },
+      "UsageByModelRow": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "title": "Output Tokens"
+          },
+          "advisor_calls": {
+            "type": "integer",
+            "title": "Advisor Calls"
+          },
+          "cache_read_tokens": {
+            "type": "integer",
+            "title": "Cache Read Tokens"
+          },
+          "sessions": {
+            "type": "integer",
+            "title": "Sessions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "model",
+          "role",
+          "input_tokens",
+          "output_tokens",
+          "advisor_calls",
+          "cache_read_tokens",
+          "sessions"
+        ],
+        "title": "UsageByModelRow",
+        "description": "One row of ``GET /api/usage/by_model?period=week``.\n\nPer spec \u00a78 \"Quota efficiency\" the by_model surface aggregates\nper-model token totals plus advisor calls + cache reads. The\naggregation slices ``messages`` rows by their per-message routing\ncolumns (item 1.9 wires the writes)."
+      },
+      "UsageByTagRow": {
+        "properties": {
+          "tag_id": {
+            "type": "integer",
+            "title": "Tag Id"
+          },
+          "tag_name": {
+            "type": "string",
+            "title": "Tag Name"
+          },
+          "executor_input_tokens": {
+            "type": "integer",
+            "title": "Executor Input Tokens"
+          },
+          "executor_output_tokens": {
+            "type": "integer",
+            "title": "Executor Output Tokens"
+          },
+          "advisor_input_tokens": {
+            "type": "integer",
+            "title": "Advisor Input Tokens"
+          },
+          "advisor_output_tokens": {
+            "type": "integer",
+            "title": "Advisor Output Tokens"
+          },
+          "advisor_calls": {
+            "type": "integer",
+            "title": "Advisor Calls"
+          },
+          "sessions": {
+            "type": "integer",
+            "title": "Sessions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tag_id",
+          "tag_name",
+          "executor_input_tokens",
+          "executor_output_tokens",
+          "advisor_input_tokens",
+          "advisor_output_tokens",
+          "advisor_calls",
+          "sessions"
+        ],
+        "title": "UsageByTagRow",
+        "description": "One row of ``GET /api/usage/by_tag?period=week``.\n\nTags are the user-facing classification surface; this slice rolls\nup the per-message totals into per-tag aggregates so the inspector\ncan attribute spend to a tag."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VaultDocOut": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/VaultEntryOut"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "redactions": {
+            "items": {
+              "$ref": "#/components/schemas/RedactionOut"
+            },
+            "type": "array",
+            "title": "Redactions"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entry",
+          "body",
+          "redactions",
+          "truncated"
+        ],
+        "title": "VaultDocOut",
+        "description": "Response shape for ``GET /api/vault/{id}`` \u2014 entry + body + redactions.\n\nPer vault.md \u00a7\"Redaction rendering\" the server returns the raw\nbody plus a list of redaction ranges; the client masks visually\nand toggles per-range. ``persists no toggle state`` \u2014 the server\nre-detects on every fetch (so a file edited to remove a secret\nsurfaces unredacted on the next read)."
+      },
+      "VaultEntryOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "mtime": {
+            "type": "integer",
+            "title": "Mtime"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "last_indexed_at": {
+            "type": "integer",
+            "title": "Last Indexed At"
+          },
+          "markdown_link": {
+            "type": "string",
+            "title": "Markdown Link"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "slug",
+          "title",
+          "kind",
+          "mtime",
+          "size",
+          "last_indexed_at",
+          "markdown_link"
+        ],
+        "title": "VaultEntryOut",
+        "description": "Response shape for a single vault row.\n\nPer ``docs/behavior/vault.md`` \u00a7\"When the user opens the vault\"\neach row carries an absolute path, slug, optional title, kind,\nmtime, and size; per \u00a7\"Paste-into-message behavior\" the\n``markdown_link`` field is server-computed so the client doesn't\nhave to assemble it (matches the ``group`` server-computed field\npattern on :class:`bearings.web.models.tags.TagOut`)."
+      },
+      "VaultListOut": {
+        "properties": {
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/VaultEntryOut"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "todos": {
+            "items": {
+              "$ref": "#/components/schemas/VaultEntryOut"
+            },
+            "type": "array",
+            "title": "Todos"
+          },
+          "plan_roots": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Plan Roots"
+          },
+          "todo_globs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Todo Globs"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plans",
+          "todos",
+          "plan_roots",
+          "todo_globs"
+        ],
+        "title": "VaultListOut",
+        "description": "Response shape for ``GET /api/vault`` \u2014 bucketed list.\n\nPer vault.md \u00a7\"When the user opens the vault\" the user sees a\nPlans section and a Todos section; the wire surfaces both\nbuckets as separate arrays so the client doesn't have to filter\non the wire-side ``kind`` discriminator. ``plan_roots`` /\n``todo_globs`` mirror the configured paths so the empty-state\nUI (\"No plans found under \u2026\") can name them per vault.md\n\u00a7\"When the user opens the vault\" \u2192 empty state."
+      }
+    }
+  }
+}

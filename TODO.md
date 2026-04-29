@@ -4,34 +4,46 @@ Append the moment work is deferred or an error is passed on, per the
 project CLAUDE.md "TODO.md Discipline" rule. Scheduled work belongs in
 the master checklist (id `0f6e4006fb1d4340bda9983af3432064`), not here.
 
+When a TODO is resolved, strike it from this file in the same commit
+that lands the fix and cite the resolving commit hash in the removal
+trailer.
+
+## Resolved by item 3.3 (documentation pass)
+
+* **Item 2.5 — chat.md augmentation for non-routing inspector
+  subsections.** Resolved: `docs/behavior/chat.md` now carries an
+  §"Inspector pane (non-routing subsections)" section describing the
+  Agent / Context / Instructions tabs as shipped in commit `d0f5f68`.
+  Cites arch §1.2 + the `SessionOut` wire shape per
+  `src/bearings/web/models/sessions.py`.
+
 ## Deferred from item 2.1 (SvelteKit scaffolding + app shell)
 
 The scaffold establishes empty directories under `frontend/src/lib/`
 mirroring `docs/architecture-v1.md` §1.2. Each one tracks a future
-item per the plan's build order:
+item per the plan's build order. **Status:** all of the items below
+landed during Phase 2 — kept here as a historical record of how the
+scaffold ledger was discharged, not as outstanding work. Strike on the
+next ledger sweep.
 
 - `frontend/src/lib/themes/` — runtime theme provider, no-flash boot
-  script, theme-color meta updater. **Item 2.9** wires the picker per
+  script, theme-color meta updater. **Item 2.9** wired the picker per
   `docs/behavior/themes.md` and tracks `data-theme` on `<html>`.
-  Default theme during 2.1: Midnight Glass (set in `app.html`).
 - `frontend/src/lib/keyboard/` — keybindings registry + cheat-sheet
-  generator. **Item 2.9** registers every chord listed in
+  generator. **Item 2.9** registered every chord listed in
   `docs/behavior/keyboard-shortcuts.md` §"Bindings (v1)".
 - `frontend/src/lib/context-menu/` — palette + registry + actions/.
-  **Item 2.9** hooks the right-click handler per
+  **Item 2.9** hooked the right-click handler per
   `docs/behavior/context-menus.md`.
 - `frontend/src/lib/api/` — typed fetch clients per backend route
-  group. Items 2.2-2.10 add files as their feature lands; 2.4 (new
-  session) adds `routing.ts` / `quota.ts` first.
-- `frontend/src/lib/stores/` — Svelte 5 runes stores. Item 2.2 adds
-  `sessions.svelte.ts` + `tags.svelte.ts`; 2.3 adds
-  `conversation.svelte.ts`; 2.4-2.6 add routing / quota / usage
+  group. Items 2.2-2.10 added files as their feature landed; 2.4 added
+  `routing.ts` / `quota.ts` first.
+- `frontend/src/lib/stores/` — Svelte 5 runes stores. Item 2.2 added
+  `sessions.svelte.ts` + `tags.svelte.ts`; 2.3 added
+  `conversation.svelte.ts`; 2.4-2.6 added routing / quota / usage
   stores per spec §6 + §10.
 - `frontend/src/lib/components/{conversation,sidebar,inspector,settings,checklist,routing,vault,reorg,menus,icons,modals,feedback,common,pending}/`
-  — populated by items 2.2-2.10 per arch §1.2 component groups. Each
-  is a `.gitkeep` placeholder until the feature item lands.
-- `frontend/src/lib/actions/`, `frontend/src/lib/utils/` — Svelte
-  actions + pure helpers; populated incrementally by 2.2+.
+  — populated by items 2.2-2.10 per arch §1.2 component groups.
 
 ## Item 2.1 — small inline-styling decision logged for 2.9 review
 

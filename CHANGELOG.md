@@ -1,0 +1,130 @@
+# Changelog
+
+All notable changes to Bearings are recorded here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The `1.0.0` tag is reserved for the stability commitment after roughly
+two weeks of dogfood; pre-release versions continue under `0.x.y` per
+SemVer §4.
+
+## [0.18.0] — 2026-04-29
+
+The v1 rebuild: behavioral parity with v0.17.x's feature surface, plus
+model-routing v1, on a fresh tree (`v1-rebuild` branch, orphan
+history). Concurrent run with v0.17.x is supported (port 8788, DB
+`~/.local/share/bearings-v1/`, systemd unit `bearings-v1.service`).
+
+### Added
+
+* **Model routing v1** (per `docs/model-routing-v1-spec.md`):
+  * `evaluate()` pure function for tag-rule + system-rule + default
+    resolution (`agent/routing.py`).
+  * Quota poller and `apply_quota_guard()` downgrade with manual-override
+    accounting (`agent/quota.py`).
+  * Override-rate aggregator with rolling 14-day window
+    (`agent/override_aggregator.py`).
+  * Routing / quota / usage HTTP endpoints per spec §9
+    (`/api/routing/*`, `/api/quota/*`, `/api/usage/*`).
+  * Per-message routing/usage columns on `messages` capturing executor
+    and advisor `model_usage`, source, reason, matched rule.
+  * `RoutingDecision`, `RoutingRule`, `SystemRoutingRule`, `QuotaSnapshot`
+    frozen dataclasses (Appendix A wire shape).
+* **Frontend routing surfaces** (per spec §6 + §10):
+  * New-session dialog with reactive routing preview (300 ms debounce),
+    advisor toggle, quota bars (yellow at 80 %, red at 95 %), and
+    downgrade banner with "Use anyway" override.
+  * Per-message `RoutingBadge` in the conversation pane.
+  * Inspector **Routing** subsection: current decision, advisor totals,
+    quota delta this session, per-message timeline with "Why this
+    model?" expandable rule chain.
+  * Inspector **Usage** subsection: 7-day headroom chart, by-model
+    table, advisor-effectiveness widget, rules-to-review list (override
+    rate > 30 % over 14 days).
+  * Routing rule editor (per-tag + system-wide) with drag-reorder,
+    enable/disable, duplicate, delete, and a deterministic
+    test-against-message dialog (no LLM).
+* **Inspector core** (per arch §1.2): five-tab inspector shell with
+  Agent / Context / Instructions / Routing / Usage subsections (item
+  2.5 ships the first three; 2.6 lights up Routing + Usage).
+* **Paired chats + prompt endpoint + bearings CLI**:
+  `POST /api/sessions/<id>/prompt` returning 202, paired-chat persistence
+  per `docs/behavior/paired-chats.md`, and a `bearings` CLI with the
+  `todo` subcommand.
+* **Checklists, auto-driver, and sentinels**: full picking / linking /
+  reordering / run-control endpoints; auto-driver agent surfaces
+  per-item run state through the sidebar sentinel pip.
+* **Vault + memories**: per-tag system-prompt overlays, vault search,
+  memories editor, redaction toggles per `docs/behavior/vault.md`.
+* **Themes**: theme provider with no-flash boot script, runtime picker
+  with Midnight Glass / Default / Paper Light, theme-color meta updater.
+* **Keyboard shortcuts and context menus**: keybinding registry with
+  cheat-sheet, palette, and right-click action surface per
+  `docs/behavior/keyboard-shortcuts.md` and `docs/behavior/context-menus.md`.
+* **Migration script**: `scripts/migrate_v0_17_to_v0_18.py` copies
+  v0.17.x DB to the v1 path, transforms schema, has dry-run mode, and
+  is idempotent on re-run.
+* **OpenAPI export**: `GET /openapi.json` (item 1.10) and the static
+  copy at [`docs/openapi.json`](docs/openapi.json) — 62 paths,
+  53 schemas.
+* **Documentation**: `docs/architecture-v1.md`, `docs/model-routing-v1-spec.md`,
+  per-subsystem behavior specs under `docs/behavior/`, augmented chat.md
+  §"Inspector pane (non-routing subsections)", project `CLAUDE.md`.
+* **Quality gates**: 12-tool pre-commit stack (ruff, mypy, pytest,
+  vulture, radon, interrogate, codespell, pip-audit, eslint, prettier,
+  svelte-check, knip, ts-prune, depcheck, lychee), playwright e2e,
+  cross-system consistency lint, ≥ 80 % coverage on business logic.
+
+### Changed
+
+* **Repo posture**: `v1-rebuild` is an orphan branch; pre-commit
+  `branch-verifier` rejects commits to any other branch on this
+  worktree. Per-worktree `core.hooksPath` isolation via
+  `scripts/setup-worktree.sh`.
+* **Backend layout** consolidated per `docs/architecture-v1.md`:
+  * `bearings.agent` collapses v0.17.x's three-file session split into a
+    single session lifecycle module.
+  * `bearings.web` separates DTOs (`web/models/`) from routes
+    (`web/routes/`); each route group has a typed Pydantic wire model.
+  * `bearings.config` exposes the spec-mandated numeric constants in a
+    single constants module — no inline literals downstream.
+  * `bearings.db` keeps a single routing-aware schema (no migration
+    chain) and per-concern query modules.
+* **Frontend layout**: `lib/components/` regrouped from v0.17.x's
+  flat 60+ files into feature-scoped folders
+  (`conversation/` + `sidebar/` + `inspector/` + `routing/` + `vault/`
+  + `reorg/` + `menus/` + `modals/` + `feedback/` + `common/` +
+  `pending/` + `checklist/` + `settings/` + `icons/`).
+* **SDK**: pinned `claude-agent-sdk~=0.1.69` (compatible-release).
+  Streaming protocol, advisor tool, beta headers, `model_usage` shape,
+  effort levels, `fallback_model`, and subagent auto-select all updated
+  to current SDK surface (see `docs/architecture-v1.md` §5 SDK currency
+  audit).
+* **Concurrent-run defaults** for v1 vs v0.17.x: port 8787 → **8788**;
+  DB `~/.local/share/bearings/` → `~/.local/share/bearings-v1/`;
+  systemd `bearings.service` → `bearings-v1.service`.
+
+### Deferred (explicitly NOT in v0.18.0)
+
+* Multi-user / auth — Bearings stays localhost.
+* Cross-user shared rule libraries (per spec §12).
+* ML routers, A/B testing, classifier preflight (per spec §12).
+* Per-rule model-version pinning (per spec §12).
+* `1.0.0` stability commitment — post-dogfood decision.
+
+### Migration
+
+Run the one-shot migration script after upgrading from v0.17.x:
+
+```bash
+uv run python scripts/migrate_v0_17_to_v0_18.py --dry-run
+uv run python scripts/migrate_v0_17_to_v0_18.py
+```
+
+The script reads from `~/.local/share/bearings/sessions.db` and writes
+to `~/.local/share/bearings-v1/sessions.db`. The v0.17.x install is left
+untouched so the two services can run concurrently on ports 8787 / 8788
+during cutover.
+
+[0.18.0]: https://github.com/Beryndil/Bearings/tree/v1-rebuild
