@@ -266,20 +266,51 @@ async def list_all(
     *,
     kind: str | None = None,
     include_closed: bool = True,
+    tag_ids: tuple[int, ...] | None = None,
 ) -> list[Session]:
-    """Every session row matching the filters; newest-first."""
+    """Every session row matching the filters; newest-first.
+
+    ``tag_ids`` is the sidebar tag-filter surface from
+    ``docs/behavior/chat.md`` §"When the user creates a chat" + the
+    item 2.2 done-when criterion ("OR semantics across tags"). Passing
+    ``None`` (default) applies no tag filter; passing a non-empty tuple
+    returns sessions attached to **at least one** of the listed tags
+    (OR semantics, implemented via ``WHERE session_tags.tag_id IN
+    (...)``). ``DISTINCT`` collapses the multi-row product the join
+    produces when a single session matches more than one of the
+    requested tags. Passing the empty tuple raises ``ValueError`` —
+    the API layer maps "no filter" to ``None``, so an empty tuple is a
+    caller bug rather than an "exclude everything" intent.
+    """
     if kind is not None and kind not in KNOWN_SESSION_KINDS:
         raise ValueError(f"list_all: kind {kind!r} not in {sorted(KNOWN_SESSION_KINDS)}")
+    if tag_ids is not None and len(tag_ids) == 0:
+        raise ValueError(
+            "list_all: tag_ids must be non-empty when provided (use None for no filter)"
+        )
     clauses: list[str] = []
     args: list[object] = []
     if kind is not None:
-        clauses.append("kind = ?")
+        clauses.append("sessions.kind = ?")
         args.append(kind)
     if not include_closed:
-        clauses.append("closed_at IS NULL")
+        clauses.append("sessions.closed_at IS NULL")
+    if tag_ids is not None:
+        placeholders = ",".join(["?"] * len(tag_ids))
+        clauses.append(f"session_tags.tag_id IN ({placeholders})")
+        args.extend(tag_ids)
+    join = (
+        " INNER JOIN session_tags ON session_tags.session_id = sessions.id"
+        if tag_ids is not None
+        else ""
+    )
     where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+    # ``SELECT DISTINCT`` is only required on the join path; the
+    # plain-select path returns each row once already, so we keep the
+    # cheaper non-distinct query when no tag filter is in play.
+    select = _SELECT_SESSION_COLUMNS_DISTINCT if tag_ids is not None else _SELECT_SESSION_COLUMNS
     cursor = await connection.execute(
-        _SELECT_SESSION_COLUMNS + where + " ORDER BY updated_at DESC, id ASC",
+        select + join + where + " ORDER BY sessions.updated_at DESC, sessions.id ASC",
         args,
     )
     try:
@@ -420,6 +451,24 @@ _SELECT_SESSION_COLUMNS = (
     "last_context_pct, last_context_tokens, last_context_max, pinned, error_pending, "
     "checklist_item_id, created_at, updated_at, last_viewed_at, last_completed_at, "
     "closed_at FROM sessions"
+)
+
+
+# Variant used by the join path in :func:`list_all` when ``tag_ids`` is
+# set: the ``INNER JOIN session_tags`` produces one row per matching
+# (session, tag) pair, so a session attached to multiple selected tags
+# would appear multiple times without ``DISTINCT``. The ``sessions.``
+# qualifier is required because the join introduces another table; the
+# unqualified variant above is left alone so the no-filter path keeps
+# the cheaper plan.
+_SELECT_SESSION_COLUMNS_DISTINCT = (
+    "SELECT DISTINCT sessions.id, sessions.kind, sessions.title, sessions.description, "
+    "sessions.session_instructions, sessions.working_dir, sessions.model, "
+    "sessions.permission_mode, sessions.max_budget_usd, sessions.total_cost_usd, "
+    "sessions.message_count, sessions.last_context_pct, sessions.last_context_tokens, "
+    "sessions.last_context_max, sessions.pinned, sessions.error_pending, "
+    "sessions.checklist_item_id, sessions.created_at, sessions.updated_at, "
+    "sessions.last_viewed_at, sessions.last_completed_at, sessions.closed_at FROM sessions"
 )
 
 

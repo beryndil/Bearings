@@ -27,10 +27,33 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.node,
+        // Svelte 5 runes — used in .svelte.ts modules. The
+        // eslint-plugin-svelte flat preset auto-injects them for
+        // .svelte files; .svelte.ts files need them spelled out.
+        $state: "readonly",
+        $derived: "readonly",
+        $effect: "readonly",
+        $props: "readonly",
+        $bindable: "readonly",
+        $inspect: "readonly",
+        // ``RequestInfo`` is part of the Fetch lib but not always
+        // injected as a global by ESLint's preset; add it explicitly
+        // so test files using it as a parameter type pass.
+        RequestInfo: "readonly",
       },
     },
     plugins: { "@typescript-eslint": tseslint },
-    rules: { ...tseslint.configs.recommended.rules },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      // Defer to @typescript-eslint/no-unused-vars; the base rule
+      // misreads TypeScript function-type parameter names (which are
+      // documentation-only) as unused identifiers.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
   },
   ...svelte.configs["flat/recommended"],
   {
@@ -44,6 +67,16 @@ export default [
       globals: {
         ...globals.browser,
       },
+    },
+    plugins: { "@typescript-eslint": tseslint },
+    rules: {
+      // Same reasoning as the .ts override above — type-signature
+      // parameter names are documentation, not declarations.
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   {

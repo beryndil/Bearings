@@ -133,3 +133,98 @@ async def test_list_all_filters(conn: aiosqlite.Connection) -> None:
     assert {row.id for row in chats_all} == {a.id}
     every = await sessions_db.list_all(conn)
     assert {row.id for row in every} == {a.id, b.id}
+
+
+async def test_list_all_filters_by_tag_ids_or_semantics(
+    conn: aiosqlite.Connection,
+) -> None:
+    """Item 2.2 — OR semantics across tag_ids in :func:`list_all`.
+
+    The done-when for master item #537 ("Sidebar, tag filter, session
+    row. Finder-click filter + OR semantics across tags") is enforced
+    here: a session attached to **either** of two selected tags must
+    appear in the result, and AND-style intersection must NOT be
+    applied. We construct a deliberately disjoint setup —
+    session_a→tag1, session_b→tag2, session_c→untagged — and assert
+    that ``tag_ids=(tag1, tag2)`` returns {a, b}, never {} (which AND
+    semantics would yield against disjoint sessions).
+    """
+    from bearings.db import tags as tags_db
+
+    tag1 = await tags_db.create(conn, name="bearings/architect")
+    tag2 = await tags_db.create(conn, name="bearings/exec")
+
+    session_a = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="a", working_dir="/wd", model="sonnet"
+    )
+    session_b = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="b", working_dir="/wd", model="sonnet"
+    )
+    session_c = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="c", working_dir="/wd", model="sonnet"
+    )
+    await tags_db.attach(conn, session_id=session_a.id, tag_id=tag1.id)
+    await tags_db.attach(conn, session_id=session_b.id, tag_id=tag2.id)
+    # session_c remains untagged.
+
+    only_tag1 = await sessions_db.list_all(conn, tag_ids=(tag1.id,))
+    assert {row.id for row in only_tag1} == {session_a.id}
+
+    or_filter = await sessions_db.list_all(conn, tag_ids=(tag1.id, tag2.id))
+    assert {row.id for row in or_filter} == {session_a.id, session_b.id}, (
+        "OR semantics: session_a (tag1) or session_b (tag2) — AND would yield {}"
+    )
+
+    no_filter = await sessions_db.list_all(conn)
+    assert {row.id for row in no_filter} == {session_a.id, session_b.id, session_c.id}
+
+
+async def test_list_all_tag_ids_dedups_multi_attach(
+    conn: aiosqlite.Connection,
+) -> None:
+    """Sessions attached to multiple selected tags appear exactly once.
+
+    Without ``SELECT DISTINCT`` on the join path, a session attached to
+    both tag1 and tag2 would surface as two rows when ``tag_ids=(tag1,
+    tag2)``. The list_all contract is one row per session.
+    """
+    from bearings.db import tags as tags_db
+
+    tag1 = await tags_db.create(conn, name="bearings/architect")
+    tag2 = await tags_db.create(conn, name="bearings/exec")
+    session = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="multi", working_dir="/wd", model="sonnet"
+    )
+    await tags_db.attach(conn, session_id=session.id, tag_id=tag1.id)
+    await tags_db.attach(conn, session_id=session.id, tag_id=tag2.id)
+
+    rows = await sessions_db.list_all(conn, tag_ids=(tag1.id, tag2.id))
+    assert [row.id for row in rows] == [session.id]
+
+
+async def test_list_all_empty_tag_ids_raises(conn: aiosqlite.Connection) -> None:
+    """Empty ``tag_ids`` is a caller bug — ``None`` means "no filter"."""
+    with pytest.raises(ValueError, match="tag_ids must be non-empty"):
+        await sessions_db.list_all(conn, tag_ids=())
+
+
+async def test_list_all_combines_kind_and_tag_filter(conn: aiosqlite.Connection) -> None:
+    """``kind`` + ``tag_ids`` AND together (kind narrows, tag_ids OR within).
+
+    A checklist tagged with tag1 should NOT appear when filtering for
+    chat + tag_ids=(tag1,) — the kind clause excludes it.
+    """
+    from bearings.db import tags as tags_db
+
+    tag1 = await tags_db.create(conn, name="bearings/architect")
+    chat_tagged = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="chat", working_dir="/wd", model="sonnet"
+    )
+    checklist_tagged = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHECKLIST, title="cl", working_dir="/wd", model="sonnet"
+    )
+    await tags_db.attach(conn, session_id=chat_tagged.id, tag_id=tag1.id)
+    await tags_db.attach(conn, session_id=checklist_tagged.id, tag_id=tag1.id)
+
+    chats_only = await sessions_db.list_all(conn, kind="chat", tag_ids=(tag1.id,))
+    assert {row.id for row in chats_only} == {chat_tagged.id}

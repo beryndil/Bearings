@@ -89,6 +89,72 @@ async def test_list_sessions_filter_open_only(
     assert {row["id"] for row in response.json()} == {open_id}
 
 
+async def test_list_sessions_filter_by_tag_ids_or_semantics(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Item 2.2 — wire-shape contract for ``?tag_ids=1&tag_ids=2`` OR filter.
+
+    The sidebar filter UI passes selected tag ids as repeated query
+    params; the route must (a) accept the repeated form, and (b) apply
+    OR semantics across them. We assert both with a disjoint setup:
+    ``?tag_ids=tag1&tag_ids=tag2`` returns sessions tagged with EITHER,
+    not the AND-intersection (which would be empty here).
+    """
+    from bearings.db import tags as tags_db
+
+    app, conn = app_and_db
+    tag1 = await tags_db.create(conn, name="bearings/architect")
+    tag2 = await tags_db.create(conn, name="bearings/exec")
+
+    a = await _new_chat(conn, "a")
+    b = await _new_chat(conn, "b")
+    untagged = await _new_chat(conn, "untagged")
+    await tags_db.attach(conn, session_id=a, tag_id=tag1.id)
+    await tags_db.attach(conn, session_id=b, tag_id=tag2.id)
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/sessions",
+            params=[("tag_ids", str(tag1.id)), ("tag_ids", str(tag2.id))],
+        )
+    assert response.status_code == 200
+    ids = {row["id"] for row in response.json()}
+    assert ids == {a, b}, "OR semantics — untagged session must be excluded"
+    assert untagged not in ids
+
+
+async def test_list_sessions_no_tag_filter_returns_all(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Omitting ``tag_ids`` applies no tag filter (untagged sessions stay)."""
+    app, conn = app_and_db
+    a = await _new_chat(conn, "a")
+    with TestClient(app) as client:
+        response = client.get("/api/sessions")
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()} == {a}
+
+
+async def test_list_sessions_single_tag_id(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Single ``?tag_ids=N`` works without the OR-list shape."""
+    from bearings.db import tags as tags_db
+
+    app, conn = app_and_db
+    tag1 = await tags_db.create(conn, name="bearings/architect")
+    a = await _new_chat(conn, "a")
+    b = await _new_chat(conn, "b")
+    await tags_db.attach(conn, session_id=a, tag_id=tag1.id)
+
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"tag_ids": tag1.id})
+    assert response.status_code == 200
+    ids = {row["id"] for row in response.json()}
+    assert ids == {a}
+    assert b not in ids
+
+
 async def test_get_session_round_trip(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:

@@ -28,11 +28,27 @@
   import "../app.css";
   import type { Snippet } from "svelte";
 
+  import { SIDEBAR_STRINGS } from "$lib/config";
+  import SessionList from "$lib/components/sidebar/SessionList.svelte";
+
   interface Props {
     children?: Snippet;
   }
 
   const { children }: Props = $props();
+
+  /**
+   * The active session id — selected by clicking a row in the
+   * sidebar. Kept on the layout so the sidebar (which selects) and
+   * the conversation pane (which reads) live in the same reactive
+   * tree. Item 2.3's conversation render reads this via the layout
+   * data tree; v1 of item 2.2 just keeps the highlight wired.
+   */
+  let selectedSessionId = $state<string | null>(null);
+
+  function handleSelectSession(sessionId: string): void {
+    selectedSessionId = sessionId;
+  }
 </script>
 
 <div class="app-shell" data-testid="app-shell">
@@ -42,12 +58,12 @@
     aria-label="Sessions sidebar"
   >
     <header class="app-shell__sidebar-header border-b border-border p-3">
-      <h1 class="font-mono text-sm text-fg-strong">Bearings</h1>
-      <p class="text-xs text-fg-muted">v0.18.0-dev</p>
+      <h1 class="font-mono text-sm text-fg-strong">{SIDEBAR_STRINGS.heading}</h1>
+      <p class="text-xs text-fg-muted">{SIDEBAR_STRINGS.versionTag}</p>
     </header>
-    <nav class="app-shell__sidebar-body p-3 text-sm text-fg-muted" aria-label="Session list">
-      <p>Session list — wired in item 2.2 (Sidebar + tag filtering).</p>
-    </nav>
+    <div class="app-shell__sidebar-body" data-testid="app-shell-sidebar-body">
+      <SessionList {selectedSessionId} onSelect={handleSelectSession} />
+    </div>
   </aside>
 
   <main

@@ -22,10 +22,10 @@ domain call, response formatting. Errors map :class:`PromptDispatchOutcome`
 from __future__ import annotations
 
 import json
-from typing import cast
+from typing import Annotated, cast
 
 import aiosqlite
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from bearings.agent.prompt_dispatch import (
     PromptDispatchOutcome,
@@ -128,15 +128,36 @@ async def list_sessions(
     request: Request,
     kind: str | None = None,
     include_closed: bool = True,
+    tag_ids: Annotated[list[int] | None, Query()] = None,
 ) -> list[SessionOut]:
-    """List sessions filtered by ``kind`` + ``include_closed``."""
+    """List sessions filtered by ``kind`` + ``include_closed`` + ``tag_ids``.
+
+    ``tag_ids`` is the sidebar tag-filter query surface from
+    ``docs/behavior/chat.md`` § "When the user creates a chat" + the
+    item 2.2 done-when criterion ("OR semantics across tags"). Repeat
+    the parameter for multi-select filtering — ``?tag_ids=1&tag_ids=2``
+    returns sessions attached to tag 1 OR tag 2 (the standard FastAPI
+    list-query convention; a comma-list would have required custom
+    parsing for no expressivity gain). Omitting the parameter applies
+    no tag filter.
+    """
     db = _db(request)
     if kind is not None and kind not in KNOWN_SESSION_KINDS:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"kind {kind!r} not in {sorted(KNOWN_SESSION_KINDS)}",
         )
-    rows = await sessions_db.list_all(db, kind=kind, include_closed=include_closed)
+    # Normalize the empty-list-from-query edge case (FastAPI hands
+    # ``[]`` if the client sends no ``tag_ids``; treat that the same as
+    # "no filter" so the DB layer's contract — ``None`` for no filter,
+    # non-empty tuple for OR — is honoured.
+    tag_filter = tuple(tag_ids) if tag_ids else None
+    rows = await sessions_db.list_all(
+        db,
+        kind=kind,
+        include_closed=include_closed,
+        tag_ids=tag_filter,
+    )
     return [_to_out(row) for row in rows]
 
 

@@ -1,0 +1,89 @@
+/**
+ * Tiny typed fetch wrapper — the one place the rest of the frontend
+ * goes through to call the backend. Centralising it keeps:
+ *
+ * - error handling consistent (a non-2xx response throws an
+ *   :class:`ApiError` whose ``status`` + ``body`` carry the FastAPI
+ *   ``detail`` payload through to the caller);
+ * - typed-response decoding consistent (the caller hands in the
+ *   expected shape; the wrapper does the JSON parse and the cast);
+ * - ``AbortSignal`` plumbing consistent so a store that re-fetches
+ *   while a previous request is in flight can cancel cleanly.
+ *
+ * Per arch §1.2 each backend route group gets its own thin client
+ * module (``api/sessions.ts``, ``api/tags.ts``, etc.) that calls into
+ * this wrapper. The wrapper is intentionally narrow — no retry, no
+ * caching, no auth munging — those concerns are added by the modules
+ * that need them rather than baked in here.
+ */
+const HTTP_OK_MIN = 200;
+const HTTP_OK_MAX = 300;
+
+/**
+ * Thrown when the server returns a non-2xx response. The caller can
+ * branch on ``error.status`` for 404 / 409 / etc. handling without
+ * re-parsing the response body.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(status: number, body: unknown, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+export interface RequestOptions {
+  signal?: AbortSignal;
+  /** Repeated query-param entries; produces ``?k=v1&k=v2`` for the OR-filter shape. */
+  query?: Iterable<readonly [string, string]>;
+}
+
+/**
+ * Issue a GET against ``path``, decode the JSON body, and return it
+ * cast to ``T``. The cast is unchecked at runtime — callers stay
+ * responsible for matching the ``T`` shape to the documented response
+ * model in the corresponding ``web/models/*.py`` Pydantic class.
+ */
+export async function getJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const url = options.query ? `${path}?${buildQuery(options.query)}` : path;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+    signal: options.signal,
+  });
+  if (response.status < HTTP_OK_MIN || response.status >= HTTP_OK_MAX) {
+    const body = await safeReadBody(response);
+    throw new ApiError(
+      response.status,
+      body,
+      `GET ${path} → ${response.status} ${response.statusText}`,
+    );
+  }
+  return (await response.json()) as T;
+}
+
+function buildQuery(entries: Iterable<readonly [string, string]>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of entries) {
+    params.append(key, value);
+  }
+  return params.toString();
+}
+
+async function safeReadBody(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    // Some endpoints return non-JSON 5xx pages; surface the text
+    // rather than swallowing the failure.
+    try {
+      return await response.text();
+    } catch {
+      return null;
+    }
+  }
+}
