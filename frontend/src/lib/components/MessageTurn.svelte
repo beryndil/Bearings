@@ -328,14 +328,19 @@
 {/if}
 
 {#if toolCalls.length > 0}
-  <!-- Open state is purely user-controlled. The summary row already
-       carries liveness (count + pulsing "N running" badge), so we no
-       longer force-open when tools start — that produced an
-       expand/collapse flash on every tool call. User clicks to peek;
-       state changes leave `open` alone. -->
+  <!-- Default open per Dave's preference: tool work is visible without
+       a click. The static `open` attribute sets initial state only;
+       once rendered, the browser owns it via user interaction, so a
+       manual collapse persists for the rest of the session. We never
+       programmatically flip `.open` during streaming — that would
+       cause the expand/collapse flash this comment used to warn
+       about. The `jumpToToolCalls` action sets `.open = true` (a
+       no-op when already open) so the ⤴ TOOLS button still works if
+       a user has collapsed the block. -->
   <details
     bind:this={toolWorkDetails}
     data-testid="tool-work-details"
+    open
     class="ml-6 rounded border border-slate-800/60 bg-slate-950/40 px-2 py-1"
   >
     <summary
@@ -365,7 +370,7 @@
     </summary>
     <div
       use:stickToBottom={toolStreamSignal}
-      class="mt-2 max-h-80 overflow-y-auto rounded border border-slate-800
+      class="mt-2 max-h-[50vh] overflow-y-auto rounded border border-slate-800
         bg-black/70 p-2 font-mono text-[10px] leading-relaxed text-slate-300"
     >
       {#each toolCalls as call, i (call.id)}

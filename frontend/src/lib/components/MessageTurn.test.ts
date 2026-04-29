@@ -681,11 +681,13 @@ describe('MessageTurn (jump-to-tools button)', () => {
     expect(queryByTestId('jump-tools-button')).toBeNull();
   });
 
-  it('clicking ⤴ TOOLS opens the tool-work details element', async () => {
+  it('tool-work details defaults to open and ⤴ TOOLS scrolls to it', async () => {
     // jsdom doesn't implement scrollIntoView — stub it on the
     // prototype so the click handler can fire end-to-end without
-    // throwing. The behavioral assertion is that `.open` flips to
-    // true; the smooth-scroll is nice-to-have UX.
+    // throwing. Tool work is open by default now, so the click's
+    // primary job is the smooth-scroll; the explicit `.open = true`
+    // in the handler is a no-op safeguard for users who manually
+    // collapsed the block.
     const scrollSpy = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -694,7 +696,9 @@ describe('MessageTurn (jump-to-tools button)', () => {
     try {
       const { getByTestId } = render(MessageTurn, baseProps({ toolCalls: [call()] }));
       const details = getByTestId('tool-work-details') as HTMLDetailsElement;
-      expect(details.open).toBe(false);
+      expect(details.open).toBe(true);
+      // Simulate a user collapsing it, then verify the button reopens.
+      details.open = false;
       await fireEvent.click(getByTestId('jump-tools-button'));
       expect(details.open).toBe(true);
       expect(scrollSpy).toHaveBeenCalledTimes(1);
