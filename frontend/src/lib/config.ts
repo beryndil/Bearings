@@ -27,6 +27,38 @@ export const sessionTagsEndpoint = (sessionId: string): string =>
   `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/tags`;
 
 /**
+ * ``GET /api/checklists/{id}`` — bundled overview (items + active run)
+ * per :func:`bearings.web.routes.checklists.get_overview`. The
+ * ChecklistView (item 2.7) reads this on mount + re-reads while a run
+ * is live so the status line ticks per ``docs/behavior/checklists.md``
+ * §"Run-control surface".
+ */
+export const apiChecklistEndpoint = (checklistId: string): string =>
+  `${API_BASE}/checklists/${encodeURIComponent(checklistId)}`;
+
+/** ``POST /api/checklists/{id}/items`` — create a new item. */
+export const apiChecklistItemsEndpoint = (checklistId: string): string =>
+  `${apiChecklistEndpoint(checklistId)}/items`;
+
+/**
+ * ``…/api/checklist-items/{id}`` — base path for the per-item routes.
+ * Subpaths the client appends: ``/check``, ``/uncheck``, ``/block``,
+ * ``/unblock``, ``/link``, ``/unlink``, ``/legs``, ``/move``,
+ * ``/indent``, ``/outdent``, ``/spawn-chat`` (item 1.7's paired-chat
+ * spawn route).
+ */
+export const apiChecklistItemEndpoint = (itemId: number): string =>
+  `${API_BASE}/checklist-items/${itemId}`;
+
+/**
+ * ``…/api/checklists/{id}/run`` — base path for run-control routes:
+ * ``/start``, ``/stop``, ``/pause``, ``/resume``, ``/skip-current``,
+ * ``/status``.
+ */
+export const apiChecklistRunEndpoint = (checklistId: string): string =>
+  `${apiChecklistEndpoint(checklistId)}/run`;
+
+/**
  * ``GET /api/sessions/{id}/messages`` — per-session transcript fetch
  * surface (item 1.9; ``src/bearings/web/routes/messages.py``). The
  * SvelteKit client reads it once on session-select to hydrate the
@@ -619,6 +651,209 @@ export const NEW_SESSION_STRINGS = {
     [EFFORT_LEVEL_HIGH]: "high",
     [EFFORT_LEVEL_XHIGH]: "xhigh",
   } as const satisfies Record<EffortLevel, string>,
+} as const;
+
+// ---- Checklist alphabets (mirrors backend ``KNOWN_*``) --------------------
+
+/**
+ * Auto-driver run-state alphabet — mirrors backend
+ * :data:`bearings.config.constants.KNOWN_AUTO_DRIVER_STATES`. The
+ * AutoDriverControls component branches on the active run's
+ * ``state`` to enable / disable the run-control buttons per
+ * ``docs/behavior/checklists.md`` §"Run-control surface".
+ */
+export const AUTO_DRIVER_STATE_IDLE = "idle";
+export const AUTO_DRIVER_STATE_RUNNING = "running";
+export const AUTO_DRIVER_STATE_PAUSED = "paused";
+export const AUTO_DRIVER_STATE_FINISHED = "finished";
+// ``errored`` + the full alphabet (``KNOWN_AUTO_DRIVER_STATES``) +
+// the ``AutoDriverState`` type are deliberately not exported in v1 —
+// the only consumer (AutoDriverControls) reads the four states above
+// directly. The backend alphabet (``KNOWN_AUTO_DRIVER_STATES`` in
+// :mod:`bearings.config.constants`) stays the source of truth; this
+// file re-introduces the mirror when an enum-shaped UI consumer
+// arrives.
+
+/**
+ * Auto-driver failure-policy alphabet — mirrors backend
+ * :data:`bearings.config.constants.KNOWN_AUTO_DRIVER_FAILURE_POLICIES`.
+ * The user picks one in the AutoDriverControls dropdown before pressing
+ * Start; the choice applies to the next run only.
+ */
+export const AUTO_DRIVER_FAILURE_POLICY_HALT = "halt";
+export const AUTO_DRIVER_FAILURE_POLICY_SKIP = "skip";
+export const KNOWN_AUTO_DRIVER_FAILURE_POLICIES = [
+  AUTO_DRIVER_FAILURE_POLICY_HALT,
+  AUTO_DRIVER_FAILURE_POLICY_SKIP,
+] as const;
+export type AutoDriverFailurePolicy = (typeof KNOWN_AUTO_DRIVER_FAILURE_POLICIES)[number];
+
+/**
+ * Item non-completion category alphabet — mirrors backend
+ * :data:`bearings.config.constants.KNOWN_ITEM_OUTCOMES`. Drives the pip
+ * color in :class:`SentinelEvent` per
+ * ``docs/behavior/checklists.md`` §"Item-status colors".
+ */
+export const ITEM_OUTCOME_BLOCKED = "blocked";
+export const ITEM_OUTCOME_FAILED = "failed";
+export const ITEM_OUTCOME_SKIPPED = "skipped";
+export const KNOWN_ITEM_OUTCOMES = [
+  ITEM_OUTCOME_BLOCKED,
+  ITEM_OUTCOME_FAILED,
+  ITEM_OUTCOME_SKIPPED,
+] as const;
+// ``ItemOutcome`` type is not yet referenced by a TS consumer; the
+// alphabet is read at runtime via the array. The type is re-introduced
+// when a consumer needs the union form.
+
+/**
+ * Sentinel-kind alphabet — mirrors backend
+ * :data:`bearings.config.constants.KNOWN_SENTINEL_KINDS`. Used by the
+ * frontend sentinel parser (``parseSentinels`` in ``sentinel.ts``) to
+ * decide which kinds are well-known and which to ignore as malformed
+ * per ``docs/behavior/checklists.md`` §"Sentinels".
+ */
+export const SENTINEL_KIND_ITEM_DONE = "item_done";
+export const SENTINEL_KIND_HANDOFF = "handoff";
+export const SENTINEL_KIND_FOLLOWUP_BLOCKING = "followup_blocking";
+export const SENTINEL_KIND_FOLLOWUP_NONBLOCKING = "followup_nonblocking";
+export const SENTINEL_KIND_ITEM_BLOCKED = "item_blocked";
+export const SENTINEL_KIND_ITEM_FAILED = "item_failed";
+export const KNOWN_SENTINEL_KINDS = [
+  SENTINEL_KIND_ITEM_DONE,
+  SENTINEL_KIND_HANDOFF,
+  SENTINEL_KIND_FOLLOWUP_BLOCKING,
+  SENTINEL_KIND_FOLLOWUP_NONBLOCKING,
+  SENTINEL_KIND_ITEM_BLOCKED,
+  SENTINEL_KIND_ITEM_FAILED,
+] as const;
+export type SentinelKind = (typeof KNOWN_SENTINEL_KINDS)[number];
+
+/**
+ * Spawned-by alphabet for a paired-chat link — mirrors backend
+ * :data:`bearings.config.constants.KNOWN_PAIRED_CHAT_SPAWNED_BY`. The
+ * link/spawn UI passes ``"user"``; the auto-driver passes
+ * ``"driver"`` from server-side code paths only.
+ */
+export const PAIRED_CHAT_SPAWNED_BY_USER = "user";
+// ``PAIRED_CHAT_SPAWNED_BY_DRIVER`` is the backend's enum value for
+// auto-driver-spawned chats. The UI never sets it (only the user
+// path), but the constant ships in the backend alphabet
+// :data:`bearings.config.constants.KNOWN_PAIRED_CHAT_SPAWNED_BY` and
+// is re-introduced here when a UI consumer needs to disambiguate the
+// two paths.
+
+/**
+ * Driver outcome strings observed by the user when the status line
+ * freezes — mirrors backend :data:`DRIVER_OUTCOME_*`. The empty-run
+ * string is the only outcome the AutoDriverControls fallback path
+ * needs today; the others (``Completed`` / ``Halted: max items`` /
+ * ``Halted: stopped by user``) are backend-written values that arrive
+ * through ``AutoDriverRunOut.outcome`` and are rendered verbatim by
+ * :func:`formatStatusLine`.
+ */
+export const DRIVER_OUTCOME_HALTED_EMPTY = "Halted: empty";
+
+/**
+ * Auto-driver run-status poll cadence (ms). Decided-and-documented:
+ * ``docs/behavior/checklists.md`` §"Run-control surface" prescribes a
+ * live status line ("Running — item 3 of 12, leg 1, 0 failures") that
+ * ticks while a run is in flight. Item 1.6 ships the run-row state +
+ * the ``GET /api/checklists/{id}`` overview but NOT a per-checklist
+ * driver-state WS broker; a future item adds the broker. v1 polls the
+ * overview while a run is live so the user observes the status-line
+ * ticks. 1500 ms chosen to match the user-perceived liveness of the
+ * existing per-session WS heartbeat (``WS_IDLE_PING_INTERVAL_S=15``)
+ * scaled for a UI thread that wants finer granularity than the
+ * heartbeat-grade keepalive.
+ */
+export const CHECKLIST_OVERVIEW_POLL_INTERVAL_MS = 1500;
+
+// ---- Checklist string table ----------------------------------------------
+
+/**
+ * UI string table for the checklist surfaces (item 2.7). Pulled out of
+ * components per coding-standards §"i18n-ready string tables". Anchors
+ * for each string trace to behavior docs in inline comments.
+ */
+export const CHECKLIST_STRINGS = {
+  // Top-level pane labels (behavior/checklists.md §"What a checklist is, observably").
+  paneAriaLabel: "Checklist pane",
+  loadingOverview: "Loading checklist…",
+  loadFailed: "Couldn't load this checklist.",
+  emptyChecklist: "No items yet — type below to add the first one.",
+  addItemPlaceholder: "Add an item…",
+  addItemAriaLabel: "Add a new checklist item",
+  // Item row labels (behavior/checklists.md §"Item edit / add / delete / reorder").
+  itemDragHandleAriaLabel: "Drag to reorder",
+  itemCheckboxAriaLabel: "Mark item complete",
+  itemCheckboxParentDisabledTitle: "Parent items are derived from their children",
+  itemLabelEditAriaLabel: "Edit item label",
+  itemNotesToggleLabel: "Notes",
+  itemNotesPlaceholder: "Add notes for this item…",
+  itemDeleteLabel: "Delete",
+  itemDeleteConfirmTemplate: "Delete this item? Children + paired chats will also be removed.",
+  // Paired-chat link/spawn labels (behavior/paired-chats.md §"Link / spawn UI").
+  pairedChatWorkOnThisLabel: "💬 Work on this",
+  pairedChatWorkOnThisAriaLabel: "Spawn a paired chat for this item",
+  pairedChatContinueLabel: "Continue working",
+  pairedChatContinueAriaLabel: "Open the paired chat for this item",
+  pairedChatLinkExistingLabel: "Link existing chat…",
+  pairedChatUnlinkLabel: "Unlink chat",
+  pairedChatLinkChooseLabel: "Choose a chat to link:",
+  pairedChatLinkConfirmLabel: "Link",
+  pairedChatLinkCancelLabel: "Cancel",
+  pairedChatLinkEmptyLabel: "No open chat sessions to link.",
+  pairedChatSpawnFailed: "Couldn't spawn a paired chat.",
+  pairedChatLinkFailed: "Couldn't link the chosen chat.",
+  // Auto-driver run-control labels (behavior/checklists.md §"Run-control surface").
+  runControlsAriaLabel: "Auto-driver run controls",
+  runStartLabel: "Start",
+  runStopLabel: "Stop",
+  runPauseLabel: "Pause",
+  runResumeLabel: "Resume",
+  runSkipCurrentLabel: "Skip current",
+  runFailurePolicyLabel: "On failure",
+  runFailurePolicyHaltLabel: "halt run",
+  runFailurePolicySkipLabel: "skip & continue",
+  runVisitExistingLabel: "Visit existing chats",
+  runVisitExistingTitle: "Reuse each item's already-paired chat instead of spawning fresh ones.",
+  runStatusIdle: "Idle — press Start to drive the checklist.",
+  runStatusEmpty: "Halted: empty",
+  // Behavior doc §"Run-control surface" template:
+  // "Running — item N of M, leg L, F failures".
+  runStatusRunningTemplate:
+    "Running — item {currentIndex} of {total}, leg {legs}, {failures} failures",
+  runStatusPausedTemplate: "Paused — {completed}/{total} complete, {failures} failures",
+  runStatusOutcomeTemplate: "{outcome} — {completed}/{total} complete, {failures} failures",
+  // Sentinel-event surface — surfaces the parsed sentinels per
+  // behavior/checklists.md §"Sentinels".
+  sentinelEventAriaLabel: "Item state",
+  sentinelEventTooltipNone: "Not yet attempted by a driver, no paired chat.",
+  sentinelEventTooltipSlate: "Has a paired chat, no run currently driving the item.",
+  sentinelEventTooltipBlue: "The autonomous driver currently has this item active.",
+  sentinelEventTooltipGreen: "Item is checked.",
+  sentinelEventTooltipAmber: "Item is blocked.",
+  sentinelEventTooltipRed: "Item failed.",
+  sentinelEventTooltipGrey: "Item was skipped.",
+  // ChecklistChat surface — the embedded conversation pane.
+  checklistChatAriaLabel: "Paired chat",
+  checklistChatNoSelection: "Select a checklist item with a paired chat to continue.",
+  checklistChatBreadcrumbPrefix: "Working on",
+  checklistChatSentinelHeading: "Sentinel events",
+  checklistChatSentinelEmpty: "No sentinels in the latest assistant turn.",
+  // Per-sentinel-kind label (sentinel kind → user-visible chip).
+  sentinelKindLabels: {
+    item_done: "item done",
+    handoff: "handoff",
+    followup_blocking: "followup (blocking)",
+    followup_nonblocking: "followup (non-blocking)",
+    item_blocked: "item blocked",
+    item_failed: "item failed",
+  } as const satisfies Record<string, string>,
+  // Failure-on-item template (mirrors backend
+  // ``DRIVER_OUTCOME_HALTED_FAILURE_TEMPLATE``).
+  driverOutcomeHaltedFailureTemplate: "Halted: failure on item {itemId}",
 } as const;
 
 // ---- Derivations -----------------------------------------------------------

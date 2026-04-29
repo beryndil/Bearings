@@ -26,9 +26,10 @@
   import "../app.css";
   import type { Snippet } from "svelte";
 
-  import { SIDEBAR_STRINGS } from "$lib/config";
+  import { SESSION_KIND_CHECKLIST, SIDEBAR_STRINGS } from "$lib/config";
   import SessionList from "$lib/components/sidebar/SessionList.svelte";
   import Conversation from "$lib/components/conversation/Conversation.svelte";
+  import ChecklistView from "$lib/components/checklist/ChecklistView.svelte";
   import Inspector from "$lib/components/inspector/Inspector.svelte";
   import { sessionsStore } from "$lib/stores/sessions.svelte";
   import { inspectorStore, setActiveSession } from "$lib/stores/inspector.svelte";
@@ -100,7 +101,15 @@
       data-testid="app-shell-main-body"
       aria-label="Conversation body"
     >
-      {#if selectedSessionId !== null}
+      {#if selectedSessionId !== null && activeSession?.kind === SESSION_KIND_CHECKLIST}
+        <ChecklistView
+          checklistId={selectedSessionId}
+          availableChats={sessionsStore.sessions.filter(
+            (row) => row.kind !== SESSION_KIND_CHECKLIST && row.closed_at === null,
+          )}
+          onSelectChat={handleSelectSession}
+        />
+      {:else if selectedSessionId !== null}
         <Conversation sessionId={selectedSessionId} />
       {:else if children}
         {@render children()}
