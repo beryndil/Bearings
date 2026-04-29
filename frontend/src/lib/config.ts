@@ -40,6 +40,23 @@ export const sessionMessagesEndpoint = (sessionId: string): string =>
 export const messageEndpoint = (messageId: string): string =>
   `${API_BASE}/messages/${encodeURIComponent(messageId)}`;
 
+/**
+ * ``POST /api/routing/preview`` — new-session dialog's reactive
+ * routing preview surface (spec §6 + §9). Body shape: ``{ tags:
+ * int[], message: str }``; response shape: ``RoutingPreviewOut`` per
+ * ``src/bearings/web/models/routing.py`` mirrored on
+ * :interface:`RoutingPreview` in ``api/routing.ts``.
+ */
+export const API_ROUTING_PREVIEW_ENDPOINT = `${API_BASE}/routing/preview`;
+
+/**
+ * ``GET /api/quota/current`` — latest snapshot for the in-dialog
+ * QuotaBars (spec §8 / §9 + §10 "Quota bars in the session header").
+ * Response shape mirrored on :interface:`QuotaSnapshot` in
+ * ``api/quota.ts``.
+ */
+export const API_QUOTA_CURRENT_ENDPOINT = `${API_BASE}/quota/current`;
+
 // ---- WebSocket streaming surface ------------------------------------------
 
 /**
@@ -167,6 +184,147 @@ export const SIDEBAR_STRINGS = {
     [SESSION_KIND_CHAT]: "Chat session",
     [SESSION_KIND_CHECKLIST]: "Checklist session",
   } as const satisfies Record<SessionKind, string>,
+} as const;
+
+// ---- Routing preview + quota guard tunings --------------------------------
+
+/**
+ * Debounce window for the new-session dialog's reactive routing
+ * preview (spec §6 — "Typing in the first-message field re-evaluates
+ * rules in real time (debounced ~300ms)"). Mirrors the backend's
+ * :data:`bearings.config.constants.ROUTING_PREVIEW_DEBOUNCE_MS`
+ * (``src/bearings/config/constants.py:65``); value duplicated rather
+ * than synced because the backend module is Python-only.
+ */
+export const ROUTING_PREVIEW_DEBOUNCE_MS = 300;
+
+/**
+ * Quota-bar yellow / red transition thresholds (spec §4 + §10 —
+ * "yellow at 80% used, red at 95%"). Mirrors the backend's
+ * :data:`QUOTA_BAR_YELLOW_PCT` / :data:`QUOTA_BAR_RED_PCT`
+ * (``src/bearings/config/constants.py:81-82``). Values are fractions
+ * in ``[0.0, 1.0]`` so they line up with the
+ * ``overall_used_pct`` / ``sonnet_used_pct`` shape on the API.
+ */
+export const QUOTA_BAR_YELLOW_PCT = 0.8;
+export const QUOTA_BAR_RED_PCT = 0.95;
+
+/**
+ * Routing-source values mirrored from
+ * :data:`bearings.config.constants.KNOWN_ROUTING_SOURCES` (spec §App
+ * A enum). The dialog reads ``quota_downgrade`` to decide when to
+ * render the downgrade banner with the "Use anyway" override; the
+ * other source values are part of the spec alphabet but not yet
+ * referenced from this layer (later items consume them).
+ */
+export const ROUTING_SOURCE_TAG_RULE = "tag_rule";
+export const ROUTING_SOURCE_QUOTA_DOWNGRADE = "quota_downgrade";
+
+// ---- Routing alphabet (mirrors backend ``KNOWN_*``) -----------------------
+
+/**
+ * Two-axis routing selector alphabets per spec §3 (rule eval inputs)
+ * + §6 (the new-session dialog selectors). Mirrors the backend's
+ * :data:`KNOWN_EXECUTOR_MODELS` and :data:`KNOWN_EFFORT_LEVELS`
+ * (``src/bearings/config/constants.py:224, 236``). The
+ * advisor-axis null choice is encoded as
+ * :const:`ADVISOR_MODEL_NONE` so a templated ``<select>`` carries it
+ * without a sentinel literal.
+ */
+export const EXECUTOR_MODEL_SONNET = "sonnet";
+export const EXECUTOR_MODEL_HAIKU = "haiku";
+export const EXECUTOR_MODEL_OPUS = "opus";
+export const KNOWN_EXECUTOR_MODELS = [
+  EXECUTOR_MODEL_SONNET,
+  EXECUTOR_MODEL_HAIKU,
+  EXECUTOR_MODEL_OPUS,
+] as const;
+export type ExecutorModel = (typeof KNOWN_EXECUTOR_MODELS)[number];
+
+export const ADVISOR_MODEL_OPUS = "opus";
+export const ADVISOR_MODEL_NONE = "" as const;
+export const KNOWN_ADVISOR_MODELS = [ADVISOR_MODEL_NONE, ADVISOR_MODEL_OPUS] as const;
+export type AdvisorModelChoice = (typeof KNOWN_ADVISOR_MODELS)[number];
+
+export const EFFORT_LEVEL_AUTO = "auto";
+const EFFORT_LEVEL_LOW = "low";
+const EFFORT_LEVEL_MEDIUM = "medium";
+const EFFORT_LEVEL_HIGH = "high";
+const EFFORT_LEVEL_XHIGH = "xhigh";
+export const KNOWN_EFFORT_LEVELS = [
+  EFFORT_LEVEL_AUTO,
+  EFFORT_LEVEL_LOW,
+  EFFORT_LEVEL_MEDIUM,
+  EFFORT_LEVEL_HIGH,
+  EFFORT_LEVEL_XHIGH,
+] as const;
+export type EffortLevel = (typeof KNOWN_EFFORT_LEVELS)[number];
+
+/**
+ * Default ``advisor.max_uses`` for the new-session dialog (spec §2
+ * "Default policy" table — Sonnet executor → 5, Haiku executor → 3,
+ * Opus executor → no advisor). Mirrors backend
+ * :data:`DEFAULT_ADVISOR_MAX_USES_SONNET` /
+ * :data:`DEFAULT_ADVISOR_MAX_USES_HAIKU`.
+ */
+export const DEFAULT_ADVISOR_MAX_USES_SONNET = 5;
+export const DEFAULT_ADVISOR_MAX_USES_HAIKU = 3;
+
+// ---- New-session dialog string table -------------------------------------
+
+/**
+ * UI strings for the new-session dialog (chat.md §"creates a chat" +
+ * spec §6 layout + spec §8 quota banner copy). Pulled out of the
+ * components per coding-standards §"i18n-ready string tables".
+ */
+export const NEW_SESSION_STRINGS = {
+  dialogTitle: "New Session",
+  dialogAriaLabel: "New session dialog",
+  routingHeading: "Routing (auto-resolved from tags + first message)",
+  executorLabel: "Executor",
+  advisorLabel: "Advisor",
+  advisorEnabledLabel: "enabled",
+  advisorMaxUsesLabel: "max calls",
+  advisorOpusExecutorHint: "Opus is the executor — advisor not needed.",
+  advisorOptionNoneLabel: "(none)",
+  effortLabel: "Effort",
+  routedFromPrefix: "Routed from",
+  routedManualOverride: "Manual override",
+  firstMessageLabel: "First message",
+  firstMessagePlaceholder: "What would you like to start the session with?",
+  quotaHeading: "Quota",
+  quotaOverallLabel: "overall",
+  quotaSonnetLabel: "sonnet",
+  quotaUnavailable: "Quota data unavailable",
+  quotaResetTooltipPrefix: "Resets at",
+  downgradeBannerPrefix: "Routing downgraded to",
+  downgradeBannerOverallSuffixTemplate: "(overall quota at {pct}%)",
+  downgradeBannerSonnetSuffixTemplate: "(sonnet quota at {pct}%)",
+  downgradeUseAnywayLabel: "Use {model} anyway",
+  cancelLabel: "Cancel",
+  submitLabel: "Start Session",
+  loadingPreview: "Resolving routing…",
+  previewError: "Couldn't resolve routing — try again.",
+  // Display labels for executor / advisor / effort options. Capitalised
+  // for the dropdown surface; the underlying value is the lowercase
+  // wire identifier (``sonnet`` / ``haiku`` / ``opus`` / ``auto`` /
+  // ``low`` / ``medium`` / ``high`` / ``xhigh``).
+  executorLabels: {
+    [EXECUTOR_MODEL_SONNET]: "Sonnet 4.6",
+    [EXECUTOR_MODEL_HAIKU]: "Haiku 4.5",
+    [EXECUTOR_MODEL_OPUS]: "Opus 4.7",
+  } as const satisfies Record<ExecutorModel, string>,
+  advisorLabels: {
+    [ADVISOR_MODEL_NONE]: "(none)",
+    [ADVISOR_MODEL_OPUS]: "Opus 4.6",
+  } as const satisfies Record<AdvisorModelChoice, string>,
+  effortLabels: {
+    [EFFORT_LEVEL_AUTO]: "auto",
+    [EFFORT_LEVEL_LOW]: "low",
+    [EFFORT_LEVEL_MEDIUM]: "medium",
+    [EFFORT_LEVEL_HIGH]: "high",
+    [EFFORT_LEVEL_XHIGH]: "xhigh",
+  } as const satisfies Record<EffortLevel, string>,
 } as const;
 
 // ---- Derivations -----------------------------------------------------------

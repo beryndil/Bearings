@@ -36,10 +36,12 @@ export default [
         $props: "readonly",
         $bindable: "readonly",
         $inspect: "readonly",
-        // ``RequestInfo`` is part of the Fetch lib but not always
-        // injected as a global by ESLint's preset; add it explicitly
-        // so test files using it as a parameter type pass.
+        // ``RequestInfo`` / ``RequestInit`` are part of the Fetch lib
+        // but not always injected as a global by ESLint's preset; add
+        // them explicitly so test files using them as parameter types
+        // pass.
         RequestInfo: "readonly",
+        RequestInit: "readonly",
       },
     },
     plugins: { "@typescript-eslint": tseslint },

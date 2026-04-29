@@ -66,6 +66,42 @@ export async function getJson<T>(path: string, options: RequestOptions = {}): Pr
   return (await response.json()) as T;
 }
 
+/**
+ * Issue a POST against ``path`` with a JSON body, decode the JSON
+ * response, and return it cast to ``T``. Mirrors :func:`getJson`'s
+ * error contract: a non-2xx response throws an :class:`ApiError`
+ * carrying the status + parsed body. Used by the ``/api/routing/preview``
+ * client (item 2.4 — the new-session dialog's reactive preview is
+ * the only POST surface that fits the typed-fetch wrapper's read-a-
+ * JSON-body shape; the prompt endpoint and other write surfaces are
+ * built on dedicated modules with their own retry / streaming logic).
+ */
+export async function postJson<T>(
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
+  const url = options.query ? `${path}?${buildQuery(options.query)}` : path;
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  if (response.status < HTTP_OK_MIN || response.status >= HTTP_OK_MAX) {
+    const errorBody = await safeReadBody(response);
+    throw new ApiError(
+      response.status,
+      errorBody,
+      `POST ${path} → ${response.status} ${response.statusText}`,
+    );
+  }
+  return (await response.json()) as T;
+}
+
 function buildQuery(entries: Iterable<readonly [string, string]>): string {
   const params = new URLSearchParams();
   for (const [key, value] of entries) {
