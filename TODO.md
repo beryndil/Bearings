@@ -8,6 +8,23 @@ verbatim at `TODO-archive-2026-04-22.md` next to this file.
 
 ---
 
+## Test-suite flake: `test_awaiting_endpoint_includes_blocked_paired_sessions` — 2026-04-29
+
+`tests/test_routes_sessions.py:666` uses the deprecated
+`asyncio.get_event_loop().run_until_complete(seed())` pattern. Passes
+in isolation, **fails inside the full suite** with `RuntimeError:
+There is no current event loop in thread 'MainThread'.` because some
+earlier test consumes the implicit main-thread loop and Python 3.12
+no longer auto-creates a new one.
+
+Surfaced while landing the `ws_agent.py` D1 diagnostic logs
+(`plan-a-way-to-agile-pillow.md`). Deselected to clear the run; the
+new logs are unrelated. Fix is a one-liner — switch the seed call to
+`asyncio.run(seed())` or to a `pytest-asyncio`-style fixture matching
+the other tests in the file.
+
+---
+
 ## Root-cause: why `mcp__bearings__bash` denied under `bypassPermissions` — 2026-04-27
 
 Surfaced from audit item #520 executor (this commit). The defensive

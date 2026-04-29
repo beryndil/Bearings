@@ -280,19 +280,37 @@ async def _accept_and_validate_session(
     returns `None` on any reject."""
     await websocket.accept(subprotocol=ws_accept_subprotocol(websocket))
     if not check_ws_origin(websocket):
+        # D1 diagnostic (plan-a-way-to-agile-pillow): every reject path
+        # was previously silent. The new-session-input wedge needs to
+        # discriminate "WS never reached open" from "WS opened then
+        # something else broke" — log every reject with sid + reason so
+        # the journal/stderr tail makes the call site visible.
+        log.info("ws_reject sid=%s reason=forbidden_origin", session_id)
         await websocket.close(code=CODE_FORBIDDEN_ORIGIN, reason="origin not allowed")
         return None
     if not check_ws_auth(websocket):
+        log.info("ws_reject sid=%s reason=unauthorized", session_id)
         await websocket.close(code=CODE_UNAUTHORIZED)
         return None
     row = await store.get_session(websocket.app.state.db, session_id)
     if row is None:
+        # Primary D1 signal: if this fires at the timestamp of an
+        # in-app "Create session" click, suspect C is confirmed (WS
+        # attaches before the just-POSTed row is visible to this
+        # handler's transaction; frontend's shouldReconnect at
+        # agent.svelte.ts:316 deliberately doesn't retry on 4404).
+        log.info("ws_reject sid=%s reason=session_not_found", session_id)
         await websocket.close(code=CODE_SESSION_NOT_FOUND)
         return None
     if row.get("kind", "chat") not in RUNNABLE_KINDS:
         # Future non-runnable kinds land here. Close loud so the bug
         # is obvious if a frontend ever tries to connect to a kind
         # whose UI should be local-only.
+        log.info(
+            "ws_reject sid=%s reason=kind_unsupported kind=%s",
+            session_id,
+            row.get("kind"),
+        )
         await websocket.close(
             code=CODE_SESSION_KIND_UNSUPPORTED,
             reason="session kind does not support agent attachment",
@@ -498,8 +516,27 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
         return
     app = websocket.app
     since_seq = _parse_since_seq(websocket)
+    # D1 diagnostic: ws_open marks the moment the WS is past all reject
+    # gates and about to attach the runner. Paired with ws_close in the
+    # outer finally so a tail of the journal shows the connection's
+    # lifetime — a near-zero delta means the client tore down (e.g.
+    # SvelteKit re-render) right after attaching, a long-lived delta
+    # means a normal session.
+    started_at = time.monotonic()
+    log.info("ws_open sid=%s since_seq=%s", session_id, since_seq)
+    # Distinguish first-attach (runner factory ran) from reconnect
+    # (existing runner reused). On the new-session-input wedge path
+    # we expect runner_built; if we see runner_reused unexpectedly
+    # the registry has stale state for a freshly-POSTed id, which is
+    # itself a clue.
+    runner_existed = app.state.runners.get(session_id) is not None
     runner = await app.state.runners.get_or_create(
         session_id, factory=lambda sid: build_runner(app, sid)
+    )
+    log.info(
+        "runner_%s sid=%s",
+        "reused" if runner_existed else "built",
+        session_id,
     )
     # Directory Context System (v0.6.1): stamp `history.jsonl` start
     # marker + kick off stale-state revalidation. Idempotent on every
@@ -519,3 +556,8 @@ async def agent_ws(websocket: WebSocket, session_id: str) -> None:
         runner.unsubscribe(queue)
         app.state.active_ws.discard(websocket)
         metrics.ws_active_connections.dec()
+        log.info(
+            "ws_close sid=%s elapsed_ms=%d",
+            session_id,
+            int((time.monotonic() - started_at) * 1000),
+        )
