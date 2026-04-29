@@ -65,7 +65,12 @@ routing-decision and per-model-usage column is NULL. The legacy flat
 carry forward verbatim (kept nullable on v1 per arch §4.7
 ``Optional[int]``). ``advisor_calls_count`` falls back to the schema's
 ``DEFAULT 0`` per spec §5 verbatim ALTER. NULL session titles backfill
-to the empty string (v1 ``title TEXT NOT NULL`` admits ``''``).
+to the empty string (v1 ``title TEXT NOT NULL`` admits ``''``). Session
+titles longer than :data:`TITLE_MAX_LENGTH` are truncated with a
+trailing :data:`TRUNCATED_TITLE_SUFFIX` ellipsis — v0.17 had no cap
+but v1's ``Session`` dataclass invariant (500 chars) rejects long
+titles at runtime, so the migration must enforce the cap to keep the
+row addressable through ``GET /api/sessions``.
 
 **Tables intentionally dropped.** ``artifacts``, ``tool_calls``,
 ``preferences``, ``reorg_audits``, ``schema_migrations`` have no v1
@@ -121,10 +126,30 @@ LEGACY_TAG_MEMORY_TITLE: Final[str] = "Imported from v0.17"
 # never overwritten.
 LEGACY_NOTES_DESCRIPTION_SENTINEL: Final[str] = "[Migrated v0.17 checklist notes]"
 
-# v1 ``sessions.title TEXT NOT NULL`` — v0.17 allowed NULL. Empty string
-# satisfies the constraint and renders as a blank title in the UI (the
-# row isn't lost).
-EMPTY_TITLE_BACKFILL: Final[str] = ""
+# v1 ``sessions.title`` — schema is ``TEXT NOT NULL`` (admits ``''``);
+# the runtime ``Session`` dataclass tightens this to non-empty
+# (:func:`Session.__post_init__` in ``src/bearings/db/sessions.py``).
+# v0.17 allowed NULL, so the migration substitutes this human-readable
+# sentinel — short enough to stay under the cap, distinct enough that
+# the user spots it in the sidebar and renames if they care.
+EMPTY_TITLE_BACKFILL: Final[str] = "(untitled)"
+
+# v1 ``Session.title`` carries a Python-level invariant of ≤ 500 chars
+# (enforced by ``Session.__post_init__`` in ``src/bearings/db/sessions.py``;
+# see :data:`bearings.config.constants.SESSION_TITLE_MAX_LENGTH`). The
+# v1 schema does not encode the length, so a v0.17 row with a longer
+# title migrates fine at the SQL layer but trips the dataclass invariant
+# the moment ``GET /api/sessions`` reads it back. Mirroring the constant
+# here (rather than importing it) matches the script's existing
+# ``VALID_V1_SESSION_KINDS`` pattern: the migration encodes the v1
+# contract it must obey, no runtime → migration import edge.
+TITLE_MAX_LENGTH: Final[int] = 500
+
+# Sentinel char appended when a v0.17 title is truncated. Single
+# unicode ellipsis so the visible signal is unambiguous without
+# eating the budget; the user sees a readable prefix of the original
+# title in the sidebar and can rename if they want the full text.
+TRUNCATED_TITLE_SUFFIX: Final[str] = "…"
 
 # Default JSON-encoded tag-name array for migrated templates whose
 # v0.17 ``tag_ids_json`` resolves to an empty list.
@@ -322,7 +347,27 @@ def _migrate_sessions(src: sqlite3.Connection, tgt: sqlite3.Connection) -> Table
             LOG.warning("skipping session %s: kind=%r outside v1 alphabet", row["id"], row["kind"])
             summary.skipped_invalid += 1
             continue
-        title = row["title"] if row["title"] is not None else EMPTY_TITLE_BACKFILL
+        # The runtime ``Session`` dataclass requires a non-empty title;
+        # v0.17 admitted both NULL and empty-string values. Coerce
+        # both to :data:`EMPTY_TITLE_BACKFILL` so every recoverable
+        # row survives migration.
+        raw_title = row["title"]
+        title = raw_title if raw_title else EMPTY_TITLE_BACKFILL
+        # Enforce the v1 ``Session.title`` ≤ 500 char invariant. v0.17
+        # had no such cap; observed real-world max in dogfood is ~1.5k
+        # chars (a checklist label that wandered into prose). Truncate
+        # rather than skip: the row's history (messages, tags,
+        # routing) is otherwise valid and dropping the session would
+        # orphan all of that. The trailing ellipsis flags the
+        # truncation in the sidebar so the user knows to rename.
+        if len(title) > TITLE_MAX_LENGTH:
+            LOG.warning(
+                "truncating session %s title from %d to %d chars",
+                row["id"],
+                len(title),
+                TITLE_MAX_LENGTH,
+            )
+            title = title[: TITLE_MAX_LENGTH - len(TRUNCATED_TITLE_SUFFIX)] + TRUNCATED_TITLE_SUFFIX
         # ``message_count`` is left at the schema's DEFAULT 0 here and
         # backfilled by :func:`_recompute_session_message_counts` after
         # the messages migration has run, so the subquery has rows to

@@ -58,7 +58,14 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
-        args: ["src", "tests"]
+        # ``scripts`` is included so test files that import a script
+        # via the ``importlib.util.spec_from_file_location`` loader can
+        # also use a ``TYPE_CHECKING`` import for static field-shape
+        # access (e.g. ``tests/test_cutover_smoke.py`` →
+        # ``scripts/cutover_smoke.py``). The standalone gate in the
+        # executor session description has always included scripts;
+        # this hook is brought in line.
+        args: ["src", "tests", "scripts"]
 
   # ---------------------------------------------------------------------------
   # Backend — Pytest (smoke run; full coverage in CI)

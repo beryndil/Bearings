@@ -127,4 +127,30 @@ to `~/.local/share/bearings-v1/sessions.db`. The v0.17.x install is left
 untouched so the two services can run concurrently on ports 8787 / 8788
 during cutover.
 
+The migration coerces v0.17 session titles to fit v1's runtime
+invariants:
+
+* NULL or empty titles → ``"(untitled)"`` sentinel (the v1 ``Session``
+  dataclass requires a non-empty title; the schema's NOT NULL alone is
+  not sufficient).
+* Titles longer than 500 chars are truncated with an ellipsis suffix
+  so the row remains addressable through ``GET /api/sessions``.
+
+### Cutover smoke
+
+`scripts/cutover_smoke.py` is the v1 acceptance gate. It migrates a v0.17.x
+DB into a tempdir target, boots the v1 FastAPI app + SvelteKit dist
+against the migrated data, probes every API subsystem (health, metrics,
+tags, sessions, vault, uploads, routing, quota, usage, diag, static
+SPA), walks migrated rows back through the API to confirm round-trip
+integrity, and runs the Playwright E2E suite (29 tests across 9
+specs). The script emits a per-stage PASS / FAIL report and exits 0
+only when every stage is green:
+
+```bash
+uv run python scripts/cutover_smoke.py             # full acceptance
+uv run python scripts/cutover_smoke.py --skip-e2e  # fast iteration
+uv run python scripts/cutover_smoke.py --json      # machine-readable
+```
+
 [0.18.0]: https://github.com/Beryndil/Bearings/tree/v1-rebuild

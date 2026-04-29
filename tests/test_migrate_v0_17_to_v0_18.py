@@ -18,7 +18,13 @@ Coverage:
   the schema.
 * Idempotency: re-running the migration on a populated target inserts
   zero new rows.
-* NULL-title sessions backfill to ``''`` (the v1 ``NOT NULL`` schema).
+* NULL or empty-string sessions.title backfills to the
+  :data:`EMPTY_TITLE_BACKFILL` sentinel — v1's ``Session`` dataclass
+  rejects both at runtime (schema-level ``NOT NULL`` is necessary
+  but not sufficient).
+* Over-cap titles (> 500 chars) truncate with the ellipsis sentinel —
+  the v1 ``Session`` dataclass enforces a Python-level cap the v0.17
+  schema did not.
 * Session ``kind`` and message ``role`` values outside the v1
   alphabet land in ``skipped_invalid``.
 * ``checklists.notes`` merge into ``sessions.description`` only fires
@@ -74,6 +80,8 @@ LEGACY_AUTO_DRIVER_RUN_STATE_FALLBACK: Final[str] = _M.LEGACY_AUTO_DRIVER_RUN_ST
 LEGACY_NOTES_DESCRIPTION_SENTINEL: Final[str] = _M.LEGACY_NOTES_DESCRIPTION_SENTINEL
 LEGACY_ROUTING_SOURCE: Final[str] = _M.LEGACY_ROUTING_SOURCE
 LEGACY_TAG_MEMORY_TITLE: Final[str] = _M.LEGACY_TAG_MEMORY_TITLE
+TITLE_MAX_LENGTH: Final[int] = _M.TITLE_MAX_LENGTH
+TRUNCATED_TITLE_SUFFIX: Final[str] = _M.TRUNCATED_TITLE_SUFFIX
 MigrationError = _M.MigrationError
 main = _M.main
 migrate = _M.migrate
@@ -273,6 +281,16 @@ CHECKLIST_SESSION_ID: Final[str] = "checklist-session-bbbbbbbbbb"
 NULL_TITLE_SESSION_ID: Final[str] = "null-title-session-cccccccc"
 INVALID_KIND_SESSION_ID: Final[str] = "invalid-kind-session-ddddddd"
 NOTES_MERGE_SESSION_ID: Final[str] = "notes-merge-session-eeeeeeee"
+LONG_TITLE_SESSION_ID: Final[str] = "long-title-session-ffffffffff"
+EMPTY_TITLE_SESSION_ID: Final[str] = "empty-title-session-gggggggg"
+
+# Synthesises a v0.17 title that exceeds the v1
+# ``SESSION_TITLE_MAX_LENGTH`` (500) so the migrator's truncation
+# path runs. Mirrors the dogfood reality where a couple of sessions
+# accumulated checklist-prose-as-title in early v0.17.x. Length 1504
+# matches the actual outlier observed during the item 3.4 cutover
+# smoke against the live ``~/.local/share/bearings/db.sqlite``.
+LONG_TITLE_TEXT: Final[str] = "x" * 1504
 
 ASSISTANT_MESSAGE_ID: Final[str] = "msg-assistant-fffffffffffffff"
 USER_MESSAGE_ID: Final[str] = "msg-user-gggggggggggggggggggg"
@@ -307,6 +325,8 @@ def _seed_v0_17_db(db_path: Path) -> None:
     * a chat session + an assistant message + a user message;
     * a checklist session with one root + one nested ``checklist_item``;
     * a session with NULL title (NULL-title backfill path);
+    * a session with an empty-string title (empty-title backfill path);
+    * a session with a 1504-char title (long-title-truncate path);
     * a session with an out-of-alphabet ``kind`` (skipped_invalid);
     * a message with an out-of-alphabet ``role`` (skipped_invalid);
     * a tag with all the v0.17-only columns populated;
@@ -391,6 +411,34 @@ def _seed_v0_17_db(db_path: Path) -> None:
                     "Notes merge target",
                     None,
                     "checklist",
+                    0,
+                    0,
+                ),
+                # Session with a v0.17 title longer than v1's
+                # ``SESSION_TITLE_MAX_LENGTH``; the migrator truncates
+                # to fit the dataclass invariant rather than dropping
+                # the row. Exercises ``test_long_title_truncated``.
+                (
+                    LONG_TITLE_SESSION_ID,
+                    TS_CHAT_CREATED,
+                    TS_CHAT_CREATED,
+                    LONG_TITLE_TEXT,
+                    None,
+                    "chat",
+                    0,
+                    0,
+                ),
+                # Session with an empty-string title — v0.17's schema
+                # admits ``''`` (TEXT NOT NULL) but v1's runtime
+                # ``Session`` dataclass rejects it. Exercises
+                # ``test_empty_title_backfills_to_sentinel``.
+                (
+                    EMPTY_TITLE_SESSION_ID,
+                    TS_CHAT_CREATED,
+                    TS_CHAT_CREATED,
+                    "",
+                    None,
+                    "chat",
                     0,
                     0,
                 ),
@@ -604,8 +652,11 @@ def test_full_migration_round_counts(v0_17_db: Path, target_db_path: Path) -> No
     """A real (non-dry) migration lands every valid source row."""
     migrate(source_path=v0_17_db, target_path=target_db_path, dry_run=False)
     with _open(target_db_path) as conn:
-        # 5 source sessions, 1 invalid-kind → 4 land.
-        assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 4
+        # 7 source sessions (chat, checklist, null-title, invalid-kind,
+        # notes-merge, long-title, empty-title), 1 invalid-kind → 6
+        # land. Long-title and empty-title rows are repaired in
+        # place, not skipped.
+        assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 6
         # 3 source messages, 1 invalid-role → 2 land.
         assert conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0] == 2
         assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 1
@@ -714,9 +765,11 @@ def test_advisor_calls_count_uses_schema_default_zero(v0_17_db: Path, target_db_
 # ---------------------------------------------------------------------------
 
 
-def test_null_title_backfills_to_empty_string(v0_17_db: Path, target_db_path: Path) -> None:
-    """v0.17 ``sessions.title`` could be NULL; v1 declares NOT NULL.
-    The script substitutes :data:`EMPTY_TITLE_BACKFILL`."""
+def test_null_title_backfills_to_sentinel(v0_17_db: Path, target_db_path: Path) -> None:
+    """v0.17 ``sessions.title`` could be NULL; the v1 ``Session``
+    dataclass invariant requires a non-empty title. The migrator
+    substitutes :data:`EMPTY_TITLE_BACKFILL` so the row survives the
+    schema's ``TEXT NOT NULL`` AND the runtime non-empty check."""
     migrate(source_path=v0_17_db, target_path=target_db_path, dry_run=False)
     with _open(target_db_path) as conn:
         row = conn.execute(
@@ -724,6 +777,49 @@ def test_null_title_backfills_to_empty_string(v0_17_db: Path, target_db_path: Pa
             (NULL_TITLE_SESSION_ID,),
         ).fetchone()
     assert row["title"] == EMPTY_TITLE_BACKFILL
+    assert row["title"], "backfilled title must be non-empty per Session.__post_init__"
+
+
+def test_empty_title_backfills_to_sentinel(v0_17_db: Path, target_db_path: Path) -> None:
+    """v0.17 admitted empty-string titles (``TEXT NOT NULL`` alone);
+    v1 rejects them at the dataclass layer. The migrator coerces
+    empty-string titles to :data:`EMPTY_TITLE_BACKFILL` alongside
+    NULLs."""
+    migrate(source_path=v0_17_db, target_path=target_db_path, dry_run=False)
+    with _open(target_db_path) as conn:
+        row = conn.execute(
+            "SELECT title FROM sessions WHERE id = ?",
+            (EMPTY_TITLE_SESSION_ID,),
+        ).fetchone()
+    assert row["title"] == EMPTY_TITLE_BACKFILL
+
+
+def test_long_title_truncated(v0_17_db: Path, target_db_path: Path) -> None:
+    """v0.17 had no title-length cap; v1's ``Session`` dataclass
+    rejects titles > ``SESSION_TITLE_MAX_LENGTH`` (500) at runtime.
+    The migrator truncates the title to fit (with the
+    :data:`TRUNCATED_TITLE_SUFFIX` ellipsis sentinel) so the row is
+    preserved end-to-end through ``GET /api/sessions``.
+
+    Without this transformation, item 3.4's cutover smoke surfaced a
+    real 500 on the migrated DB whose outlier title was 1504 chars."""
+    migrate(source_path=v0_17_db, target_path=target_db_path, dry_run=False)
+    with _open(target_db_path) as conn:
+        row = conn.execute(
+            "SELECT title FROM sessions WHERE id = ?",
+            (LONG_TITLE_SESSION_ID,),
+        ).fetchone()
+    assert row is not None
+    title: str = row["title"]
+    assert len(title) == TITLE_MAX_LENGTH, (
+        f"truncated title should be exactly {TITLE_MAX_LENGTH} chars, got {len(title)}"
+    )
+    assert title.endswith(TRUNCATED_TITLE_SUFFIX), (
+        f"truncated title should carry the {TRUNCATED_TITLE_SUFFIX!r} suffix"
+    )
+    assert title.startswith("x" * (TITLE_MAX_LENGTH - len(TRUNCATED_TITLE_SUFFIX))), (
+        "truncated title should preserve the original prefix"
+    )
 
 
 def test_session_with_invalid_kind_skipped(v0_17_db: Path, target_db_path: Path) -> None:
