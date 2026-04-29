@@ -27,23 +27,53 @@ References:
 
 from __future__ import annotations
 
+import time
+
 import aiosqlite
 from fastapi import FastAPI, WebSocket
 
+from bearings import __version__
 from bearings.agent.auto_driver_runtime import AutoDriverRegistry, build_registry
 from bearings.agent.prompt_dispatch import RateLimiter
 from bearings.agent.quota import QuotaPoller
 from bearings.agent.runner import RunnerFactory
-from bearings.config.constants import STREAM_HEARTBEAT_INTERVAL_S
-from bearings.config.settings import VaultCfg
+from bearings.config.constants import (
+    OPENAPI_DESCRIPTION,
+    OPENAPI_TITLE,
+    ROUTE_TAG_CHECKLISTS,
+    ROUTE_TAG_DIAG,
+    ROUTE_TAG_FS,
+    ROUTE_TAG_HEALTH,
+    ROUTE_TAG_MEMORIES,
+    ROUTE_TAG_MESSAGES,
+    ROUTE_TAG_METRICS,
+    ROUTE_TAG_PAIRED_CHATS,
+    ROUTE_TAG_QUOTA,
+    ROUTE_TAG_ROUTING,
+    ROUTE_TAG_SESSIONS,
+    ROUTE_TAG_SHELL,
+    ROUTE_TAG_TAGS,
+    ROUTE_TAG_UPLOADS,
+    ROUTE_TAG_USAGE,
+    ROUTE_TAG_VAULT,
+    STREAM_HEARTBEAT_INTERVAL_S,
+)
+from bearings.config.settings import FsCfg, ShellCfg, UploadsCfg, VaultCfg
+from bearings.metrics import BearingsMetrics
 from bearings.web.routes.checklists import router as checklists_router
+from bearings.web.routes.diag import router as diag_router
+from bearings.web.routes.fs import router as fs_router
+from bearings.web.routes.health import router as health_router
 from bearings.web.routes.memories import router as memories_router
 from bearings.web.routes.messages import router as messages_router
+from bearings.web.routes.metrics import router as metrics_router
 from bearings.web.routes.paired_chats import router as paired_chats_router
 from bearings.web.routes.quota import router as quota_router
 from bearings.web.routes.routing import router as routing_router
 from bearings.web.routes.sessions import router as sessions_router
+from bearings.web.routes.shell import router as shell_router
 from bearings.web.routes.tags import router as tags_router
+from bearings.web.routes.uploads import router as uploads_router
 from bearings.web.routes.usage import router as usage_router
 from bearings.web.routes.vault import router as vault_router
 from bearings.web.runner_factory import build_in_process_factory
@@ -59,6 +89,9 @@ def create_app(
     auto_driver_registry: AutoDriverRegistry | None = None,
     prompt_rate_limiter: RateLimiter | None = None,
     quota_poller: QuotaPoller | None = None,
+    uploads_cfg: UploadsCfg | None = None,
+    fs_cfg: FsCfg | None = None,
+    shell_cfg: ShellCfg | None = None,
 ) -> FastAPI:
     """Construct the FastAPI app.
 
@@ -89,7 +122,11 @@ def create_app(
     if heartbeat_interval_s <= 0:
         raise ValueError(f"heartbeat_interval_s must be > 0 (got {heartbeat_interval_s})")
     factory: RunnerFactory = runner_factory or build_in_process_factory()
-    app = FastAPI()
+    app = FastAPI(
+        title=OPENAPI_TITLE,
+        description=OPENAPI_DESCRIPTION,
+        version=__version__,
+    )
     app.state.runner_factory = factory
     app.state.heartbeat_interval_s = heartbeat_interval_s
     app.state.db_connection = db_connection
@@ -97,6 +134,18 @@ def create_app(
     app.state.auto_driver_registry = (
         auto_driver_registry if auto_driver_registry is not None else build_registry()
     )
+    # Misc-API sub-configurations (item 1.10; arch §1.1.5).
+    app.state.uploads_cfg = uploads_cfg if uploads_cfg is not None else UploadsCfg()
+    app.state.fs_cfg = fs_cfg if fs_cfg is not None else FsCfg()
+    app.state.shell_cfg = shell_cfg if shell_cfg is not None else ShellCfg()
+    # Process-uptime anchor (item 1.10; consumed by health + metrics +
+    # diag/server). ``time.monotonic`` so a system-clock jump does not
+    # fold uptime negative.
+    app.state.start_time_monotonic = time.monotonic()
+    # Per-app metrics bundle (arch §1.1.7). Owned by ``app.state`` so
+    # parallel test runs don't clash on the global Prometheus
+    # registry.
+    app.state.metrics = BearingsMetrics(version=__version__)
     # Per-app rate limiter for the prompt endpoint (item 1.7;
     # ``docs/behavior/prompt-endpoint.md`` §"Rate-limit observable
     # behavior"). One limiter per app so parallel test runs do not
@@ -132,16 +181,27 @@ def create_app(
             heartbeat_interval_s=heartbeat_interval_s,
         )
 
-    app.include_router(tags_router)
-    app.include_router(memories_router)
-    app.include_router(vault_router)
-    app.include_router(checklists_router)
-    app.include_router(sessions_router)
-    app.include_router(messages_router)
-    app.include_router(paired_chats_router)
-    app.include_router(routing_router)
-    app.include_router(quota_router)
-    app.include_router(usage_router)
+    # Every router carries its tag so the ``/openapi.json`` export
+    # groups operations correctly per coding-standards "no inline
+    # string literals" — the tag names live in
+    # :mod:`bearings.config.constants`.
+    app.include_router(tags_router, tags=[ROUTE_TAG_TAGS])
+    app.include_router(memories_router, tags=[ROUTE_TAG_MEMORIES])
+    app.include_router(vault_router, tags=[ROUTE_TAG_VAULT])
+    app.include_router(checklists_router, tags=[ROUTE_TAG_CHECKLISTS])
+    app.include_router(sessions_router, tags=[ROUTE_TAG_SESSIONS])
+    app.include_router(messages_router, tags=[ROUTE_TAG_MESSAGES])
+    app.include_router(paired_chats_router, tags=[ROUTE_TAG_PAIRED_CHATS])
+    app.include_router(routing_router, tags=[ROUTE_TAG_ROUTING])
+    app.include_router(quota_router, tags=[ROUTE_TAG_QUOTA])
+    app.include_router(usage_router, tags=[ROUTE_TAG_USAGE])
+    # Item 1.10 — misc-API surfaces.
+    app.include_router(uploads_router, tags=[ROUTE_TAG_UPLOADS])
+    app.include_router(fs_router, tags=[ROUTE_TAG_FS])
+    app.include_router(shell_router, tags=[ROUTE_TAG_SHELL])
+    app.include_router(diag_router, tags=[ROUTE_TAG_DIAG])
+    app.include_router(health_router, tags=[ROUTE_TAG_HEALTH])
+    app.include_router(metrics_router, tags=[ROUTE_TAG_METRICS])
     return app
 
 

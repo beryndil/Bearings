@@ -49,17 +49,24 @@ from pydantic_settings import (
 )
 
 from bearings.config.constants import (
+    DEFAULT_ALLOWED_SHELL_COMMANDS,
     DEFAULT_DB_PATH,
     DEFAULT_HOST,
     DEFAULT_PORT,
     DEFAULT_TOOL_OUTPUT_CAP_CHARS,
+    DEFAULT_UPLOADS_STORAGE_ROOT,
     DEFAULT_VAULT_PLAN_ROOT,
     DEFAULT_VAULT_TODO_GLOB,
+    FS_LIST_MAX_ENTRIES,
+    FS_READ_MAX_BYTES,
+    MAX_UPLOAD_SIZE_BYTES,
     OVERRIDE_RATE_REVIEW_THRESHOLD,
     PCT_MAX,
     PCT_MIN,
     QUOTA_THRESHOLD_PCT,
     ROUTING_PREVIEW_DEBOUNCE_MS,
+    SHELL_EXEC_TIMEOUT_S,
+    SHELL_OUTPUT_MAX_BYTES,
     TCP_PORT_MAX,
     TCP_PORT_MIN,
     USAGE_POLL_INTERVAL_S,
@@ -96,6 +103,71 @@ class VaultCfg(BaseModel):  # type: ignore[explicit-any]
 
     plan_roots: tuple[Path, ...] = Field(default=(DEFAULT_VAULT_PLAN_ROOT,))
     todo_globs: tuple[str, ...] = Field(default=(DEFAULT_VAULT_TODO_GLOB,))
+
+
+class UploadsCfg(BaseModel):  # type: ignore[explicit-any]
+    """Uploads sub-config — on-disk storage root + per-body size cap.
+
+    Per ``docs/architecture-v1.md`` §1.1.5 ``web/routes/uploads.py``
+    accepts multipart-form-data uploads, writes the body under
+    :data:`UploadsCfg.storage_root` keyed by sha256, and persists the
+    metadata row in the DB. Behavior docs are silent on the endpoint
+    shape (chat.md mentions "attachment chips" only); see the
+    constants module for the decided-and-documented contract.
+
+    Defaults flow from :mod:`bearings.config.constants` so the
+    no-inline-literals gate holds. ``frozen=True`` keeps the model
+    hashable for downstream cache keys.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    storage_root: Path = Field(default=DEFAULT_UPLOADS_STORAGE_ROOT)
+    max_size_bytes: int = Field(default=MAX_UPLOAD_SIZE_BYTES, gt=0)
+
+
+class FsCfg(BaseModel):  # type: ignore[explicit-any]
+    """Filesystem-walk sub-config — allow-roots + read/list caps.
+
+    Per ``docs/architecture-v1.md`` §1.1.5 ``web/routes/fs.py`` is the
+    general-purpose FS-picker walker. The route enforces every input
+    path against :data:`FsCfg.allow_roots` after realpath resolution
+    so ``..``, symlink escape, and absolute-path-outside-root are all
+    rejected at the boundary.
+
+    The default ``allow_roots`` is empty — a fresh ``Settings()`` has
+    NO accessible filesystem surface from the FS endpoint. A user
+    opts in via TOML by setting ``fs.allow_roots = ["/home/me/projects"]``;
+    tests inject a tuple containing a ``tmp_path`` so the endpoint is
+    deterministic. Decided-and-documented (vault.md is plan/todo-only;
+    no behavior doc covers a default for the general walker).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    allow_roots: tuple[Path, ...] = Field(default=())
+    read_max_bytes: int = Field(default=FS_READ_MAX_BYTES, gt=0)
+    list_max_entries: int = Field(default=FS_LIST_MAX_ENTRIES, gt=0)
+
+
+class ShellCfg(BaseModel):  # type: ignore[explicit-any]
+    """Shell-exec sub-config — argv allowlist + per-call wall-clock cap.
+
+    Per ``docs/architecture-v1.md`` §1.1.5 ``web/routes/shell.py``
+    dispatches argv via ``subprocess.run`` with ``shell=False`` and
+    rejects any argv whose argv[0] is not in
+    :data:`ShellCfg.allowed_commands`. The default allowlist (per
+    :data:`bearings.config.constants.DEFAULT_ALLOWED_SHELL_COMMANDS`)
+    is intentionally minimal — only ``xdg-open`` plus the two POSIX
+    no-ops ``echo`` / ``true`` so the integration-test surface
+    requires no allowlist override. Power users extend via TOML.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    allowed_commands: frozenset[str] = Field(default=DEFAULT_ALLOWED_SHELL_COMMANDS)
+    timeout_s: float = Field(default=SHELL_EXEC_TIMEOUT_S, gt=0.0)
+    output_max_bytes: int = Field(default=SHELL_OUTPUT_MAX_BYTES, gt=0)
 
 
 def xdg_config_path() -> Path:
@@ -180,6 +252,14 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
     # holds.
     vault: VaultCfg = Field(default_factory=VaultCfg)
 
+    # Misc-API sub-configurations (item 1.10; arch §1.1.5
+    # ``web/routes/{uploads,fs,shell}.py``). Default-factory pattern
+    # mirrors ``vault`` above so each ``Settings`` instance has its
+    # own frozen sub-config identity.
+    uploads: UploadsCfg = Field(default_factory=UploadsCfg)
+    fs: FsCfg = Field(default_factory=FsCfg)
+    shell: ShellCfg = Field(default_factory=ShellCfg)
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -213,4 +293,4 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
         )
 
 
-__all__ = ["Settings", "VaultCfg", "xdg_config_path"]
+__all__ = ["FsCfg", "Settings", "ShellCfg", "UploadsCfg", "VaultCfg", "xdg_config_path"]

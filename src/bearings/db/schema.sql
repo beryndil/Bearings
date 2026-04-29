@@ -490,6 +490,40 @@ CREATE INDEX IF NOT EXISTS idx_templates_name
     ON templates(name);
 
 -- ---------------------------------------------------------------------------
+-- uploads — content-addressed file uploads for the misc-API surface.
+--
+-- Per docs/architecture-v1.md §1.1.5 web/routes/uploads.py owns the
+-- multipart-form upload surface; the on-disk body lives under the
+-- uploads-storage-root keyed by sha256 (see config/constants.py
+-- §"Uploads"). The behavior docs are silent on the endpoint shape
+-- (chat.md mentions "attachment chips" only); this table is the
+-- decided-and-documented contract for v1:
+--
+--   • id is the sequential row id (auto-increment) — the route layer
+--     mints a stable string handle (``upl_<id>``) at the API boundary.
+--   • sha256 is hex-encoded (64 chars). UNIQUE so a re-upload of the
+--     same body returns the existing row (content-addressed dedup).
+--   • filename is the user-supplied name from the multipart part;
+--     stored as-is (no sanitisation) — the route layer caps the
+--     length per ``UPLOAD_FILENAME_MAX_LENGTH``.
+--   • mime_type defaults to ``application/octet-stream`` per RFC 2046.
+--   • size is the on-disk body size in bytes.
+--   • created_at is INTEGER unix seconds for consistency with the
+--     routing/quota tables that use the same shape.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS uploads (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    sha256                   TEXT    NOT NULL UNIQUE,
+    filename                 TEXT    NOT NULL,
+    mime_type                TEXT    NOT NULL,
+    size                     INTEGER NOT NULL,
+    created_at               INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_uploads_created_at
+    ON uploads(created_at DESC);
+
+-- ---------------------------------------------------------------------------
 -- Default system_routing_rules seed.
 --
 -- Verbatim from docs/model-routing-v1-spec.md §3 default rule table.

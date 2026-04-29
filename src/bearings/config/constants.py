@@ -820,6 +820,250 @@ VAULT_REDACTION_MASK_GLYPH: Final[str] = "•" * 8
 VAULT_SEARCH_MAX_LINES_PER_DOC: Final[int] = 100_000
 
 
+# ---------------------------------------------------------------------------
+# Uploads (item 1.10; arch §1.1.5 ``web/routes/uploads.py``).
+#
+# The behavior docs are silent on the upload-endpoint shape — chat.md
+# references "attachment chips" only at the UI surface, with no contract
+# for where bytes land or how they are addressed. The route below is
+# decided-and-documented:
+#
+#   * Content-addressed storage: the sha256 of the body is the natural
+#     primary key. Hash collisions return the existing row instead of
+#     writing twice — duplicate uploads are deduped at zero cost.
+#   * On-disk layout: ``<storage_root>/<sha256[:2]>/<sha256>``. The
+#     two-character shard keeps any one directory below ~256 entries
+#     after a full hash space sweep, which is well-behaved on every
+#     filesystem the rebuild targets.
+#   * Per-row metadata: id, sha256, filename (user-supplied), mime_type
+#     (UploadFile.content_type or octet-stream fallback), size,
+#     created_at.
+# ---------------------------------------------------------------------------
+
+# Hard cap on a single upload body (bytes). 10 MiB is generous for the
+# attachment-chip use case (screenshots, small PDFs, plain-text logs)
+# while bounding worst-case disk pressure on a runaway client.
+MAX_UPLOAD_SIZE_BYTES: Final[int] = 10 * 1024 * 1024
+
+# Default on-disk storage root for upload bodies. Mirrors
+# :data:`DEFAULT_DB_PATH` so the rebuild's per-instance state lives
+# under one XDG-shaped tree (``~/.local/share/bearings-v1/``). Resolved
+# at import time so downstream code never re-expands ``~``.
+DEFAULT_UPLOADS_STORAGE_ROOT: Final[Path] = Path("~/.local/share/bearings-v1/uploads").expanduser()
+
+# Number of leading hex chars from the sha256 used as the shard
+# subdirectory name. Two chars = 256 buckets; aligned with the git
+# object-store convention so a power user reading the on-disk layout
+# recognises the shape immediately.
+UPLOADS_SHA256_SHARD_CHARS: Final[int] = 2
+
+# Upload row id prefix — ``upl_<integer>``. Mirrors the
+# ``ses_``/``msg_`` convention (``SESSION_ID_PREFIX`` /
+# ``MESSAGE_ID_PREFIX``) so a stray id in a log line is self-describing.
+UPLOAD_ID_PREFIX: Final[str] = "upl"
+
+# Upload filename / mime-type bounds. Filenames surface in the
+# ``UploadOut`` wire shape and the future "attachment chip" UI;
+# mime-types are user-supplied via ``UploadFile.content_type`` (with
+# the ``UPLOAD_DEFAULT_MIME_TYPE`` fallback below) and need a bound so
+# a hand-crafted malicious header cannot bloat the row.
+UPLOAD_FILENAME_MAX_LENGTH: Final[int] = 500
+UPLOAD_MIME_TYPE_MAX_LENGTH: Final[int] = 200
+
+# Fallback mime-type when the multipart-form-data part has no
+# ``Content-Type`` header. RFC 2046 §4.5.1 names octet-stream as the
+# generic-binary fallback.
+UPLOAD_DEFAULT_MIME_TYPE: Final[str] = "application/octet-stream"
+
+# ``GET /api/uploads`` page-size defaults. The list returns newest-first;
+# the cap bounds worst-case payload size for a long-running instance.
+UPLOADS_LIST_DEFAULT_LIMIT: Final[int] = 100
+UPLOADS_LIST_MAX_LIMIT: Final[int] = 1000
+
+# Streaming chunk size for ``GET /api/uploads/{id}/content``. Mirrors
+# :data:`STREAM_MAX_DELTA_CHARS` order-of-magnitude (64 KiB) so the
+# wire-frame budget is consistent across surfaces.
+UPLOAD_STREAM_CHUNK_BYTES: Final[int] = 64 * 1024
+
+# ---------------------------------------------------------------------------
+# Filesystem read/list (item 1.10; arch §1.1.5 ``web/routes/fs.py``).
+#
+# vault.md is plan/todo-specific (the vault is a curated read-only index
+# of plans + TODOs); the ``/api/fs/*`` endpoint is the general-purpose
+# filesystem walker arch §1.1.5 names. Decided-and-documented because
+# no behavior doc covers the general-walk surface:
+#
+#   * Inputs are absolute paths only. Relative paths are rejected at
+#     the validator boundary — no implicit "relative to what?" guess.
+#   * Path safety is realpath-based: ``os.path.realpath(raw)`` resolves
+#     ``..``, symlinks, and ``//``-style normalisation in one pass.
+#     The resolved path must start with one of ``FsCfg.allow_roots``'s
+#     own realpaths; otherwise the route returns 403.
+#   * Read responses are utf-8 with ``errors="replace"`` so a binary
+#     file does not crash the decoder; an explicit binary-detect step
+#     is omitted in v1 (the size cap below makes a runaway binary read
+#     bounded anyway).
+# ---------------------------------------------------------------------------
+
+# Hard cap on a single ``GET /api/fs/read`` response body (bytes). The
+# cap bounds worst-case payload size at the wire boundary; over-cap
+# files return 413 (no truncation marker — the FS surface is read-as-
+# is, vault.md owns the marker convention).
+FS_READ_MAX_BYTES: Final[int] = 1024 * 1024
+
+# Hard cap on entries returned by a single ``GET /api/fs/list``. A
+# directory with more children than this returns the first
+# ``FS_LIST_MAX_ENTRIES`` plus a ``capped=true`` flag in the wire
+# shape; clients that need a deeper view drill into a subdirectory.
+FS_LIST_MAX_ENTRIES: Final[int] = 5000
+
+# Filesystem-entry kind alphabet. Mirrors the ``stat`` shapes the
+# walker recognises; ``other`` covers FIFOs / sockets / block devices
+# / character devices in one bucket so the wire shape stays tractable.
+FS_ENTRY_KIND_FILE: Final[str] = "file"
+FS_ENTRY_KIND_DIR: Final[str] = "dir"
+FS_ENTRY_KIND_SYMLINK: Final[str] = "symlink"
+FS_ENTRY_KIND_OTHER: Final[str] = "other"
+KNOWN_FS_ENTRY_KINDS: Final[frozenset[str]] = frozenset(
+    {
+        FS_ENTRY_KIND_FILE,
+        FS_ENTRY_KIND_DIR,
+        FS_ENTRY_KIND_SYMLINK,
+        FS_ENTRY_KIND_OTHER,
+    }
+)
+
+# ---------------------------------------------------------------------------
+# Shell exec (item 1.10; arch §1.1.5 ``web/routes/shell.py``).
+#
+# tool-output-streaming.md documents agent-side tool calls (Bash, Edit,
+# Read, etc.) — the UI never invokes a shell on the user's behalf. The
+# route below is a user-side dispatch surface (e.g., "open this in the
+# system editor"). Decided-and-documented:
+#
+#   * ``subprocess.run`` with ``shell=False`` always; the API never
+#     accepts a shell-string and never spawns ``sh -c``.
+#   * argv[0] must be a member of ``ALLOWED_SHELL_COMMANDS``; this is
+#     the API-level allowlist. Power users override via
+#     ``ShellCfg.allowed_commands`` in TOML.
+#   * Bounded timeout — :data:`SHELL_EXEC_TIMEOUT_S`. A timeout returns
+#     504 Gateway Timeout (the spawned process is killed first).
+# ---------------------------------------------------------------------------
+
+# Per-call wall-clock cap. 30 s is generous for the "open in editor"
+# flow without letting a runaway spawn block the route forever.
+SHELL_EXEC_TIMEOUT_S: Final[float] = 30.0
+
+# Per-call output cap (bytes, per stream). 1 MiB matches the FS read
+# cap so the two surfaces share a budget.
+SHELL_OUTPUT_MAX_BYTES: Final[int] = 1024 * 1024
+
+# argv length cap. Keeps a hand-crafted payload from bloating the
+# request body / log lines without rejecting the legitimate
+# ``xdg-open <path>``-style two-element argv.
+SHELL_ARGV_MAX_ENTRIES: Final[int] = 64
+SHELL_ARGV_ENTRY_MAX_LENGTH: Final[int] = 4_000
+
+# Default shell-command allowlist. Strict least-privilege: only
+# ``xdg-open`` (the standard "open in associated app" dispatcher on
+# Linux) plus the two POSIX no-ops ``echo`` / ``true`` (kept as
+# integration-test handles so the test surface does not require
+# overriding the allowlist). Power users extend via
+# ``ShellCfg.allowed_commands`` in TOML.
+DEFAULT_ALLOWED_SHELL_COMMANDS: Final[frozenset[str]] = frozenset({"xdg-open", "echo", "true"})
+
+# ---------------------------------------------------------------------------
+# Diagnostics (item 1.10; arch §1.1.5 ``web/routes/diag.py``).
+#
+# Localhost-only per project CLAUDE.md (Bearings is single-user; no
+# auth in v1). Surfaces internal runtime state for debugging; the
+# 1.3 audit carry-forward applies — diag MUST NOT expose checkpoint
+# state via SDK ``enable_file_checkpointing`` primitives. Bearings
+# checkpoints (item 1.3) are the table-fork semantic per arch §5
+# row 12 and are surfaced via the dedicated ``checkpoints`` route
+# group, not via diag.
+# ---------------------------------------------------------------------------
+
+# Cap on the per-runner / per-driver list lengths the diag endpoints
+# return. A reasonable headroom over the steady-state fleet size while
+# bounding worst-case payloads.
+DIAG_RUNNER_SAMPLE_LIMIT: Final[int] = 200
+DIAG_DRIVER_SAMPLE_LIMIT: Final[int] = 200
+
+# ---------------------------------------------------------------------------
+# Health (item 1.10; arch §1.1.5 ``web/routes/health.py``).
+#
+# ``GET /api/health`` returns 200 always — the readiness signal is the
+# JSON ``db_ok`` field, not the HTTP status. This matches the systemd
+# / external-monitor convention where 200 means "the server is alive
+# and accepting traffic" and the body carries the deeper readiness
+# breakdown.
+# ---------------------------------------------------------------------------
+
+HEALTH_STATUS_OK: Final[str] = "ok"
+HEALTH_STATUS_DEGRADED: Final[str] = "degraded"
+KNOWN_HEALTH_STATUSES: Final[frozenset[str]] = frozenset({HEALTH_STATUS_OK, HEALTH_STATUS_DEGRADED})
+
+# DB liveness probe. ``SELECT 1`` is universally valid SQL with
+# zero side effects.
+HEALTH_DB_PROBE_QUERY: Final[str] = "SELECT 1"
+
+# ---------------------------------------------------------------------------
+# Metrics (item 1.10; arch §1.1.5 ``web/routes/metrics.py`` + arch §1.1.7
+# ``bearings.metrics`` package).
+#
+# Prometheus text exposition is the single supported format in v1
+# (OpenMetrics is wire-compatible for the surfaces below). Metric
+# names use the Prometheus convention: snake_case, ``_total`` suffix
+# for counters, unit suffix for gauges, ``_info`` for "build info"
+# style gauges.
+# ---------------------------------------------------------------------------
+
+METRICS_CONTENT_TYPE: Final[str] = "text/plain; version=0.0.4; charset=utf-8"
+
+METRIC_NAME_INFO: Final[str] = "bearings_info"
+METRIC_NAME_UPTIME_SECONDS: Final[str] = "bearings_uptime_seconds"
+METRIC_NAME_ACTIVE_RUNNERS: Final[str] = "bearings_active_runners"
+METRIC_NAME_QUEUED_PROMPTS: Final[str] = "bearings_queued_prompts"
+METRIC_NAME_ACTIVE_DRIVERS: Final[str] = "bearings_active_drivers"
+METRIC_NAME_QUOTA_OVERALL: Final[str] = "bearings_quota_overall_used_pct"
+METRIC_NAME_QUOTA_SONNET: Final[str] = "bearings_quota_sonnet_used_pct"
+METRIC_NAME_ROUTING_DECISIONS_TOTAL: Final[str] = "bearings_routing_decisions_total"
+METRIC_NAME_ADVISOR_CALLS_TOTAL: Final[str] = "bearings_advisor_calls_total"
+
+# ---------------------------------------------------------------------------
+# OpenAPI export (item 1.10; FastAPI auto-generates ``/openapi.json``).
+#
+# Title + version flow into the spec's ``info`` block; tag names group
+# operations in the rendered docs. Pinned as constants so a future
+# rename touches one symbol per coding-standards "no inline literals".
+# ---------------------------------------------------------------------------
+
+OPENAPI_TITLE: Final[str] = "Bearings"
+OPENAPI_DESCRIPTION: Final[str] = (
+    "Localhost web UI that streams Claude Code agent sessions (v1 rebuild)."
+)
+
+# Route-group tag alphabet. Every router carries a ``tags=[...]`` arg
+# at ``include_router`` time so the rendered OpenAPI groups operations.
+ROUTE_TAG_SESSIONS: Final[str] = "sessions"
+ROUTE_TAG_MESSAGES: Final[str] = "messages"
+ROUTE_TAG_TAGS: Final[str] = "tags"
+ROUTE_TAG_MEMORIES: Final[str] = "memories"
+ROUTE_TAG_VAULT: Final[str] = "vault"
+ROUTE_TAG_CHECKLISTS: Final[str] = "checklists"
+ROUTE_TAG_PAIRED_CHATS: Final[str] = "paired-chats"
+ROUTE_TAG_ROUTING: Final[str] = "routing"
+ROUTE_TAG_QUOTA: Final[str] = "quota"
+ROUTE_TAG_USAGE: Final[str] = "usage"
+ROUTE_TAG_UPLOADS: Final[str] = "uploads"
+ROUTE_TAG_FS: Final[str] = "fs"
+ROUTE_TAG_SHELL: Final[str] = "shell"
+ROUTE_TAG_DIAG: Final[str] = "diag"
+ROUTE_TAG_HEALTH: Final[str] = "health"
+ROUTE_TAG_METRICS: Final[str] = "metrics"
+
+
 # Self-consistency: every profile that appears in the resolution tables
 # below must also appear in :data:`PERMISSION_PROFILE_NAMES`, and every
 # resolved SDK mode must be a member of :data:`KNOWN_SDK_PERMISSION_MODES`.
@@ -837,6 +1081,26 @@ assert STREAM_HEARTBEAT_INTERVAL_S == WS_IDLE_PING_INTERVAL_S
 # scan that produces an unsupported kind fails at the dataclass
 # validator before it reaches the DB.
 assert frozenset({VAULT_KIND_PLAN, VAULT_KIND_TODO}) == KNOWN_VAULT_KINDS
+
+# FS-entry kind alphabet — every named kind appears in the
+# ``KNOWN_FS_ENTRY_KINDS`` set so a stat result missing the alphabet
+# fails at the dataclass validator before it leaves the agent layer.
+assert (
+    frozenset(
+        {
+            FS_ENTRY_KIND_FILE,
+            FS_ENTRY_KIND_DIR,
+            FS_ENTRY_KIND_SYMLINK,
+            FS_ENTRY_KIND_OTHER,
+        }
+    )
+    == KNOWN_FS_ENTRY_KINDS
+)
+
+# Health-status alphabet — every named status appears in the
+# ``KNOWN_HEALTH_STATUSES`` set so the wire-shape validator can
+# enforce the alphabet at the API boundary.
+assert frozenset({HEALTH_STATUS_OK, HEALTH_STATUS_DEGRADED}) == KNOWN_HEALTH_STATUSES
 
 
 __all__ = [
@@ -869,6 +1133,7 @@ __all__ = [
     "CLI_EXIT_USAGE_ERROR",
     "DEFAULT_ADVISOR_MAX_USES_HAIKU",
     "DEFAULT_ADVISOR_MAX_USES_SONNET",
+    "DEFAULT_ALLOWED_SHELL_COMMANDS",
     "DEFAULT_CHECKPOINT_LABEL_TEMPLATE",
     "DEFAULT_DB_PATH",
     "DEFAULT_HOST",
@@ -879,8 +1144,11 @@ __all__ = [
     "DEFAULT_TEMPLATE_MODEL",
     "DEFAULT_TEMPLATE_PERMISSION_PROFILE",
     "DEFAULT_TOOL_OUTPUT_CAP_CHARS",
+    "DEFAULT_UPLOADS_STORAGE_ROOT",
     "DEFAULT_VAULT_PLAN_ROOT",
     "DEFAULT_VAULT_TODO_GLOB",
+    "DIAG_DRIVER_SAMPLE_LIMIT",
+    "DIAG_RUNNER_SAMPLE_LIMIT",
     "DRIVER_OUTCOME_COMPLETED",
     "DRIVER_OUTCOME_HALTED_EMPTY",
     "DRIVER_OUTCOME_HALTED_FAILURE_TEMPLATE",
@@ -889,6 +1157,15 @@ __all__ = [
     "EFFORT_LEVEL_TO_SDK",
     "EXECUTOR_FALLBACK_MODEL",
     "EXECUTOR_MODEL_FULL_ID_PREFIX",
+    "FS_ENTRY_KIND_DIR",
+    "FS_ENTRY_KIND_FILE",
+    "FS_ENTRY_KIND_OTHER",
+    "FS_ENTRY_KIND_SYMLINK",
+    "FS_LIST_MAX_ENTRIES",
+    "FS_READ_MAX_BYTES",
+    "HEALTH_DB_PROBE_QUERY",
+    "HEALTH_STATUS_DEGRADED",
+    "HEALTH_STATUS_OK",
     "HISTORY_PRIME_MAX_CHARS",
     "ITEM_OUTCOME_BLOCKED",
     "ITEM_OUTCOME_FAILED",
@@ -897,6 +1174,8 @@ __all__ = [
     "KNOWN_AUTO_DRIVER_STATES",
     "KNOWN_EFFORT_LEVELS",
     "KNOWN_EXECUTOR_MODELS",
+    "KNOWN_FS_ENTRY_KINDS",
+    "KNOWN_HEALTH_STATUSES",
     "KNOWN_ITEM_OUTCOMES",
     "KNOWN_PAIRED_CHAT_SPAWNED_BY",
     "KNOWN_ROUTING_SOURCES",
@@ -906,12 +1185,25 @@ __all__ = [
     "KNOWN_SESSION_KINDS",
     "KNOWN_VAULT_KINDS",
     "MAX_CHECKPOINTS_PER_SESSION",
+    "MAX_UPLOAD_SIZE_BYTES",
     "MESSAGES_LIST_DEFAULT_LIMIT",
     "MESSAGES_LIST_MAX_LIMIT",
     "MESSAGE_ID_PREFIX",
+    "METRICS_CONTENT_TYPE",
+    "METRIC_NAME_ACTIVE_DRIVERS",
+    "METRIC_NAME_ACTIVE_RUNNERS",
+    "METRIC_NAME_ADVISOR_CALLS_TOTAL",
+    "METRIC_NAME_INFO",
+    "METRIC_NAME_QUEUED_PROMPTS",
+    "METRIC_NAME_QUOTA_OVERALL",
+    "METRIC_NAME_QUOTA_SONNET",
+    "METRIC_NAME_ROUTING_DECISIONS_TOTAL",
+    "METRIC_NAME_UPTIME_SECONDS",
     "MODEL_USAGE_KEY_CACHE_READ_TOKENS",
     "MODEL_USAGE_KEY_INPUT_TOKENS",
     "MODEL_USAGE_KEY_OUTPUT_TOKENS",
+    "OPENAPI_DESCRIPTION",
+    "OPENAPI_TITLE",
     "OVERRIDE_RATE_REVIEW_THRESHOLD",
     "OVERRIDE_RATE_WINDOW",
     "OVERRIDE_RATE_WINDOW_DAYS",
@@ -934,6 +1226,22 @@ __all__ = [
     "QUOTA_BAR_YELLOW_PCT",
     "QUOTA_THRESHOLD_PCT",
     "RING_BUFFER_MAX",
+    "ROUTE_TAG_CHECKLISTS",
+    "ROUTE_TAG_DIAG",
+    "ROUTE_TAG_FS",
+    "ROUTE_TAG_HEALTH",
+    "ROUTE_TAG_MEMORIES",
+    "ROUTE_TAG_MESSAGES",
+    "ROUTE_TAG_METRICS",
+    "ROUTE_TAG_PAIRED_CHATS",
+    "ROUTE_TAG_QUOTA",
+    "ROUTE_TAG_ROUTING",
+    "ROUTE_TAG_SESSIONS",
+    "ROUTE_TAG_SHELL",
+    "ROUTE_TAG_TAGS",
+    "ROUTE_TAG_UPLOADS",
+    "ROUTE_TAG_USAGE",
+    "ROUTE_TAG_VAULT",
     "ROUTING_PREVIEW_DEBOUNCE",
     "ROUTING_PREVIEW_DEBOUNCE_MS",
     "SENTINEL_KIND_FOLLOWUP_BLOCKING",
@@ -947,6 +1255,10 @@ __all__ = [
     "SESSION_KIND_CHAT",
     "SESSION_KIND_CHECKLIST",
     "SESSION_TITLE_MAX_LENGTH",
+    "SHELL_ARGV_ENTRY_MAX_LENGTH",
+    "SHELL_ARGV_MAX_ENTRIES",
+    "SHELL_EXEC_TIMEOUT_S",
+    "SHELL_OUTPUT_MAX_BYTES",
     "STREAM_HEARTBEAT_INTERVAL_S",
     "STREAM_MAX_DELTA_CHARS",
     "STREAM_MAX_TOOL_OUTPUT_CHARS",
@@ -962,6 +1274,14 @@ __all__ = [
     "TEMPLATE_NAME_MAX_LENGTH",
     "TOOL_PROGRESS_INTERVAL",
     "TOOL_PROGRESS_INTERVAL_S",
+    "UPLOADS_LIST_DEFAULT_LIMIT",
+    "UPLOADS_LIST_MAX_LIMIT",
+    "UPLOADS_SHA256_SHARD_CHARS",
+    "UPLOAD_DEFAULT_MIME_TYPE",
+    "UPLOAD_FILENAME_MAX_LENGTH",
+    "UPLOAD_ID_PREFIX",
+    "UPLOAD_MIME_TYPE_MAX_LENGTH",
+    "UPLOAD_STREAM_CHUNK_BYTES",
     "USAGE_HEADROOM_WINDOW",
     "USAGE_HEADROOM_WINDOW_DAYS",
     "USAGE_POLL_INTERVAL",

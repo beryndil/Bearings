@@ -238,6 +238,26 @@ async def get_active(
     return None if row is None else _row_to_run(row)
 
 
+async def list_active(
+    connection: aiosqlite.Connection,
+) -> list[AutoDriverRun]:
+    """Every ``running`` / ``paused`` run, newest-first.
+
+    Item 1.10 diag surface — exposes the full active-driver fleet
+    without taking a per-checklist round trip. The partial index
+    ``idx_auto_driver_runs_state`` covers the WHERE clause.
+    """
+    cursor = await connection.execute(
+        _SELECT_RUN_COLUMNS + " WHERE state IN (?, ?) ORDER BY started_at DESC, id DESC",
+        (AUTO_DRIVER_STATE_RUNNING, AUTO_DRIVER_STATE_PAUSED),
+    )
+    try:
+        rows = await cursor.fetchall()
+    finally:
+        await cursor.close()
+    return [_row_to_run(row) for row in rows]
+
+
 async def list_for_checklist(
     connection: aiosqlite.Connection,
     checklist_id: str,

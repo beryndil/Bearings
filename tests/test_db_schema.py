@@ -68,6 +68,11 @@ EXPECTED_TABLES = frozenset(
         # checklists.md §"Run-control surface" (state machine,
         # counters, terminal outcome).
         "auto_driver_runs",
+        # Item 1.10 addition — content-addressed file uploads metadata
+        # mirror per arch §1.1.5 ``web/routes/uploads.py``. On-disk
+        # body lives under the configured uploads-storage-root keyed
+        # by sha256; this table is the metadata side of the contract.
+        "uploads",
     }
 )
 

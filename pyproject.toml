@@ -21,6 +21,13 @@ dependencies = [
     "pydantic-settings~=2.6",
     # TOML loading for config files (Python 3.12+ has tomllib in stdlib for read; tomli-w for write).
     "tomli-w~=1.0",
+    # Prometheus exposition for ``GET /metrics`` (item 1.10; arch §1.1.7).
+    "prometheus-client~=0.21",
+    # Multipart/form-data parsing for ``POST /api/uploads`` (item 1.10; arch
+    # §1.1.5 ``web/routes/uploads.py``). FastAPI's ``UploadFile`` requires
+    # this dep at request-parse time; without it FastAPI raises a clear
+    # runtime error pointing at python-multipart.
+    "python-multipart~=0.0.18",
 ]
 
 [project.optional-dependencies]
