@@ -12,6 +12,14 @@
   let budget = $state('');
   let saving = $state(false);
 
+  // Auto-suggest-titles plan (`~/.claude/plans/auto-suggesting-titles.md`).
+  // Click ✨ → fetch three candidates → render as pills under the
+  // Title input → click a pill to fill the input. The user still
+  // clicks Save to commit; nothing here writes to the server.
+  let suggesting = $state(false);
+  let suggested = $state<string[]>([]);
+  let suggestError = $state<string | null>(null);
+
   // Tags state. Scoped to the modal session so chips reflect what's
   // actually attached — `tags.list` is the global pool.
   let sessionTags = $state<api.Tag[]>([]);
@@ -56,8 +64,31 @@
     budget = current.max_budget_usd != null ? String(current.max_budget_usd) : '';
     tagDraft = '';
     tagError = null;
+    suggested = [];
+    suggestError = null;
     loadTags(current.id);
   });
+
+  async function onSuggest() {
+    if (!current || suggesting) return;
+    suggesting = true;
+    suggestError = null;
+    suggested = [];
+    try {
+      const res = await api.suggestSessionTitles(current.id);
+      suggested = res.titles;
+    } catch (e) {
+      suggestError = e instanceof Error ? e.message : String(e);
+    } finally {
+      suggesting = false;
+    }
+  }
+
+  function applySuggestion(candidate: string) {
+    title = candidate;
+    suggested = [];
+    suggestError = null;
+  }
 
   async function loadTags(id: string) {
     try {
@@ -176,13 +207,45 @@
 
       <label class="flex flex-col gap-1 text-xs">
         <span class="text-slate-400">Title</span>
-        <input
-          type="text"
-          class="rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
-            focus:border-slate-600 focus:outline-none"
-          placeholder="(leave empty to clear)"
-          bind:value={title}
-        />
+        <div class="flex items-stretch gap-2">
+          <input
+            type="text"
+            class="flex-1 rounded border border-slate-800 bg-slate-950 px-2 py-2 text-sm
+              focus:border-slate-600 focus:outline-none"
+            placeholder="(leave empty to clear)"
+            bind:value={title}
+          />
+          <button
+            type="button"
+            class="rounded border border-slate-800 bg-slate-900 px-2 text-sm
+              hover:border-slate-600 hover:bg-slate-800 disabled:opacity-50"
+            title="Suggest titles based on this conversation"
+            aria-label="Suggest titles"
+            onclick={onSuggest}
+            disabled={suggesting}
+          >
+            {suggesting ? '…' : '✨'}
+          </button>
+        </div>
+        {#if suggested.length > 0}
+          <ul class="mt-1 flex flex-col gap-1" aria-label="Suggested titles">
+            {#each suggested as candidate (candidate)}
+              <li>
+                <button
+                  type="button"
+                  class="w-full rounded border border-slate-800 bg-slate-950 px-2 py-1
+                    text-left text-xs hover:border-slate-600 hover:bg-slate-800"
+                  onclick={() => applySuggestion(candidate)}
+                >
+                  {candidate}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        {#if suggestError}
+          <p class="mt-1 text-xs text-rose-400">{suggestError}</p>
+        {/if}
       </label>
 
       <label class="flex flex-col gap-1 text-xs">

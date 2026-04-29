@@ -620,6 +620,31 @@ export function regenerateFromMessage(
   );
 }
 
+/** Auto-suggest titles plan
+ * (`~/.claude/plans/auto-suggesting-titles.md`). Three candidate
+ * titles for the session, derived from a one-shot LLM call against
+ * the session's recent messages. Always exactly three on success;
+ * the backend rejects shorter responses upstream so the UI can
+ * render a fixed three-pill row without a length check. Order is
+ * narrow → medium → wide abstraction levels. */
+export type SuggestTitlesResult = {
+  titles: string[];
+};
+
+/** Drive `POST /sessions/{id}/suggest_titles`. Surface 503s as
+ * thrown errors (the modal renders the message inline; the disabled-
+ * in-config case carries the config-key hint in the detail). */
+export function suggestSessionTitles(
+  sessionId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<SuggestTitlesResult> {
+  return jsonFetch<SuggestTitlesResult>(
+    fetchImpl,
+    `/api/sessions/${sessionId}/suggest_titles`,
+    { method: 'POST' }
+  );
+}
+
 /** L4.3.1 — `＋ SPAWN` button. Create a fresh `chat`-kind session
  * seeded with the assistant reply at `messageId`. The new session
  * inherits the parent's `working_dir`, `model`, `max_budget_usd`, and
