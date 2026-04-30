@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] - 2026-04-29
+
+Memories page — Phase 4 of the v1.0.0 dashboard redesign. The
+mockup put a top-level `/memories` route in the sidebar nav for
+browsing the durable per-tag context that gets stitched into
+every session's system prompt; this ships the real surface
+behind the placeholder route Phase 2c wired up.
+
+**Backend:**
+- New `db/_tags.list_tag_memories(conn)` — joins `tag_memories`
+  with the parent tag's display fields (name, color, group),
+  ordered by most-recent edit first server-side.
+- New `GET /api/tags/memories` — aggregate endpoint that returns
+  the full memory inventory in one round-trip. Distinct from
+  `GET /api/tags/{tag_id}/memory` (single fetch); FastAPI's
+  literal-over-parametric route precedence keeps the two from
+  colliding.
+- New `TagMemoryWithTagOut` Pydantic model bundling memory body
+  with parent tag fields.
+- Existing tag memory tests still green (61 pass).
+
+**Frontend:**
+- New `listTagMemories()` API client + `TagMemoryWithTag` type.
+- `routes/(app)/memories/+page.svelte` rebuilt with the real
+  Memories surface: header with count, list of cards (one per
+  tag with a memory), each card showing tag color dot + name +
+  severity badge + last-edit timestamp + 4-line content preview
+  + Edit button. Empty state names where to create the first
+  memory (the sidebar tag pencil) rather than offering a
+  parallel `+ Memory` button — memory creation is tag-scoped.
+- Editing reuses `TagEdit.svelte` (the same modal the sidebar
+  pencil opens) so editor invariants — markdown preview, save/
+  delete, runner respawn on save — stay in one place.
+- Page re-fetches when the editor closes (no shared store to
+  invalidate; closing-poll is the simplest path back to a
+  consistent view).
+
+**Note:** the running systemd unit must be restarted to pick up
+the new `/api/tags/memories` endpoint. The frontend bundle is
+already synced into `src/bearings/web/dist`; only the Python
+process needs reloading. `systemctl --user restart bearings`.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.28.0] - 2026-04-29
 
 Right sidebar 4-tab refactor — Phase 3 of the v1.0.0 dashboard

@@ -55,7 +55,15 @@ from .sessions import (
     SessionUpdate,
 )
 from .suggest_titles import SuggestTitlesResult
-from .tags import TagCreate, TagGroup, TagMemoryOut, TagMemoryPut, TagOut, TagUpdate
+from .tags import (
+    TagCreate,
+    TagGroup,
+    TagMemoryOut,
+    TagMemoryPut,
+    TagMemoryWithTagOut,
+    TagOut,
+    TagUpdate,
+)
 from .templates import TemplateCreate, TemplateInstantiateRequest, TemplateOut
 from .tools import TodoItemOut, TodosOut, ToolCallOut
 from .vault import (
@@ -122,6 +130,7 @@ __all__ = [
     "TagGroup",
     "TagMemoryOut",
     "TagMemoryPut",
+    "TagMemoryWithTagOut",
     "TagOut",
     "TagUpdate",
     "TemplateCreate",

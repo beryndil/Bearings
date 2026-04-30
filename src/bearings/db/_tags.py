@@ -381,3 +381,22 @@ async def delete_tag_memory(conn: aiosqlite.Connection, tag_id: int) -> bool:
     cursor = await conn.execute("DELETE FROM tag_memories WHERE tag_id = ?", (tag_id,))
     await conn.commit()
     return cursor.rowcount > 0
+
+
+async def list_tag_memories(conn: aiosqlite.Connection) -> list[dict[str, Any]]:
+    """Return every tag that has a memory row, joined with the parent
+    tag's display fields (name, color, group). Used by the v1.0.0
+    Memories page (`/memories`) to render the full memory inventory in
+    one request rather than fanning out a GET per tag id. Sorted by
+    most-recent edit first so the list reads chronologically — the
+    memory the user just touched sits at the top. Tags with no memory
+    are omitted by the INNER JOIN; the page renders an empty state
+    when the list is empty."""
+    async with conn.execute(
+        "SELECT m.tag_id, t.name AS tag_name, t.color AS tag_color, "
+        "t.tag_group AS tag_group, m.content, m.updated_at "
+        "FROM tag_memories m "
+        "JOIN tags t ON t.id = m.tag_id "
+        "ORDER BY m.updated_at DESC"
+    ) as cursor:
+        return [dict(row) async for row in cursor]

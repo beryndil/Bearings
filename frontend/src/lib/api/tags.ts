@@ -51,6 +51,19 @@ export type TagMemory = {
   updated_at: string;
 };
 
+/** Aggregate row served by `GET /api/tags/memories` for the v1.0.0
+ * Memories page. Bundles the memory body with the parent tag's
+ * display fields so the page can render the inventory in a single
+ * round-trip without a follow-up tags fetch. */
+export type TagMemoryWithTag = {
+  tag_id: number;
+  tag_name: string;
+  tag_color: string | null;
+  tag_group: TagGroup;
+  content: string;
+  updated_at: string;
+};
+
 /** Options for {@link listTags}. `scopeTagIds` drives the v0.7.4
  * context-aware severity counts: the backend only returns absolute
  * counts when the option is omitted, zeros every severity count when
@@ -109,6 +122,15 @@ export function deleteTag(id: number, fetchImpl: typeof fetch = fetch): Promise<
 
 export function getTagMemory(tagId: number, fetchImpl: typeof fetch = fetch): Promise<TagMemory> {
   return jsonFetch<TagMemory>(fetchImpl, `/api/tags/${tagId}/memory`);
+}
+
+/** List every tag that carries a memory, joined with the parent tag's
+ * display fields. Backs the v1.0.0 dashboard's `/memories` page so
+ * the inventory renders in a single round-trip — the per-tag
+ * `getTagMemory` would fan out N requests over a tag list of any
+ * meaningful size. Sorted by most-recent edit first server-side. */
+export function listTagMemories(fetchImpl: typeof fetch = fetch): Promise<TagMemoryWithTag[]> {
+  return jsonFetch<TagMemoryWithTag[]>(fetchImpl, '/api/tags/memories');
 }
 
 export function putTagMemory(

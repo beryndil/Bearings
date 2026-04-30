@@ -72,3 +72,18 @@ class TagMemoryOut(BaseModel):
     tag_id: int
     content: str
     updated_at: str
+
+
+class TagMemoryWithTagOut(BaseModel):
+    """List item for the Memories inventory endpoint. Bundles the
+    memory row with the parent tag's display fields so the frontend
+    can render the Memories page (v1.0.0 dashboard redesign Phase 4)
+    without a second tags-fetch round-trip — every memory carries the
+    tag's name, color, and group inline."""
+
+    tag_id: int
+    tag_name: str
+    tag_color: str | None = None
+    tag_group: TagGroup = "general"
+    content: str
+    updated_at: str
