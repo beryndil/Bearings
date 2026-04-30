@@ -40,7 +40,7 @@ check that every preferences GET carries the new keys.
 
 Pillow joins `pyproject.toml` deps (`pillow>=10.0`) and CREDITS.md.
 
-## [0.30.0] - 2026-04-29
+## [0.31.0] - 2026-04-29
 
 Inspector Files & Changes tabs — Phase 5 of the v1.0.0 dashboard
 redesign. Both tabs were placeholders since Phase 3; this ships
