@@ -1,12 +1,14 @@
 <!doctype html>
 <!--
   `data-theme` is set synchronously by the no-flash boot script below,
-  before the SvelteKit head injection and before first paint. v1 ships three
-  bundled themes: `midnight-glass` (default dark), `default` (saved
-  Tailwind palette), and `paper-light`. The `data-theme` attribute is
-  the only switching surface — Tailwind color classes resolve through
-  CSS variables, so flipping this attribute restyles the entire app
-  with no component re-render.
+  before the SvelteKit head injection and before first paint. v0.18+
+  ships four bundled themes: `midnight-glass` (current default dark),
+  `default` (saved Tailwind palette), `paper-light` (light cream),
+  and `evergreen` (forest-green flat dark — v1.0.0 dashboard target,
+  will become default at v1.0.0). The `data-theme` attribute is the
+  only switching surface — Tailwind color classes resolve through CSS
+  variables, so flipping this attribute restyles the entire app with
+  no component re-render.
 -->
 <html lang="en" class="h-full" data-theme="midnight-glass">
   <head>
@@ -52,6 +54,7 @@
             'midnight-glass': '#0A0E1C',
             default: '#020617',
             'paper-light': '#FAF7F0',
+            evergreen: '#0E131B',
           };
           var theme = null;
           try {

@@ -1,0 +1,221 @@
+/*
+ * Evergreen — flat dark forest, brand-targeted v1.0.0 dashboard
+ * --------------------------------------------------------------
+ * v1.0.0 dashboard mockup (session "Theme" / `d975cfef…`,
+ * 2026-04-29) called for a deep blue-black surface with a forest-
+ * green primary accent — visually distinct from midnight-glass
+ * (warm-navy + violet) and the saved Tailwind default. The full
+ * v1 dashboard plan lives at
+ * `~/.claude/plans/evergreen-redesigning-dashboard.md`; this file
+ * is **Phase 1** — palette + treatment only. Layout / new pages
+ * land in later phases.
+ *
+ * Treatment style: **flat**, like `paper-light` — no aurora, no
+ * backdrop-filter, no glass panels. Hairline borders distinguish
+ * surfaces. The deep base does the heavy lifting; effects stay
+ * out of the way.
+ *
+ * Palette source: k-means + targeted pixel sampling against the
+ * attached mockup. Brand green pinned to `#258846`; cool-gray text
+ * ramp ends at `#E7EAED`; warm orange `#C87B58` reserved for the
+ * "warm avatar" accent that breaks up the otherwise-cool surface.
+ *
+ * The slate scale here keeps the standard Tailwind direction
+ * (50 light → 950 dark) — unlike `paper-light`, which inverts.
+ * That's why no per-alias re-pointing is needed below: every
+ * `bg-slate-900` / `text-slate-100` already means what it does
+ * in midnight-glass; the channel triples just hold a different
+ * dark-ramp.
+ */
+
+[data-theme='evergreen'] {
+  /* ----- Slate — deep blue-black ramp -----
+   * 950 is the page background (the deepest blue-black sampled
+   * from the mockup). 900 is the primary surface (cards, message
+   * bubbles); 800 is the elevated tier (the "Recovered actions"
+   * accent card sat at this lift in the mockup). The lighter end
+   * (50–300) carries the cool-gray text ramp that landed at
+   * `#E7EAED` for primary text. */
+  --bearings-slate-50: 245 246 249;
+  --bearings-slate-100: 231 234 237;
+  --bearings-slate-200: 200 207 215;
+  --bearings-slate-300: 174 180 190;
+  --bearings-slate-400: 139 152 161;
+  --bearings-slate-500: 112 123 132;
+  --bearings-slate-600: 85 91 103;
+  --bearings-slate-700: 56 65 75;
+  --bearings-slate-800: 33 40 51;
+  --bearings-slate-900: 20 27 36;
+  --bearings-slate-950: 14 19 27;
+
+  /* ----- Sky — cool teal-cyan, complementary to emerald primary.
+   * Evergreen breaks midnight-glass's sky→violet remap: with green
+   * as the primary action color, focus rings/links want a
+   * distinctly-not-green hue so they don't blend into emerald
+   * buttons. A muted teal-cyan reads as "interactive but different
+   * from the brand" against the deep base, and is dim enough that
+   * link text doesn't shout against body copy. */
+  --bearings-sky-200: 180 230 250;
+  --bearings-sky-300: 140 215 240;
+  --bearings-sky-400: 100 195 230;
+  --bearings-sky-500: 70 165 200;
+  --bearings-sky-600: 50 130 165;
+  --bearings-sky-800: 30 90 125;
+  --bearings-sky-900: 20 65 90;
+
+  /* ----- Emerald — forest green, the brand accent.
+   * Pinned to `#258846` at -500 (sampled from the "+ New Session"
+   * pill and the "Healthy" indicator). -600/-700 deepen for hover/
+   * active button states; -300/-400 lighten for decorative pills
+   * and inline accents. */
+  --bearings-emerald-200: 180 230 200;
+  --bearings-emerald-300: 110 200 140;
+  --bearings-emerald-400: 65 168 100;
+  --bearings-emerald-500: 37 136 70;
+  --bearings-emerald-600: 30 110 56;
+  --bearings-emerald-700: 22 80 40;
+  --bearings-emerald-900: 12 50 24;
+
+  /* ----- Amber — warning. Yellow-amber tuned to read on dark
+   * surfaces without leaning brown. */
+  --bearings-amber-100: 252 235 180;
+  --bearings-amber-200: 250 220 145;
+  --bearings-amber-300: 245 205 110;
+  --bearings-amber-400: 235 185 80;
+  --bearings-amber-500: 220 165 50;
+  --bearings-amber-800: 130 95 25;
+  --bearings-amber-900: 80 55 12;
+  --bearings-amber-950: 50 32 8;
+
+  /* ----- Rose — error / destructive. Pink-red kept saturated
+   * enough to flag but not enough to fight emerald for attention. */
+  --bearings-rose-200: 255 200 205;
+  --bearings-rose-300: 255 165 175;
+  --bearings-rose-400: 250 130 145;
+  --bearings-rose-500: 235 95 110;
+  --bearings-rose-600: 210 75 90;
+  --bearings-rose-700: 175 55 70;
+  --bearings-rose-800: 130 35 50;
+  --bearings-rose-900: 80 20 30;
+  --bearings-rose-950: 50 12 18;
+
+  /* ----- Red — ContextMeter pulse band. Distinct from rose so the
+   * pulse reads as urgent rather than as the standard error hue. */
+  --bearings-red-100: 250 200 200;
+  --bearings-red-500: 235 80 80;
+  --bearings-red-600: 210 60 60;
+  --bearings-red-900: 90 25 25;
+
+  /* ----- Orange — warm accent / avatar circles.
+   * -500 is the sampled `#C87B58` directly; the mockup used it for
+   * avatar circles so the otherwise-cool palette has a warm
+   * counterpoint. -600 deepens for the intermediate context-
+   * pressure band (the original Tailwind orange-600 role). */
+  --bearings-orange-100: 250 220 200;
+  --bearings-orange-600: 175 105 70;
+  --bearings-orange-900: 110 60 35;
+
+  /* ----- Teal — tag_memory layer badge. */
+  --bearings-teal-300: 95 200 195;
+  --bearings-teal-900: 15 65 65;
+
+  /* ----- Indigo — session_description badge. */
+  --bearings-indigo-300: 150 165 230;
+  --bearings-indigo-500: 110 125 215;
+  --bearings-indigo-900: 40 50 110;
+
+  /* ----- Semantic alias overrides ---------------------------------
+   * The base aliases in `tokens.css :root` resolve correctly via the
+   * shade variables above (slate ramp keeps Tailwind direction here,
+   * unlike paper-light). Two evergreen-specific overrides:
+   *
+   * --color-border-accent / --color-accent-info: the mockup binds
+   *   these visual roles to the brand green (selected sidebar item
+   *   border, "Healthy" status, "Connected" badge). Without the
+   *   override they'd resolve to sky (teal-cyan) and read as
+   *   "interactive" rather than "this is the brand."
+   *
+   * --color-focus-ring stays on sky on purpose — a green focus
+   *   ring on a green button is invisible. Keyboard nav needs a
+   *   visually distinct ring; teal-cyan threads that needle. */
+  --color-border-accent: var(--bearings-emerald-500);
+  --color-accent-info: var(--bearings-emerald-500);
+
+  /* ----- Shiki tokens (Track E2) — evergreen forest mood.
+   * Keywords lean emerald (the brand bleeding into syntax);
+   * strings warm to amber for contrast against the green keywords;
+   * functions take the cool sky-cyan to stay distinct from
+   * keywords; comments dim into the slate ramp's mid-grey so they
+   * recede against the deep base. */
+  --shiki-foreground: rgb(var(--bearings-slate-100));
+  --shiki-background: transparent;
+  --shiki-token-comment: rgb(var(--bearings-slate-500));
+  --shiki-token-keyword: rgb(var(--bearings-emerald-300));
+  --shiki-token-string: rgb(var(--bearings-amber-300));
+  --shiki-token-string-expression: rgb(var(--bearings-amber-400));
+  --shiki-token-constant: rgb(var(--bearings-orange-600));
+  --shiki-token-function: rgb(var(--bearings-sky-300));
+  --shiki-token-parameter: rgb(var(--bearings-slate-200));
+  --shiki-token-punctuation: rgb(var(--bearings-slate-400));
+  --shiki-token-link: rgb(var(--bearings-sky-300));
+}
+
+/* ----- Treatment overrides ----------------------------------------
+ * Midnight-glass's treatment file scopes every effect under
+ * `[data-theme='midnight-glass']`, so evergreen — like paper-light —
+ * gets a flat look for free. The rules below add the few
+ * evergreen-specific touches: a barely-there body gradient for
+ * surface depth, hairline aside borders so the panels don't merge
+ * into the body, an emerald-tinted selected-row treatment, flat
+ * code blocks, and a flat focus outline.
+ */
+
+/* Body: very subtle vertical gradient — top a touch deeper, bottom
+ * a touch lifted — so the page reads as a surface rather than a
+ * flat black panel. Stays inside the slate-900..950 band so it
+ * doesn't compete with cards or accent surfaces. */
+[data-theme='evergreen'] body {
+  background-image: linear-gradient(
+    180deg,
+    rgb(var(--bearings-slate-950)) 0%,
+    rgb(var(--bearings-slate-900)) 100%
+  );
+  background-attachment: fixed;
+}
+
+/* Asides: hairline border so the panels stay distinguishable from
+ * the body gradient. Dark themes don't get that for free. */
+[data-theme='evergreen'] aside {
+  border-right: 1px solid rgb(var(--bearings-slate-800));
+}
+[data-theme='evergreen'] aside + section + aside,
+[data-theme='evergreen'] aside:last-of-type {
+  border-right: none;
+  border-left: 1px solid rgb(var(--bearings-slate-800));
+}
+
+/* Selected sidebar row: emerald-tinted surface + emerald left
+ * border (mirrors paper-light's sky pattern, swapped for the brand
+ * green). The midnight-glass violet wash is theme-scoped so it
+ * doesn't apply here. */
+[data-theme='evergreen'] aside li[class*='bg-slate-800'] {
+  background-color: rgb(var(--bearings-emerald-900) / 0.45) !important;
+  border-left: 2px solid rgb(var(--bearings-emerald-500));
+}
+
+/* Code blocks: flat dark surface with a hairline border so the
+ * block reads as a discrete region. The midnight-glass inner-glow
+ * rule is theme-scoped so it doesn't apply here. */
+[data-theme='evergreen'] div[data-bearings-code-block],
+[data-theme='evergreen'] pre {
+  background-color: rgb(var(--bearings-slate-900));
+  border: 1px solid rgb(var(--bearings-slate-800));
+}
+
+/* Focus ring: solid sky outline so keyboard nav stays visible on
+ * emerald primary actions. No translucent glow (that's a
+ * midnight-glass affordance). */
+[data-theme='evergreen'] :focus-visible {
+  outline: 2px solid rgb(var(--bearings-sky-500));
+  outline-offset: 1px;
+}

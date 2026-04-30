@@ -9,9 +9,13 @@
  * `bg-slate-900`, `text-emerald-400/80`, etc. keep working unchanged — the
  * underlying channel values just flip when `[data-theme]` changes on <html>.
  *
- * Two themes are bundled in v0.x:
+ * Four themes are bundled at v0.18+:
  *   - `midnight-glass`  (active default; set on <html> in app.html)
  *   - `default`         (saved snapshot of the pre-Midnight-Glass palette)
+ *   - `paper-light`     (light cream, flat — defined in `paper-light.css`)
+ *   - `evergreen`       (forest-green over deep blue-black, flat — defined
+ *                        in `evergreen.css`; v1.0.0 dashboard target,
+ *                        will become default at v1.0.0)
  *
  * `:root` carries the midnight-glass values so an element without an
  * explicit `data-theme` attribute still renders correctly (safe fallback).

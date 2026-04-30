@@ -17,6 +17,7 @@
 @import './lib/themes/tokens.css';
 @import './lib/themes/midnight-glass.css';
 @import './lib/themes/paper-light.css';
+@import './lib/themes/evergreen.css';
 
 @tailwind base;
 @tailwind components;

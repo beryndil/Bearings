@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-04-29
+
+Evergreen theme — Phase 1 of the v1.0.0 dashboard redesign. New
+bundled theme `evergreen`: deep blue-black surface (`#0E131B` →
+`#141B24` → `#212833`) with a forest-green primary accent
+(`#258846`) and a cool-gray text ramp ending at `#E7EAED`. Flat
+treatment in the paper-light idiom — no glass, no aurora;
+hairline borders distinguish surfaces and a subtle vertical body
+gradient gives the page depth without competing with cards.
+
+Selectable from Settings → Appearance. Not the default at v0.24
+— `midnight-glass` keeps the default slot through Phase 7
+(v1.0.0), where `evergreen` takes over alongside the rest of the
+mockup-aligned chrome.
+
+Wiring touches the four files that gate theme bundling: palette
++ treatment in `frontend/src/lib/themes/evergreen.css`, registry
+entry in `meta-theme-colors.ts`, sync'd `THEME_COLORS` literal
+in the no-flash boot script in `app.html`, `@import` in
+`app.css`, and a picker entry in `AppearanceSection.svelte`.
+
+Sky stays cool teal-cyan rather than midnight-glass's violet
+remap — with green as the brand action color, focus rings need a
+distinctly-not-green hue so they're visible on emerald buttons.
+Two semantic alias overrides bind `--color-border-accent` and
+`--color-accent-info` to emerald-500 (the mockup uses the brand
+green for "selected" and "Healthy" states); `--color-focus-ring`
+stays on sky.
+
+Brand glyph deliberately untouched — the mockup showed a leaf
+next to "Bearings" but the project's permanent brand element is
+`BearingsMark.svelte`, a compass-rings design. (Project is named
+*Bearings*; the compass is the identity.) Mockup leaf was a
+designer artifact, not a directive.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.23.0] - 2026-04-29
 
 Auto-suggest session titles. The SessionEdit modal grows a `✨`
