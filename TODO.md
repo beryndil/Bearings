@@ -8,6 +8,39 @@ verbatim at `TODO-archive-2026-04-22.md` next to this file.
 
 ---
 
+## 2026-04-30 — post-v1.0.0 backlog sweep
+
+Master plan: `~/.claude/plans/methodical-clearing-backlog.md`.
+
+**Shipped this sweep:**
+- `style(api): reflow suggestSessionTitles call signature` — `7d981d2`
+- `docs(todo): close subscribe-replay entry; downgrade to cold-cursor micro-opt` — `e790dc6`
+- `fix(tests): swap deprecated get_event_loop().run_until_complete for asyncio.run` — `da43515`
+- `chore(lint): exclude .research/ from ruff; reformat _analytics.py` — `132c344`
+- `refactor(agent): split runner.py into approval + directory managers; under 400 lines` — `b4a8248`
+- `fix(gitignore): drop .research/ gitlinks from previous commit` — `e15f714`
+- `perf(db): batch tool-event commits at turn boundary; ~17x fewer fsyncs` — `4ac3411`
+- `perf(ui): memoize tool-call input pretty-print at reducer; not per delta` — `f86b086`
+- `feat(titles): add agent.title_suggest_model override; recommend Haiku` — `ffcdd1a`
+- `feat(cli): add bearings status and bearings log subcommands` — `d86454b`
+
+**Deferred to follow-up plans (don't re-list under their own headers below):**
+- Bulk retitle from checklist view → `~/.claude/plans/bulk-retitling-checklist.md`
+- Agent-artifact previews (Phase 2) → `~/.claude/plans/previewing-agent-artifacts.md`
+- Spawn-from-reply Wave 3 → `~/.claude/plans/classifying-spawn-reply-wave-3.md`
+
+**Still on this TODO (not yet planned):**
+- Synth-gate executor DONE callbacks against artifact evidence (auto_driver discipline gap).
+- Investigation: why `mcp__bearings__bash` denied under `bypassPermissions`.
+- Persistent attachment chips below user bubbles (composer post-send visibility).
+- v1.0.0 manual smoke test on Kubuntu + Hyprland + Chrome.
+
+Bonus discovery: `bearings status` reports 269 open chat sessions out of
+709 total — large unclosed-session backlog worth a future cleanup pass
+(unrelated to this sweep).
+
+---
+
 ## Auto-suggest titles v1.1 — bulk retitle from checklist view — 2026-04-29
 
 v1 ships the per-session ✨ button in `SessionEdit.svelte` (plan
