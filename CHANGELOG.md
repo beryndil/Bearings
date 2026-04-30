@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-04-29
+
+Right sidebar 4-tab refactor — Phase 3 of the v1.0.0 dashboard
+redesign. Pre-Phase-3 the Inspector was one component with two
+`<details>` disclosures (Context + Agent). The mockup turned the
+right pane into a 4-tab surface — Context, Files, Changes, Metrics
+— and reorganized the Context tab as a stack of summary cards.
+
+New components under `frontend/src/lib/components/inspector/`:
+
+  - **InspectorTabNav** — top strip with the 4 tabs, emerald
+    active-state underline, role="tablist" for assistive tech.
+  - **ContextTab** — eight stacked cards: Active Context
+    (working_dir + model), Tags, Memories (count + Phase 4
+    placeholder note), System Prompt (existing layer renderer),
+    Session Metrics (TokenTotals 4-tile grid: input / output /
+    cache_read / cache_creation), Session Health (UI aggregator —
+    Healthy/Connecting/Disconnected + 3 sub-bullets), Agent Tool
+    Calls (existing list with stickToBottom), Session Instructions
+    (existing inline editor). Pre-Phase-3 the Agent disclosure was
+    a peer of Context; it now lives inside the Context tab as a
+    dedicated card so the Files tab can grow into the proper
+    files-touched view in Phase 5 without conflating with raw
+    tool-call telemetry.
+  - **FilesTab / ChangesTab / MetricsTab** — placeholder cards
+    naming the phase that ships the real surface. Files & Changes
+    land in Phase 5; Metrics' detailed per-turn / per-tool view
+    lands in Phase 6 alongside the dedicated Analytics page.
+
+`Inspector.svelte` is now a small orchestrator: owns the active-tab
+state, persists the choice per-device in `localStorage` under
+`bearings:inspector-tab` (so a reload paints the same tab the user
+left), and renders the matching tab component. The svelte-check
+"Non-interactive `<nav>` cannot have `tablist`" warning got
+resolved by switching the wrapper to `<div role="tablist">`.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.27.0] - 2026-04-29
 
 Left sidebar restructure — Phase 2c of the v1.0.0 dashboard
