@@ -34,6 +34,13 @@ export type LiveToolCall = {
   messageId: string | null;
   name: string;
   input: Record<string, unknown>;
+  /** `JSON.stringify(input, null, 2)` cached at creation time. The
+   * tool-call row in `MessageTurn.svelte` renders this verbatim, and
+   * Svelte's `{#each toolCalls}` re-runs on every `tool_output_delta`
+   * — without the cache, every chunk re-pays the stringify + linkify
+   * cost over an immutable input. Set once in `hydrateToolCall` and
+   * the `tool_call_start` reducer arm; never re-read after. */
+  inputPretty: string;
   output: string | null;
   error: string | null;
   ok: boolean | null; // null until tool_call_end arrives
@@ -99,6 +106,7 @@ export function hydrateToolCall(row: api.ToolCall): LiveToolCall {
     messageId: row.message_id,
     name: row.name,
     input: parsedInput,
+    inputPretty: JSON.stringify(parsedInput, null, 2),
     output: capped.output,
     error: row.error,
     ok,
@@ -454,6 +462,7 @@ export function applyEvent(state: SessionState, event: api.AgentEvent, ctx: Redu
         messageId: state.streamingMessageId,
         name: event.name,
         input: event.input,
+        inputPretty: JSON.stringify(event.input, null, 2),
         output: null,
         error: null,
         ok: null,

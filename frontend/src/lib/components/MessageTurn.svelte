@@ -439,7 +439,7 @@
                 >— running sub-agent: {subAgentSubtitle(call.input)}</span
               >{/if}{/if}{#if call.outputTruncated}
             <span class="text-amber-400">[truncated]</span>{/if}
-{@html linkifiedSegment(JSON.stringify(call.input, null, 2))}{#if call.output !== null}
+{@html linkifiedSegment(call.inputPretty)}{#if call.output !== null}
             {@html linkifiedSegment(call.output)}{/if}{#if call.error}
             <span class="text-rose-400">error: {@html linkifiedSegment(call.error)}</span
             >{/if}</pre>

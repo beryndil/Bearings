@@ -18,6 +18,7 @@ function call(
   return {
     name: 'Bash',
     input: {},
+    inputPretty: '{}',
     output: null,
     error: null,
     ok: null,
