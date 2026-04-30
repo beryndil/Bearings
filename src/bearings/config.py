@@ -237,6 +237,15 @@ class AgentCfg(BaseModel):
     # the user at this config key; the SessionEdit modal surfaces the
     # message inline so the operator knows exactly which flag to flip.
     enable_llm_title_suggest: bool = False
+    # Override the model used by suggest_titles + bulk-suggest when LLM
+    # title-suggest is enabled. None means "fall back to the session's
+    # configured model" (typically Opus / Sonnet). A title-summarizer
+    # call doesn't need that horsepower — Haiku 4.5 cuts cost ~10× per
+    # click with no perceptible quality loss on the 3-candidate
+    # narrow→medium→wide axis the prompt asks for. Recommended in the
+    # default config the installer drops; left None here so an explicit
+    # override has to be a deliberate choice.
+    title_suggest_model: str | None = None
 
 
 class StorageCfg(BaseModel):

@@ -67,7 +67,13 @@ async def suggest_session_titles(
         )
 
     messages = await store.list_messages(conn, session_id)
-    model = session.get("model") or settings.agent.model
+    # Title summarization doesn't need the session's full model. Prefer
+    # `agent.title_suggest_model` (typically Haiku) when set; fall back
+    # to the session model so existing installs without the override
+    # behave exactly as before. ~10× cost cut per click when configured.
+    model = (
+        settings.agent.title_suggest_model or session.get("model") or settings.agent.model
+    )
     titles, notes = await suggest_titles(messages, model=model)
     if titles is None:
         raise HTTPException(
