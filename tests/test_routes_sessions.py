@@ -663,7 +663,7 @@ def test_awaiting_endpoint_includes_blocked_paired_sessions(
         await set_item_blocked(db, item["id"], category="payment", reason="need card on file")
         return str(chat_session["id"])
 
-    chat_session_id = asyncio.get_event_loop().run_until_complete(seed())
+    chat_session_id = asyncio.run(seed())
     awaiting = client.get("/api/sessions/awaiting")
     assert awaiting.status_code == 200
     body = awaiting.json()
