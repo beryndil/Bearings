@@ -287,12 +287,16 @@ async def execute_turn(  # noqa: C901
             elif isinstance(event, Thinking):
                 thinking_buf.append(event.text)
             elif isinstance(event, ToolCallStart):
+                # commit=False: every per-event write batches into the
+                # per-turn commit at MessageComplete (`persist_assistant_turn`).
+                # Cuts ~35 fsyncs/turn down to ~2 on a tool-heavy turn.
                 await store.insert_tool_call_start(
                     runner.db,
                     session_id=runner.session_id,
                     tool_call_id=event.tool_call_id,
                     name=event.name,
                     input_json=json.dumps(event.input),
+                    commit=False,
                 )
                 tool_call_ids.append(event.tool_call_id)
                 # Stash for the auto-register hook in the matching
@@ -341,6 +345,7 @@ async def execute_turn(  # noqa: C901
                     tool_call_id=event.tool_call_id,
                     output=event.output,
                     error=event.error,
+                    commit=False,
                 )
                 metrics.tool_calls_finished.labels(ok=str(event.ok).lower()).inc()
                 # Phase-1 File Display auto-register: pop the cached
@@ -398,6 +403,7 @@ async def execute_turn(  # noqa: C901
                         pct=event.percentage,
                         tokens=event.total_tokens,
                         max_tokens=event.max_tokens,
+                        commit=False,
                     )
                 except aiosqlite.Error:
                     log.exception(

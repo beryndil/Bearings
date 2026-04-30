@@ -160,7 +160,13 @@ class ToolOutputCoalescer:
             buf.flush_task = None
         payload = "".join(buf.chunks)
         try:
-            await store.append_tool_output(self.db, tool_call_id=tool_call_id, chunk=payload)
+            # commit=False: turn_executor batches every per-event
+            # write into the per-turn `persist_assistant_turn` commit.
+            # On crash, the deferred chunk is lost; `finish_tool_call`
+            # would have overwritten with canonical output anyway.
+            await store.append_tool_output(
+                self.db, tool_call_id=tool_call_id, chunk=payload, commit=False
+            )
         except Exception:
             # Mirror the pre-coalescing behavior: a DB hiccup on a
             # streamed delta shouldn't kill the turn. `finish_tool_call`

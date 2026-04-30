@@ -110,9 +110,15 @@ async def test_count_threshold_flushes_immediately(
     calls: list[tuple[str, str]] = []
     original = store.append_tool_output
 
-    async def spy(conn: aiosqlite.Connection, *, tool_call_id: str, chunk: str) -> bool:
+    async def spy(
+        conn: aiosqlite.Connection,
+        *,
+        tool_call_id: str,
+        chunk: str,
+        commit: bool = True,
+    ) -> bool:
         calls.append((tool_call_id, chunk))
-        return await original(conn, tool_call_id=tool_call_id, chunk=chunk)
+        return await original(conn, tool_call_id=tool_call_id, chunk=chunk, commit=commit)
 
     monkeypatch.setattr(store, "append_tool_output", spy)
 
@@ -149,9 +155,15 @@ async def test_time_threshold_flushes_small_burst(
     calls: list[tuple[str, str]] = []
     original = store.append_tool_output
 
-    async def spy(conn: aiosqlite.Connection, *, tool_call_id: str, chunk: str) -> bool:
+    async def spy(
+        conn: aiosqlite.Connection,
+        *,
+        tool_call_id: str,
+        chunk: str,
+        commit: bool = True,
+    ) -> bool:
         calls.append((tool_call_id, chunk))
-        return await original(conn, tool_call_id=tool_call_id, chunk=chunk)
+        return await original(conn, tool_call_id=tool_call_id, chunk=chunk, commit=commit)
 
     monkeypatch.setattr(store, "append_tool_output", spy)
 
@@ -191,9 +203,15 @@ async def test_drop_buffer_cancels_pending_timer(
     calls: list[str] = []
     original = store.append_tool_output
 
-    async def spy(conn: aiosqlite.Connection, *, tool_call_id: str, chunk: str) -> bool:
+    async def spy(
+        conn: aiosqlite.Connection,
+        *,
+        tool_call_id: str,
+        chunk: str,
+        commit: bool = True,
+    ) -> bool:
         calls.append(chunk)
-        return await original(conn, tool_call_id=tool_call_id, chunk=chunk)
+        return await original(conn, tool_call_id=tool_call_id, chunk=chunk, commit=commit)
 
     monkeypatch.setattr(store, "append_tool_output", spy)
 
@@ -229,9 +247,15 @@ async def test_flush_all_drains_every_pending_buffer(
     calls: list[tuple[str, str]] = []
     original = store.append_tool_output
 
-    async def spy(conn: aiosqlite.Connection, *, tool_call_id: str, chunk: str) -> bool:
+    async def spy(
+        conn: aiosqlite.Connection,
+        *,
+        tool_call_id: str,
+        chunk: str,
+        commit: bool = True,
+    ) -> bool:
         calls.append((tool_call_id, chunk))
-        return await original(conn, tool_call_id=tool_call_id, chunk=chunk)
+        return await original(conn, tool_call_id=tool_call_id, chunk=chunk, commit=commit)
 
     monkeypatch.setattr(store, "append_tool_output", spy)
 
@@ -271,9 +295,15 @@ async def test_full_turn_coalesces_and_writes_canonical_final(
     calls: list[tuple[str, str]] = []
     original = store.append_tool_output
 
-    async def spy(conn: aiosqlite.Connection, *, tool_call_id: str, chunk: str) -> bool:
+    async def spy(
+        conn: aiosqlite.Connection,
+        *,
+        tool_call_id: str,
+        chunk: str,
+        commit: bool = True,
+    ) -> bool:
         calls.append((tool_call_id, chunk))
-        return await original(conn, tool_call_id=tool_call_id, chunk=chunk)
+        return await original(conn, tool_call_id=tool_call_id, chunk=chunk, commit=commit)
 
     monkeypatch.setattr(store, "append_tool_output", spy)
 

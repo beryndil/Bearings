@@ -451,20 +451,27 @@ async def set_session_context_usage(
     pct: float,
     tokens: int,
     max_tokens: int,
+    commit: bool = True,
 ) -> None:
     """Cache the latest ContextUsage snapshot on the session row (see
     migration 0013). Called by the runner on every `ContextUsage` WS
     event so a fresh page load has a number to show before the next
     turn's live event arrives. Clamps the percentage to `[0, 100]` to
     keep downstream UI math simple; token counts are stored verbatim.
-    No-op if the row is gone (UPDATE matches zero rows)."""
+    No-op if the row is gone (UPDATE matches zero rows).
+
+    `commit=False` defers to the caller so the streaming turn batches
+    every per-event write into the eventual `persist_assistant_turn`
+    commit. Context usage is a derived snapshot; losing one on crash
+    is a no-op (the next turn re-emits)."""
     safe_pct = max(0.0, min(100.0, float(pct)))
     await conn.execute(
         "UPDATE sessions SET last_context_pct = ?, last_context_tokens = ?, "
         "last_context_max = ? WHERE id = ?",
         (safe_pct, int(tokens), int(max_tokens), session_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
 
 
 async def close_session(

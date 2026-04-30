@@ -305,13 +305,24 @@ async def insert_tool_call_start(
     tool_call_id: str,
     name: str,
     input_json: str,
+    commit: bool = True,
 ) -> dict[str, Any]:
+    """Insert the row created by `tool_call_start` and return it shaped
+    like a `tool_calls` SELECT result (so the runner can fan it out
+    without a re-read).
+
+    `commit=False` lets the streaming caller (`turn_executor`) batch
+    every tool-event write inside a single per-turn transaction,
+    folding into the eventual `persist_assistant_turn` commit. Cuts
+    the per-turn fsync count from ~35 to ~2 on a tool-heavy turn.
+    """
     now = _now()
     await conn.execute(
         "INSERT INTO tool_calls (id, session_id, name, input, started_at) VALUES (?, ?, ?, ?, ?)",
         (tool_call_id, session_id, name, input_json, now),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return {
         "id": tool_call_id,
         "session_id": session_id,
@@ -331,12 +342,18 @@ async def finish_tool_call(
     tool_call_id: str,
     output: str | None,
     error: str | None,
+    commit: bool = True,
 ) -> bool:
+    """Stamp the canonical final output and `finished_at` on a tool
+    call. `commit=False` defers to the caller so a streaming turn can
+    bundle every tool-event write under one transaction (see
+    `insert_tool_call_start`)."""
     cursor = await conn.execute(
         "UPDATE tool_calls SET output = ?, error = ?, finished_at = ? WHERE id = ?",
         (output, error, _now(), tool_call_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return cursor.rowcount > 0
 
 
@@ -345,6 +362,7 @@ async def append_tool_output(
     *,
     tool_call_id: str,
     chunk: str,
+    commit: bool = True,
 ) -> bool:
     """Append a streamed chunk to a tool call's output column.
 
@@ -356,6 +374,11 @@ async def append_tool_output(
     untouched; only `finish_tool_call` sets it, and that call writes
     the canonical final output in a single statement.
 
+    `commit=False` defers to the caller so a streaming turn can bundle
+    every coalesced flush under one transaction. The coalescer
+    typically passes `commit=False` and lets the per-turn batch land
+    via `persist_assistant_turn`'s commit at MessageComplete time.
+
     Returns True if the tool_call row exists (chunk landed), False if
     no row matched — callers may log the latter as a dropped chunk.
     """
@@ -363,7 +386,8 @@ async def append_tool_output(
         "UPDATE tool_calls SET output = COALESCE(output, '') || ? WHERE id = ?",
         (chunk, tool_call_id),
     )
-    await conn.commit()
+    if commit:
+        await conn.commit()
     return cursor.rowcount > 0
 
 
