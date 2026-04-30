@@ -53,3 +53,7 @@ src/bearings/web/dist/*
 .vscode/
 *.swp
 .DS_Store
+
+# External skill/example repos cloned for local reference. Not part
+# of this codebase; ruff also excludes via pyproject.toml.
+.research/
