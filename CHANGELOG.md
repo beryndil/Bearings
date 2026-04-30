@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2026-04-29
+
+Accent cards above chat — Phase 2b of the v1.0.0 dashboard
+redesign. The mockup placed two summary badges between the
+session header and the message list, framing always-on Bearings
+value-adds the user might otherwise not notice.
+
+New `AccentCards.svelte` mounts in `Conversation.svelte` right
+under the header. Two cards, computed from data Bearings already
+has — no new endpoints:
+
+  - **✓ Saved N% tokens · X.Xk of Y.Yk cached.** Token-caching
+    savings, derived from the existing `/sessions/{id}/tokens`
+    endpoint (`TokenTotals`). Anthropic's prompt cache prices
+    `cache_read_tokens` at ~10% of base input cost; we compute
+    "tokens saved by caching" as `cache_read * 0.9` and express it
+    as a percentage of total input that *would* have been billed
+    without caching (`input + cache_creation + cache_read`).
+    Suppressed on sessions with zero cached tokens — a fresh
+    session shouldn't shout "0% saved" at the user. Refreshes on
+    session change and on streaming-turn completion (same edge
+    pattern as the header's TokenMeter).
+
+  - **⛨ Recovery armed · Up to 5,000 events buffered for replay.**
+    Honest framing of the recovery-on-disconnect ring buffer that
+    backs every session. The mockup version showed a per-session
+    count ("Recovered 3 actions"); that requires a server-side
+    reconnect-count event that doesn't exist yet — deferred to a
+    follow-up phase. The honest version names the *mechanism*, not
+    a fake counter.
+
+Strip uses `flex-wrap` so the two cards stack on narrow center
+columns rather than overflowing horizontally. The whole strip is
+suppressed when no session is selected, so the empty-state pane
+stays empty.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.25.0] - 2026-04-29
 
 Bottom status bar — Phase 2a of the v1.0.0 dashboard redesign.

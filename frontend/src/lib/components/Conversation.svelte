@@ -19,6 +19,7 @@
   import ConversationComposer, {
     type ConversationComposerHandle,
   } from '$lib/components/ConversationComposer.svelte';
+  import AccentCards from '$lib/components/AccentCards.svelte';
   import ConversationHeader from '$lib/components/ConversationHeader.svelte';
   import LiveTodos from '$lib/components/LiveTodos.svelte';
   import MessageTurn from '$lib/components/MessageTurn.svelte';
@@ -454,6 +455,12 @@
     onOpenAnalyze={() => (analyzeOpen = true)}
     onEditSession={() => (editingSession = true)}
   />
+
+  <!-- Phase 2b of the v1.0.0 dashboard redesign — summary badges
+       above the chat (token caching savings + recovery capability).
+       Auto-suppresses when no session is selected, so the empty-state
+       pane stays empty. -->
+  <AccentCards />
 
   <ReorgProposalEditor
     open={analyzeOpen}
