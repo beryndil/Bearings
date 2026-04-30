@@ -1,69 +1,44 @@
 <script lang="ts">
   /**
-   * Claude logomark — the four-pointed sparkle Anthropic uses for
-   * Claude's brand. Used in `MessageTurn` to identify assistant
-   * messages so the role row carries an icon next to the text label
-   * (matching the user row's avatar / initials circle).
+   * Claude logomark — the actual Anthropic burst, fetched from
+   * `claude.ai`'s static asset bundle and stored at
+   * `frontend/static/claude-logomark.svg`. Served at `/claude-logomark.svg`
+   * by SvelteKit's static adapter; the FastAPI mount point passes
+   * static files through unchanged.
    *
-   * Geometry: a four-pointed star with the bottom-right point
-   * extended longer than the others, which is the silhouette of the
-   * Anthropic mark. Drawn from a single path so the fill colour can
-   * be swapped without re-exporting the asset. Colour defaults to
-   * Anthropic's brand copper (`#cc785c`) but is overridable via the
-   * `color` prop or the surrounding `currentColor` chain — pass
-   * `color="currentColor"` to inherit the text colour, e.g. when the
-   * mark sits inside a muted-slate header.
+   * Used in `MessageTurn` to identify assistant rows. Single-asset
+   * `<img>` rather than inline SVG so the file caches at the network
+   * layer and the component stays trivial.
    *
-   * Size defaults to 14px to slot inline with the existing 10-pt
-   * uppercase `tracking-wider` role labels in the message header.
-   * Bump for overlay / hero uses.
+   * Colour is fixed to Anthropic's brand copper (`#D97757`) by the
+   * source SVG's `fill` attribute. If the design ever needs a tinted
+   * variant, swap the asset for an inline `<svg>` whose path inherits
+   * `currentColor` — out of scope for v1.
+   *
+   * Size defaults to 36px to match the user-avatar height in the
+   * message header. Bump for hero / overlay use.
    */
   interface Props {
     /** Square width/height in px. */
     size?: number;
-    /** Fill colour. Defaults to Anthropic's brand copper. Pass
-     * `currentColor` to inherit from the surrounding text colour. */
-    color?: string;
     /** Extra classes for spacing / sizing from the caller. */
     class?: string;
     /** Accessible label. Omit for a decorative role. */
     label?: string;
   }
 
-  let { size = 14, color = '#cc785c', class: klass = '', label }: Props = $props();
+  let { size = 36, class: klass = '', label }: Props = $props();
 </script>
 
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  viewBox="0 0 100 100"
+<img
+  src="/claude-logomark.svg"
+  alt={label ?? ''}
   width={size}
   height={size}
   class="claude-mark {klass}"
-  role={label ? 'img' : undefined}
-  aria-label={label}
   aria-hidden={label ? undefined : 'true'}
   data-testid="claude-mark"
->
-  {#if label}
-    <title>{label}</title>
-  {/if}
-  <!-- Four-pointed sparkle. The bottom-right point is intentionally
-       longer; that asymmetry is what reads as the Anthropic mark
-       rather than a generic four-pointed star. Single path so a
-       colour swap is one attribute. -->
-  <path
-    d="M50 5
-       L57 43
-       L95 50
-       L57 57
-       L50 95
-       L43 57
-       L5 50
-       L43 43
-       Z"
-    fill={color}
-  />
-</svg>
+/>
 
 <style>
   .claude-mark {
