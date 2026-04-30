@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2026-04-29
+
+Fix: `GET /api/tags/memories` returned 422 because the route was
+declared after `GET /api/tags/{tag_id}`, so FastAPI/Starlette
+matched the literal "memories" against the parametric tag_id slot
+and bounced on int parsing. Reordered the declaration to land
+before the parametric routes (FastAPI matches in registration
+order, not literal-first as I'd assumed in the 0.29.0 docstring).
+
+Added four regression tests in `tests/test_tag_memories.py`:
+inventory shape (joined fields, ordering), empty-state, INNER-JOIN
+filter for tags without memory, and an explicit route-order guard
+whose docstring points at the fix so a future reorder fails loud
+with a pointer rather than a mysterious 422 in the browser.
+
+The 0.29.0 Memories page UI is unchanged; only the backend
+endpoint was broken.
+
 ## [0.29.0] - 2026-04-29
 
 Memories page — Phase 4 of the v1.0.0 dashboard redesign. The

@@ -118,6 +118,32 @@ async def create_tag(body: TagCreate, request: Request) -> TagOut:
     return TagOut(**row)
 
 
+@router.get("/memories", response_model=list[TagMemoryWithTagOut])
+async def list_tag_memories(request: Request) -> list[TagMemoryWithTagOut]:
+    """Memory inventory for the v1.0.0 dashboard's `/memories` page.
+
+    Returns every tag that carries a memory row, joined with the
+    parent tag's display fields (name, color, group), ordered by
+    most-recent edit first. Tags without a memory are omitted; the
+    page shows an empty state when the list is empty.
+
+    Distinct from `GET /api/tags/{tag_id}/memory` which fetches a
+    single memory by tag id; this is the aggregate.
+
+    **Declaration order matters here.** FastAPI/Starlette match
+    routes in the order they're registered. This block is declared
+    before the parametric `GET /{tag_id}` and `GET /{tag_id}/memory`
+    routes below so a request for `/memories` doesn't first try to
+    parse the literal "memories" as an int tag_id and 422 out.
+    Moving this declaration after the parametric routes is a
+    silent regression — `tests/test_tag_memories.py` covers the
+    aggregate path so a future reorder would surface as a test
+    failure rather than a runtime 422.
+    """
+    rows = await store.list_tag_memories(request.app.state.db)
+    return [TagMemoryWithTagOut(**row) for row in rows]
+
+
 @router.get("/{tag_id}", response_model=TagOut)
 async def get_tag(tag_id: int, request: Request) -> TagOut:
     row = await store.get_tag(request.app.state.db, tag_id)
@@ -148,25 +174,6 @@ async def delete_tag(tag_id: int, request: Request) -> Response:
     if not ok:
         raise HTTPException(status_code=404, detail="tag not found")
     return Response(status_code=204)
-
-
-@router.get("/memories", response_model=list[TagMemoryWithTagOut])
-async def list_tag_memories(request: Request) -> list[TagMemoryWithTagOut]:
-    """Memory inventory for the v1.0.0 dashboard's `/memories` page.
-
-    Returns every tag that carries a memory row, joined with the
-    parent tag's display fields (name, color, group), ordered by
-    most-recent edit first. Tags without a memory are omitted; the
-    page shows an empty state when the list is empty.
-
-    Distinct from `GET /api/tags/{tag_id}/memory` which fetches a
-    single memory by tag id; this is the aggregate. FastAPI route
-    matching prefers literal `/memories` over the parametric
-    `/{tag_id}/memory` regardless of declaration order, so the two
-    coexist without ambiguity.
-    """
-    rows = await store.list_tag_memories(request.app.state.db)
-    return [TagMemoryWithTagOut(**row) for row in rows]
 
 
 @router.get("/{tag_id}/memory", response_model=TagMemoryOut)

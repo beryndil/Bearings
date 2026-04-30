@@ -307,3 +307,66 @@ def test_system_prompt_full_stack(client: TestClient) -> None:
     for layer in body["layers"]:
         if layer["content"]:
             assert layer["token_count"] >= 1
+
+
+# --- aggregate (Phase 4 of v1.0.0 dashboard redesign) ----------------
+
+
+def test_list_tag_memories_empty(client: TestClient) -> None:
+    """Empty inventory returns an empty list, not 404. The Memories
+    page renders its empty state from this signal."""
+    resp = client.get("/api/tags/memories")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_list_tag_memories_returns_inventory(client: TestClient) -> None:
+    """Two tags with memories → both surface, joined with parent
+    tag's display fields (name, color, group)."""
+    a = client.post("/api/tags", json={"name": "infra", "color": "#abcdef"}).json()
+    b = client.post("/api/tags", json={"name": "ux", "color": "#10b981"}).json()
+    client.put(f"/api/tags/{a['id']}/memory", json={"content": "Prefer nftables."})
+    client.put(f"/api/tags/{b['id']}/memory", json={"content": "Read aloud."})
+
+    resp = client.get("/api/tags/memories")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 2
+    by_name = {row["tag_name"]: row for row in rows}
+    assert "infra" in by_name and "ux" in by_name
+    assert by_name["infra"]["content"] == "Prefer nftables."
+    assert by_name["infra"]["tag_color"] == "#abcdef"
+    assert by_name["infra"]["tag_group"] == "general"
+    assert by_name["ux"]["content"] == "Read aloud."
+    assert by_name["ux"]["tag_color"] == "#10b981"
+    assert by_name["ux"]["tag_group"] == "general"
+    # Required fields all present.
+    for row in rows:
+        assert {"tag_id", "tag_name", "content", "updated_at"} <= row.keys()
+
+
+def test_list_tag_memories_route_order_regression(client: TestClient) -> None:
+    """Regression guard: `GET /api/tags/memories` must NOT match the
+    parametric `GET /api/tags/{tag_id}` route. If the route declarations
+    are reordered (memories moved after `/{tag_id}`), this hits the
+    `int_parsing` validator and returns 422 instead of 200. Failing
+    here means someone reordered the route block in
+    `bearings.api.routes_tags` — move the literal back above the
+    parametric routes."""
+    resp = client.get("/api/tags/memories")
+    assert resp.status_code == 200, (
+        f"Expected 200 but got {resp.status_code}; the literal /memories "
+        "route was probably reordered after /{tag_id} — see the docstring "
+        "on list_tag_memories()."
+    )
+
+
+def test_list_tag_memories_omits_tags_without_memory(client: TestClient) -> None:
+    """A tag without a memory row is filtered out by the INNER JOIN."""
+    client.post("/api/tags", json={"name": "no-memory"}).json()
+    tagged = client.post("/api/tags", json={"name": "with-memory"}).json()
+    client.put(f"/api/tags/{tagged['id']}/memory", json={"content": "kept"})
+
+    rows = client.get("/api/tags/memories").json()
+    names = [row["tag_name"] for row in rows]
+    assert names == ["with-memory"]
