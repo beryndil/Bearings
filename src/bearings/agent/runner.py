@@ -22,14 +22,16 @@ Module layout: this file owns `SessionRunner`. Worker loop and per-turn
 execution live in `turn_executor.py`; wire types/tunables in
 `runner_types.py`; subscribe/unsubscribe/should_reap in
 `runner_subscribers.py`; tickers in `progress_ticker.py`; assistant-turn
-persistence in `persist.py`. The `runner_types` symbols and
-`_persist_assistant_turn` are re-exported here for backwards compat.
+persistence in `persist.py`; runner-level approval gate (counter +
+broadcast on top of `ApprovalBroker`) in `runner_approval.py`;
+Directory Context System markers in `runner_directory.py`. The
+`runner_types` symbols and `_persist_assistant_turn` are re-exported
+here for backwards compat.
 """
 
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -43,6 +45,8 @@ from bearings.agent.approval_broker import ApprovalBroker
 from bearings.agent.event_fanout import emit_ephemeral, emit_event
 from bearings.agent.events import AgentEvent
 from bearings.agent.progress_ticker import ProgressTickerManager
+from bearings.agent.runner_approval import ApprovalGate
+from bearings.agent.runner_directory import DirectoryLifecycle
 from bearings.agent.runner_types import (
     _SHUTDOWN,
     RING_MAX,
@@ -55,13 +59,9 @@ from bearings.agent.runner_types import (
     _Submit,
 )
 from bearings.agent.session import AgentSession
-from bearings.agent.sessions_broker import SessionsBroker, publish_runner_state
+from bearings.agent.sessions_broker import SessionsBroker
 from bearings.agent.tool_output_coalescer import ToolOutputCoalescer
-from bearings.bearings_dir import lifecycle as dir_lifecycle
 from bearings.config import ArtifactsCfg
-from bearings.db import store
-
-log = logging.getLogger(__name__)
 
 # Cross-runner prompt dispatch: `(target_session_id, content) -> None`.
 # Wired by `bearings.api.ws_agent.build_runner` to a closure that
@@ -132,9 +132,9 @@ class SessionRunner:
         # stale flag can't short-circuit the next prompt.
         self._stop_requested = False
         # Tool-use approval state. Broker owns pending Futures and
-        # ApprovalRequest/ApprovalResolved emission; runner forwards
-        # `resolve_approval` and triggers deny-all on stop/shutdown.
-        # `mode_getter` is a closure (not a stored value) so a mid-turn
+        # ApprovalRequest/ApprovalResolved emission; gate adds the
+        # runner-axis counter + state broadcast on top. `mode_getter`
+        # is a closure (not a stored value) so a mid-turn
         # `set_permission_mode` flip is observed on the very next
         # `can_use_tool` — without it a flip to bypassPermissions
         # wouldn't unstick a Future already parked under default mode
@@ -144,12 +144,14 @@ class SessionRunner:
             self._emit_event,
             mode_getter=lambda: self.agent.permission_mode,
         )
-        # Count of `can_use_tool` parks currently awaiting a user
-        # decision. Non-zero drives `is_awaiting_user` → sidebar red
-        # flash. Counter (not bool) because the SDK can stack parks
-        # (approval prompt immediately followed by AskUserQuestion in
-        # the same turn); both keep the indicator lit until all resolve.
-        self._awaiting_count: int = 0
+        self._approval_gate = ApprovalGate(
+            session_id,
+            agent,
+            db,
+            self._approval,
+            sessions_broker,
+            is_running=lambda: self.is_running,
+        )
         # Coalesces `ToolOutputDelta` → `append_tool_output` writes per
         # `tool_call_id`. Runner forwards buffer/drop/flush_all.
         self._coalescer = ToolOutputCoalescer(db, session_id)
@@ -169,20 +171,9 @@ class SessionRunner:
         # it off via `subscribe()` immediately, so the initial window
         # is effectively zero.
         self._quiet_since: float | None = time.monotonic()
-        # Directory Context System (v0.6.1) lifecycle handle. Captured
-        # by `note_directory_context_start` on the first WS connection
-        # and consumed by `shutdown` to append the matching end-marker
-        # to `<working_dir>/.bearings/history.jsonl`. Stays `None` for
-        # directories that haven't been onboarded yet — the start hook
-        # no-ops there and the end hook checks for `None`.
-        self._dir_handle: dir_lifecycle.SessionLifecycleHandle | None = None
-        # Idempotency guard: `note_directory_context_start` is called on
-        # every WS connection (the runner outlives reconnects), but the
-        # history-jsonl start marker should land exactly once per runner
-        # lifetime. True after the first call regardless of whether the
-        # directory was onboarded — re-calling on a non-onboarded
-        # directory shouldn't pay the FS-stat tax on every reconnect.
-        self._dir_start_attempted: bool = False
+        # Directory Context System (v0.6.1) lifecycle. Markers land
+        # exactly once per runner lifetime regardless of WS reconnects.
+        self._directory = DirectoryLifecycle(session_id, agent)
 
     # ---- backwards-compat ticker accessors ------------------------
     #
@@ -239,55 +230,17 @@ class SessionRunner:
                 await self._worker
             except asyncio.CancelledError:
                 pass
-        # Directory Context System: append the matching end-marker to
-        # `history.jsonl`. Synchronous git lookups + JSONL append, so
-        # we offload to a thread to keep the event loop honest under
-        # `pytest-asyncio` and the production loop alike. No-op when
-        # `_dir_handle` is None.
-        handle = self._dir_handle
-        self._dir_handle = None
-        if handle is not None:
-            await asyncio.to_thread(dir_lifecycle.record_session_end, handle)
+        # Directory Context System: append the matching end-marker.
+        await self._directory.note_end()
 
     async def note_directory_context_start(self) -> None:
         """Idempotent one-shot. Stamps the `history.jsonl` start
         marker and kicks off stale-state revalidation in the
-        background. Safe to call on every WS attach — the worst case
-        is a single FS-stat for a non-onboarded directory.
-
-        Called by the WS handler after `registry.get_or_create` so the
-        FS work runs at most once per runner-lifetime, not once per
-        connection. Async-safe: both the start-marker write and the
-        revalidation pass through `asyncio.to_thread` so the event
-        loop never blocks on git or `uv sync`."""
-        if self._dir_start_attempted:
-            return
-        self._dir_start_attempted = True
-        working_dir = self.agent.working_dir
-        if not working_dir:
-            return
-        # History start marker: cheap, but still synchronous I/O —
-        # offload so a slow disk doesn't stall the WS handler.
-        self._dir_handle = await asyncio.to_thread(
-            dir_lifecycle.record_session_start, working_dir, self.session_id
-        )
-        # Stale-state revalidation: fire-and-forget. Wraps the
-        # subprocess-heavy `run_check` in a task so the user starts
-        # typing immediately. The brief renders from whatever's on
-        # disk; the revalidation result lands on the *next* turn.
-        asyncio.create_task(
-            asyncio.to_thread(dir_lifecycle.maybe_revalidate, working_dir),
-            name=f"dir-revalidate:{self.session_id}",
-        )
-        # User-defined `.bearings/checks/on_open.sh` (v0.6.3 polish):
-        # fire-and-forget too. The 10s subprocess budget runs in a
-        # worker thread so a slow check doesn't hold the WS attach.
-        # Result is persisted to `.bearings/last_on_open.json`; the
-        # brief reads it on the next turn.
-        asyncio.create_task(
-            asyncio.to_thread(dir_lifecycle.maybe_run_on_open, working_dir),
-            name=f"dir-on-open:{self.session_id}",
-        )
+        background. Called by the WS handler after `registry.get_or_create`
+        so the FS work runs at most once per runner-lifetime, not once
+        per connection. See `runner_directory.DirectoryLifecycle` for
+        the body."""
+        await self._directory.note_start()
 
     # ---- public API ------------------------------------------------
 
@@ -302,12 +255,10 @@ class SessionRunner:
     @property
     def is_awaiting_user(self) -> bool:
         """True iff parked inside `can_use_tool`, awaiting a user
-        decision. Covers both native tool-use approval and the
-        AskUserQuestion flow (both ride the approval broker through
-        the wrapped callback below). Drives the sidebar's red-flashing
-        indicator — distinct from `is_running`, which stays true
-        across the whole turn including the park."""
-        return self._awaiting_count > 0
+        decision. Drives the sidebar's red-flashing indicator —
+        distinct from `is_running`, which stays true across the whole
+        turn including the park."""
+        return self._approval_gate.is_awaiting_user
 
     async def submit_prompt(
         self,
@@ -331,6 +282,7 @@ class SessionRunner:
         another turn that runs to completion. Fail-closed at the gate.
         """
         from bearings.agent.events import ErrorEvent
+        from bearings.db import store
 
         row = await store.get_session(self.db, self.session_id)
         if row is not None:
@@ -354,33 +306,9 @@ class SessionRunner:
             await self._prompts.put(prompt)
 
     async def set_permission_mode(self, mode: Any) -> None:
-        """Update the SDK's permission mode AND retro-apply it to any
-        approval already parked. Forwarding to the SDK alone isn't
-        enough — the SDK only consults the new mode on the *next*
-        `can_use_tool`, so a flip to bypassPermissions while a modal
-        is on screen would still strand the user. The broker clears
-        parked Futures per the accept-edits/bypass matrix and emits
-        `approval_resolved` so mirroring tabs drop their modals too.
-
-        Persists to `sessions.permission_mode` (migration 0012) so a
-        browser reload or socket drop restores the same mode."""
-        self.agent.set_permission_mode(mode)
-        if isinstance(mode, str):
-            await self._approval.resolve_for_mode(mode)
-        # Persist str modes and explicit None (== clear the override).
-        # Non-string truthy values are treated as malformed wire frames
-        # and left alone — don't clobber a good DB value with a bad
-        # one. Invalid strings are rejected by the store helper; we
-        # swallow that ValueError so a bad frame can't crash the runner.
-        if isinstance(mode, str) or mode is None:
-            try:
-                await store.set_session_permission_mode(self.db, self.session_id, mode)
-            except ValueError:
-                log.warning(
-                    "runner %s: rejected unknown permission mode %r",
-                    self.session_id,
-                    mode,
-                )
+        """Forwarder to `ApprovalGate.set_permission_mode`. See that
+        method's docstring for the retro-apply rationale."""
+        await self._approval_gate.set_permission_mode(mode)
 
     async def request_stop(self) -> None:
         """User-initiated stop of the current turn. Flags the worker
@@ -397,44 +325,20 @@ class SessionRunner:
         except (ClaudeSDKError, OSError):
             pass
 
-    # ---- tool-use approval ----------------------------------------
+    # ---- tool-use approval (delegates to ApprovalGate) -------------
 
     @property
     def can_use_tool(self) -> Any:
-        """Callback bound onto `AgentSession.can_use_tool` by
-        `ws_agent.build_runner`. Wraps the broker's callback so each
-        entry/exit broadcasts a `runner_state` frame — the sidebar
-        reads `awaiting_user` off that frame and flips the red-flashing
-        "needs attention" indicator. The broker stays transport-
-        agnostic."""
-        broker_cb = self._approval.can_use_tool
-
-        async def wrapped(tool_name: Any, tool_input: Any, context: Any) -> Any:
-            self._awaiting_count += 1
-            self._publish_runner_state()
-            try:
-                return await broker_cb(tool_name, tool_input, context)
-            finally:
-                # Decrement THEN broadcast so the published frame
-                # reflects the post-resolve count. A stacked approval
-                # + AskUserQuestion keeps the indicator lit until the
-                # last one resolves — the counter's whole point.
-                self._awaiting_count -= 1
-                self._publish_runner_state()
-
-        return wrapped
+        """Bound onto `AgentSession.can_use_tool` by `ws_agent.build_runner`.
+        Forwards to the gate's wrapped callback (counter + broadcast
+        on top of the broker)."""
+        return self._approval_gate.can_use_tool
 
     def _publish_runner_state(self) -> None:
-        """Broadcast this runner's current `(is_running, is_awaiting_user)`
-        tuple on the sessions broker. No-op when no broker is wired
-        (test runners). Idempotent — a frame identical to the last one
-        is harmless; subscribers just re-apply the same state."""
-        publish_runner_state(
-            self._sessions_broker,
-            self.session_id,
-            is_running=self.is_running,
-            is_awaiting_user=self.is_awaiting_user,
-        )
+        """Broadcast `(is_running, is_awaiting_user)` on the sessions
+        broker. Kept on the runner because `turn_executor` calls it on
+        turn-state transitions; thin forwarder to the gate."""
+        self._approval_gate.publish_state()
 
     async def resolve_approval(
         self,
@@ -443,11 +347,9 @@ class SessionRunner:
         reason: str | None = None,
         updated_input: dict[str, object] | None = None,
     ) -> None:
-        """WS → broker forwarder. Kept on the runner so the WS handler
-        holds one object, not two. `updated_input` is the UI-collected
-        override the SDK passes to the tool on allow — see
-        `ApprovalBroker.resolve` for the AskUserQuestion motivation."""
-        await self._approval.resolve(request_id, decision, reason, updated_input)
+        """WS → broker forwarder via the gate. Kept on the runner so
+        the WS handler holds one object, not two."""
+        await self._approval_gate.resolve_approval(request_id, decision, reason, updated_input)
 
     # ---- subscriber lifecycle (bodies in `runner_subscribers.py`) -
 
