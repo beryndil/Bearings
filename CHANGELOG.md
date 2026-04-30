@@ -94,6 +94,52 @@ check that every preferences GET carries the new keys.
 
 Pillow joins `pyproject.toml` deps (`pillow>=10.0`) and CREDITS.md.
 
+## [0.34.0] - 2026-04-29
+
+Analytics page — Phase 6 of the v1.0.0 dashboard redesign. The
+`/analytics` route went from a Phase-2c placeholder to a real
+per-instance rollup: KPI tiles + sessions-per-day chart + top-tags
+list + token breakdown.
+
+**Backend:**
+- New `db/_analytics.get_analytics_summary(conn, days=30)` — one
+  function bundles every aggregate the page needs in a single
+  round-trip. Session counts (total / open / closed), token sums
+  per channel (input / output / cache_read / cache_creation),
+  total cost, sessions-by-day zero-filled to the full window
+  (so the chart axis stays continuous), and top-10 tags by
+  session_count.
+- New `GET /api/analytics/summary?days=N` (`days` clamped to
+  [1, 365]; headline totals are all-time, only the time-series
+  honors the window).
+- New `AnalyticsSummaryOut` / `SessionsByDay` / `TopTag` Pydantic
+  models.
+- 5 tests in `tests/test_analytics.py`: empty-DB shape, multi-
+  session token rollup, top-tag ordering with LEFT JOIN
+  surfacing zero-count tags, endpoint smoke + `days` validator.
+
+**Frontend:**
+- New `lib/api/analytics.ts` client + types (`AnalyticsSummary`,
+  `SessionsByDay`, `TopTag`), exported via `$lib/api`.
+- `routes/(app)/analytics/+page.svelte` rebuilt with the real
+  surface: 4 KPI tiles (Sessions / Messages / Tokens / Cost),
+  sessions-per-day bar chart (hand-rolled inline divs — no chart
+  library dep, 30 buckets fit cleanly in the column width with
+  hover tooltips), top tags list with proportional progress bars,
+  token breakdown card, and a snapshot timestamp footer. Manual
+  Refresh button (the page is a periodic snapshot, not a live
+  stream).
+
+**Note:** `systemctl --user restart bearings` to pick up the new
+`/api/analytics/summary` endpoint. Frontend bundle is already
+synced.
+
+This brings the v1.0.0 dashboard redesign to **6 of 7 phases
+complete**. Only Phase 7 (polish + flip default theme to
+evergreen) remains.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.31.0] - 2026-04-29
 
 Inspector Files & Changes tabs — Phase 5 of the v1.0.0 dashboard

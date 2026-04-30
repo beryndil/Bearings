@@ -8,6 +8,7 @@ module is re-exported here, so callers continue to use
 
 from __future__ import annotations
 
+from .analytics import AnalyticsSummaryOut, SessionsByDay, TopTag
 from .artifacts import ArtifactOut, ArtifactRegister
 from .checklists import (
     AutoRunStart,
@@ -75,6 +76,7 @@ from .vault import (
 )
 
 __all__ = [
+    "AnalyticsSummaryOut",
     "ArtifactOut",
     "ArtifactRegister",
     "Attachment",
@@ -123,6 +125,7 @@ __all__ = [
     "SessionExportBundle",
     "SessionOut",
     "SessionUpdate",
+    "SessionsByDay",
     "SuggestTitlesResult",
     "SystemPromptLayerOut",
     "SystemPromptOut",
@@ -140,6 +143,7 @@ __all__ = [
     "TodosOut",
     "TokenTotalsOut",
     "ToolCallOut",
+    "TopTag",
     "UploadOut",
     "VaultDocOut",
     "VaultEntryOut",

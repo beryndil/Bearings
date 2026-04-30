@@ -11,6 +11,7 @@ concern, then re-export here.
 
 from __future__ import annotations
 
+from bearings.db._analytics import get_analytics_summary
 from bearings.db._artifacts import (
     create_artifact,
     delete_artifact,
@@ -156,6 +157,7 @@ __all__ = [
     "ensure_default_severity",
     "find_replayable_prompt",
     "finish_tool_call",
+    "get_analytics_summary",
     "get_artifact",
     "get_auto_run_state",
     "get_checklist",

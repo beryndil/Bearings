@@ -1,4 +1,5 @@
 export * from './core';
+export * from './analytics';
 export * from './version';
 export * from './sessions';
 export * from './sessions_bulk';
