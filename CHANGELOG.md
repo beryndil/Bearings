@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-04-29
+
+Bottom status bar — Phase 2a of the v1.0.0 dashboard redesign.
+The mockup placed always-on chrome state at the bottom of the
+viewport rather than crammed into the session header; this ships
+that move.
+
+New `StatusBar.svelte` mounts at the bottom of the `(app)` group's
+shell (full-width, below the sidebar/main/inspector grid). Renders:
+
+  - **Bearings v0.25.0** — version pill in the brand emerald, fetched
+    from `/api/version` on mount. A failed fetch leaves the slot
+    rendering plain "Bearings"; the rest of the bar is unaffected.
+  - **~/projects/bearings** — selected session's `working_dir`, with
+    `/home/<user>/...` compressed to `~/...` for display and the full
+    path on the title attribute. Suppressed when no session is selected.
+  - **● Recovery: Enabled** — static text. Recovery-on-disconnect is
+    built into the WS reconnect loop; never user-configurable.
+  - **● Auto-save: On** — static text. Persistence is built into the
+    WS message path; never user-configurable.
+  - **CONNECTED** pill — agent connection state, extracted from
+    `ConversationHeader.svelte`'s upper-right cluster.
+
+`ConversationHeader.svelte` loses two surfaces in the move:
+  - Working_dir from the model/cost subtitle line — header is now
+    session-content focused (title, model, cost, tags, description),
+    footer is chrome-state focused.
+  - The connection badge from the upper-right cluster — Stop button
+    stays because it's session-action, not chrome-state.
+
+Layout shift: `(app)/+layout.svelte` wraps the existing 3-column
+grid in a `flex-col` container so `<StatusBar />` can sit below it.
+The grid takes `flex-1 min-h-0` so it fills the remaining height
+without crowding out the footer.
+
+Disk usage ("2.1 GB" in the mockup) deferred — would require a new
+server endpoint, out of Phase 2a scope.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.24.0] - 2026-04-29
 
 Evergreen theme — Phase 1 of the v1.0.0 dashboard redesign. New

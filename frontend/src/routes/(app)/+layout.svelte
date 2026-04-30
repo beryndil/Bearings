@@ -31,6 +31,7 @@
   import Inspector from '$lib/components/Inspector.svelte';
   import PendingOpsCard from '$lib/components/pending/PendingOpsCard.svelte';
   import SessionList from '$lib/components/SessionList.svelte';
+  import StatusBar from '$lib/components/StatusBar.svelte';
   import { dispatchShortcut } from '$lib/keyboard/bindings';
   import { agent } from '$lib/agent.svelte';
   import { auth } from '$lib/stores/auth.svelte';
@@ -314,57 +315,60 @@
 <UndoToastHost />
 <StubToastHost />
 <PendingOpsCard />
-<main
-  class="grid h-full"
-  style="grid-template-columns: {panes.left}px 6px minmax(0,1fr) 6px {panes.right}px"
->
-  <div class="overflow-hidden">
-    <SessionList />
-  </div>
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div
-    role="separator"
-    aria-label="Resize sidebar"
-    aria-orientation="vertical"
-    tabindex="0"
-    class="group relative cursor-col-resize bg-slate-800 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
-    onmousedown={(e) => startDrag('left', e)}
-    onkeydown={(e) => onHandleKey('left', e)}
+<div class="flex h-full flex-col">
+  <main
+    class="grid min-h-0 flex-1"
+    style="grid-template-columns: {panes.left}px 6px minmax(0,1fr) 6px {panes.right}px"
   >
-    <button
-      type="button"
-      class="absolute left-1/2 top-3 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded bg-slate-700 text-xs text-slate-200 opacity-60 hover:bg-slate-600 hover:opacity-100 group-hover:opacity-100"
-      title={panes.left > 0 ? 'Collapse sidebar' : 'Expand sidebar'}
-      onmousedown={(e) => e.stopPropagation()}
-      onclick={() => togglePane('left')}
+    <div class="overflow-hidden">
+      <SessionList />
+    </div>
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div
+      role="separator"
+      aria-label="Resize sidebar"
+      aria-orientation="vertical"
+      tabindex="0"
+      class="group relative cursor-col-resize bg-slate-800 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
+      onmousedown={(e) => startDrag('left', e)}
+      onkeydown={(e) => onHandleKey('left', e)}
     >
-      {panes.left > 0 ? '◂' : '▸'}
-    </button>
-  </div>
-  {@render children?.()}
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <div
-    role="separator"
-    aria-label="Resize inspector"
-    aria-orientation="vertical"
-    tabindex="0"
-    class="group relative cursor-col-resize bg-slate-800 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
-    onmousedown={(e) => startDrag('right', e)}
-    onkeydown={(e) => onHandleKey('right', e)}
-  >
-    <button
-      type="button"
-      class="absolute left-1/2 top-3 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded bg-slate-700 text-xs text-slate-200 opacity-60 hover:bg-slate-600 hover:opacity-100 group-hover:opacity-100"
-      title={panes.right > 0 ? 'Collapse inspector' : 'Expand inspector'}
-      onmousedown={(e) => e.stopPropagation()}
-      onclick={() => togglePane('right')}
+      <button
+        type="button"
+        class="absolute left-1/2 top-3 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded bg-slate-700 text-xs text-slate-200 opacity-60 hover:bg-slate-600 hover:opacity-100 group-hover:opacity-100"
+        title={panes.left > 0 ? 'Collapse sidebar' : 'Expand sidebar'}
+        onmousedown={(e) => e.stopPropagation()}
+        onclick={() => togglePane('left')}
+      >
+        {panes.left > 0 ? '◂' : '▸'}
+      </button>
+    </div>
+    {@render children?.()}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <div
+      role="separator"
+      aria-label="Resize inspector"
+      aria-orientation="vertical"
+      tabindex="0"
+      class="group relative cursor-col-resize bg-slate-800 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-sky-500"
+      onmousedown={(e) => startDrag('right', e)}
+      onkeydown={(e) => onHandleKey('right', e)}
     >
-      {panes.right > 0 ? '▸' : '◂'}
-    </button>
-  </div>
-  <div class="overflow-hidden">
-    <Inspector />
-  </div>
-</main>
+      <button
+        type="button"
+        class="absolute left-1/2 top-3 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded bg-slate-700 text-xs text-slate-200 opacity-60 hover:bg-slate-600 hover:opacity-100 group-hover:opacity-100"
+        title={panes.right > 0 ? 'Collapse inspector' : 'Expand inspector'}
+        onmousedown={(e) => e.stopPropagation()}
+        onclick={() => togglePane('right')}
+      >
+        {panes.right > 0 ? '▸' : '◂'}
+      </button>
+    </div>
+    <div class="overflow-hidden">
+      <Inspector />
+    </div>
+  </main>
+  <StatusBar />
+</div>

@@ -19,12 +19,7 @@
   import { sessions } from '$lib/stores/sessions.svelte';
   import { agent } from '$lib/agent.svelte';
   import * as api from '$lib/api';
-  import {
-    connectionLabel,
-    copyText,
-    messagesAsMarkdown,
-    pressureClass,
-  } from '$lib/utils/conversation-ui';
+  import { copyText, messagesAsMarkdown, pressureClass } from '$lib/utils/conversation-ui';
   import BearingsMark from './icons/BearingsMark.svelte';
   import ContextMeter from './ContextMeter.svelte';
   import FeedbackButton from './FeedbackButton.svelte';
@@ -405,7 +400,10 @@
     </h1>
     <p class="truncate font-mono text-xs text-slate-500">
       {#if sessions.selected}
-        {sessions.selected.model} · {sessions.selected.working_dir} ·
+        <!-- working_dir moved to the bottom StatusBar (Phase 2a of the
+             v1.0.0 dashboard redesign) — header is now session-content
+             focused, footer is chrome-state focused. -->
+        {sessions.selected.model} ·
         {#if billing.showTokens}
           <!-- Subscription mode: flat-rate billing makes the dollar
                figure meaningless, so swap in the token aggregate from
@@ -499,15 +497,8 @@
         <StopUndoInline />
       {/if}
     {/if}
-    <span
-      class="rounded px-2 py-1 text-[10px] uppercase tracking-wider
-        {agent.state === 'open'
-        ? 'bg-emerald-900 text-emerald-300'
-        : agent.state === 'connecting'
-          ? 'bg-amber-900 text-amber-300'
-          : 'bg-slate-800 text-slate-400'}"
-    >
-      {connectionLabel(agent.state, agent.reconnectDelayMs, agent.lastCloseCode)}
-    </span>
+    <!-- Connection badge moved to the bottom StatusBar (Phase 2a of
+         the v1.0.0 dashboard redesign). The Stop button stays here
+         because it's session-action, not chrome-state. -->
   </div>
 </header>
