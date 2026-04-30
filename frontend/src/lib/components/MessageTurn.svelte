@@ -319,13 +319,13 @@
           <img
             src={userAvatarUrl}
             alt=""
-            class="h-4 w-4 rounded-full object-cover"
+            class="h-7 w-7 rounded-full object-cover"
             aria-hidden="true"
           />
         {:else}
           <span
-            class="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-700
-              text-[8px] font-semibold normal-case text-white"
+            class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-700
+              text-[11px] font-semibold normal-case text-white"
             aria-hidden="true"
           >
             {userInitials(userName)}
@@ -490,7 +490,7 @@
             data-message-id={assistant.id}
           />
         {/if}
-        <ClaudeMark size={14} label="Claude" />
+        <ClaudeMark size={28} label="Claude" />
         <span>Claude{isStreaming ? ' · streaming' : ''}</span>
         {#if assistant?.pinned}
           <span class="normal-case text-amber-400" title="Pinned">📌</span>
