@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] - 2026-04-29
+
+Changed: message turn headers now carry an identity icon next to the
+role label.
+
+* User rows render the configured avatar (rounded 16×16) — same
+  source of truth as the sidebar `UserIdentityBlock`. When no avatar
+  is set the circle falls back to two-letter initials on the existing
+  emerald-700 chip, matching the sidebar exactly.
+* Assistant rows render `ClaudeMark` (a four-pointed copper sparkle)
+  next to the role label, which now reads "Claude" instead of the
+  generic "assistant" — same identity convention chat apps use for
+  the model side of the conversation.
+
+New `frontend/src/lib/components/icons/ClaudeMark.svelte`. Defaults
+to Anthropic's brand copper (`#cc785c`); colour overridable via
+prop or `currentColor`.
+
+The user-side display name still flows from `preferences.displayName`
+with the literal `"user"` fallback when unset (preserved API
+compatibility — no test changes needed; the existing 50 MessageTurn
+tests pass against the updated header).
+
 ## [0.32.0] - 2026-04-29
 
 Added: system-identity hydration. The preferences row now seeds

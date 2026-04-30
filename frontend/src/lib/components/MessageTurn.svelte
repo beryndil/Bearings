@@ -9,6 +9,7 @@
   import { scrollBehavior } from '$lib/utils/motion';
   import { formatDuration } from '$lib/utils/datetime';
   import CollapsibleBody from './CollapsibleBody.svelte';
+  import ClaudeMark from './icons/ClaudeMark.svelte';
 
   type Props = {
     user: Message | null;
@@ -228,6 +229,22 @@
     return selectedIds?.has(id) ?? false;
   }
 
+  /** Two-character initials for the user-role avatar fallback. Mirrors
+   * `UserIdentityBlock.svelte` so the same display-name renders the
+   * same initials in the sidebar and in every message header. Cheap
+   * to compute per render — the message list is bounded and this
+   * runs once per turn. */
+  function userInitials(name: string): string {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  let userName = $derived(preferences.displayName?.trim() || 'user');
+  let userAvatarUrl = $derived(preferences.avatarUrl);
+
   function onCheckboxClick(e: MouseEvent, msg: Message) {
     // The checkbox itself is triggered by the browser before this
     // handler fires; we intercept to deliver the shiftKey flag to
@@ -298,7 +315,23 @@
             data-message-id={user.id}
           />
         {/if}
-        <span>{preferences.displayName ?? 'user'}</span>
+        {#if userAvatarUrl}
+          <img
+            src={userAvatarUrl}
+            alt=""
+            class="h-4 w-4 rounded-full object-cover"
+            aria-hidden="true"
+          />
+        {:else}
+          <span
+            class="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-700
+              text-[8px] font-semibold normal-case text-white"
+            aria-hidden="true"
+          >
+            {userInitials(userName)}
+          </span>
+        {/if}
+        <span>{userName}</span>
         {#if user.pinned}
           <span class="normal-case text-amber-400" title="Pinned">📌</span>
         {/if}
@@ -457,7 +490,8 @@
             data-message-id={assistant.id}
           />
         {/if}
-        <span>assistant{isStreaming ? ' · streaming' : ''}</span>
+        <ClaudeMark size={14} label="Claude" />
+        <span>Claude{isStreaming ? ' · streaming' : ''}</span>
         {#if assistant?.pinned}
           <span class="normal-case text-amber-400" title="Pinned">📌</span>
         {/if}
