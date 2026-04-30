@@ -71,9 +71,7 @@ async def suggest_session_titles(
     # `agent.title_suggest_model` (typically Haiku) when set; fall back
     # to the session model so existing installs without the override
     # behave exactly as before. ~10× cost cut per click when configured.
-    model = (
-        settings.agent.title_suggest_model or session.get("model") or settings.agent.model
-    )
+    model = settings.agent.title_suggest_model or session.get("model") or settings.agent.model
     titles, notes = await suggest_titles(messages, model=model)
     if titles is None:
         raise HTTPException(

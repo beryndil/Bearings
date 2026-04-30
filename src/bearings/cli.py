@@ -306,6 +306,47 @@ def _add_gc_parser(sub: _SubParsers) -> None:
     )
 
 
+def _add_status_parser(sub: _SubParsers) -> None:
+    status = sub.add_parser(
+        "status",
+        help="Print server connectivity, version, and session/runner counts.",
+    )
+    status.add_argument("--host", default=None, help="Server host (default: from config)")
+    status.add_argument("--port", type=int, default=None, help="Server port (default: from config)")
+    status.add_argument(
+        "--token",
+        default=None,
+        help="Auth token (default: from config auth.token when auth.enabled)",
+    )
+
+
+def _add_log_parser(sub: _SubParsers) -> None:
+    log_cmd = sub.add_parser(
+        "log",
+        help="Tail recent messages from a session (default: most-recently-updated).",
+    )
+    log_cmd.add_argument(
+        "--session",
+        default=None,
+        help="Session id to tail. Omit to use the most-recently-updated session.",
+    )
+    log_cmd.add_argument(
+        "--tail",
+        type=int,
+        default=10,
+        help="Number of trailing messages to print (default: 10).",
+    )
+    log_cmd.add_argument("--host", default=None, help="Server host (default: from config)")
+    log_cmd.add_argument(
+        "--port", type=int, default=None, help="Server port (default: from config)"
+    )
+    log_cmd.add_argument(
+        "--token",
+        default=None,
+        help="Auth token (default: from config auth.token when auth.enabled)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Top-level argparse builder for the `bearings` CLI.
 
@@ -319,6 +360,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_init_parser(sub)
     _add_window_parser(sub)
     _add_send_parser(sub)
+    _add_status_parser(sub)
+    _add_log_parser(sub)
     _add_here_parser(sub)
     _add_pending_parser(sub)
     _todo_register(sub)
@@ -676,6 +719,88 @@ def _handle_send_command(args: argparse.Namespace) -> int:
     return asyncio.run(_run_send(url, args.message, sys.stdout, pretty=args.format == "pretty"))
 
 
+def _http_get_json(url: str, token: str | None) -> Any:
+    """Stdlib-only GET → JSON. Avoids an httpx/requests dep in the CLI
+    surface; the server is local so connection failures are the common
+    hard error and we surface them with a one-line hint."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(url)
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=5.0) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"could not reach {url}: {exc}. Is `bearings serve` running?") from exc
+
+
+def _handle_status_command(args: argparse.Namespace) -> int:
+    """Print server health, version, sessions count, active runners.
+
+    Two HTTP calls (health + sessions list); intentionally no streaming
+    so the command exits cleanly when piped or scripted."""
+    cfg = load_settings()
+    host = args.host or cfg.server.host
+    port = args.port or cfg.server.port
+    token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
+    base = f"http://{host}:{port}"
+    try:
+        health = _http_get_json(f"{base}/api/health", token)
+        sessions = _http_get_json(f"{base}/api/sessions?limit=1000", token)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    rows = sessions if isinstance(sessions, list) else sessions.get("sessions", [])
+    running = sum(1 for s in rows if s.get("kind") == "chat" and s.get("closed_at") is None)
+    # Reaching this point means both /health and /sessions returned 200,
+    # so the server is up and answering. The /health body itself is
+    # ancillary metadata (auth on/off, data_dir) — rendered alongside
+    # the OK banner rather than relied on for the health verdict.
+    print(f"server  : {base}  (OK)")
+    print(f"version : {health.get('version', 'unknown')}")
+    print(f"auth    : {health.get('auth', 'unknown')}")
+    print(f"sessions: {len(rows)} total, {running} open chat sessions")
+    print(f"db_path : {cfg.storage.db_path}")
+    return 0
+
+
+def _handle_log_command(args: argparse.Namespace) -> int:
+    """Tail the last N messages from one session. Default session is
+    the most-recently-updated row (sessions are returned newest-first
+    by the list endpoint)."""
+    cfg = load_settings()
+    host = args.host or cfg.server.host
+    port = args.port or cfg.server.port
+    token = args.token or (cfg.auth.token if cfg.auth.enabled else None)
+    base = f"http://{host}:{port}"
+    try:
+        sid = args.session
+        if sid is None:
+            sessions = _http_get_json(f"{base}/api/sessions?limit=1", token)
+            rows = sessions if isinstance(sessions, list) else sessions.get("sessions", [])
+            if not rows:
+                print("(no sessions)", file=sys.stderr)
+                return 1
+            sid = rows[0]["id"]
+        msgs = _http_get_json(f"{base}/api/sessions/{sid}/messages?limit={args.tail}", token)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    items = msgs if isinstance(msgs, list) else msgs.get("messages", [])
+    print(f"session : {sid}  ({len(items)} messages)")
+    for m in items:
+        role = m.get("role", "?")
+        ts = m.get("created_at", "")
+        body = (m.get("content") or "").strip().splitlines()
+        head = body[0] if body else ""
+        if len(head) > 100:
+            head = head[:97] + "..."
+        print(f"  {ts}  {role:9}  {head}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Dispatch the parsed CLI command to its per-subcommand handler.
 
@@ -690,6 +815,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "init": _handle_init_command,
         "window": _handle_window_command,
         "send": _handle_send_command,
+        "status": _handle_status_command,
+        "log": _handle_log_command,
         "here": _run_here,
         "pending": _run_pending,
         "todo": _todo_dispatch,
