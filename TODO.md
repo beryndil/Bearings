@@ -2147,11 +2147,17 @@ headline. Additional issues found, in priority order:
   test_list_tool_calls_filters_by_message_ids`, `test_routes_sessions
   .py::test_get_tool_calls_filters_by_message_ids`.
 
-- [ ] **Subscribe replay walks full 5k ring buffer on every new
-  WS.** `src/bearings/agent/runner.py:163-166`. Two tabs reconnecting
-  each scan 5000 envelopes. Fix: keep a parallel `dict[seq → index]`
-  or use `bisect` over a sorted `deque` for O(log n) replay start.
-  Low-priority unless reconnect storms show up in practice.
+- [x] **Subscribe replay walks full 5k ring buffer on every new
+  WS.** *(largely shipped — the original O(5000) scan is gone.)*
+  `src/bearings/agent/runner_subscribers.py:49-80` (`_replay_window`)
+  now does `k = min(n, last_seq - since_seq)` and `islice(reversed
+  (...), k)` so a reconnect with a recent cursor walks O(K) where K =
+  events-since-cursor, not O(5000). Remaining micro-opt (deferred,
+  not blocking): when `since_seq` predates the buffer front, the
+  current path returns the full buffer contents — a `bisect` over a
+  sorted view or a parallel `dict[seq → index]` would give O(log n)
+  start-point lookup for cold cursors. Worth doing only if reconnect
+  storms with stale cursors appear in production.
 
 - [x] **Unbounded subscriber queues.** *(shipped 2026-04-25, L3.2)*
   `src/bearings/agent/runner_types.py`. The eviction path was already
