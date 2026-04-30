@@ -9,29 +9,36 @@
   import type { ContextTarget } from '$lib/context-menu/types';
   import DataView from '$lib/components/DataView.svelte';
   import NewSessionForm from '$lib/components/NewSessionForm.svelte';
+  import PendingOpsBadge from '$lib/components/pending/PendingOpsBadge.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import SidebarSearch from '$lib/components/SidebarSearch.svelte';
   import TagFilterPanel from '$lib/components/TagFilterPanel.svelte';
+  import TemplatePicker from '$lib/components/TemplatePicker.svelte';
+  import NewSessionPill from '$lib/components/sidebar/NewSessionPill.svelte';
+  import SidebarBrand from '$lib/components/sidebar/SidebarBrand.svelte';
+  import SidebarNav from '$lib/components/sidebar/SidebarNav.svelte';
+  import SystemStatusCard from '$lib/components/sidebar/SystemStatusCard.svelte';
+  import UserIdentityBlock from '$lib/components/sidebar/UserIdentityBlock.svelte';
   import SessionListClosedGroup from './SessionListClosedGroup.svelte';
-  import SessionListHeader from './SessionListHeader.svelte';
   import SessionListItem from './SessionListItem.svelte';
   import { indicatorState } from './sessionListHelpers.js';
   import { scrollBehavior } from '$lib/utils/motion';
 
   const CONFIRM_TIMEOUT_MS = 3_000;
 
-  let showSettings = $state(false);
-
   // Deep-link entry: a fresh page load with `?settings=<id>` should
   // open the Settings dialog and land on the named section. The shell
   // (SettingsShell.svelte) reads the param itself for the initial
-  // `activeId`; this just flips the dialog's `open` flag so the URL
-  // anchor works as a real shareable deep-link, not just a mid-session
-  // "remember which pane I was on" sticky.
+  // `activeId`; this just flips the shared `uiActions.settingsOpen`
+  // flag so the URL anchor works as a real shareable deep-link, not
+  // just a mid-session "remember which pane I was on" sticky.
+  // Phase 2c lifted Settings open-state out of per-component locals
+  // and into `uiActions` so the sidebar nav rail (gear) and the
+  // user-identity avatar block can both flip the same flag.
   $effect(() => {
     if (typeof window === 'undefined') return;
     const params = new URL(window.location.href).searchParams;
-    if (params.has('settings')) showSettings = true;
+    if (params.has('settings')) uiActions.settingsOpen = true;
   });
 
   let importInput: HTMLInputElement | undefined = $state();
@@ -47,10 +54,13 @@
   // the sidebar quiet on boot.
   let closedCollapsed = $state(true);
 
-  // Bound to the scrollable <aside> below so the scroll-to-top effect
-  // can pull the just-bumped selected session into view. Otherwise a
-  // user who'd scrolled down loses sight of their session the moment
-  // it bumps to index 0.
+  // Bound to the scrollable middle band below (the Recent Sessions
+  // list area) so the scroll-to-top effect can pull the just-bumped
+  // selected session into view. Phase 2c split the sidebar into three
+  // zones — top bands (brand/pill/nav/tools) and bottom bands
+  // (system-status/user-identity) are fixed; only this middle zone
+  // scrolls — so this ref now points at the middle div, not the
+  // outer aside. (Pre-2c, the aside itself was the scroller.)
   let asideEl: HTMLElement | undefined = $state();
   // Baseline so the mount-time run of the effect (which reads the
   // current tick) doesn't fire a gratuitous scroll. Only real tick
@@ -276,23 +286,68 @@
   }
 </script>
 
-<Settings bind:open={showSettings} />
+<Settings bind:open={uiActions.settingsOpen} />
 
 <aside
-  bind:this={asideEl}
-  class="relative flex h-full flex-col gap-2 overflow-y-auto border-r
+  class="relative flex h-full flex-col gap-2 overflow-hidden border-r
     border-slate-800 bg-slate-900 p-2 {dragging ? 'ring-2 ring-inset ring-emerald-500/60' : ''}"
   ondragenter={onDragEnter}
   ondragover={onDragOver}
   ondragleave={onDragLeave}
   ondrop={onDrop}
 >
-  <SessionListHeader
-    onImportClick={() => importInput?.click()}
-    onSettingsClick={() => (showSettings = true)}
-    onImportFileChange={onImportFile}
-    bindImportInput={(el) => (importInput = el)}
-  />
+  <!-- Phase 2c sidebar bands (top): brand → big New Session pill →
+       primary navigation rail. The old SessionListHeader toolbar
+       (small +New / settings / import / vault buttons) split into
+       these bands plus the small "Tools" row below; Settings moved
+       into the nav rail's gear, so the modal opens from there now. -->
+  <SidebarBrand />
+  <NewSessionPill />
+  <SidebarNav />
+
+  <NewSessionForm bind:open={uiActions.newSessionOpen} />
+
+  <!-- Compact tools row — preserves the four toolbar actions that
+       didn't get a nav slot (Import, Pending count, Templates, Vault).
+       Smaller and lower than the original SessionListHeader so it
+       reads as secondary; the primary actions are the New Session
+       pill and the nav rail. -->
+  <div
+    class="flex items-center justify-between gap-1 px-1 text-slate-400"
+    data-testid="sidebar-tools"
+  >
+    <span class="text-[10px] uppercase tracking-wider text-slate-500">Tools</span>
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
+        aria-label="Import session from JSON"
+        title="Import a session.json file"
+        onclick={() => importInput?.click()}
+      >
+        ⇡
+      </button>
+      <input
+        type="file"
+        accept="application/json,.json"
+        multiple
+        class="hidden"
+        bind:this={importInput}
+        onchange={onImportFile}
+      />
+      <PendingOpsBadge />
+      <TemplatePicker />
+      <a
+        href="/vault"
+        class="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] hover:bg-slate-700"
+        aria-label="Open vault (plans + TODOs)"
+        title="Open vault — browse plans and TODO.md files"
+        data-testid="vault-link"
+      >
+        📚
+      </a>
+    </div>
+  </div>
 
   {#if dragging}
     <div
@@ -303,102 +358,127 @@
     </div>
   {/if}
 
-  <SidebarSearch bind:query={searchQuery} />
+  <!-- Recent Sessions band — heading, search, tag filter, then the
+       session list itself. The old layout had Search above NewSessionForm
+       and the tag filter immediately under; reordering puts the
+       sessions surface in one labeled block under the rail.
+       Wrapped in `flex-1 overflow-y-auto` so this is the only zone
+       that scrolls — the top brand/pill/nav/tools and bottom system-
+       status/user-identity bands stay pinned. -->
+  <h3
+    class="mt-1 shrink-0 px-1 text-[10px] font-medium uppercase tracking-wider text-slate-500"
+    data-testid="recent-sessions-heading"
+  >
+    Recent Sessions
+  </h3>
 
-  <NewSessionForm bind:open={uiActions.newSessionOpen} />
+  <div bind:this={asideEl} class="flex flex-1 flex-col gap-2 overflow-y-auto">
+    <SidebarSearch bind:query={searchQuery} />
 
-  {#if importProgress}
-    <p class="text-xs text-emerald-300">
-      Importing {importProgress.done} of {importProgress.total}…
-    </p>
-  {/if}
-  {#if importError}
-    <p class="text-xs text-rose-400">import: {importError}</p>
-  {/if}
+    {#if importProgress}
+      <p class="text-xs text-emerald-300">
+        Importing {importProgress.done} of {importProgress.total}…
+      </p>
+    {/if}
+    {#if importError}
+      <p class="text-xs text-rose-400">import: {importError}</p>
+    {/if}
 
-  {#if !searchQuery.trim()}
-    <TagFilterPanel />
-  {/if}
+    {#if !searchQuery.trim()}
+      <TagFilterPanel />
+    {/if}
 
-  {#snippet sessionRow(session: api.Session)}
-    <SessionListItem
-      {session}
-      selected={sessions.selectedId === session.id}
-      bulkSelected={sessionSelection.ids.has(session.id)}
-      indicator={indicatorState(session, sessions.awaiting, sessions.running)}
-      confirming={confirm.id === session.id}
-      renaming={rename.id === session.id}
-      renameDraft={rename.draft}
-      allTags={tags.list}
-      contextTarget={rowTarget(session.id)}
-      {onSelect}
-      {onDelete}
-      onStartRename={startRename}
-      onCommitRename={commitRename}
-      onCancelRename={cancelRename}
-      onRenameDraftChange={(draft) => (rename.draft = draft)}
-    />
-  {/snippet}
+    {#snippet sessionRow(session: api.Session)}
+      <SessionListItem
+        {session}
+        selected={sessions.selectedId === session.id}
+        bulkSelected={sessionSelection.ids.has(session.id)}
+        indicator={indicatorState(session, sessions.awaiting, sessions.running)}
+        confirming={confirm.id === session.id}
+        renaming={rename.id === session.id}
+        renameDraft={rename.draft}
+        allTags={tags.list}
+        contextTarget={rowTarget(session.id)}
+        {onSelect}
+        {onDelete}
+        onStartRename={startRename}
+        onCommitRename={commitRename}
+        onCancelRename={cancelRename}
+        onRenameDraftChange={(draft) => (rename.draft = draft)}
+      />
+    {/snippet}
 
-  {#if searchQuery.trim()}
-    <!-- SidebarSearch renders its own results list above. -->
-  {:else}
-    <!-- §9 wrapper: skeleton on first load, error+retry on fetch
+    {#if searchQuery.trim()}
+      <!-- SidebarSearch renders its own results list above. -->
+    {:else}
+      <!-- §9 wrapper: skeleton on first load, error+retry on fetch
          failure, "No sessions yet." on empty. The retry path calls
          `sessions.refresh(tags.filter)` so the same filter the user
          last applied is re-tried — otherwise a retry would silently
          drop their tag selection. -->
-    <DataView
-      loading={sessions.loading && sessions.list.length === 0}
-      error={sessions.error}
-      isEmpty={sessions.list.length === 0}
-      onRetry={() => sessions.refresh(tags.filter)}
-      emptyLabel="No sessions yet."
-      loadingLabel="Loading sessions"
-    >
-      {#if sessions.openList.length > 0}
-        <ul class="flex flex-col gap-1">
-          {#each sessions.openList as session (session.id)}
-            {@render sessionRow(session)}
-          {/each}
-        </ul>
-      {:else}
-        <p class="text-sm text-slate-500">No open sessions.</p>
-      {/if}
-    </DataView>
+      <DataView
+        loading={sessions.loading && sessions.list.length === 0}
+        error={sessions.error}
+        isEmpty={sessions.list.length === 0}
+        onRetry={() => sessions.refresh(tags.filter)}
+        emptyLabel="No sessions yet."
+        loadingLabel="Loading sessions"
+      >
+        {#if sessions.openList.length > 0}
+          <ul class="flex flex-col gap-1">
+            {#each sessions.openList as session (session.id)}
+              {@render sessionRow(session)}
+            {/each}
+          </ul>
+        {:else}
+          <p class="text-sm text-slate-500">No open sessions.</p>
+        {/if}
+      </DataView>
 
-    {#if sessionSelection.hasSelection}
-      <!-- Selection footer: sticky reminder that bulk mode is active.
+      {#if sessionSelection.hasSelection}
+        <!-- Selection footer: sticky reminder that bulk mode is active.
            The real bulk ops fire from the right-click menu on any
            selected row (dispatches the `multi_select` target). -->
-      <div
-        class="mt-2 flex items-center justify-between gap-2 border-t
+        <div
+          class="mt-2 flex items-center justify-between gap-2 border-t
           border-emerald-700/40 pt-2 text-xs"
-        data-testid="session-bulk-bar"
-      >
-        <span class="text-emerald-300">
-          {sessionSelection.size} selected
-        </span>
-        <span class="text-slate-500">Right-click for actions</span>
-        <button
-          type="button"
-          class="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300
-            hover:bg-slate-700"
-          onclick={() => sessionSelection.clear()}
-          data-testid="session-bulk-clear"
+          data-testid="session-bulk-bar"
         >
-          Clear
-        </button>
-      </div>
-    {/if}
+          <span class="text-emerald-300">
+            {sessionSelection.size} selected
+          </span>
+          <span class="text-slate-500">Right-click for actions</span>
+          <button
+            type="button"
+            class="rounded bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300
+            hover:bg-slate-700"
+            onclick={() => sessionSelection.clear()}
+            data-testid="session-bulk-clear"
+          >
+            Clear
+          </button>
+        </div>
+      {/if}
 
-    {#if sessions.closedList.length > 0}
-      <SessionListClosedGroup
-        closedList={sessions.closedList}
-        collapsed={closedCollapsed}
-        onToggle={() => (closedCollapsed = !closedCollapsed)}
-        {sessionRow}
-      />
+      {#if sessions.closedList.length > 0}
+        <SessionListClosedGroup
+          closedList={sessions.closedList}
+          collapsed={closedCollapsed}
+          onToggle={() => (closedCollapsed = !closedCollapsed)}
+          {sessionRow}
+        />
+      {/if}
     {/if}
-  {/if}
+  </div>
+  <!-- /Recent Sessions scroll zone -->
+
+  <!-- Phase 2c sidebar bands (bottom): system-status card pinned
+       above the user-identity block. `shrink-0` so they keep their
+       own height regardless of how many sessions are scrolling
+       above; the middle scroll zone (Recent Sessions) takes all
+       remaining height via `flex-1`. -->
+  <div class="flex shrink-0 flex-col gap-2 pt-1">
+    <SystemStatusCard />
+    <UserIdentityBlock />
+  </div>
 </aside>

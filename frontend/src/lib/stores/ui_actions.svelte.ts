@@ -29,6 +29,14 @@ class UiActions {
   /** Sidebar template-picker dropdown (`t` opens, `Esc` closes). */
   templatePickerOpen = $state(false);
 
+  /** Settings modal — Phase 2c of the v1.0.0 dashboard redesign
+   * lifted this from per-component local state into the shared
+   * store so the sidebar nav rail (gear) and the user-identity
+   * avatar block can both flip the same flag the deep-link effect
+   * in SessionList sets when `?settings=<id>` is present in the URL.
+   * Settings.svelte itself binds `open` to this flag. */
+  settingsOpen = $state(false);
+
   openNewSession(opts: { fresh?: boolean } = {}): void {
     this.newSessionFresh = opts.fresh === true;
     this.newSessionOpen = true;
@@ -83,6 +91,10 @@ class UiActions {
     }
     if (this.templatePickerOpen) {
       this.templatePickerOpen = false;
+      closed = true;
+    }
+    if (this.settingsOpen) {
+      this.settingsOpen = false;
       closed = true;
     }
     return closed;

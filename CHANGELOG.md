@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.27.0] - 2026-04-29
+
+Left sidebar restructure — Phase 2c of the v1.0.0 dashboard
+redesign. The biggest single layout shift in the redesign plan.
+The mockup pulled the sidebar apart into seven discrete bands
+top-to-bottom; this rebuild ships them.
+
+New sidebar bands (under `frontend/src/lib/components/sidebar/`):
+
+  - **SidebarBrand** — BearingsMark compass + "Bearings" wordmark in
+    brand emerald. Project IS named Bearings; the compass stays.
+  - **NewSessionPill** — large emerald pill replacing the small
+    `+ New` toolbar button. Toggles the existing
+    `uiActions.newSessionOpen`.
+  - **SidebarNav** — five-item rail (Sessions / Tags / Memories /
+    Analytics / Settings) with inline SVG icons (no lucide dep).
+    Sessions is active for `/` and any `/sessions/*`. Settings stays
+    a modal (the rest of the app deep-links to it via
+    `?settings=<id>`); the gear flips a new shared
+    `uiActions.settingsOpen` flag.
+  - **SystemStatusCard** — connection + Claude-reachable dots.
+    Mockup's "Last sync" line omitted until `versionWatcher` exposes
+    a check timestamp.
+  - **UserIdentityBlock** — initials avatar + display_name +
+    "Localhost" anchor; click opens Settings.
+
+Also adds three placeholder routes wired to the new nav items:
+`/tags`, `/memories`, `/analytics`. Each renders a single card
+naming when the real surface ships (Phase 4 / Phase 6 / TBD).
+
+`SessionList.svelte` restructured to compose the new bands:
+top zone (brand / pill / nav / tools row) and bottom zone
+(system-status / user-identity) are pinned outside the scroll;
+only the middle Recent Sessions zone scrolls. The old
+`SessionListHeader.svelte` was unused after the move and got
+deleted; the four toolbar actions that didn't fit a nav slot
+(import, pending-ops badge, templates, vault) live in a smaller
+TOOLS row under the nav. `Settings.svelte` opens are unified on
+`uiActions.settingsOpen` (deep-link, gear, avatar all flip the
+same flag; Esc closes via `dismissOverlays`).
+
+Projects remains deliberately omitted — the 2026-04-29 scope
+decision said Tags subsume the cross-cutting grouping use-case.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.26.0] - 2026-04-29
 
 Accent cards above chat — Phase 2b of the v1.0.0 dashboard
