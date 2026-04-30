@@ -1,24 +1,25 @@
 <!doctype html>
 <!--
   `data-theme` is set synchronously by the no-flash boot script below,
-  before the SvelteKit head injection and before first paint. v0.18+
-  ships four bundled themes: `midnight-glass` (current default dark),
-  `default` (saved Tailwind palette), `paper-light` (light cream),
-  and `evergreen` (forest-green flat dark — v1.0.0 dashboard target,
-  will become default at v1.0.0). The `data-theme` attribute is the
+  before the SvelteKit head injection and before first paint. v1.0.0
+  ships four bundled themes: `evergreen` (current default — forest-
+  green flat dark, v1.0.0 dashboard target), `midnight-glass`
+  (warm-navy glass), `default` (saved Tailwind palette), and
+  `paper-light` (light cream). The `data-theme` attribute is the
   only switching surface — Tailwind color classes resolve through CSS
   variables, so flipping this attribute restyles the entire app with
   no component re-render.
 -->
-<html lang="en" class="h-full" data-theme="midnight-glass">
+<html lang="en" class="h-full" data-theme="evergreen">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Bearings — Claude Code agent web UI" />
     <!-- Mobile browser chrome color. Initial value matches the
-         midnight-glass base; the no-flash script below replaces it
-         to match the resolved theme before first paint. -->
-    <meta name="theme-color" content="#0A0E1C" />
+         evergreen base (the v1.0.0 default); the no-flash script
+         below replaces it to match the resolved theme before first
+         paint. -->
+    <meta name="theme-color" content="#0E131B" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -30,17 +31,23 @@
       any stylesheet paints. Reads the cached preferences row (the same key
       `bearings:preferences-cache` that preferences.svelte.ts writes after
       every PATCH) so a reload in any theme paints the saved theme on the
-      first frame instead of flashing midnight-glass and then re-applying.
+      first frame instead of flashing the default and then re-applying.
 
       First-visit fallback (Track F): if no cache exists or the cached
       `theme` is null, read the OS color-scheme preference once and pick
-      `paper-light` for light, `midnight-glass` otherwise. Once the user
+      `paper-light` for light, `evergreen` otherwise. Once the user
       saves any theme via the picker, the cached value wins forever — we
       do NOT keep tracking the OS setting.
 
+      v1.0.0 (Phase 7 of the dashboard redesign): default flipped from
+      `midnight-glass` to `evergreen` to match the v1.0.0 mockup. Existing
+      users keep whatever they last saved — the localStorage cache wins
+      every reload — so this change only affects fresh installs and
+      private-mode tabs.
+
       Defensive: every read is try/catch'd. A broken localStorage entry,
       a private-mode browser, or a missing matchMedia leaves the default
-      `data-theme="midnight-glass"` in place — same as today.
+      `data-theme="evergreen"` in place.
     -->
     <script>
       (function () {
@@ -73,7 +80,7 @@
             var prefersLight =
               typeof window.matchMedia === 'function' &&
               window.matchMedia('(prefers-color-scheme: light)').matches;
-            theme = prefersLight ? 'paper-light' : 'midnight-glass';
+            theme = prefersLight ? 'paper-light' : 'evergreen';
           }
           if (THEME_COLORS[theme]) {
             document.documentElement.dataset.theme = theme;

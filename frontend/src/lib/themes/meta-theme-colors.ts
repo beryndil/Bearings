@@ -32,6 +32,14 @@ export const THEME_META_COLORS: Record<string, string> = {
 
 /** Default for first-paint when no theme has been picked yet. Mirrors
  * the OS-color-scheme fallback the boot script uses (light → paper-
- * light, otherwise → midnight-glass). Imported by the runtime store
- * for parity with the boot path. */
-export const DEFAULT_THEME = 'midnight-glass';
+ * light, otherwise → evergreen). Imported by the runtime store for
+ * parity with the boot path.
+ *
+ * v1.0.0 (Phase 7 of the dashboard redesign): flipped from
+ * `midnight-glass` to `evergreen` so a fresh install lands on the
+ * forest-green dashboard the v1.0.0 mockup prescribed. Existing
+ * users keep whatever they last saved — the cached preferences
+ * row in localStorage wins on every reload, so this default only
+ * applies to genuinely new installs and to private-mode tabs that
+ * lose their cache between sessions. */
+export const DEFAULT_THEME = 'evergreen';

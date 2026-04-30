@@ -22,7 +22,7 @@
   import { preferences } from '$lib/stores/preferences.svelte';
   import { displaySettings } from '$lib/stores/display-settings.svelte';
 
-  let theme = $state(preferences.theme ?? 'midnight-glass');
+  let theme = $state(preferences.theme ?? 'evergreen');
 
   // 'auto' sentinel = follow browser default (`null` in the store);
   // SettingsSelect can't bind to `null` so the UI translates back
@@ -31,10 +31,10 @@
   let timezone = $state<string>(displaySettings.timezone ?? AUTO_TZ);
 
   const themeOptions = [
+    { value: 'evergreen', label: 'Evergreen (forest-green, flat dark) — default' },
     { value: 'midnight-glass', label: 'Midnight Glass (warm-navy, glass panels)' },
     { value: 'default', label: 'Default (Tailwind classic dark)' },
     { value: 'paper-light', label: 'Paper Light (cream, flat)' },
-    { value: 'evergreen', label: 'Evergreen (forest-green, flat dark)' },
   ];
 
   /** Curated IANA zones. Covers Dave (CT), the most common US zones,

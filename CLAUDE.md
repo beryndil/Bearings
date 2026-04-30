@@ -8,14 +8,25 @@
   local SQLite database
 - **License**: MIT (deliberate deviation from the Unlicense used elsewhere —
   per spec)
-- **Status**: Pre-release (0.x.x development). Current: v0.17.x — feature
-  development in progress. Shipped post-v0.10: tag-filter sidebar OR
-  semantics + Finder-click filter (v0.10), token-cost survival kit
-  (v0.12), `bearings todo` CLI (v0.13), themes & skins v1 (v0.14),
-  keyboard shortcuts v1 (v0.15), context-menu phases 14-16 +
-  auto-register Write image artifacts + tool-output linkifier (v0.16),
-  intra-call tool-output streaming + Conversation.svelte split (v0.17).
-  v0.1 closed at v0.1.40; tags landed in v0.2; permission profiles in
+- **Status**: **v1.0.0 (2026-04-29)** — dashboard redesign complete.
+  The v1.0.0 mockup landed across 8 versions (v0.24 → v1.0.0): the
+  forest-green Evergreen theme is the default; the left sidebar is
+  banded into brand / New Session pill / nav rail / tools / system
+  status / user identity; the right inspector is a 4-tab surface
+  (Context / Files / Changes / Metrics); accent cards above chat
+  surface token-cache savings + recovery; a bottom status bar
+  carries version + working_dir + connection chrome; Memories
+  (`/memories`) and Analytics (`/analytics`) are real surfaces
+  backed by `tag_memory` and per-instance aggregates respectively.
+  Plan archive: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
+  Pre-v1 highlights (post-v0.10): tag-filter sidebar OR semantics +
+  Finder-click filter (v0.10), token-cost survival kit (v0.12),
+  `bearings todo` CLI (v0.13), themes & skins v1 (v0.14), keyboard
+  shortcuts v1 (v0.15), context-menu phases 14-16 + auto-register
+  Write image artifacts + tool-output linkifier (v0.16), intra-call
+  tool-output streaming + Conversation.svelte split (v0.17). v0.1
+  closed at v0.1.40; tags landed in v0.2; permission profiles in
   v0.4; checkpoints / templates / vault / paired chats / live todos
   across v0.6 → v0.9.
 - **Repository**: `Beryndil/Bearings` (decided 2026-04-22)

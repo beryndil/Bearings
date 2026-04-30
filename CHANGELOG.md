@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-04-29
+
+**v1.0.0 — dashboard redesign complete.** Bearings exits 0.x with the
+forest-green Evergreen dashboard prescribed by the v1.0.0 mockup
+(session "Theme", `d975cfef…`, 2026-04-29). Phase 7 — the final
+phase of the redesign plan — flips the default theme to evergreen
+and tags the milestone.
+
+Phase 7 changes:
+- `frontend/src/lib/themes/meta-theme-colors.ts` — `DEFAULT_THEME`
+  flipped from `'midnight-glass'` to `'evergreen'`.
+- `frontend/src/app.html` — root `data-theme` attribute, initial
+  `<meta theme-color>` value, and the no-flash boot script's
+  OS-fallback branch all updated to evergreen. Comment header and
+  boot-script comment refreshed; the "private mode falls back to
+  default" assertion now points at evergreen.
+- `frontend/src/lib/components/settings/sections/AppearanceSection.svelte`
+  — picker reorder so evergreen sits at the top of the dropdown
+  with a "default" suffix; the `theme` initial-state fallback used
+  when prefs haven't loaded yet now points at evergreen too.
+- `frontend/src/lib/themes/tokens.css` — header comment refreshed
+  to list evergreen as the active default.
+
+**Existing users keep whatever they last saved.** The localStorage
+preferences cache wins on every reload, so this default-flip only
+affects fresh installs and private-mode tabs that lose their cache
+between sessions. Anyone on midnight-glass who wants to stay there
+sees no change.
+
+### v1.0.0 dashboard redesign — full arc
+
+Eight versions across one development run, paced as honest
+shippable slices instead of one mega-PR. Plan:
+`~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
+| Phase | Version | Shipped |
+|-------|---------|---------|
+| 1     | 0.24.0  | Evergreen palette + treatment file (selectable, not yet default) |
+| 2a    | 0.25.0  | Bottom status bar (extracted from header) |
+| 2b    | 0.26.0  | Accent cards above chat (token cache savings + recovery armed) |
+| 2c    | 0.27.0  | Left sidebar restructure (brand / pill / nav / tools / system status / user identity bands) |
+| 3     | 0.28.0  | Right sidebar 4-tab refactor (Context / Files / Changes / Metrics) |
+| 4     | 0.29.0  | Memories page (real, backed by `tag_memory`) |
+| —     | 0.29.1  | Fix: `/api/tags/memories` route order (was 422'ing as int parse) |
+| 5     | 0.31.0  | Inspector Files & Changes tabs (client-side, derived from tool calls) |
+| 6     | 0.34.0  | Analytics page (KPI tiles + 30-day chart + top tags) |
+| 7     | 1.0.0   | **Default theme → evergreen. v1.0.0 tagged.** |
+
+Project status flips from "pre-release (0.x.x development)" to v1.
+
 ## [0.33.0] - 2026-04-29
 
 Changed: message turn headers now carry an identity icon next to the
