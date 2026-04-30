@@ -68,6 +68,11 @@ packages = ["src/bearings"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# `.research/` holds gitignored clones of external skill/example repos
+# (anthropics_skills, claude-cookbooks, etc.) used as local reference.
+# Their code is not ours and breaks our gates with parse errors and
+# style noise; exclude them from both lint and format passes.
+extend-exclude = [".research"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

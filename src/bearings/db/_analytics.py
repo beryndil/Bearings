@@ -19,9 +19,7 @@ from typing import Any
 import aiosqlite
 
 
-async def get_analytics_summary(
-    conn: aiosqlite.Connection, days: int = 30
-) -> dict[str, Any]:
+async def get_analytics_summary(conn: aiosqlite.Connection, days: int = 30) -> dict[str, Any]:
     """Aggregate every metric the analytics page renders.
 
     Returns a dict with the following keys:
