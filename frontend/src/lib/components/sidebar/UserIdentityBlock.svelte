@@ -34,6 +34,13 @@
   }
 
   let avatarText = $derived(initials(displayName));
+  /** When the user has uploaded an avatar (`/api/preferences/avatar`)
+   * the store carries the cache-busted URL; otherwise we render the
+   * initials circle. Branching on `null` rather than truthiness so a
+   * zero-length string (impossible by construction, but cheap to be
+   * defensive) still falls back to initials instead of rendering a
+   * broken `<img>`. */
+  let avatarUrl = $derived(preferences.avatarUrl);
 </script>
 
 <button
@@ -45,13 +52,22 @@
   data-testid="user-identity-block"
   aria-label="Open settings (signed in as {displayName})"
 >
-  <span
-    class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full
-      bg-emerald-700 text-[10px] font-semibold text-white"
-    aria-hidden="true"
-  >
-    {avatarText}
-  </span>
+  {#if avatarUrl}
+    <img
+      src={avatarUrl}
+      alt=""
+      class="h-7 w-7 shrink-0 rounded-full object-cover"
+      aria-hidden="true"
+    />
+  {:else}
+    <span
+      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full
+        bg-emerald-700 text-[10px] font-semibold text-white"
+      aria-hidden="true"
+    >
+      {avatarText}
+    </span>
+  {/if}
   <span class="min-w-0 flex-1">
     <span class="block truncate text-sm font-medium text-slate-200">{displayName}</span>
     <span class="block truncate text-[10px] text-slate-500">Localhost</span>

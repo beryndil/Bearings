@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-04-29
+
+Added: user avatar in the sidebar identity block. Migration 0035
+adds `avatar_uploaded_at TEXT` to the singleton `preferences` row;
+the bytes themselves live at `<DATA_HOME>/avatar.png` (configurable
+via `storage.avatar_path`) and are normalised to a 512×512 PNG by
+Pillow regardless of the upload format. New endpoints:
+
+* `POST /api/preferences/avatar` — multipart upload. Validates MIME
+  (PNG / JPEG / WebP), enforces a 5 MiB cap streaming, runs the
+  center-crop + resize pipeline, bumps `avatar_uploaded_at`.
+* `DELETE /api/preferences/avatar` — unlinks the file (idempotent),
+  nulls the column.
+* `GET /api/preferences/avatar` — streams the PNG with an ETag keyed
+  on `avatar_uploaded_at`. 404 when unset, 304 on `If-None-Match`.
+
+`PreferencesOut` grew `avatar_uploaded_at` and a derived
+`avatar_url` (the cache-busted `/api/preferences/avatar?v=<ts>`
+path) so the frontend doesn't have to mirror the contract.
+
+Frontend: `UserIdentityBlock.svelte` renders `<img>` when the avatar
+is set and falls back to the initials circle otherwise. The Settings
+→ Profile pane gained an Avatar row with file picker (Upload /
+Replace) plus a Clear button when one is set. The sidebar
+re-renders the moment an upload lands because the store applies the
+fresh `avatar_url` synchronously.
+
+Coverage: `tests/test_preferences_avatar.py` exercises the full
+matrix — happy path with PNG and JPEG inputs (both normalised to
+PNG), MIME / size / undecoded-bytes rejects, GET 404 / ETag
+round-trip / 304 on If-None-Match, DELETE idempotency, and a shape
+check that every preferences GET carries the new keys.
+
+Pillow joins `pyproject.toml` deps (`pillow>=10.0`) and CREDITS.md.
+
 ## [0.29.1] - 2026-04-29
 
 Fix: `GET /api/tags/memories` returned 422 because the route was

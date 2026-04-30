@@ -1,6 +1,6 @@
 [project]
 name = "bearings"
-version = "0.29.1"
+version = "0.30.0"
 description = "Localhost web UI for Claude Code agent sessions."
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,6 +25,7 @@ dependencies = [
     "aiosqlite>=0.20",
     "orjson>=3.9",
     "python-multipart>=0.0.9",
+    "pillow>=12.2.0",
 ]
 
 [project.scripts]

@@ -241,6 +241,19 @@ class AgentCfg(BaseModel):
 
 class StorageCfg(BaseModel):
     db_path: Path = Field(default_factory=lambda: DATA_HOME / "db.sqlite")
+    # Singleton avatar PNG written by `POST /api/preferences/avatar`.
+    # Fixed path under DATA_HOME — Bearings is single-user, so one file
+    # covers the whole feature. Tests redirect this at `tmp_path` so
+    # uploads don't scribble on the developer's real avatar. The file
+    # is normalised to 512×512 PNG by Pillow regardless of the upload
+    # format (PNG / JPEG / WebP), so callers can treat the path as a
+    # static asset and serve it byte-for-byte.
+    avatar_path: Path = Field(default_factory=lambda: DATA_HOME / "avatar.png")
+    # Per-upload byte cap, enforced while reading the multipart body.
+    # 5 MiB is comfortable for a high-res portrait at any reasonable
+    # input compression while keeping accidental "I dropped a 4K
+    # screenshot" cases out of the resize pipeline.
+    avatar_max_size_mb: int = 5
 
 
 class MetricsCfg(BaseModel):

@@ -1,0 +1,25 @@
+-- Avatar bytes for the singleton preferences row (v1).
+--
+-- The image itself lives on disk under `<DATA_HOME>/avatar.png`; the
+-- DB only tracks an "uploaded at" timestamp. Two reasons to keep the
+-- bytes off SQLite:
+--
+--   1. SQLite handles BLOBs fine, but the avatar is consumed by the
+--      browser as a static asset — letting the OS serve a file is
+--      cheaper than reading bytes through aiosqlite per request, and
+--      it lets the existing static-path machinery handle Range/ETag
+--      without us re-implementing it.
+--   2. Backups, dumps, and the migration runner stay text-only.
+--
+-- `avatar_uploaded_at` doubles as the cache-busting key — the API
+-- composes `/api/preferences/avatar?v=<uploaded_at>` so the browser
+-- refreshes when the timestamp changes and otherwise honours its own
+-- cache. NULL means "no avatar set; render initials fallback".
+--
+-- No new columns for filename or content-type: the upload pipeline
+-- normalises every accepted image to a 512×512 PNG (Pillow center
+-- crop + resize), so the on-disk format and dimensions are fixed by
+-- contract. If a future revision wants to preserve the original
+-- format, that's a follow-up migration adding `avatar_mime`.
+
+ALTER TABLE preferences ADD COLUMN avatar_uploaded_at TEXT;

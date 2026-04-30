@@ -23,6 +23,7 @@ Thanks to everyone who maintains them.
 - [prometheus-client](https://github.com/prometheus/client_python) (`prometheus-client`)
 - [tomli-w](https://github.com/hukkin/tomli-w) (`tomli-w`)
 - [python-multipart](https://github.com/Kludex/python-multipart) (`python-multipart`)
+- [Pillow](https://python-pillow.org) (`pillow`) — avatar image normalisation
 
 ## Frontend (shipped in the bundle)
 

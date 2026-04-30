@@ -41,6 +41,8 @@ type CachedPrefs = {
   default_model: string | null;
   default_working_dir: string | null;
   notify_on_complete: boolean;
+  avatar_uploaded_at: string | null;
+  avatar_url: string | null;
   updated_at: string;
 };
 
@@ -50,6 +52,8 @@ const EMPTY_PREFS: CachedPrefs = {
   default_model: null,
   default_working_dir: null,
   notify_on_complete: false,
+  avatar_uploaded_at: null,
+  avatar_url: null,
   updated_at: '',
 };
 
@@ -112,7 +116,8 @@ function isSeedState(prefs: api.Preferences): boolean {
     prefs.theme === null &&
     prefs.default_model === null &&
     prefs.default_working_dir === null &&
-    prefs.notify_on_complete === false;
+    prefs.notify_on_complete === false &&
+    prefs.avatar_uploaded_at === null;
   // Seed row is created with `datetime('now')` (no `T`); every
   // application-driven write uses `_now()` which is `datetime.now(UTC)
   // .isoformat()` (always contains `T`). A timestamp without `T` is
@@ -169,6 +174,14 @@ class PreferencesStore {
   get notifyOnComplete(): boolean {
     return this.row.notify_on_complete;
   }
+  /** Cache-busted URL for the avatar PNG, or `null` when no avatar
+   * is set. Components branch on `null` to fall back to the initials
+   * renderer. The URL changes on every successful upload (the `?v=`
+   * query carries `avatar_uploaded_at`), so a refresh after re-upload
+   * bypasses the browser cache without us touching cache-control. */
+  get avatarUrl(): string | null {
+    return this.row.avatar_url;
+  }
 
   /** Apply a server response (or cached snapshot) to the in-memory
    * state. Pulled out so `init` and `update` share the same shape-
@@ -180,10 +193,30 @@ class PreferencesStore {
       default_model: prefs.default_model,
       default_working_dir: prefs.default_working_dir,
       notify_on_complete: prefs.notify_on_complete,
+      avatar_uploaded_at: prefs.avatar_uploaded_at,
+      avatar_url: prefs.avatar_url,
       updated_at: prefs.updated_at,
     };
     writeCache(this.row);
     this.applyTheme();
+  }
+
+  /** POST a new avatar image. The store applies the response (which
+   * carries the fresh `avatar_url`) so components rerender against
+   * the new cache-busted URL the moment the upload lands. Errors
+   * surface to the caller — the Settings modal renders them in the
+   * row's status pill. */
+  async uploadAvatar(file: File, fetchImpl: typeof fetch = fetch): Promise<void> {
+    const fresh = await api.uploadAvatar(file, fetchImpl);
+    this.apply(fresh);
+  }
+
+  /** DELETE the avatar. Idempotent server-side; the store applies the
+   * response so the in-memory `avatarUrl` flips to `null` and the
+   * sidebar falls back to initials immediately. */
+  async clearAvatar(fetchImpl: typeof fetch = fetch): Promise<void> {
+    const fresh = await api.deleteAvatar(fetchImpl);
+    this.apply(fresh);
   }
 
   /** Reflect the active theme on `<html data-theme="...">` and update

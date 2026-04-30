@@ -26,7 +26,7 @@ Design notes:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 class PreferencesOut(BaseModel):
@@ -38,6 +38,12 @@ class PreferencesOut(BaseModel):
     and falls back to its built-in defaults (literal 'user' for the
     role label, the configured `data-theme`, the global default model
     string, etc.).
+
+    `avatar_uploaded_at` is the timestamp of the last successful
+    avatar upload (migration 0035). The derived `avatar_url` field
+    composes the cache-busted URL so the frontend doesn't have to
+    duplicate the contract — when it's `None`, the sidebar falls back
+    to the initials avatar.
     """
 
     display_name: str | None = None
@@ -45,7 +51,22 @@ class PreferencesOut(BaseModel):
     default_model: str | None = None
     default_working_dir: str | None = None
     notify_on_complete: bool = False
+    avatar_uploaded_at: str | None = None
     updated_at: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def avatar_url(self) -> str | None:
+        """Cache-busted URL for the avatar image, or None if unset.
+
+        Embedding `avatar_uploaded_at` as the `?v=` query string means
+        the browser refreshes the image whenever a new upload lands
+        (the URL changes) and otherwise honours its own caching. The
+        path matches the `GET /api/preferences/avatar` route.
+        """
+        if not self.avatar_uploaded_at:
+            return None
+        return f"/api/preferences/avatar?v={self.avatar_uploaded_at}"
 
 
 class PreferencesPatch(BaseModel):

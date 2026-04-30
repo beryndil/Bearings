@@ -29,7 +29,8 @@ import aiosqlite
 from bearings.db._common import _now
 
 _PREFS_COLS = (
-    "id, display_name, theme, default_model, default_working_dir, notify_on_complete, updated_at"
+    "id, display_name, theme, default_model, default_working_dir, "
+    "notify_on_complete, avatar_uploaded_at, updated_at"
 )
 
 
@@ -79,6 +80,7 @@ async def update_preferences(conn: aiosqlite.Connection, **fields: Any) -> dict[
         "default_model",
         "default_working_dir",
         "notify_on_complete",
+        "avatar_uploaded_at",
     }
     unknown = set(fields) - allowed
     if unknown:

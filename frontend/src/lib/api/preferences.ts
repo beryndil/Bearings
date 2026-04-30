@@ -10,6 +10,16 @@ export type Preferences = {
   default_model: string | null;
   default_working_dir: string | null;
   notify_on_complete: boolean;
+  /** ISO-8601 timestamp of the last successful avatar upload, or
+   * `null` when no avatar is set. The cache-busted URL is in
+   * `avatar_url`; this raw timestamp is exposed for components that
+   * need to reason about freshness directly (e.g. tests). */
+  avatar_uploaded_at: string | null;
+  /** Cache-busted URL for the avatar PNG, or `null` when no avatar
+   * is set. The backend composes `/api/preferences/avatar?v=<ts>`
+   * from `avatar_uploaded_at` so the frontend doesn't have to mirror
+   * the contract. NULL means "render initials fallback." */
+  avatar_url: string | null;
   updated_at: string;
 };
 
@@ -42,5 +52,27 @@ export function patchPreferences(
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+  });
+}
+
+/** Upload a new avatar image. The backend re-encodes whatever PNG /
+ * JPEG / WebP we send into a 512×512 PNG, so the caller doesn't need
+ * to pre-process anything. Returns the updated preferences row whose
+ * `avatar_url` reflects the new cache-busted path. */
+export function uploadAvatar(file: File, fetchImpl: typeof fetch = fetch): Promise<Preferences> {
+  const form = new FormData();
+  form.append('file', file);
+  return jsonFetch<Preferences>(fetchImpl, '/api/preferences/avatar', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+/** Clear the avatar. Idempotent on the server side — calling it twice
+ * is the same as calling it once; the row's `avatar_url` is `null`
+ * either way. */
+export function deleteAvatar(fetchImpl: typeof fetch = fetch): Promise<Preferences> {
+  return jsonFetch<Preferences>(fetchImpl, '/api/preferences/avatar', {
+    method: 'DELETE',
   });
 }
