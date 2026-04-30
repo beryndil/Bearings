@@ -39,11 +39,40 @@ MOCK_MSG_ID = "mock-msg"
 MOCK_TOOL_MSG_ID = "mock-tool-msg"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_system_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Block every test from reading the dev's real GECOS / busctl
+    output / `~/.face`. Tests that exercise the resolver pin their own
+    monkeypatches AFTER this autouse fixture runs, which take
+    precedence. The boot-hydration tests pre-load the same name with a
+    fresh patch each time, so this fixture's "empty identity" default
+    never reaches them.
+
+    Without this guard, every test that builds its own Settings (the
+    routes_shell / routes_config / auth / profiles suites) would
+    trigger boot hydration, and a few of them assert `subprocess.Popen`
+    isn't called — boot hydration's busctl probe trips that assertion."""
+    from bearings import system_identity
+
+    monkeypatch.setattr(
+        "bearings.system_identity.read_system_identity",
+        lambda: system_identity.SystemIdentity(display_name=None, avatar_path=None),
+    )
+
+
 @pytest.fixture
 def tmp_settings(tmp_path: Path) -> Iterator[Settings]:
     cfg = Settings(
         server=ServerCfg(allowed_origins=[TEST_ORIGIN]),
-        storage=StorageCfg(db_path=tmp_path / "db.sqlite"),
+        storage=StorageCfg(
+            db_path=tmp_path / "db.sqlite",
+            avatar_path=tmp_path / "avatar.png",
+            # Off by default in tests so the dev's real GECOS /
+            # AccountsService / ~/.face values don't leak into the
+            # seed-state row. Tests that exercise hydration flip the
+            # flag back on explicitly via tmp_settings.storage.
+            system_identity_hydrate=False,
+        ),
         # Redirect uploads at the tmp dir so routes_uploads tests don't
         # scribble into `~/.local/share/bearings/uploads`. Isolated
         # subdir keeps it clean-cut from the sqlite files.

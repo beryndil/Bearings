@@ -254,6 +254,12 @@ class StorageCfg(BaseModel):
     # input compression while keeping accidental "I dropped a 4K
     # screenshot" cases out of the resize pipeline.
     avatar_max_size_mb: int = 5
+    # Auto-hydrate display_name + avatar from the host OS at boot when
+    # the prefs row is still seed state. Off in test fixtures so the
+    # dev's real GECOS / AccountsService values don't leak into test
+    # assertions; on by default in production for the "fresh install
+    # just works" UX. Manual edits via Settings are never overwritten.
+    system_identity_hydrate: bool = True
 
 
 class MetricsCfg(BaseModel):

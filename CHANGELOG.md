@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0] - 2026-04-29
+
+Added: system-identity hydration. The preferences row now seeds
+display_name + avatar from the host OS on a fresh install, and a
+manual "Sync now" button in Settings → Profile triggers a refresh
+on demand. Sources tried in order:
+
+* **Display name** — GECOS field 0 → AccountsService `RealName` via
+  `busctl` → `os.getlogin()` / `$USER`. First non-empty wins.
+* **Avatar** — `/var/lib/AccountsService/icons/$USER` (world-readable
+  on every distro that ships AccountsService) → `~/.face` (XDG
+  fallback honoured by GDM and many greeters). The bytes go through
+  the same Pillow center-crop + 512×512 PNG pipeline as a user
+  upload, so the boot path can't drift in resize quality.
+
+Boot hydration only fires when the row is at seed state — manual
+edits via Settings always win and never get overwritten on
+subsequent boots. The `POST /api/preferences/sync_from_system` route
+is the explicit "I want a refresh" trigger and overwrites both
+fields.
+
+`storage.system_identity_hydrate` (default `true`) gates the boot
+path; set it to `false` in `~/.config/bearings/config.toml` to opt
+out of the auto-sync entirely.
+
+Coverage: `tests/test_system_identity.py` — resolver priority
+(GECOS over dbus over login), avatar source priority
+(AccountsService over `~/.face`), missing-source fallbacks, sync
+route apply / overwrite / no-op, boot hydration on seed state, and
+boot leaves manually-edited rows alone.
+
 ## [0.30.0] - 2026-04-29
 
 Added: user avatar in the sidebar identity block. Migration 0035

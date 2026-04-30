@@ -76,3 +76,14 @@ export function deleteAvatar(fetchImpl: typeof fetch = fetch): Promise<Preferenc
     method: 'DELETE',
   });
 }
+
+/** Pull display_name + avatar from the host OS (GECOS / AccountsService
+ * / `~/.face`) and apply them to the preferences row. The boot path
+ * runs the same code automatically on a fresh install when the row
+ * is still seed-state; this endpoint is the manual "refresh now"
+ * trigger wired to the Settings → Profile button. */
+export function syncFromSystem(fetchImpl: typeof fetch = fetch): Promise<Preferences> {
+  return jsonFetch<Preferences>(fetchImpl, '/api/preferences/sync_from_system', {
+    method: 'POST',
+  });
+}

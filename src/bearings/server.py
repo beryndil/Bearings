@@ -168,10 +168,51 @@ class _BundleStaticFiles(StaticFiles):
         return True
 
 
+async def _hydrate_identity_on_seed(app: FastAPI) -> None:
+    """Pull display_name + avatar from the host OS when the prefs row
+    is still at its migration-time defaults. No-op once the user has
+    set anything — manual values always win.
+
+    Failures are swallowed: a fresh install on a system without
+    AccountsService / GECOS / `~/.face` should boot the server, not
+    fail-loud on an enrichment that's nice-to-have."""
+    settings: Settings = app.state.settings
+    if not settings.storage.system_identity_hydrate:
+        return
+    try:
+        from pathlib import Path
+
+        from bearings.api.routes_preferences_avatar import apply_system_identity
+        from bearings.db import store
+        from bearings.system_identity import read_system_identity
+
+        row = await store.get_preferences(app.state.db)
+        if row.get("display_name") or row.get("avatar_uploaded_at"):
+            return  # user has touched the row; never auto-overwrite
+        identity = read_system_identity()
+        if identity.display_name is None and identity.avatar_path is None:
+            return
+        await apply_system_identity(
+            app.state.db,
+            Path(app.state.settings.storage.avatar_path),
+            identity,
+            overwrite_name=False,
+        )
+    except Exception:  # pragma: no cover — best-effort enrichment
+        log.exception("system identity hydration failed; continuing")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     app.state.db = await init_db(settings.storage.db_path)
+    # Hydrate display_name + avatar from the host OS on a fresh install
+    # (seed-state preferences row). Manual edits via Settings always
+    # win — `apply_system_identity` skips fields the user has touched.
+    # Routed through the avatar route's helper so the boot path uses
+    # the same Pillow normalisation as a user upload, not a second
+    # code path that could drift in resize quality / output format.
+    await _hydrate_identity_on_seed(app)
     active: set[WebSocket] = set()
     app.state.active_ws = active
     # Server-wide sessions-list pubsub. Every mutation to a session row
@@ -294,6 +335,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_pending.router, prefix="/api")
     app.include_router(routes_preferences.router, prefix="/api")
     app.include_router(routes_preferences_avatar.router, prefix="/api")
+    app.include_router(routes_preferences_avatar.sync_router, prefix="/api")
     app.include_router(routes_vault.router, prefix="/api")
     app.include_router(routes_diag.router, prefix="/api")
     app.include_router(routes_metrics.router)

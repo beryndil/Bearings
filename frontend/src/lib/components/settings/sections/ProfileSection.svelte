@@ -20,6 +20,7 @@
 
   let displayName = $state(preferences.displayName ?? '');
   let avatarState = $state<SaveState>({ kind: 'idle' });
+  let syncState = $state<SaveState>({ kind: 'idle' });
   let fileInput: HTMLInputElement | undefined = $state();
   let avatarUrl = $derived(preferences.avatarUrl);
 
@@ -62,6 +63,23 @@
       avatarState = { kind: 'saved' };
     } catch (err) {
       avatarState = {
+        kind: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  async function onSyncFromSystem(): Promise<void> {
+    syncState = { kind: 'saving' };
+    try {
+      await preferences.syncFromSystem();
+      // Re-seed the local mirror so the input reflects the synced
+      // value immediately (the autosave handler doesn't rebind on
+      // store changes — see the comment at the top of the file).
+      displayName = preferences.displayName ?? '';
+      syncState = { kind: 'saved' };
+    } catch (err) {
+      syncState = {
         kind: 'error',
         message: err instanceof Error ? err.message : String(err),
       };
@@ -134,5 +152,26 @@
       maxlength={64}
       onChange={save}
     />
+    <SettingsRow
+      title="Sync from system"
+      description="Pull display name (GECOS / AccountsService) and avatar
+        (/var/lib/AccountsService/icons/$USER or ~/.face) from the host
+        OS. Overwrites both fields. Fresh installs do this automatically;
+        use this to refresh after changing your system identity."
+      state={syncState}
+    >
+      {#snippet control()}
+        <button
+          type="button"
+          class="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs
+            font-medium text-slate-200 hover:border-slate-600 hover:bg-slate-700
+            focus:outline-none focus:ring-2 focus:ring-sky-500"
+          onclick={onSyncFromSystem}
+          data-testid="sync-from-system-button"
+        >
+          Sync now
+        </button>
+      {/snippet}
+    </SettingsRow>
   </SettingsCard>
 </div>

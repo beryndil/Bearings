@@ -219,6 +219,16 @@ class PreferencesStore {
     this.apply(fresh);
   }
 
+  /** Manual "refresh from system" trigger. The server reads GECOS /
+   * AccountsService / `~/.face` and writes whatever it finds into
+   * the prefs row. The store applies the response so display_name
+   * + avatarUrl update synchronously across the UI. No-ops cleanly
+   * (returns the unchanged row) when no system source has data. */
+  async syncFromSystem(fetchImpl: typeof fetch = fetch): Promise<void> {
+    const fresh = await api.syncFromSystem(fetchImpl);
+    this.apply(fresh);
+  }
+
   /** Reflect the active theme on `<html data-theme="...">` and update
    * `<meta name="theme-color">` so mobile browser chrome tracks the
    * picked theme without waiting for a reload. The no-flash boot

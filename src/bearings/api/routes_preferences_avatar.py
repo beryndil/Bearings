@@ -35,9 +35,20 @@ from PIL import Image, UnidentifiedImageError
 from bearings.api.auth import require_auth
 from bearings.api.models import PreferencesOut
 from bearings.db import store
+from bearings.system_identity import SystemIdentity, read_system_identity
 
 router = APIRouter(
     prefix="/preferences/avatar",
+    tags=["preferences"],
+    dependencies=[Depends(require_auth)],
+)
+
+# Sister router for actions that touch the prefs row but aren't
+# avatar-shaped (e.g. system-identity sync). Same auth dependency,
+# distinct prefix so the path lands at `/api/preferences/<action>`
+# rather than nested under `/avatar`.
+sync_router = APIRouter(
+    prefix="/preferences",
     tags=["preferences"],
     dependencies=[Depends(require_auth)],
 )
@@ -170,6 +181,73 @@ async def delete_avatar(request: Request) -> PreferencesOut:
     cfg = request.app.state.settings.storage
     Path(cfg.avatar_path).unlink(missing_ok=True)
     row = await store.update_preferences(request.app.state.db, avatar_uploaded_at=None)
+    return PreferencesOut(**_strip_id(row))
+
+
+async def apply_system_identity(
+    db: Any,
+    avatar_path: Path,
+    identity: SystemIdentity,
+    *,
+    overwrite_name: bool,
+) -> dict[str, Any]:
+    """Write `identity` into the preferences row. Shared by the boot
+    hydrator and the manual sync route so both paths normalise an
+    avatar candidate through the exact same Pillow pipeline as a user
+    upload — no second code path that could drift in resize quality
+    or output format.
+
+    `overwrite_name` lets the caller pick the "always replace" vs
+    "only when unset" semantics. The boot hydrator passes `False` so a
+    user who's already typed a display name never sees it clobbered;
+    the manual sync route passes `True` because the user explicitly
+    asked for a refresh.
+    """
+    fields: dict[str, Any] = {}
+    if identity.display_name and overwrite_name:
+        fields["display_name"] = identity.display_name
+    elif identity.display_name:
+        current = await store.get_preferences(db)
+        if not current.get("display_name"):
+            fields["display_name"] = identity.display_name
+
+    if identity.avatar_path is not None:
+        try:
+            raw = identity.avatar_path.read_bytes()
+        except OSError:
+            raw = b""
+        if raw:
+            try:
+                _normalise_to_png(raw, avatar_path)
+                fields["avatar_uploaded_at"] = _now_iso()
+            except HTTPException:
+                # Source file isn't a decodable image — skip the
+                # avatar leg, leave the row's existing value alone.
+                pass
+
+    if not fields:
+        return await store.get_preferences(db)
+    return await store.update_preferences(db, **fields)
+
+
+@sync_router.post("/sync_from_system", response_model=PreferencesOut)
+async def sync_from_system(request: Request) -> PreferencesOut:
+    """Pull display name + avatar from the host OS and apply them.
+    Manual trigger from Settings → Profile. Always overwrites the
+    name (the user just clicked "sync"); always re-runs the avatar
+    pipeline so a system change since the last upload lands.
+
+    No-ops cleanly when neither source is available — the response
+    is the unchanged row, not an error.
+    """
+    identity = read_system_identity()
+    cfg = request.app.state.settings.storage
+    row = await apply_system_identity(
+        request.app.state.db,
+        Path(cfg.avatar_path),
+        identity,
+        overwrite_name=True,
+    )
     return PreferencesOut(**_strip_id(row))
 
 
