@@ -40,6 +40,47 @@ check that every preferences GET carries the new keys.
 
 Pillow joins `pyproject.toml` deps (`pillow>=10.0`) and CREDITS.md.
 
+## [0.30.0] - 2026-04-29
+
+Inspector Files & Changes tabs — Phase 5 of the v1.0.0 dashboard
+redesign. Both tabs were placeholders since Phase 3; this ships
+real implementations derived **client-side** from the existing
+`conversation.toolCalls` stream — no new backend endpoints, no
+migrations, no per-session file-tracking schema.
+
+**Files tab.** Lists every distinct path the agent touched in
+this session, derived from tool calls with extractable file
+paths (Read/Write/Edit `file_path`, NotebookEdit `notebook_path`,
+Grep `path` when scoped, plus a defensive `input.file_path ?? .path`
+fallback for MCP/custom tools). Each path appears once with: total
+touch count (`×N` when >1), the most-recent action verb, and the
+time of the last touch. Sorted most-recent first. Verified live:
+~101 file rows on this session.
+
+**Changes tab.** Lists every WRITE-side tool call —
+Edit / Write / NotebookEdit. Each row shows path + action verb
+(Created/Edited/Notebook-edited, color-coded), single-line
+excerpt (first line of `new_string` / `content` / `new_source`),
+and timestamp. Verified live: ~89 change rows on this session.
+
+Read/Grep/Glob deliberately excluded from Changes — that tab is
+about what Claude *changed*, not what it looked at; Files covers
+the looking. **No actual diff render** — Bearings doesn't store
+pre-edit content for Write calls (the file existed before; Claude
+saw whatever was on disk at write time). Edit calls do carry
+old_string + new_string in the input, so an inline diff IS
+technically possible there, but shipping it for Edit-only with a
+silent gap on Write would be misleading. The honest first cut is
+"what changed" + a single-line sample; richer diff UI lands in a
+follow-up phase if Dave wants it.
+
+The mockup's working_dir TREE is also deferred — needs a
+directory-walker endpoint and a collapsible-tree component, both
+honest-sized projects beyond Phase 5's scope. The "Files Touched"
+framing answers the more useful per-session question anyway.
+
+Plan: `~/.claude/plans/evergreen-redesigning-dashboard.md`.
+
 ## [0.29.1] - 2026-04-29
 
 Fix: `GET /api/tags/memories` returned 422 because the route was
