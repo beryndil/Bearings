@@ -638,11 +638,9 @@ export function suggestSessionTitles(
   sessionId: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<SuggestTitlesResult> {
-  return jsonFetch<SuggestTitlesResult>(
-    fetchImpl,
-    `/api/sessions/${sessionId}/suggest_titles`,
-    { method: 'POST' }
-  );
+  return jsonFetch<SuggestTitlesResult>(fetchImpl, `/api/sessions/${sessionId}/suggest_titles`, {
+    method: 'POST',
+  });
 }
 
 /** L4.3.1 — `＋ SPAWN` button. Create a fresh `chat`-kind session
