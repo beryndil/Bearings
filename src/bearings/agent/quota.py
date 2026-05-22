@@ -452,6 +452,25 @@ class QuotaPoller:
             await self.refresh()
 
 
+def build_noop_fetcher() -> QuotaFetcher:
+    """Production-default fetcher: always returns an empty snapshot.
+
+    Used by :func:`bearings.cli.serve._run` when no real upstream
+    ``/usage`` API endpoint is configured. The empty snapshot (both
+    bucket pcts ``None``) causes the quota guard to fail open — the
+    spec §4 correct behaviour when upstream usage data is unavailable.
+
+    Distinct from :func:`make_static_fetcher` (test helper returning a
+    caller-provided snapshot) so production and test factories are
+    grep-distinct and independently evolvable.
+    """
+
+    async def _fetch() -> QuotaSnapshot:
+        return empty_snapshot()
+
+    return _fetch
+
+
 def make_static_fetcher(snapshot: QuotaSnapshot) -> QuotaFetcher:
     """Test helper: a fetcher that always returns the supplied snapshot.
 
@@ -494,6 +513,7 @@ __all__ = [
     "QuotaPoller",
     "QuotaSnapshot",
     "apply_quota_guard",
+    "build_noop_fetcher",
     "empty_snapshot",
     "load_history",
     "load_latest",

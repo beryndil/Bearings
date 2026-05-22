@@ -45,7 +45,7 @@
     QUOTA_BAR_YELLOW_PCT,
     USAGE_HEADROOM_WINDOW_DAYS,
   } from "../../config";
-  import { getQuotaHistory, type QuotaSnapshot } from "../../api/quota";
+  import { getQuotaHistory, refreshQuota, type QuotaSnapshot } from "../../api/quota";
   import {
     getOverrideRates,
     getUsageByModel,
@@ -69,6 +69,7 @@
     fetchHistory?: typeof getQuotaHistory;
     fetchByModel?: typeof getUsageByModel;
     fetchOverrideRates?: typeof getOverrideRates;
+    doRefreshQuota?: typeof refreshQuota;
   }
 
   // ``session`` is destructured under an underscore alias because the
@@ -81,6 +82,7 @@
     fetchHistory = getQuotaHistory,
     fetchByModel = getUsageByModel,
     fetchOverrideRates = getOverrideRates,
+    doRefreshQuota = refreshQuota,
   }: Props = $props();
 
   type LoadState = "idle" | "loading" | "ready" | "error";
@@ -89,6 +91,7 @@
   let byModel: UsageByModelRow[] = $state([]);
   let overrideRates: OverrideRateOut[] = $state([]);
   let loadState: LoadState = $state("idle");
+  let refreshing: boolean = $state(false);
 
   let activeAbort: AbortController | null = null;
 
@@ -130,6 +133,33 @@
         }
         loadState = "error";
         void error;
+      });
+  }
+
+  // ----- Quota refresh -------------------------------------------------
+
+  /**
+   * Force an immediate quota poll (spec §9 ``POST /api/quota/refresh``)
+   * then reload all usage data so the headroom chart reflects the new
+   * snapshot. A no-op while a refresh is already in flight.
+   */
+  function handleRefresh(): void {
+    if (refreshing) {
+      return;
+    }
+    refreshing = true;
+    doRefreshQuota()
+      .then(() => {
+        loadAll();
+      })
+      .catch(() => {
+        // Swallow — the poller may not be configured (503) or the
+        // upstream may be transiently unreachable (502). loadAll()
+        // still runs to reflect any snapshot the poller already held.
+        loadAll();
+      })
+      .finally(() => {
+        refreshing = false;
       });
   }
 
@@ -330,9 +360,19 @@
 </script>
 
 <section class="inspector-usage flex flex-col gap-4" data-testid="inspector-usage">
-  <h3 class="text-xs font-semibold uppercase tracking-wider text-fg-muted">
-    {INSPECTOR_STRINGS.usageHeading}
-  </h3>
+  <div class="flex items-center justify-between">
+    <h3 class="text-xs font-semibold uppercase tracking-wider text-fg-muted">
+      {INSPECTOR_STRINGS.usageHeading}
+    </h3>
+    <button
+      class="inspector-usage__refresh-btn text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+      data-testid="inspector-usage-refresh-quota"
+      disabled={refreshing}
+      onclick={handleRefresh}
+    >
+      {refreshing ? INSPECTOR_STRINGS.usageRefreshing : INSPECTOR_STRINGS.usageRefreshButton}
+    </button>
+  </div>
 
   {#if loadState === "loading" || loadState === "idle"}
     <p class="text-fg-muted" data-testid="inspector-usage-loading">

@@ -13,6 +13,24 @@
 
 // ---- API endpoints ---------------------------------------------------------
 
+// ---- Session-list pagination (PERF-BUG-001 + PERF-BUG-005) ---------------
+
+/**
+ * Default page size for ``GET /api/sessions`` — mirrors
+ * :data:`bearings.config.constants.SESSIONS_DEFAULT_PAGE_SIZE`.
+ * Keep in sync with the backend; drift is caught by the type checker
+ * the first time the backend rejects an out-of-range ``limit``.
+ */
+export const SESSIONS_DEFAULT_PAGE_SIZE = 100;
+
+/**
+ * Maximum page size for ``GET /api/sessions`` — mirrors
+ * :data:`bearings.config.constants.SESSIONS_MAX_PAGE_SIZE`.
+ */
+export const SESSIONS_MAX_PAGE_SIZE = 500;
+
+// ---- API endpoints ---------------------------------------------------------
+
 /** Base path for FastAPI routes; vite.config proxies this to port 8788 in dev. */
 export const API_BASE = "/api";
 
@@ -308,6 +326,14 @@ export const API_QUOTA_CURRENT_ENDPOINT = `${API_BASE}/quota/current`;
  * :func:`bearings.web.routes.quota.get_history`).
  */
 export const API_QUOTA_HISTORY_ENDPOINT = `${API_BASE}/quota/history`;
+
+/**
+ * ``POST /api/quota/refresh`` — force an immediate poll outside the
+ * regular cadence (spec §9 "Force-refresh from /usage"). Returns the
+ * freshly-recorded :interface:`QuotaSnapshot`; 503 when the poller is
+ * not configured; 502 when the upstream poll fails.
+ */
+export const API_QUOTA_REFRESH_ENDPOINT = `${API_BASE}/quota/refresh`;
 
 /**
  * ``GET /api/usage/by_model?period=week`` — InspectorUsage by-model
@@ -995,6 +1021,8 @@ export const SIDEBAR_STRINGS = {
   templatesButtonLabel: "Templates…",
   /** WCAG 2.5.3: accessible name must contain the visible label "Templates…". */
   templatesButtonAriaLabel: "Templates… — open picker",
+  /** Pagination (PERF-BUG-001 + PERF-BUG-005) — load-more indicator. */
+  loadingMoreSessions: "Loading more…",
 } as const;
 
 /**
@@ -1811,6 +1839,8 @@ export const INSPECTOR_STRINGS = {
   // chart, by-model table, advisor-effectiveness widget, rules-to-
   // review list.
   usageHeading: "Usage",
+  usageRefreshButton: "Refresh quota",
+  usageRefreshing: "Refreshing…",
   usageLoading: "Loading usage data…",
   usageError: "Couldn't load usage data.",
   usageHeadroomHeading: "Headroom remaining",
@@ -1966,6 +1996,8 @@ export const NEW_SESSION_STRINGS = {
   quotaSonnetLabel: "sonnet",
   quotaUnavailable: "Quota data unavailable",
   quotaResetTooltipPrefix: "Resets at",
+  quotaRefreshButton: "Refresh quota",
+  quotaRefreshing: "Refreshing…",
   downgradeBannerPrefix: "Routing downgraded to",
   downgradeBannerOverallSuffixTemplate: "(overall quota at {pct}%)",
   downgradeBannerSonnetSuffixTemplate: "(sonnet quota at {pct}%)",

@@ -63,7 +63,10 @@
     type SessionKind,
   } from "../../config";
   import { previewRouting as previewRoutingDefault, type RoutingPreview } from "../../api/routing";
-  import { getCurrentQuotaSafe as getCurrentQuotaDefault } from "../../api/quota";
+  import {
+    getCurrentQuotaSafe as getCurrentQuotaDefault,
+    refreshQuota as refreshQuotaDefault,
+  } from "../../api/quota";
   import { listTemplates, type TemplateOut } from "../../api/templates";
   import QuotaBars, { type QuotaBarsSnapshot } from "./QuotaBars.svelte";
   import RoutingPreviewLine, { type RoutingPreviewState } from "./RoutingPreview.svelte";
@@ -120,6 +123,7 @@
      */
     previewRouting?: typeof previewRoutingDefault;
     getCurrentQuota?: typeof getCurrentQuotaDefault;
+    doRefreshQuota?: typeof refreshQuotaDefault;
     debounceMs?: number;
     /**
      * Preselected executor model injected by the host (item 3.2).
@@ -137,6 +141,7 @@
     onCancel = () => {},
     previewRouting = previewRoutingDefault,
     getCurrentQuota = getCurrentQuotaDefault,
+    doRefreshQuota = refreshQuotaDefault,
     debounceMs = ROUTING_PREVIEW_DEBOUNCE_MS,
     initialExecutor = EXECUTOR_MODEL_SONNET,
   }: Props = $props();
@@ -214,6 +219,7 @@
   let previewLoading = $state(false);
   let previewError = $state(false);
   let quota = $state<QuotaBarsSnapshot | null>(null);
+  let quotaRefreshing = $state(false);
 
   // ---- Debounce wiring ----------------------------------------------------
 
@@ -358,6 +364,37 @@
         sonnetResetsAt: snapshot.sonnet_resets_at,
       };
     }
+  }
+
+  // ---- Quota refresh -----------------------------------------------------
+
+  /**
+   * Force an immediate quota poll then re-hydrate the QuotaBars snapshot.
+   * Spec §9 ``POST /api/quota/refresh``; button wired in the quota-bars
+   * section below the routing fieldset (rt-05 fix, feature-3).
+   */
+  function handleRefreshQuota(): void {
+    if (quotaRefreshing) {
+      return;
+    }
+    quotaRefreshing = true;
+    doRefreshQuota()
+      .then((snapshot) => {
+        if (snapshot !== null) {
+          quota = {
+            overallUsedPct: snapshot.overall_used_pct,
+            sonnetUsedPct: snapshot.sonnet_used_pct,
+            overallResetsAt: snapshot.overall_resets_at,
+            sonnetResetsAt: snapshot.sonnet_resets_at,
+          };
+        }
+      })
+      .catch(() => {
+        // Swallow 502/503 — poller not configured or upstream transient.
+      })
+      .finally(() => {
+        quotaRefreshing = false;
+      });
   }
 
   // ---- Selector handlers (mark as overridden) ----------------------------
@@ -621,7 +658,19 @@
       <RoutingPreviewLine state={previewState} />
     </fieldset>
 
-    <QuotaBars snapshot={quota} />
+    <div class="new-session-form__quota-row">
+      <QuotaBars snapshot={quota} />
+      <button
+        class="new-session-form__quota-refresh text-xs text-fg-muted hover:text-fg disabled:opacity-50"
+        data-testid="new-session-quota-refresh"
+        disabled={quotaRefreshing}
+        onclick={handleRefreshQuota}
+      >
+        {quotaRefreshing
+          ? NEW_SESSION_STRINGS.quotaRefreshing
+          : NEW_SESSION_STRINGS.quotaRefreshButton}
+      </button>
+    </div>
 
     {#if banner !== null}
       <RecostDialog

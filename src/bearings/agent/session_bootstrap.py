@@ -12,14 +12,17 @@ session_instructions / max_budget_usd / routing decision, builds the
 SDK MCP server with closure-captured deps, and composes the full
 :class:`bearings.agent.options.OptionsKwargs`.
 
-Per sign-off Q6 (2026-05-01) the routing decision is read verbatim
-from the session row's stored decision projection — the routing
-evaluator runs once at session-create (``agent/session_assembly.py``)
-and is not re-run per turn. Today the session row stores only
-``model``; the full RoutingDecision is reconstructed defensively from
-the row's known columns + the constants-module defaults so the worker
-can run on rows created before the decision-projection columns
-landed.
+Per sign-off Q6 (2026-05-01) the routing decision is reconstructed at
+bootstrap time. The session row stores the executor/advisor/effort
+shape (``model``, ``routing_advisor_model``, ``routing_advisor_max_uses``,
+``routing_effort_level``); the rule walker runs with an empty first-
+message to derive ``source`` / ``reason`` / ``matched_rule_id`` rather
+than hardcoding the literal "session <sid> bootstrap" placeholder that
+caused every v0.18.0-era assistant message to record
+``routing_source='default'`` (rt-15 fix). An empty message causes
+tag-rule matchers (regex/keyword/length) to fall through; the seeded
+always-fallback system rule fires, yielding ``source='system_rule'``
+and ``matched_rule_id=7`` for the typical case.
 """
 
 from __future__ import annotations
@@ -42,7 +45,8 @@ from bearings.agent.bearings_mcp import (
 from bearings.agent.options import (
     compose_session_options,
 )
-from bearings.agent.routing import RoutingDecision
+from bearings.agent.quota import load_latest
+from bearings.agent.routing import RoutingDecision, evaluate
 from bearings.agent.runner import SessionRunner, SessionSetup, SessionSetupFn
 from bearings.agent.sdk_session_id import bearings_to_sdk_uuid
 from bearings.agent.session import AgentSession, PermissionProfile, SessionConfig
@@ -56,8 +60,10 @@ from bearings.config.constants import (
     DEFAULT_TEMPLATE_PERMISSION_PROFILE,
     DEFAULT_TOOL_OUTPUT_CAP_CHARS,
 )
+from bearings.db import routing as routing_db
 from bearings.db import sdk_entries as sdk_entries_db
 from bearings.db import sessions as sessions_db
+from bearings.db import tags as tags_db
 
 
 def _expand_cwd(working_dir: str) -> str:
@@ -101,10 +107,9 @@ def build_session_setup(
         if row is None:
             return None
         # Reconstruct the routing decision from the persisted routing
-        # columns on the session row. These columns are written at
-        # session-create time (``POST /api/sessions``) so the decision
-        # survives supervisor respawns and mid-session model swaps
-        # without drifting to template-wide defaults.
+        # columns on the session row. The executor/advisor/effort shape
+        # is stored at session-create time (``POST /api/sessions``) and
+        # survives supervisor respawns without drifting to defaults.
         #
         # Backward-compat: rows that predate the routing columns carry
         # NULL for ``routing_advisor_model`` and the schema defaults (5,
@@ -120,14 +125,33 @@ def build_session_setup(
             if row.routing_advisor_model is not None
             else DEFAULT_TEMPLATE_ADVISOR_MODEL
         )
+        # Run the rule walker with an empty first-message so
+        # source/reason/matched_rule_id reflect the real spec values
+        # rather than the literal "session <sid> bootstrap" placeholder
+        # (rt-15 fix). An empty message causes tag-rule matchers
+        # (regex/keyword/length) to fall through, so the seeded
+        # always-fallback rule (system rule id 7 per spec §3) fires,
+        # giving source='system_rule' and matched_rule_id=7. The
+        # executor/advisor/effort are overridden from the session row
+        # so user-selected models are preserved.
+        _tags = await tags_db.list_for_session(db_connection, session_id)
+        _tag_ids = [t.id for t in _tags]
+        _tags_with_rules = await routing_db.list_for_tags(
+            db_connection, _tag_ids, enabled_only=True
+        )
+        _system_rules = await routing_db.list_system_rules(db_connection, enabled_only=True)
+        _snapshot = await load_latest(db_connection)
+        _raw = evaluate("", _tags_with_rules, _system_rules, _snapshot)
         decision = RoutingDecision(
             executor_model=row.model,
             advisor_model=advisor_model,
             advisor_max_uses=row.routing_advisor_max_uses,
             effort_level=row.routing_effort_level,
-            source="default",
-            reason=f"session {session_id} bootstrap",
-            matched_rule_id=None,
+            source=_raw.source,
+            reason=_raw.reason,
+            matched_rule_id=_raw.matched_rule_id,
+            evaluated_rules=_raw.evaluated_rules,
+            quota_state_at_decision=_snapshot.quota_state_dict() if _snapshot is not None else {},
         )
         # The session row stores the user-typed `working_dir` verbatim
         # (the inspector displays the literal `~/Projects/...` form).

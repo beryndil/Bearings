@@ -24,9 +24,10 @@
 import {
   API_QUOTA_CURRENT_ENDPOINT,
   API_QUOTA_HISTORY_ENDPOINT,
+  API_QUOTA_REFRESH_ENDPOINT,
   USAGE_HEADROOM_WINDOW_DAYS,
 } from "../config";
-import { ApiError, getJson, type RequestOptions } from "./client";
+import { ApiError, getJson, postJson, type RequestOptions } from "./client";
 
 /**
  * Wire shape for one snapshot — one-to-one with
@@ -112,4 +113,33 @@ export async function getQuotaHistory(
     requestOptions.signal = options.signal;
   }
   return await getJson<QuotaSnapshot[]>(API_QUOTA_HISTORY_ENDPOINT, requestOptions);
+}
+
+/**
+ * Force an immediate quota poll outside the regular cadence
+ * (spec §9 ``POST /api/quota/refresh``).
+ *
+ * Resolves to the freshly-recorded snapshot on success; resolves to
+ * ``null`` on the documented non-error responses:
+ *
+ * * 503 — poller not configured (test app / bare runtime);
+ * * 502 — upstream ``/usage`` poll failed (transient).
+ *
+ * Unexpected errors are re-thrown.
+ */
+export async function refreshQuota(
+  options: { signal?: AbortSignal } = {},
+): Promise<QuotaSnapshot | null> {
+  const requestOptions: RequestOptions = {};
+  if (options.signal !== undefined) {
+    requestOptions.signal = options.signal;
+  }
+  try {
+    return await postJson<QuotaSnapshot>(API_QUOTA_REFRESH_ENDPOINT, {}, requestOptions);
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 502 || err.status === 503)) {
+      return null;
+    }
+    throw err;
+  }
 }

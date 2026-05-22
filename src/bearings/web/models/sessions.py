@@ -22,6 +22,8 @@ from bearings.config.constants import (
     PROMPT_CONTENT_MAX_CHARS,
     SESSION_DESCRIPTION_MAX_LENGTH,
     SESSION_TITLE_MAX_LENGTH,
+    SESSIONS_DEFAULT_PAGE_SIZE,
+    SESSIONS_MAX_PAGE_SIZE,
 )
 from bearings.web.models.tags import TagOut
 
@@ -417,6 +419,34 @@ class CheckpointExport(BaseModel):
     created_at: str
 
 
+class SessionsPage(BaseModel):
+    """Paginated response for ``GET /api/sessions`` (PERF-BUG-001 + PERF-BUG-005).
+
+    ``sessions`` carries the page slice. ``total`` is the count of ALL rows
+    matching the active filters — clients use it to decide whether a
+    "load more" affordance should be shown. ``next_offset`` is the offset
+    the client should pass for the next page, or ``None`` when the last
+    page has been returned.
+
+    The shape is derived from the :class:`~bearings.config.constants`
+    ``SESSIONS_DEFAULT_PAGE_SIZE`` / ``SESSIONS_MAX_PAGE_SIZE`` pair so
+    no inline literals appear downstream.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sessions: list[SessionOut]
+    total: int = Field(ge=0)
+    next_offset: int | None = Field(
+        default=None,
+        description=(
+            f"Offset for the next page request; null when all sessions have been returned. "
+            f"Clients should pass this value as ``?offset=<next_offset>`` with the same "
+            f"``limit`` (default {SESSIONS_DEFAULT_PAGE_SIZE}, max {SESSIONS_MAX_PAGE_SIZE})."
+        ),
+    )
+
+
 class SessionExport(BaseModel):
     """Response shape for ``GET /api/sessions/{id}/export``.
 
@@ -536,6 +566,7 @@ __all__ = [
     "SessionTitleUpdate",
     "SessionTodosOut",
     "SessionUpdate",
+    "SessionsPage",
     "SystemPromptLayerOut",
     "SystemPromptLayersOut",
     "TokenTotalsOut",

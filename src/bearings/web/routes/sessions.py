@@ -70,6 +70,8 @@ from bearings.config.constants import (
     KNOWN_SESSION_KINDS,
     PROMPT_ACK_QUEUED_KEY,
     PROMPT_ACK_SESSION_ID_KEY,
+    SESSIONS_DEFAULT_PAGE_SIZE,
+    SESSIONS_MAX_PAGE_SIZE,
 )
 from bearings.db import checkpoints as checkpoints_db
 from bearings.db import messages as messages_db
@@ -91,6 +93,7 @@ from bearings.web.models.sessions import (
     SessionOut,
     SessionPermissionModeUpdate,
     SessionPinnedUpdate,
+    SessionsPage,
     SessionTodosOut,
     SessionUpdate,
     SystemPromptLayerOut,
@@ -465,7 +468,7 @@ def _build_patch_kwargs(
 # ---- list / fetch -----------------------------------------------------------
 
 
-@router.get("/api/sessions", response_model=list[SessionOut], operation_id="list-sessions")
+@router.get("/api/sessions", response_model=SessionsPage, operation_id="list-sessions")
 async def list_sessions(
     request: Request,
     kind: str | None = None,
@@ -475,10 +478,40 @@ async def list_sessions(
     tag_ids_severity: Annotated[list[int] | None, Query()] = None,
     tag_ids_other: Annotated[list[int] | None, Query()] = None,
     severity_none: bool = False,
-) -> list[SessionOut]:
-    """List sessions filtered by ``kind`` + ``include_closed`` + tag filters.
+    limit: Annotated[
+        int,
+        Query(
+            ge=1,
+            le=SESSIONS_MAX_PAGE_SIZE,
+            description=(
+                f"Maximum sessions to return per page (1-{SESSIONS_MAX_PAGE_SIZE}). "
+                f"Default {SESSIONS_DEFAULT_PAGE_SIZE}."
+            ),
+        ),
+    ] = SESSIONS_DEFAULT_PAGE_SIZE,
+    offset: Annotated[
+        int,
+        Query(
+            ge=0,
+            description="Zero-based row offset for pagination. Default 0 (first page).",
+        ),
+    ] = 0,
+) -> SessionsPage:
+    """List sessions filtered by ``kind`` + ``include_closed`` + tag filters (paginated).
 
-    Two filter shapes coexist:
+    **Pagination** (PERF-BUG-001 + PERF-BUG-005): responses are now pages
+    rather than full-table dumps. The wire shape is
+    ``{sessions: [...], total: <int>, next_offset: <int|null>}``.
+
+    * ``limit`` — rows per page (default :data:`SESSIONS_DEFAULT_PAGE_SIZE`,
+      max :data:`SESSIONS_MAX_PAGE_SIZE`). Pass ``?limit=500`` for a large
+      snapshot; even at the max the payload is bounded to ~500 rows.
+    * ``offset`` — zero-based row skip; ``0`` returns the first page.
+    * ``next_offset`` — ``offset`` value for the next page; ``null`` when all
+      rows have been delivered.
+    * ``total`` — total rows matching the filter (irrespective of pagination).
+
+    **Filter shapes** (unchanged from the pre-pagination surface):
 
     * ``tag_ids`` — legacy flat OR (back-compat). Returns sessions
       attached to **at least one** of the listed tags regardless of
@@ -515,7 +548,7 @@ async def list_sessions(
     project_filter = tuple(tag_ids_project) if tag_ids_project else None
     severity_filter = tuple(tag_ids_severity) if tag_ids_severity else None
     other_filter = tuple(tag_ids_other) if tag_ids_other else None
-    rows = await sessions_db.list_all(
+    rows, total = await sessions_db.list_paged(
         db,
         kind=kind,
         include_closed=include_closed,
@@ -524,11 +557,13 @@ async def list_sessions(
         tag_ids_severity=severity_filter,
         tag_ids_other=other_filter,
         severity_none=severity_none,
+        limit=limit,
+        offset=offset,
     )
     paired_info_map = await _build_paired_info_map(db, rows)
     session_ids = [row.id for row in rows]
     tags_map = await _batch_fetch_tags_out(db, session_ids)
-    return [
+    page_sessions = [
         _to_out(
             row,
             paired_parent_title=paired_info_map.get(row.id),
@@ -536,6 +571,9 @@ async def list_sessions(
         )
         for row in rows
     ]
+    delivered = offset + len(rows)
+    next_offset: int | None = delivered if delivered < total else None
+    return SessionsPage(sessions=page_sessions, total=total, next_offset=next_offset)
 
 
 @router.post(

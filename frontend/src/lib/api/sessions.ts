@@ -16,6 +16,7 @@
  */
 import {
   API_SESSIONS_ENDPOINT,
+  SESSIONS_DEFAULT_PAGE_SIZE,
   sessionModelEndpoint,
   sessionStopEndpoint,
   spawnFromReplyEndpoint,
@@ -80,6 +81,50 @@ export interface SessionOut {
   /** Back-pointer to the parent session for a spawn-from-reply chat.
    *  ``null`` on every session not created via that flow. */
   parent_session_id?: string | null;
+  /**
+   * Tags embedded in the session list response (PERF-NET-01 batch join).
+   * Populated by ``GET /api/sessions`` via a single batch JOIN; an empty
+   * array for sessions with no tags. Treat an absent field as ``[]`` for
+   * back-compat with any client that held a cached ``SessionOut`` from
+   * before the embed landed.
+   */
+  tags?: SessionTagOut[];
+}
+
+/**
+ * Tag shape embedded in :interface:`SessionOut` — a minimal subset of the
+ * full :interface:`TagOut` from ``api/tags.ts`` used by the session list.
+ * Kept as a local alias to avoid a circular import between
+ * ``api/sessions.ts`` and ``api/tags.ts``; the full ``TagOut`` is still
+ * used by the tags store and standalone tag endpoints.
+ */
+export interface SessionTagOut {
+  id: number;
+  name: string;
+  color: string | null;
+  default_model: string | null;
+  working_dir: string | null;
+  pinned: boolean;
+  class_: string;
+  sort_order: number;
+  group: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Paginated response for ``GET /api/sessions`` (PERF-BUG-001 + PERF-BUG-005).
+ *
+ * Mirrors :class:`bearings.web.models.sessions.SessionsPage`.
+ *
+ * ``total`` is the count of ALL rows matching the active filters.
+ * ``next_offset`` is the offset for the next page request, or ``null``
+ * when all sessions have been returned.
+ */
+export interface SessionsPage {
+  sessions: SessionOut[];
+  total: number;
+  next_offset: number | null;
 }
 
 interface ListSessionsParams {
@@ -111,6 +156,18 @@ interface ListSessionsParams {
    * severity OR sessions matching the listed severity ids are returned.
    */
   severityNone?: boolean;
+  /**
+   * Maximum rows per page (PERF-BUG-001 + PERF-BUG-005). Defaults to
+   * :const:`SESSIONS_DEFAULT_PAGE_SIZE` when omitted; clamped to
+   * :const:`SESSIONS_MAX_PAGE_SIZE` by the backend.
+   */
+  limit?: number;
+  /**
+   * Zero-based row offset for the requested page. Pass the
+   * ``next_offset`` value from the previous :interface:`SessionsPage`
+   * response to fetch the next page. Defaults to ``0`` (first page).
+   */
+  offset?: number;
   signal?: AbortSignal;
 }
 
@@ -255,7 +312,23 @@ export async function stopSession(sessionId: string): Promise<void> {
   // 204 No Content — nothing to parse.
 }
 
-export async function listSessions(params: ListSessionsParams = {}): Promise<SessionOut[]> {
+/**
+ * Fetch one page of sessions with the requested filters applied
+ * (PERF-BUG-001 + PERF-BUG-005).
+ *
+ * Returns a :interface:`SessionsPage` envelope containing ``sessions``,
+ * ``total`` (total matching rows across all pages), and ``next_offset``
+ * (``null`` when the last page has been delivered). Pass ``next_offset``
+ * as ``params.offset`` to fetch the next page.
+ *
+ * ``tags`` on each :interface:`SessionOut` row are populated from the
+ * backend's single-batch JOIN (PERF-NET-01) — no per-row tag fetches
+ * are required by the caller.
+ *
+ * @throws :class:`ApiError` on non-2xx responses (422 for an unknown
+ *   ``kind``, 5xx for backend faults).
+ */
+export async function listSessions(params: ListSessionsParams = {}): Promise<SessionsPage> {
   const query: Array<readonly [string, string]> = [];
   if (params.kind !== undefined) {
     query.push(["kind", params.kind]);
@@ -286,6 +359,14 @@ export async function listSessions(params: ListSessionsParams = {}): Promise<Ses
   if (params.severityNone) {
     query.push(["severity_none", "true"]);
   }
+  // Pagination params — always send limit so the wire is explicit;
+  // offset is omitted when 0 (backend default) to keep URLs clean on
+  // first-page loads.
+  const effectiveLimit = params.limit ?? SESSIONS_DEFAULT_PAGE_SIZE;
+  query.push(["limit", String(effectiveLimit)]);
+  if (params.offset !== undefined && params.offset > 0) {
+    query.push(["offset", String(params.offset)]);
+  }
   const options: RequestOptions = {};
   if (query.length > 0) {
     options.query = query;
@@ -293,7 +374,7 @@ export async function listSessions(params: ListSessionsParams = {}): Promise<Ses
   if (params.signal !== undefined) {
     options.signal = params.signal;
   }
-  return await getJson<SessionOut[]>(API_SESSIONS_ENDPOINT, options);
+  return await getJson<SessionsPage>(API_SESSIONS_ENDPOINT, options);
 }
 
 /**
@@ -307,8 +388,8 @@ export async function listSessions(params: ListSessionsParams = {}): Promise<Ses
  * right source for "what did the user use last time?"
  */
 export async function getMostRecentSession(signal?: AbortSignal): Promise<SessionOut | null> {
-  const sessions = await listSessions({ includeClosed: true, signal });
-  return sessions[0] ?? null;
+  const page = await listSessions({ includeClosed: true, limit: 1, signal });
+  return page.sessions[0] ?? null;
 }
 
 /**

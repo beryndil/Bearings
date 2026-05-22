@@ -505,6 +505,21 @@ def create_app(
     # backend-only test runs do not need a built frontend.
     mount_static_bundle(app)
 
+    # Quota poller lifecycle — start on server boot so the first poll
+    # fires immediately (spec §4 "first poll fires immediately on
+    # server start"), stop on shutdown so the background task exits
+    # cleanly before the event loop closes.
+    if quota_poller is not None:
+        _poller_ref = quota_poller
+
+        @app.on_event("startup")
+        async def _start_quota_poller() -> None:
+            _poller_ref.start()
+
+        @app.on_event("shutdown")
+        async def _stop_quota_poller() -> None:
+            await _poller_ref.stop()
+
     # Shutdown drain — when the factory is the InProcessRunnerRegistry
     # (the production path), cancel every per-session supervisor task
     # so the SDK CLI subprocesses tear down cleanly. Wired as a

@@ -73,6 +73,7 @@
   } from "../../stores/sessionSort.svelte";
   import { listTags, type TagOut } from "../../api/tags";
   import {
+    loadMoreSessions as loadMoreSessionsDefault,
     refreshSessions as refreshSessionsDefault,
     sessionsStore as sessionsStoreDefault,
   } from "../../stores/sessions.svelte";
@@ -105,6 +106,8 @@
     sessionsStore?: typeof sessionsStoreDefault;
     tagsStore?: typeof tagsStoreDefault;
     refreshSessions?: typeof refreshSessionsDefault;
+    /** Append the next page of sessions — passed as a prop for test injection. */
+    loadMoreSessions?: typeof loadMoreSessionsDefault;
     refreshTags?: typeof refreshTagsDefault;
     toggleTag?: typeof toggleTagDefault;
     toggleSeverityNone?: typeof toggleSeverityNoneDefault;
@@ -125,6 +128,7 @@
     sessionsStore = sessionsStoreDefault,
     tagsStore = tagsStoreDefault,
     refreshSessions = refreshSessionsDefault,
+    loadMoreSessions = loadMoreSessionsDefault,
     refreshTags = refreshTagsDefault,
     toggleTag = toggleTagDefault,
     toggleSeverityNone = toggleSeverityNoneDefault,
@@ -499,6 +503,13 @@
   });
 
   /**
+   * Sentinel element at the bottom of the scroll container. When it
+   * enters the viewport the IntersectionObserver fires and triggers
+   * :func:`loadMoreSessions` if the store has more pages to fetch.
+   */
+  let loadMoreSentinel = $state<HTMLDivElement | null>(null);
+
+  /**
    * Fetch on mount + on every filter-set change. ``$effect`` re-runs
    * when any of the three section filter sets update — Svelte 5
    * tracks the proxy reads inside the effect's body, and
@@ -517,6 +528,40 @@
 
   $effect(() => {
     void refreshSessions(currentFilter());
+  });
+
+  /**
+   * Intersection observer that drives scroll-based load-more for the
+   * paginated session list (PERF-BUG-001 + PERF-BUG-005).
+   *
+   * Watches ``loadMoreSentinel`` — a zero-height div pinned to the
+   * bottom of the ``<nav>`` scroll container. When the sentinel
+   * scrolls into view and the store has more pages
+   * (``sessionsStore.hasMore``), :func:`loadMoreSessions` is called
+   * with the current filter.
+   *
+   * The effect re-runs whenever ``loadMoreSentinel`` or
+   * ``sessionsStore.hasMore`` changes; the observer is torn down and
+   * recreated accordingly. Disconnect is handled in the cleanup
+   * return value so no observer outlives the component.
+   */
+  $effect(() => {
+    const sentinel = loadMoreSentinel;
+    if (sentinel === null || !sessionsStore.hasMore) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && sessionsStore.hasMore) {
+          void loadMoreSessions(currentFilter());
+        }
+      },
+      { threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
   });
 
   /**
@@ -802,6 +847,30 @@
         </section>
       {/if}
     {/if}
+
+    <!--
+      Load-more sentinel — zero-height div at the bottom of the scroll
+      container. The IntersectionObserver in the script block watches this
+      element and fires loadMoreSessions() when it enters the viewport.
+      Rendered only when the store reports more pages are available so the
+      observer is never active when all sessions are loaded.
+    -->
+    {#if sessionsStore.hasMore}
+      <div
+        bind:this={loadMoreSentinel}
+        class="session-list__load-more-sentinel"
+        aria-hidden="true"
+      ></div>
+    {/if}
+    {#if sessionsStore.loading && sessionsStore.sessions.length > 0}
+      <p
+        class="px-3 py-2 text-xs text-fg-muted"
+        aria-live="polite"
+        data-testid="session-list-loading-more"
+      >
+        {SIDEBAR_STRINGS.loadingMoreSessions}
+      </p>
+    {/if}
   </nav>
 </div>
 
@@ -876,5 +945,12 @@
   .session-list__selection-clear:hover {
     background: rgb(var(--bearings-surface-2));
     color: rgb(var(--bearings-fg));
+  }
+
+  /* Load-more sentinel — zero-height; only serves as IntersectionObserver
+     target. No visual presence; screen-reader hidden via aria-hidden. */
+  .session-list__load-more-sentinel {
+    height: 1px;
+    width: 100%;
   }
 </style>

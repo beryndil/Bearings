@@ -991,6 +991,14 @@ MESSAGES_LIST_MAX_LIMIT: Final[int] = 1000
 # payload threshold for a typical Bearings session.
 MESSAGE_PAGE_SIZE: Final[int] = 100
 
+# Pagination for GET /api/sessions (PERF-BUG-001 + PERF-BUG-005).
+# The default (100) keeps the initial sidebar payload well under 256 KiB on
+# a typical Bearings install (~1 138 sessions x ~2.2 KiB/row with tag-embed
+# → 2.49 MiB unbounded; 100 rows → ~220 KiB). The max (500) lets a client
+# request a large snapshot without triggering a full-table scan risk.
+SESSIONS_DEFAULT_PAGE_SIZE: Final[int] = 100
+SESSIONS_MAX_PAGE_SIZE: Final[int] = 500
+
 # The TODO.md filename the walker recognises. Pinned constant so a
 # future per-project rename touches one symbol.
 BEARINGS_TODO_FILENAME: Final[str] = "TODO.md"
@@ -1795,6 +1803,8 @@ __all__ = [
     "SENTINEL_KIND_ITEM_DONE",
     "SENTINEL_KIND_ITEM_FAILED",
     "SESSIONS_BROADCAST_QUEUE_MAX",
+    "SESSIONS_DEFAULT_PAGE_SIZE",
+    "SESSIONS_MAX_PAGE_SIZE",
     "SESSION_CLOSING_SUMMARY_MAX_LENGTH",
     "SESSION_CLOSING_SUMMARY_MIN_LENGTH",
     "SESSION_DESCRIPTION_MAX_LENGTH",

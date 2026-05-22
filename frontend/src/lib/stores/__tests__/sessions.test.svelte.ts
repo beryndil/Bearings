@@ -1,18 +1,40 @@
 /**
- * Unit tests for the sessions store — covers the OR-semantics wire
- * shape (multiple ``tag_ids`` query params), the no-filter shortcut,
- * and the per-session tag fan-out.
+ * Unit tests for the sessions store — covers the paginated
+ * ``refreshSessions`` + ``loadMoreSessions`` surface (PERF-BUG-001 +
+ * PERF-BUG-005), the OR-semantics wire shape, and the embedded-tag
+ * population path (PERF-NET-01).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _resetForTests, refreshSessions, sessionsStore } from "../sessions.svelte";
-import type { SessionOut } from "../../api/sessions";
+import {
+  _resetForTests,
+  loadMoreSessions,
+  refreshSessions,
+  sessionsStore,
+} from "../sessions.svelte";
+import type { SessionOut, SessionsPage } from "../../api/sessions";
 import type { TagOut } from "../../api/tags";
 
-const fixtureSession: SessionOut = {
-  id: "ses_a",
+const fixtureTag: TagOut = {
+  id: 1,
+  name: "bearings/architect",
+  color: null,
+  default_model: null,
+  working_dir: null,
+  pinned: false,
+  class_: "general" as const,
+  sort_order: 0,
+  group: "bearings",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+  open_session_count: 0,
+  session_count: 0,
+};
+
+const makeSession = (id: string, tags: TagOut[] = []): SessionOut => ({
+  id,
   kind: "chat",
-  title: "Hello",
+  title: id,
   description: null,
   session_instructions: null,
   working_dir: "/wd",
@@ -33,23 +55,20 @@ const fixtureSession: SessionOut = {
   last_completed_at: null,
   closed_at: null,
   closing_summary: null,
-};
+  tags,
+});
 
-const fixtureTag: TagOut = {
-  id: 1,
-  name: "bearings/architect",
-  color: null,
-  default_model: null,
-  working_dir: null,
-  pinned: false,
-  class_: "general" as const,
-  sort_order: 0,
-  group: "bearings",
-  created_at: "2026-01-01T00:00:00Z",
-  updated_at: "2026-01-01T00:00:00Z",
-  open_session_count: 0,
-  session_count: 0,
-};
+const fixtureSession = makeSession("ses_a", [fixtureTag]);
+
+const page = (
+  sessions: SessionOut[],
+  total?: number,
+  next_offset?: number | null,
+): SessionsPage => ({
+  sessions,
+  total: total ?? sessions.length,
+  next_offset: next_offset ?? null,
+});
 
 beforeEach(() => {
   _resetForTests();
@@ -66,35 +85,42 @@ function jsonResponse(body: unknown): Response {
   });
 }
 
-const emptyFilter = (): {
-  project: ReadonlySet<number>;
-  severity: ReadonlySet<number>;
-  other: ReadonlySet<number>;
-} => ({
+const emptyFilter = () => ({
   project: new Set<number>(),
   severity: new Set<number>(),
   other: new Set<number>(),
 });
 
 describe("sessionsStore.refreshSessions", () => {
-  it("omits every tag_ids_<class> param from the query when no section has a selection", async () => {
+  it("always sends ?limit= on the wire", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse([fixtureSession])) // sessions list
-      .mockResolvedValueOnce(jsonResponse([])); // per-session tags
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession])));
 
     await refreshSessions(emptyFilter());
 
     const sessionsCallUrl = String(fetchMock.mock.calls[0][0]);
-    expect(sessionsCallUrl).toBe("/api/sessions");
+    expect(sessionsCallUrl).toContain("limit=");
     expect(sessionsCallUrl).not.toContain("tag_ids");
+  });
+
+  it("omits every tag_ids_<class> param from the query when no section has a selection", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession])));
+
+    await refreshSessions(emptyFilter());
+
+    const sessionsCallUrl = String(fetchMock.mock.calls[0][0]);
+    expect(sessionsCallUrl).not.toContain("tag_ids_project");
+    expect(sessionsCallUrl).not.toContain("tag_ids_severity");
+    expect(sessionsCallUrl).not.toContain("tag_ids_other");
   });
 
   it("emits ?tag_ids_project=1&tag_ids_project=2 for the project section", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse([fixtureSession]))
-      .mockResolvedValueOnce(jsonResponse([fixtureTag]));
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession])));
 
     await refreshSessions({ ...emptyFilter(), project: new Set([1, 2]) });
 
@@ -108,8 +134,7 @@ describe("sessionsStore.refreshSessions", () => {
   it("emits all three section params when each has a selection", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse([fixtureSession]))
-      .mockResolvedValueOnce(jsonResponse([fixtureTag]));
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession])));
 
     await refreshSessions({
       project: new Set([1]),
@@ -123,15 +148,19 @@ describe("sessionsStore.refreshSessions", () => {
     expect(sessionsCallUrl).toContain("tag_ids_other=3");
   });
 
-  it("populates per-session tag map from /api/sessions/{id}/tags", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse([fixtureSession]))
-      .mockResolvedValueOnce(jsonResponse([fixtureTag]));
+  it("populates tagsBySessionId from embedded tags in the SessionsPage response (no N+1 fetch)", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession])));
 
     await refreshSessions(emptyFilter());
 
+    // One fetch only — no per-session tag round-trips.
+    expect(fetchMock.mock.calls).toHaveLength(1);
     expect(sessionsStore.sessions).toEqual([fixtureSession]);
-    expect(sessionsStore.tagsBySessionId[fixtureSession.id]).toEqual([fixtureTag]);
+    // Tags populated from embedded fixtureTag in fixtureSession.
+    expect(sessionsStore.tagsBySessionId[fixtureSession.id]).toHaveLength(1);
+    expect(sessionsStore.tagsBySessionId[fixtureSession.id]![0]!.id).toBe(fixtureTag.id);
   });
 
   it("captures error when the sessions list fetch fails", async () => {
@@ -143,15 +172,134 @@ describe("sessionsStore.refreshSessions", () => {
     expect(sessionsStore.loading).toBe(false);
   });
 
-  it("falls back to empty tag list when per-session tag fetch fails (does not blank the row)", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(jsonResponse([fixtureSession]))
-      .mockResolvedValueOnce(new Response("nope", { status: 500 }));
+  it("stores total and nextOffset from the page envelope", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(page([fixtureSession], 200, 100)),
+    );
 
     await refreshSessions(emptyFilter());
 
-    expect(sessionsStore.sessions).toEqual([fixtureSession]);
-    expect(sessionsStore.tagsBySessionId[fixtureSession.id]).toEqual([]);
-    expect(sessionsStore.error).toBeNull();
+    expect(sessionsStore.total).toBe(200);
+    expect(sessionsStore.nextOffset).toBe(100);
+    expect(sessionsStore.hasMore).toBe(true);
+  });
+
+  it("sets hasMore=false and nextOffset=null when page covers all rows", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(page([fixtureSession], 1, null)),
+    );
+
+    await refreshSessions(emptyFilter());
+
+    expect(sessionsStore.hasMore).toBe(false);
+    expect(sessionsStore.nextOffset).toBeNull();
+  });
+
+  it("resets sessions and pagination on every refresh (no stale-page appending)", async () => {
+    // First load: two sessions, more pages available.
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        jsonResponse(page([makeSession("ses_a"), makeSession("ses_b")], 100, 2)),
+      )
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_c")], 1, null)));
+
+    await refreshSessions(emptyFilter());
+    expect(sessionsStore.sessions).toHaveLength(2);
+
+    // Second refresh resets rather than appending.
+    await refreshSessions(emptyFilter());
+    expect(sessionsStore.sessions).toHaveLength(1);
+    expect(sessionsStore.sessions[0]!.id).toBe("ses_c");
+  });
+});
+
+describe("sessionsStore.loadMoreSessions", () => {
+  it("no-ops when hasMore is false", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([fixtureSession], 1, null)));
+
+    await refreshSessions(emptyFilter());
+    expect(sessionsStore.hasMore).toBe(false);
+
+    fetchMock.mockClear();
+    await loadMoreSessions(emptyFilter());
+
+    expect(fetchMock.mock.calls).toHaveLength(0);
+  });
+
+  it("appends next page to state.sessions without replacing the first page", async () => {
+    const pageA = page([makeSession("ses_a"), makeSession("ses_b")], 4, 2);
+    const pageB = page([makeSession("ses_c"), makeSession("ses_d")], 4, null);
+
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(pageA))
+      .mockResolvedValueOnce(jsonResponse(pageB));
+
+    await refreshSessions(emptyFilter());
+    expect(sessionsStore.sessions).toHaveLength(2);
+
+    await loadMoreSessions(emptyFilter());
+    expect(sessionsStore.sessions).toHaveLength(4);
+    expect(sessionsStore.sessions.map((s) => s.id)).toEqual([
+      "ses_a",
+      "ses_b",
+      "ses_c",
+      "ses_d",
+    ]);
+  });
+
+  it("sends ?offset=<nextOffset> on the load-more request", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_a")], 2, 1)))
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_b")], 2, null)));
+
+    await refreshSessions(emptyFilter());
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      jsonResponse(page([makeSession("ses_b")], 2, null)),
+    );
+
+    // Reset the spy so we can check the load-more URL cleanly.
+    vi.restoreAllMocks();
+    const loadMoreFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_b")], 2, null)));
+
+    await loadMoreSessions(emptyFilter());
+
+    const loadMoreUrl = String(loadMoreFetch.mock.calls[0]![0]);
+    expect(loadMoreUrl).toContain("offset=1");
+    void fetchMock; // suppress unused-variable lint
+  });
+
+  it("deduplicates rows that a WS upsert already inserted", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_a")], 2, 1)))
+      .mockResolvedValueOnce(
+        // ses_b comes back in the next page but was already WS-upserted.
+        jsonResponse(page([makeSession("ses_b")], 2, null)),
+      );
+
+    await refreshSessions(emptyFilter());
+    // Simulate WS upsert of ses_b — push it into state manually.
+    (sessionsStore.sessions as SessionOut[]).push(makeSession("ses_b"));
+
+    await loadMoreSessions(emptyFilter());
+
+    // No duplicate.
+    expect(sessionsStore.sessions.filter((s) => s.id === "ses_b")).toHaveLength(1);
+  });
+
+  it("updates hasMore and nextOffset after loading the last page", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_a")], 2, 1)))
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_b")], 2, null)));
+
+    await refreshSessions(emptyFilter());
+    expect(sessionsStore.hasMore).toBe(true);
+
+    await loadMoreSessions(emptyFilter());
+    expect(sessionsStore.hasMore).toBe(false);
+    expect(sessionsStore.nextOffset).toBeNull();
   });
 });

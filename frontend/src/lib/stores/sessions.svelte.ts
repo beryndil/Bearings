@@ -28,17 +28,25 @@
  * dependency graph one-way (components depend on stores; stores never
  * depend on each other).
  */
-import { listSessions, type SessionOut } from "../api/sessions";
-import { listSessionTags, type TagOut } from "../api/tags";
+import { listSessions, type SessionOut, type SessionTagOut } from "../api/sessions";
+import type { TagOut } from "../api/tags";
 import { connectSessionsBroadcast } from "../api/wsSessions";
 import { _applyTagDelete, _applyTagUpsert } from "./tags.svelte";
 
 interface SessionsState {
-  /** Last successful list response. */
+  /** Last successful list response (current page accumulation). */
   sessions: SessionOut[];
-  /** Per-session tag list — keyed by ``SessionOut.id``. */
+  /**
+   * Per-session tag list — keyed by ``SessionOut.id``.
+   *
+   * Populated from the ``tags`` field embedded in each ``SessionOut``
+   * row returned by ``GET /api/sessions`` (PERF-NET-01 batch join).
+   * Cast to the ``TagOut`` shape from ``api/tags.ts`` for backward
+   * compat with ``SessionRow`` and the tag-filter panel which were
+   * written before the embed landed and already import ``TagOut``.
+   */
   tagsBySessionId: Record<string, TagOut[]>;
-  /** ``true`` while a refresh is in flight. */
+  /** ``true`` while a refresh or load-more is in flight. */
   loading: boolean;
   /** Last error from a refresh attempt (cleared on success). */
   error: Error | null;
@@ -55,6 +63,26 @@ interface SessionsState {
    * ``is_awaiting_user`` returns to false.
    */
   awaiting: Set<string>;
+  /**
+   * Total session rows matching the current filter (from the backend's
+   * ``SessionsPage.total`` field). ``0`` on the initial empty state.
+   * Used by the sidebar to determine whether a load-more affordance
+   * should be shown.
+   */
+  total: number;
+  /**
+   * Offset for the next page request, or ``null`` when all sessions
+   * matching the current filter have been loaded. Mirrors the backend's
+   * ``SessionsPage.next_offset`` field.
+   */
+  nextOffset: number | null;
+  /**
+   * ``true`` when ``nextOffset`` is non-null, i.e. there are more
+   * sessions on the server that have not yet been fetched. Derived from
+   * ``nextOffset`` but stored explicitly so components can read it
+   * without checking for null.
+   */
+  hasMore: boolean;
 }
 
 const state: SessionsState = $state({
@@ -64,6 +92,9 @@ const state: SessionsState = $state({
   error: null,
   running: new Set<string>(),
   awaiting: new Set<string>(),
+  total: 0,
+  nextOffset: null,
+  hasMore: false,
 });
 
 export const sessionsStore = state;
@@ -201,6 +232,58 @@ connectSessionsBroadcast(
 );
 
 /**
+ * The filter shape used by both :func:`refreshSessions` and
+ * :func:`loadMoreSessions`. Exported so callers (SessionList,
+ * tags.svelte's ``currentFilter``) can type the value they pass
+ * without importing the shape from a different module.
+ */
+export interface SessionFilter {
+  project: ReadonlySet<number>;
+  severity: ReadonlySet<number>;
+  other: ReadonlySet<number>;
+  severityNone?: boolean;
+}
+
+/**
+ * Build the ``listSessions`` params from a :interface:`SessionFilter`.
+ * Shared between :func:`refreshSessions` and :func:`loadMoreSessions`
+ * so filter → params translation cannot drift between the two.
+ */
+function _filterToParams(filter: SessionFilter): Parameters<typeof listSessions>[0] {
+  const params: Parameters<typeof listSessions>[0] = {};
+  if (filter.project.size > 0) {
+    params.tagIdsProject = filter.project;
+  }
+  if (filter.severity.size > 0) {
+    params.tagIdsSeverity = filter.severity;
+  }
+  if (filter.other.size > 0) {
+    params.tagIdsOther = filter.other;
+  }
+  if (filter.severityNone) {
+    params.severityNone = true;
+  }
+  return params;
+}
+
+/**
+ * Build ``tagsBySessionId`` from embedded tags on each ``SessionOut``
+ * row (PERF-NET-01 batch join). Cast from ``SessionTagOut`` to the
+ * ``TagOut`` shape the rest of the frontend uses — both are
+ * structurally identical; the cast avoids adding a new import to
+ * every consumer while preserving a single source of truth for the
+ * wire shape.
+ */
+function _tagsMapFromSessions(sessions: readonly SessionOut[]): Record<string, TagOut[]> {
+  const map: Record<string, TagOut[]> = {};
+  for (const session of sessions) {
+    // ``session.tags`` may be absent on cached/legacy rows — treat as [].
+    map[session.id] = ((session.tags ?? []) as unknown as TagOut[]);
+  }
+  return map;
+}
+
+/**
  * Refresh the sidebar list using the three-section faceted tag
  * filter. Each section's set applies OR-within (a session matches
  * when it carries any of the listed tags within the class); the
@@ -208,64 +291,33 @@ connectSessionsBroadcast(
  * non-empty section). An empty section is "no constraint from this
  * class" — the route omits the matching ``tag_ids_<class>=`` query
  * param so the backend leaves it unconstrained.
+ *
+ * Tags are populated from the embedded ``tags`` field on each
+ * :interface:`SessionOut` row (PERF-NET-01 batch join) — no
+ * per-row ``GET /api/sessions/{id}/tags`` calls are issued.
+ *
+ * Pagination (PERF-BUG-001 + PERF-BUG-005): fetches the first page
+ * (offset 0) and resets ``nextOffset`` / ``total`` / ``hasMore`` so
+ * the sidebar load-more sentinel starts fresh on every filter change.
+ * Call :func:`loadMoreSessions` to append subsequent pages.
  */
-export async function refreshSessions(filter: {
-  project: ReadonlySet<number>;
-  severity: ReadonlySet<number>;
-  other: ReadonlySet<number>;
-  severityNone?: boolean;
-}): Promise<void> {
+export async function refreshSessions(filter: SessionFilter): Promise<void> {
   refreshController?.abort();
   const controller = new AbortController();
   refreshController = controller;
   state.loading = true;
   try {
-    const params: Parameters<typeof listSessions>[0] = { signal: controller.signal };
-    if (filter.project.size > 0) {
-      params.tagIdsProject = filter.project;
-    }
-    if (filter.severity.size > 0) {
-      params.tagIdsSeverity = filter.severity;
-    }
-    if (filter.other.size > 0) {
-      params.tagIdsOther = filter.other;
-    }
-    if (filter.severityNone) {
-      params.severityNone = true;
-    }
-    const sessions = await listSessions(params);
+    const params = _filterToParams(filter);
+    params.signal = controller.signal;
+    const page = await listSessions(params);
     if (controller.signal.aborted) {
       return;
     }
-    state.sessions = sessions;
-    // Per-session tag fetches run in parallel; one fetch per row is
-    // acceptable for v1 (the typical project has ≤ a few dozen open
-    // sessions). Item 2.5+ may collapse this into a single
-    // ``/api/sessions?include_tags=true`` extension if the latency
-    // becomes visible.
-    const tagLists: Array<[string, TagOut[]]> = await Promise.all(
-      sessions.map(async (session): Promise<[string, TagOut[]]> => {
-        try {
-          const tags = await listSessionTags(session.id, { signal: controller.signal });
-          return [session.id, tags];
-        } catch (error) {
-          if (controller.signal.aborted || isAbortError(error)) {
-            return [session.id, []];
-          }
-          // A single per-session fetch failure shouldn't blank the
-          // whole sidebar — fall back to "no chips" for that row.
-          return [session.id, []];
-        }
-      }),
-    );
-    if (controller.signal.aborted) {
-      return;
-    }
-    const nextTagMap: Record<string, TagOut[]> = {};
-    for (const [id, tags] of tagLists) {
-      nextTagMap[id] = tags;
-    }
-    state.tagsBySessionId = nextTagMap;
+    state.sessions = page.sessions;
+    state.tagsBySessionId = _tagsMapFromSessions(page.sessions);
+    state.total = page.total;
+    state.nextOffset = page.next_offset;
+    state.hasMore = page.next_offset !== null;
     state.error = null;
   } catch (error) {
     if (controller.signal.aborted || isAbortError(error)) {
@@ -280,6 +332,54 @@ export async function refreshSessions(filter: {
   }
 }
 
+/**
+ * Load the next page of sessions and append them to the current list.
+ *
+ * No-ops when :data:`sessionsStore.hasMore` is ``false`` or a fetch
+ * is already in flight. The ``filter`` argument must match the filter
+ * used in the most-recent :func:`refreshSessions` call — passing a
+ * different filter would produce a mismatched append; callers should
+ * always pass ``currentFilter()`` from :mod:`stores/tags.svelte`.
+ *
+ * On success the appended rows are merged into ``state.sessions`` and
+ * the per-session tag map is extended. ``nextOffset`` / ``hasMore``
+ * are updated from the page's ``next_offset`` field.
+ */
+export async function loadMoreSessions(filter: SessionFilter): Promise<void> {
+  if (!state.hasMore || state.loading) {
+    return;
+  }
+  const offset = state.nextOffset;
+  if (offset === null) {
+    return;
+  }
+  state.loading = true;
+  try {
+    const params = _filterToParams(filter);
+    params.offset = offset;
+    const page = await listSessions(params);
+    // Merge — deduplicate by id in case a WS upsert already inserted
+    // a row that the next page also returns.
+    const existingIds = new Set(state.sessions.map((s) => s.id));
+    const newRows = page.sessions.filter((s) => !existingIds.has(s.id));
+    state.sessions = [...state.sessions, ...newRows];
+    // Merge tag map — extend without replacing existing entries.
+    const newTagMap = _tagsMapFromSessions(page.sessions);
+    state.tagsBySessionId = { ...state.tagsBySessionId, ...newTagMap };
+    state.total = page.total;
+    state.nextOffset = page.next_offset;
+    state.hasMore = page.next_offset !== null;
+  } catch (error) {
+    if (isAbortError(error)) {
+      return;
+    }
+    // Load-more failures are non-fatal — the existing page stays; the
+    // sentinel remains visible so the user can scroll to retry.
+  } finally {
+    state.loading = false;
+  }
+}
+
 export function _resetForTests(): void {
   state.sessions = [];
   state.tagsBySessionId = {};
@@ -287,6 +387,9 @@ export function _resetForTests(): void {
   state.error = null;
   state.running = new Set<string>();
   state.awaiting = new Set<string>();
+  state.total = 0;
+  state.nextOffset = null;
+  state.hasMore = false;
   refreshController?.abort();
   refreshController = null;
 }

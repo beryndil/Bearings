@@ -21,6 +21,7 @@ from pathlib import Path
 import aiosqlite
 import uvicorn
 
+from bearings.agent.quota import QuotaPoller, build_noop_fetcher
 from bearings.config.constants import CLI_EXIT_OK, DEFAULT_AVATARS_STORAGE_ROOT
 from bearings.config.settings import Settings
 from bearings.db.connection import load_schema
@@ -74,8 +75,16 @@ def _run(args: argparse.Namespace) -> int:
     """
     settings = Settings()
     db = asyncio.run(_connect_db(settings.db_path))
+    # Instantiate the quota poller with the noop fetcher (spec §4).
+    # The poller's start() is called in the FastAPI startup event wired
+    # inside create_app(); stop() runs on shutdown. The noop fetcher
+    # returns empty snapshots (both bucket pcts None) so the guard
+    # fails open per spec §4 — correct behaviour until a real
+    # upstream /usage endpoint is wired in a future item.
+    poller = QuotaPoller(connection=db, fetcher=build_noop_fetcher())
     app = create_app(
         db_connection=db,
+        quota_poller=poller,
         enable_driver_dispatch=True,
         billing_mode=settings.billing.mode,
         data_dir=settings.db_path.parent,

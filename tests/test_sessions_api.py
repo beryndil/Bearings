@@ -52,7 +52,9 @@ async def test_list_sessions_returns_rows(
     with TestClient(app) as client:
         response = client.get("/api/sessions")
     assert response.status_code == 200
-    titles = {row["title"] for row in response.json()}
+    body = response.json()
+    assert body["total"] == 2
+    titles = {row["title"] for row in body["sessions"]}
     assert titles == {"a", "b"}
 
 
@@ -67,8 +69,8 @@ async def test_list_sessions_filter_by_kind(
     with TestClient(app) as client:
         chats = client.get("/api/sessions", params={"kind": "chat"})
         cls = client.get("/api/sessions", params={"kind": "checklist"})
-    assert {row["id"] for row in chats.json()} == {chat}
-    assert {row["id"] for row in cls.json()} == {cl.id}
+    assert {row["id"] for row in chats.json()["sessions"]} == {chat}
+    assert {row["id"] for row in cls.json()["sessions"]} == {cl.id}
 
 
 async def test_list_sessions_invalid_kind_422(
@@ -89,7 +91,7 @@ async def test_list_sessions_filter_open_only(
     await sessions_db.close(conn, closed_id)
     with TestClient(app) as client:
         response = client.get("/api/sessions", params={"include_closed": "false"})
-    assert {row["id"] for row in response.json()} == {open_id}
+    assert {row["id"] for row in response.json()["sessions"]} == {open_id}
 
 
 async def test_list_sessions_filter_by_tag_ids_or_semantics(
@@ -121,7 +123,7 @@ async def test_list_sessions_filter_by_tag_ids_or_semantics(
             params=[("tag_ids", str(tag1.id)), ("tag_ids", str(tag2.id))],
         )
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     assert ids == {a, b}, "OR semantics — untagged session must be excluded"
     assert untagged not in ids
 
@@ -135,7 +137,7 @@ async def test_list_sessions_no_tag_filter_returns_all(
     with TestClient(app) as client:
         response = client.get("/api/sessions")
     assert response.status_code == 200
-    assert {row["id"] for row in response.json()} == {a}
+    assert {row["id"] for row in response.json()["sessions"]} == {a}
 
 
 async def test_list_sessions_single_tag_id(
@@ -153,7 +155,7 @@ async def test_list_sessions_single_tag_id(
     with TestClient(app) as client:
         response = client.get("/api/sessions", params={"tag_ids": tag1.id})
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     assert ids == {a}
     assert b not in ids
 
@@ -379,7 +381,7 @@ async def test_list_sessions_three_section_filter_and_across_or_within(
             ],
         )
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     assert ids == {alpha, beta}, "OR within project + AND with severity"
 
 
@@ -405,7 +407,7 @@ async def test_list_sessions_empty_severity_filter_returns_all_severities(
             params=[("tag_ids_project", str(proj.id))],
         )
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     assert ids == {a, b}, "omitting a section must not exclude rows"
 
 
@@ -418,7 +420,7 @@ async def test_list_sessions_legacy_session_with_no_project_remains_listable(
     with TestClient(app) as client:
         response = client.get("/api/sessions")
     assert response.status_code == 200
-    assert sid in {row["id"] for row in response.json()}
+    assert sid in {row["id"] for row in response.json()["sessions"]}
 
 
 async def test_create_session_empty_title_422(
@@ -1248,7 +1250,7 @@ async def test_list_sessions_severity_none_returns_unseveritied(
     with TestClient(app) as client:
         response = client.get("/api/sessions", params={"severity_none": "true"})
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     assert no_sev in ids
     assert has_sev not in ids
 
@@ -1277,7 +1279,7 @@ async def test_list_sessions_severity_none_or_with_tag_ids_severity(
             params=[("severity_none", "true"), ("tag_ids_severity", str(sev_high.id))],
         )
     assert response.status_code == 200
-    ids = {row["id"] for row in response.json()}
+    ids = {row["id"] for row in response.json()["sessions"]}
     # OR: sessions with no severity OR sessions tagged high.
     assert ids == {no_sev, has_high}
     assert has_low not in ids
@@ -1357,7 +1359,7 @@ async def test_list_sessions_embeds_tags_matching_per_session_endpoint(
     assert tagged_tags_resp.status_code == 200
     assert untagged_tags_resp.status_code == 200
 
-    sessions_by_id = {row["id"]: row for row in list_resp.json()}
+    sessions_by_id = {row["id"]: row for row in list_resp.json()["sessions"]}
 
     # Every session in the list must carry a "tags" key.
     for sid, row in sessions_by_id.items():
@@ -1408,3 +1410,136 @@ async def test_paired_chat_info_200_data_for_paired_session(
     body = response.json()
     assert body["parent_title"] == "My Checklist"
     assert body["item_label"] == "Step one"
+
+
+# ---------------------------------------------------------------------------
+# Pagination — PERF-BUG-001 + PERF-BUG-005
+# ---------------------------------------------------------------------------
+
+
+async def test_list_sessions_returns_page_envelope(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Response is a SessionsPage envelope, not a bare list."""
+    app, conn = app_and_db
+    await _new_chat(conn, "only")
+    with TestClient(app) as client:
+        response = client.get("/api/sessions")
+    assert response.status_code == 200
+    body = response.json()
+    assert "sessions" in body
+    assert "total" in body
+    assert "next_offset" in body
+    assert isinstance(body["sessions"], list)
+    assert body["total"] == 1
+    assert body["next_offset"] is None
+
+
+async def test_list_sessions_limit_restricts_returned_rows(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """?limit=3 with 5 sessions → 3 rows, next_offset=3, total=5."""
+    app, conn = app_and_db
+    for i in range(5):
+        await _new_chat(conn, f"s{i}")
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": 3})
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["sessions"]) == 3
+    assert body["total"] == 5
+    assert body["next_offset"] == 3
+
+
+async def test_list_sessions_offset_returns_next_page(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """?limit=3&offset=3 returns the remaining 2 rows and next_offset=null."""
+    app, conn = app_and_db
+    for i in range(5):
+        await _new_chat(conn, f"s{i}")
+    with TestClient(app) as client:
+        first = client.get("/api/sessions", params={"limit": 3})
+        second = client.get("/api/sessions", params={"limit": 3, "offset": 3})
+    first_ids = {r["id"] for r in first.json()["sessions"]}
+    second_body = second.json()
+    assert len(second_body["sessions"]) == 2
+    assert second_body["total"] == 5
+    assert second_body["next_offset"] is None
+    # No overlap between pages.
+    assert first_ids.isdisjoint({r["id"] for r in second_body["sessions"]})
+
+
+async def test_list_sessions_no_next_offset_when_page_covers_all(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """next_offset is null when limit >= total rows."""
+    app, conn = app_and_db
+    await _new_chat(conn, "only")
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": 100})
+    body = response.json()
+    assert body["next_offset"] is None
+    assert body["total"] == 1
+
+
+async def test_list_sessions_empty_db_returns_zero_total(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Empty DB → sessions=[], total=0, next_offset=null."""
+    app, _ = app_and_db
+    with TestClient(app) as client:
+        response = client.get("/api/sessions")
+    body = response.json()
+    assert body["sessions"] == []
+    assert body["total"] == 0
+    assert body["next_offset"] is None
+
+
+async def test_list_sessions_limit_above_max_422(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """?limit=501 (above SESSIONS_MAX_PAGE_SIZE=500) returns 422."""
+    from bearings.config.constants import SESSIONS_MAX_PAGE_SIZE
+
+    app, _ = app_and_db
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": SESSIONS_MAX_PAGE_SIZE + 1})
+    assert response.status_code == 422
+
+
+async def test_list_sessions_limit_zero_422(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """?limit=0 (below minimum of 1) returns 422."""
+    app, _ = app_and_db
+    with TestClient(app) as client:
+        response = client.get("/api/sessions", params={"limit": 0})
+    assert response.status_code == 422
+
+
+async def test_list_sessions_pages_are_non_overlapping_and_exhaustive(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Walking all pages with limit=2 yields every session exactly once."""
+    app, conn = app_and_db
+    expected_ids: set[str] = set()
+    for i in range(7):
+        sid = await _new_chat(conn, f"s{i}")
+        expected_ids.add(sid)
+
+    collected: set[str] = set()
+    offset = 0
+    limit = 2
+    with TestClient(app) as client:
+        while True:
+            response = client.get("/api/sessions", params={"limit": limit, "offset": offset})
+            assert response.status_code == 200
+            body = response.json()
+            for row in body["sessions"]:
+                collected.add(row["id"])
+            if body["next_offset"] is None:
+                break
+            offset = body["next_offset"]
+
+    assert collected == expected_ids

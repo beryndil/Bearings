@@ -5,12 +5,14 @@
  *
  * What this test exercises:
  *
- * 1. SessionList mounts, fetches /api/tags + /api/sessions + per-row
- *    /api/sessions/{id}/tags via the real stores against a mocked
- *    ``fetch``.
- * 2. Clicking a tag chip in a session row toggles that tag in the
+ * 1. SessionList mounts, fetches /api/tags + /api/sessions via the
+ *    real stores against a mocked ``fetch``.
+ * 2. ``GET /api/sessions`` now returns a ``SessionsPage`` envelope
+ *    (PERF-BUG-001 + PERF-BUG-005) with embedded tags per row;
+ *    the per-row ``GET /api/sessions/{id}/tags`` fetches are gone.
+ * 3. Clicking a tag chip in a session row toggles that tag in the
  *    filter set AND triggers a re-fetch with ``?tag_ids=N``.
- * 3. Adding a SECOND tag to the filter — the OR-semantics assertion —
+ * 4. Adding a SECOND tag to the filter — the OR-semantics assertion —
  *    keeps the first tag's session in the result. Specifically: with
  *    a disjoint setup (session_a→tag1, session_b→tag2) and filter
  *    ``{tag1, tag2}``, the backend would return BOTH (OR); under AND
@@ -30,10 +32,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SessionList from "../SessionList.svelte";
 import { _resetForTests as resetSessionsStore } from "../../../stores/sessions.svelte";
 import { _resetForTests as resetTagsStore } from "../../../stores/tags.svelte";
-import type { SessionOut } from "../../../api/sessions";
+import type { SessionOut, SessionsPage } from "../../../api/sessions";
 import type { TagOut } from "../../../api/tags";
 
-const session = (id: string, title: string): SessionOut => ({
+const session = (id: string, title: string, tags: TagOut[] = []): SessionOut => ({
   id,
   kind: "chat",
   title,
@@ -57,6 +59,7 @@ const session = (id: string, title: string): SessionOut => ({
   last_completed_at: null,
   closed_at: null,
   closing_summary: null,
+  tags,
 });
 
 const tag = (id: number, name: string): TagOut => ({
@@ -77,8 +80,8 @@ const tag = (id: number, name: string): TagOut => ({
 
 const TAG_1 = tag(1, "bearings/architect");
 const TAG_2 = tag(2, "bearings/exec");
-const SESSION_A = session("ses_a", "A — architect-only");
-const SESSION_B = session("ses_b", "B — exec-only");
+const SESSION_A = session("ses_a", "A — architect-only", [TAG_1]);
+const SESSION_B = session("ses_b", "B — exec-only", [TAG_2]);
 
 beforeEach(() => {
   resetSessionsStore();
@@ -98,9 +101,10 @@ interface FakeServer {
  * Wire a stateful fake fetch:
  *
  * - ``/api/tags`` always returns [tag1, tag2];
- * - ``/api/sessions`` returns the union/OR of sessions matching the
- *   ``tag_ids`` query (or both sessions when the filter is absent);
- * - ``/api/sessions/{id}/tags`` returns the per-session tag list.
+ * - ``/api/sessions`` returns a ``SessionsPage`` envelope whose
+ *   ``sessions`` array is the union/OR of sessions matching the
+ *   ``tag_ids`` query (or both sessions when the filter is absent).
+ *   Tags are embedded per PERF-NET-01; no per-row tag fetches.
  */
 function installFakeServer(): FakeServer {
   const recorder: FakeServer = { urls: [] };
@@ -109,12 +113,6 @@ function installFakeServer(): FakeServer {
     recorder.urls.push(url);
     if (url.startsWith("/api/tags")) {
       return Promise.resolve(jsonResponse([TAG_1, TAG_2]));
-    }
-    if (url.startsWith("/api/sessions/ses_a/tags")) {
-      return Promise.resolve(jsonResponse([TAG_1]));
-    }
-    if (url.startsWith("/api/sessions/ses_b/tags")) {
-      return Promise.resolve(jsonResponse([TAG_2]));
     }
     if (url.startsWith("/api/sessions")) {
       const tagIds = extractTagIds(url);
@@ -127,7 +125,8 @@ function installFakeServer(): FakeServer {
         if (tagIds.includes(1)) rows.push(SESSION_A);
         if (tagIds.includes(2)) rows.push(SESSION_B);
       }
-      return Promise.resolve(jsonResponse(rows));
+      const page: SessionsPage = { sessions: rows, total: rows.length, next_offset: null };
+      return Promise.resolve(jsonResponse(page));
     }
     return Promise.resolve(new Response("not mocked: " + url, { status: 404 }));
   });
@@ -169,9 +168,8 @@ describe("SessionList integration — finder-click + OR semantics", () => {
     const server = installFakeServer();
     const { container, queryByText, findByText } = render(SessionList);
 
-    // Wait for the SessionRow's tag chip to render — the title appears
-    // before the per-session tag-fetch completes, so we must explicitly
-    // wait for the chip itself.
+    // Tags are now embedded in the session list response (PERF-NET-01),
+    // so the chip renders as soon as the initial page loads.
     const chipOnA = await waitFor(() => {
       const chip = container.querySelector<HTMLElement>(
         '[data-testid="session-row"][data-session-id="ses_a"] [data-testid="session-tag-chip"]',

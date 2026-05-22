@@ -47,6 +47,7 @@ from bearings.config.constants import (
     SESSION_DESCRIPTION_MAX_LENGTH,
     SESSION_ID_PREFIX,
     SESSION_TITLE_MAX_LENGTH,
+    SESSIONS_MAX_PAGE_SIZE,
 )
 from bearings.db._id import new_id, now_iso
 
@@ -584,6 +585,111 @@ async def list_all(
     finally:
         await cursor.close()
     return [_row_to_session(row) for row in rows]
+
+
+def _build_filter_sql(
+    kind: str | None,
+    include_closed: bool,
+    tag_ids: tuple[int, ...] | None,
+    tag_ids_project: tuple[int, ...] | None,
+    tag_ids_severity: tuple[int, ...] | None,
+    tag_ids_other: tuple[int, ...] | None,
+    severity_none: bool,
+) -> tuple[str, str, list[object]]:
+    """Build the JOIN, WHERE, and positional args for the session-list filters.
+
+    Returns ``(join_clause, where_clause, args)`` so both
+    :func:`list_all` and :func:`list_paged` share the same SQL-building
+    path without duplication. The join clause is non-empty only when the
+    legacy ``tag_ids`` filter is active (requires ``INNER JOIN
+    session_tags``).
+    """
+    clauses: list[str] = []
+    args: list[object] = []
+    if kind is not None:
+        clauses.append("sessions.kind = ?")
+        args.append(kind)
+    if not include_closed:
+        clauses.append("sessions.closed_at IS NULL")
+    _append_tag_ids_filter(tag_ids, clauses, args)
+    _append_section_filter(tag_ids_project, clauses, args)
+    _append_severity_filter(severity_none, tag_ids_severity, clauses, args)
+    _append_section_filter(tag_ids_other, clauses, args)
+    join = (
+        " INNER JOIN session_tags ON session_tags.session_id = sessions.id"
+        if tag_ids is not None
+        else ""
+    )
+    where = "" if not clauses else " WHERE " + " AND ".join(clauses)
+    return join, where, args
+
+
+async def list_paged(
+    connection: aiosqlite.Connection,
+    *,
+    kind: str | None = None,
+    include_closed: bool = True,
+    tag_ids: tuple[int, ...] | None = None,
+    tag_ids_project: tuple[int, ...] | None = None,
+    tag_ids_severity: tuple[int, ...] | None = None,
+    tag_ids_other: tuple[int, ...] | None = None,
+    severity_none: bool = False,
+    limit: int = SESSIONS_MAX_PAGE_SIZE,
+    offset: int = 0,
+) -> tuple[list[Session], int]:
+    """Return one page of sessions plus the unfiltered total count.
+
+    All filter parameters have the same semantics as :func:`list_all`.
+    ``limit`` and ``offset`` are both non-negative; ``limit`` is clamped
+    to :data:`~bearings.config.constants.SESSIONS_MAX_PAGE_SIZE` by the
+    caller (route layer) before reaching here.
+
+    Returns ``(page_rows, total)`` where ``total`` is the count of ALL
+    rows matching the filter (not just the page). Callers derive
+    ``next_offset`` as ``offset + len(page_rows)`` when
+    ``offset + len(page_rows) < total``.
+
+    Two SQL round-trips: COUNT(*) first (cheap — SQLite materialises the
+    WHERE at the same planner cost), then the paginated SELECT with
+    LIMIT/OFFSET. Both share :func:`_build_filter_sql` so filter drift
+    between the two is impossible.
+    """
+    _validate_list_all_args(kind, tag_ids)
+    join, where, args = _build_filter_sql(
+        kind,
+        include_closed,
+        tag_ids,
+        tag_ids_project,
+        tag_ids_severity,
+        tag_ids_other,
+        severity_none,
+    )
+    # Distinct qualifier: only needed on the legacy tag_ids join path.
+    distinct = "DISTINCT sessions.id" if tag_ids is not None else "sessions.id"
+    # COUNT round-trip.
+    count_sql = f"SELECT COUNT(*) FROM (SELECT {distinct} FROM sessions{join}{where})"
+    cursor = await connection.execute(count_sql, args)
+    try:
+        row = await cursor.fetchone()
+    finally:
+        await cursor.close()
+    total = int(str(row[0])) if row is not None else 0
+
+    # Data round-trip.
+    select = _SELECT_SESSION_COLUMNS_DISTINCT if tag_ids is not None else _SELECT_SESSION_COLUMNS
+    data_sql = (
+        select
+        + join
+        + where
+        + " ORDER BY sessions.updated_at DESC, sessions.id ASC"
+        + " LIMIT ? OFFSET ?"
+    )
+    cursor = await connection.execute(data_sql, [*args, limit, offset])
+    try:
+        rows = await cursor.fetchall()
+    finally:
+        await cursor.close()
+    return [_row_to_session(r) for r in rows], total
 
 
 def _validate_list_all_args(kind: str | None, tag_ids: tuple[int, ...] | None) -> None:
@@ -1339,6 +1445,7 @@ __all__ = [
     "import_session",
     "is_closed",
     "list_all",
+    "list_paged",
     "reopen",
     "update_fields",
     "update_pinned",
