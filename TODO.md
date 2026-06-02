@@ -8,9 +8,9 @@ When a TODO is resolved, strike it from this file in the same commit
 that lands the fix and cite the resolving commit hash in the removal
 trailer.
 
-## load_schema executescript ordering bug — legacy DB server restart failure (2026-05-09)
+~~## load_schema executescript ordering bug — legacy DB server restart failure (2026-05-09)~~
 
-`load_schema` calls `executescript(schema_sql)` before `_ensure_added_columns`.
+~~`load_schema` calls `executescript(schema_sql)` before `_ensure_added_columns`.
 On a live DB that predates `pivot_message_id` (and other _ADDED_COLUMNS entries),
 `schema.sql`'s `CREATE INDEX idx_sessions_pivot_message_id ON sessions(pivot_message_id)`
 fails with `no such column: pivot_message_id` because the column hasn't been
@@ -18,7 +18,14 @@ ALTERed in yet. Workaround during F1-RT-00 restart: manually applied all missing
 _ADDED_COLUMNS via sqlite3 CLI to unblock startup. Real fix: move
 `_POST_ALTER_INDEXES` entries out of `schema.sql` (leave them only in
 `connection.py`), OR gate the index creation inside `_ensure_added_columns` only.
-Not blocking Phase 2 — server is now running. Schedule as a maintenance item.
+Not blocking Phase 2 — server is now running. Schedule as a maintenance item.~~
+
+~~Resolved by commit `<COMMIT>` (fix(db): move post-alter indexes out of schema.sql to fix restart bug).
+`idx_sessions_pivot_message_id` removed from schema.sql; already present in
+`_POST_ALTER_INDEXES` in connection.py. Three tests added:
+`test_pivot_message_id_index_exists_on_fresh_boot`,
+`test_pivot_message_id_upgrade_on_legacy_db`,
+`test_pivot_message_id_reinit_is_idempotent`.~~
 
 ## knip gate failure — pre-existing unused frontend exports (2026-05-08)
 

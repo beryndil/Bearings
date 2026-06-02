@@ -516,6 +516,129 @@ def test_cache_creation_tokens_in_added_columns_registry() -> None:
     assert entry[2] == "INTEGER"
 
 
+async def test_pivot_message_id_index_exists_on_fresh_boot(database_path: Path) -> None:
+    """``idx_sessions_pivot_message_id`` is created on a fresh DB via _POST_ALTER_INDEXES."""
+    factory = get_connection_factory(database_path)
+    async with factory() as connection:
+        await load_schema(connection)
+        rows = await connection.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'sessions'"
+        )
+        index_names = {str(row[0]) for row in rows}
+
+    assert "idx_sessions_pivot_message_id" in index_names, (
+        f"expected idx_sessions_pivot_message_id in {sorted(index_names)}"
+    )
+
+
+async def test_pivot_message_id_upgrade_on_legacy_db(database_path: Path) -> None:
+    """A DB that predates pivot_message_id can be bootstrapped without error.
+
+    Simulates the restart-failure bug (TODO.md 2026-05-09): a live DB whose
+    sessions table lacks pivot_message_id would previously crash on the first
+    re-init because schema.sql ran ``CREATE INDEX idx_sessions_pivot_message_id
+    ON sessions(pivot_message_id)`` before ``_ensure_added_columns`` had added
+    the column. The fix moved that index into _POST_ALTER_INDEXES in
+    connection.py so it runs after the ALTER pass.
+    """
+    factory = get_connection_factory(database_path)
+    async with factory() as connection:
+        # Build a legacy sessions table that matches the full schema.sql column
+        # set EXCEPT for pivot_message_id (and parent_session_id, which is also
+        # an _ADDED_COLUMNS entry). All other columns are present so schema.sql's
+        # CREATE INDEX statements (closed_at, checklist_item_id, kind+updated_at)
+        # do not trip on missing columns — the only missing column is the one
+        # whose index was previously in schema.sql and triggered the bug.
+        await connection.execute(
+            "CREATE TABLE sessions ("
+            "id TEXT PRIMARY KEY, "
+            "kind TEXT NOT NULL CHECK (kind IN ('chat', 'checklist')), "
+            "title TEXT NOT NULL, "
+            "description TEXT, "
+            "session_instructions TEXT, "
+            "working_dir TEXT NOT NULL, "
+            "model TEXT NOT NULL, "
+            "permission_mode TEXT, "
+            "max_budget_usd REAL, "
+            "total_cost_usd REAL NOT NULL DEFAULT 0, "
+            "message_count INTEGER NOT NULL DEFAULT 0, "
+            "last_context_pct REAL, "
+            "last_context_tokens INTEGER, "
+            "last_context_max INTEGER, "
+            "pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)), "
+            "error_pending INTEGER NOT NULL DEFAULT 0 CHECK (error_pending IN (0, 1)), "
+            "checklist_item_id INTEGER, "
+            "created_at TEXT NOT NULL, "
+            "updated_at TEXT NOT NULL, "
+            "last_viewed_at TEXT, "
+            "last_completed_at TEXT, "
+            "closed_at TEXT"
+            ")"
+        )
+        await connection.execute(
+            "INSERT INTO sessions (id, kind, title, working_dir, model, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                "ses-legacy",
+                "chat",
+                "Legacy session",
+                "/tmp",
+                "sonnet",
+                "2025-01-01T00:00:00Z",
+                "2025-01-01T00:00:00Z",
+            ),
+        )
+        await connection.commit()
+
+        # load_schema must NOT raise even though sessions lacks pivot_message_id.
+        await load_schema(connection)
+
+        # Column should now exist (added by _ensure_added_columns).
+        column_types = await _column_types(connection, "sessions")
+        assert "pivot_message_id" in column_types, (
+            "sessions.pivot_message_id missing after legacy-DB upgrade"
+        )
+
+        # Index should now exist (created by _POST_ALTER_INDEXES).
+        rows = await connection.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'sessions'"
+        )
+        index_names = {str(row[0]) for row in rows}
+        assert "idx_sessions_pivot_message_id" in index_names, (
+            f"idx_sessions_pivot_message_id missing after legacy-DB upgrade; "
+            f"found: {sorted(index_names)}"
+        )
+
+        # Existing row should survive the upgrade with NULL pivot_message_id.
+        rows2 = list(
+            await connection.execute_fetchall(
+                "SELECT pivot_message_id FROM sessions WHERE id = ?", ("ses-legacy",)
+            )
+        )
+        assert len(rows2) == 1
+        assert rows2[0][0] is None
+
+
+async def test_pivot_message_id_reinit_is_idempotent(database_path: Path) -> None:
+    """Re-running load_schema on a DB that already has pivot_message_id is clean."""
+    factory = get_connection_factory(database_path)
+    async with factory() as connection:
+        await load_schema(connection)
+
+    # Second init on the same DB — must not raise.
+    async with factory() as connection:
+        await load_schema(connection)
+
+        column_types = await _column_types(connection, "sessions")
+        assert "pivot_message_id" in column_types
+
+        rows = await connection.execute_fetchall(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'sessions'"
+        )
+        index_names = {str(row[0]) for row in rows}
+        assert "idx_sessions_pivot_message_id" in index_names
+
+
 async def test_hand_verify_recipe_runs_clean() -> None:
     """End-to-end mirror of the hand-verify recipe in item-0.4 instructions.
 

@@ -102,8 +102,14 @@ CREATE INDEX IF NOT EXISTS idx_sessions_closed_at
     ON sessions(closed_at) WHERE closed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_sessions_checklist_item_id
     ON sessions(checklist_item_id) WHERE checklist_item_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_sessions_pivot_message_id
-    ON sessions(pivot_message_id) WHERE pivot_message_id IS NOT NULL;
+
+-- idx_sessions_pivot_message_id is created in db/connection.py after the
+-- ``_ensure_added_columns`` ALTER pass so a legacy DB that pre-dates the
+-- pivot_message_id column gets the column added before the index that
+-- references it is built. (CREATE INDEX inside this script would evaluate
+-- against the legacy table shape on the first re-init and raise
+-- ``no such column: pivot_message_id``.)
+
 
 -- ---------------------------------------------------------------------------
 -- messages — assistant + user + tool-result rows for chat-kind sessions.
