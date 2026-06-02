@@ -1948,7 +1948,7 @@
           "checkpoints"
         ],
         "summary": "Create Checkpoint",
-        "description": "Create a checkpoint anchored at ``payload.message_id``.\n\nWhen ``payload.label`` is omitted the route synthesises one from\n:data:`DEFAULT_CHECKPOINT_LABEL_TEMPLATE` using the next ordinal for\nthe session (\"Checkpoint 1\", \"Checkpoint 2\", \u2026).\n\n404 when the session or message is absent (FK violation in the DB\nlayer surfaces as ``IntegrityError``).\n409 when the per-session cap from\n:data:`MAX_CHECKPOINTS_PER_SESSION` is exceeded.",
+        "description": "Create a checkpoint anchored at ``payload.message_id``.\n\nWhen ``payload.label`` is omitted the route synthesises one from\n:data:`DEFAULT_CHECKPOINT_LABEL_TEMPLATE` using the next ordinal for\nthe session (\"Checkpoint 1\", \"Checkpoint 2\", ...).\n\n404 when the session or message is absent (FK violation in the DB\nlayer surfaces as ``IntegrityError``).\n409 when the per-session cap from\n:data:`MAX_CHECKPOINTS_PER_SESSION` is exceeded.",
         "operationId": "create-checkpoint",
         "requestBody": {
           "required": true,
@@ -1988,7 +1988,7 @@
           "checkpoints"
         ],
         "summary": "List Checkpoints",
-        "description": "Every checkpoint for ``session_id``, newest-first.\n\nReturns ``[]`` for an unknown session (matches the zero-row case for\na session that exists but has no checkpoints \u2014 the gutter renders\nempty either way).",
+        "description": "Every checkpoint for ``session_id``, newest-first.\n\nReturns ``[]`` for an unknown session (matches the zero-row case for\na session that exists but has no checkpoints -- the gutter renders\nempty either way).",
         "operationId": "list-checkpoints",
         "parameters": [
           {
@@ -2094,6 +2094,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CheckpointForkResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/checkpoints/{checkpoint_id}/compare": {
+      "get": {
+        "tags": [
+          "checkpoints"
+        ],
+        "summary": "Compare Checkpoint",
+        "description": "Return messages added to the session *after* ``checkpoint_id``'s anchor.\n\nThe diff is computed from the ``messages`` table: every row whose\n``rowid`` is strictly greater than the anchor message's ``rowid``\nbelongs to the delta. Only messages on the same session as the\ncheckpoint are included.\n\n404 when the checkpoint or its anchor message is absent. Empty\n``delta_messages`` (and ``delta_message_count == 0``) when no new\nmessages exist -- the caller renders a \"no changes\" state without\ntreating it as an error.\n\nPer ``docs/behavior/context-menus.md`` \u00a7\"Checkpoint (gutter chip)\":\n``checkpoint.compare`` is the T1-08 parity-gap action -- right-click\na checkpoint chip -> compare -> modal shows message delta.",
+        "operationId": "compare-checkpoint",
+        "parameters": [
+          {
+            "name": "checkpoint_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checkpoint Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointCompareResult"
                 }
               }
             }
@@ -2671,7 +2714,7 @@
           "sessions"
         ],
         "summary": "Delete Session",
-        "description": "Cascade-delete a session row + messages + checkpoints.",
+        "description": "Cascade-delete a session row + messages + checkpoints.\n\nAfter removing the session, explicitly NULLs ``chat_session_id`` on\nany checklist items that referenced it.  The schema carries an ``ON\nDELETE SET NULL`` FK that handles this automatically when foreign-key\nenforcement is active, but that enforcement is opt-in per connection;\nthe explicit call here is a belt-and-suspenders guarantee.",
         "operationId": "delete-session",
         "parameters": [
           {
@@ -3575,6 +3618,92 @@
         }
       }
     },
+    "/api/sessions/{session_id}/suggest_title": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Suggest Session Title",
+        "description": "Suggest a title for a session based on its conversation excerpt (T1-03).\n\nFetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`\nmessages and sends a short excerpt to the Claude CLI via subprocess.\nThe LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``\nmodal's title input when the user clicks the **\u2728 Suggest** button.\n\n* ``200`` \u2014 :class:`SuggestTitleOut` with ``suggested_title`` (may be\n  ``None`` when the session has no messages, the subprocess fails, or\n  the response is blank).\n* ``404`` \u2014 session not found.\n\nThe underlying LLM call is injected via ``app.state.title_suggester``\nso tests can replace it without spawning a real subprocess.  The\ncallable signature is\n``(excerpt: str, model: str) -> Awaitable[str | None]``.",
+        "operationId": "suggest-session-title",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestTitleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/work_evidence": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Get Work Evidence",
+        "description": "Return a structured summary of work performed by the session (T2-08).\n\nQueries ``tool_calls`` for bash, write, and edit invocations, then\noptionally runs ``git diff --stat`` in the session's ``working_dir``\nto report uncommitted changes.\n\n* ``200`` \u2014 :class:`WorkEvidenceOut` with tool-call counts and git diff.\n* ``404`` \u2014 session not found.\n\n``git_diff_stat`` is ``None`` (and ``git_diff_available`` is ``False``)\nwhen the working directory is not a git repo, ``git`` is unavailable,\nor the ``git diff`` subprocess times out.  The route always returns\n``200``; callers should treat a ``None`` diff as \"git state unknown.\"\n\nThe ``git diff --stat`` subprocess call is injected via\n``app.state.git_diff_runner`` so tests can replace it without a real\ngit repo.  The callable signature is\n``(working_dir: str) -> Awaitable[str | None]``.",
+        "operationId": "get-session-work-evidence",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkEvidenceOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/bulk": {
       "post": {
         "tags": [
@@ -3907,6 +4036,59 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/MessageHiddenUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/messages/{message_id}/content": {
+      "patch": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Patch Message Content",
+        "description": "Rewrite the ``content`` field of a user-role message (T1-05).\n\nOnly user-role messages are editable \u2014 assistant / system turns are\nthe agent's immutable output.  Calling this on a non-user message\nreturns 422. Returns the updated row. 404 when absent.",
+        "operationId": "patch-message-content",
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageContentUpdate"
               }
             }
           }
@@ -7400,6 +7582,74 @@
         "title": "ChecklistOverviewOut",
         "description": "Response shape for ``GET /api/checklists/{id}``.\n\nBundles the items list + the active-run row (if any) into one\npayload so the client renders the pane without two roundtrips."
       },
+      "CheckpointCompareResult": {
+        "properties": {
+          "checkpoint_id": {
+            "type": "string",
+            "title": "Checkpoint Id"
+          },
+          "checkpoint_label": {
+            "type": "string",
+            "title": "Checkpoint Label"
+          },
+          "anchor_message_id": {
+            "type": "string",
+            "title": "Anchor Message Id"
+          },
+          "delta_message_count": {
+            "type": "integer",
+            "title": "Delta Message Count"
+          },
+          "delta_messages": {
+            "items": {
+              "$ref": "#/components/schemas/CheckpointDeltaMessage"
+            },
+            "type": "array",
+            "title": "Delta Messages"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "checkpoint_id",
+          "checkpoint_label",
+          "anchor_message_id",
+          "delta_message_count",
+          "delta_messages"
+        ],
+        "title": "CheckpointCompareResult",
+        "description": "Response body for ``GET /api/checkpoints/{id}/compare``.\n\n``delta_messages`` contains every message whose ``rowid`` is\ngreater than the anchor message's ``rowid`` -- i.e. every message\nadded to the session *after* the checkpoint was created.\n\n``delta_message_count`` mirrors ``len(delta_messages)`` and is\nprovided as a convenience so the frontend can branch on zero without\niterating the array before it renders."
+      },
+      "CheckpointDeltaMessage": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "CheckpointDeltaMessage",
+        "description": "One message in the delta returned by ``GET /api/checkpoints/{id}/compare``.\n\nCarries only the fields the diff-view modal needs: identity, role,\ncontent, and timestamp. Routing/usage columns are omitted -- the\ncompare view surfaces *what* was said, not *how* it was routed."
+      },
       "CheckpointExport": {
         "properties": {
           "id": {
@@ -8067,6 +8317,22 @@
         ],
         "title": "LinkChatIn",
         "description": "Request shape for ``POST /api/checklist-items/{id}/link``."
+      },
+      "MessageContentUpdate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "MessageContentUpdate",
+        "description": "Request body for ``PATCH /api/messages/{id}/content`` (T1-05).\n\nOnly user-role messages may be edited.  The route layer enforces\nthe role constraint and returns 422 for assistant / system turns."
       },
       "MessageExport": {
         "properties": {
@@ -10818,6 +11084,28 @@
         "title": "StartRunIn",
         "description": "Request shape for ``POST /api/checklists/{id}/run/start``.\n\nPer behavior/checklists.md \u00a7\"Run-control surface\" the user picks\nfailure_policy \u2208 {halt, skip} (default halt) and the\nvisit_existing toggle before pressing Start."
       },
+      "SuggestTitleOut": {
+        "properties": {
+          "suggested_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Title"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "suggested_title"
+        ],
+        "title": "SuggestTitleOut",
+        "description": "Response shape for ``POST /api/sessions/{id}/suggest_title`` (T1-03).\n\n``suggested_title`` is a 3-8 word title proposed by the LLM based on a\nshort excerpt of the conversation.  ``None`` when the session has no\nmessages yet or when the underlying LLM call fails or times out \u2014 the\nendpoint always returns 200; the caller decides whether to surface the\nresult as a pre-fill or a toast."
+      },
       "SuppressWarningIn": {
         "properties": {
           "block_hash": {
@@ -12393,6 +12681,81 @@
         ],
         "title": "VaultListOut",
         "description": "Response shape for ``GET /api/vault`` \u2014 bucketed list.\n\nPer vault.md \u00a7\"When the user opens the vault\" the user sees a\nPlans section and a Todos section; the wire surfaces both\nbuckets as separate arrays so the client doesn't have to filter\non the wire-side ``kind`` discriminator. ``plan_roots`` /\n``todo_globs`` mirror the configured paths so the empty-state\nUI (\"No plans found under \u2026\") can name them per vault.md\n\u00a7\"When the user opens the vault\" \u2192 empty state."
+      },
+      "WorkEvidenceOut": {
+        "properties": {
+          "tool_calls_summary": {
+            "items": {
+              "$ref": "#/components/schemas/WorkEvidenceToolSummary"
+            },
+            "type": "array",
+            "title": "Tool Calls Summary"
+          },
+          "bash_calls": {
+            "type": "integer",
+            "title": "Bash Calls"
+          },
+          "write_calls": {
+            "type": "integer",
+            "title": "Write Calls"
+          },
+          "edit_calls": {
+            "type": "integer",
+            "title": "Edit Calls"
+          },
+          "total_work_tool_calls": {
+            "type": "integer",
+            "title": "Total Work Tool Calls"
+          },
+          "git_diff_stat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Diff Stat"
+          },
+          "git_diff_available": {
+            "type": "boolean",
+            "title": "Git Diff Available"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_calls_summary",
+          "bash_calls",
+          "write_calls",
+          "edit_calls",
+          "total_work_tool_calls",
+          "git_diff_stat",
+          "git_diff_available"
+        ],
+        "title": "WorkEvidenceOut",
+        "description": "Response shape for ``GET /api/sessions/{id}/work_evidence`` (T2-08).\n\nAggregates evidence that the session performed real work:\n\n* ``tool_calls_summary`` \u2014 per-tool call counts for bash / write / edit\n  tools.  Only tools with at least one call appear in the list.\n* ``bash_calls`` / ``write_calls`` / ``edit_calls`` \u2014 convenience\n  roll-ups of the per-tool counts grouped by category.\n* ``total_work_tool_calls`` \u2014 sum of bash + write + edit calls.\n* ``git_diff_stat`` \u2014 output of ``git diff --stat`` run in the\n  session's ``working_dir``, or ``None`` when the directory is not a\n  git repo, ``git`` is not on PATH, or the subprocess times out.\n* ``git_diff_available`` \u2014 ``True`` when ``git_diff_stat`` is a non-empty\n  string (i.e., there are uncommitted changes); ``False`` otherwise."
+      },
+      "WorkEvidenceToolSummary": {
+        "properties": {
+          "tool_name": {
+            "type": "string",
+            "title": "Tool Name"
+          },
+          "call_count": {
+            "type": "integer",
+            "title": "Call Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tool_name",
+          "call_count"
+        ],
+        "title": "WorkEvidenceToolSummary",
+        "description": "Per-tool aggregated call count in a work-evidence summary.\n\n``tool_name`` is the exact value stored in ``tool_calls.tool_name``\n(e.g. ``\"Bash\"``, ``\"Edit\"``, ``\"Write\"``).  ``call_count`` is the\nnumber of invocations recorded for that tool in the session."
       }
     }
   }

@@ -567,8 +567,68 @@ __all__ = [
     "SessionTodosOut",
     "SessionUpdate",
     "SessionsPage",
+    "SuggestTitleOut",
     "SystemPromptLayerOut",
     "SystemPromptLayersOut",
     "TokenTotalsOut",
     "ToolCallOut",
+    "WorkEvidenceOut",
+    "WorkEvidenceToolSummary",
 ]
+
+
+class SuggestTitleOut(BaseModel):
+    """Response shape for ``POST /api/sessions/{id}/suggest_title`` (T1-03).
+
+    ``suggested_title`` is a 3-8 word title proposed by the LLM based on a
+    short excerpt of the conversation.  ``None`` when the session has no
+    messages yet or when the underlying LLM call fails or times out — the
+    endpoint always returns 200; the caller decides whether to surface the
+    result as a pre-fill or a toast.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    suggested_title: str | None
+
+
+class WorkEvidenceToolSummary(BaseModel):
+    """Per-tool aggregated call count in a work-evidence summary.
+
+    ``tool_name`` is the exact value stored in ``tool_calls.tool_name``
+    (e.g. ``"Bash"``, ``"Edit"``, ``"Write"``).  ``call_count`` is the
+    number of invocations recorded for that tool in the session.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_name: str
+    call_count: int
+
+
+class WorkEvidenceOut(BaseModel):
+    """Response shape for ``GET /api/sessions/{id}/work_evidence`` (T2-08).
+
+    Aggregates evidence that the session performed real work:
+
+    * ``tool_calls_summary`` — per-tool call counts for bash / write / edit
+      tools.  Only tools with at least one call appear in the list.
+    * ``bash_calls`` / ``write_calls`` / ``edit_calls`` — convenience
+      roll-ups of the per-tool counts grouped by category.
+    * ``total_work_tool_calls`` — sum of bash + write + edit calls.
+    * ``git_diff_stat`` — output of ``git diff --stat`` run in the
+      session's ``working_dir``, or ``None`` when the directory is not a
+      git repo, ``git`` is not on PATH, or the subprocess times out.
+    * ``git_diff_available`` — ``True`` when ``git_diff_stat`` is a non-empty
+      string (i.e., there are uncommitted changes); ``False`` otherwise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_calls_summary: list[WorkEvidenceToolSummary]
+    bash_calls: int
+    write_calls: int
+    edit_calls: int
+    total_work_tool_calls: int
+    git_diff_stat: str | None
+    git_diff_available: bool

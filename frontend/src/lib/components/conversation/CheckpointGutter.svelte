@@ -31,15 +31,19 @@
    */
   import { onMount, untrack } from "svelte";
   import {
+    compareCheckpoint,
     createCheckpoint,
     deleteCheckpoint,
     forkCheckpoint,
     listCheckpoints,
+    type CheckpointCompareResult,
     type CheckpointOut,
   } from "../../api/checkpoints";
+  import CheckpointCompareModal from "./CheckpointCompareModal.svelte";
   import { contextMenu } from "../../actions/contextMenu";
   import {
     CHECKPOINT_GUTTER_STRINGS,
+    MENU_ACTION_CHECKPOINT_COMPARE,
     MENU_ACTION_CHECKPOINT_COPY_ID,
     MENU_ACTION_CHECKPOINT_COPY_LABEL,
     MENU_ACTION_CHECKPOINT_DELETE,
@@ -65,6 +69,9 @@
   let checkpoints = $state<CheckpointOut[]>([]);
   /** Pixel-position of each chip, keyed by checkpoint id. */
   let chipTops = $state<Record<string, number>>({});
+
+  /** Compare modal state: null = closed, set = open for this checkpoint. */
+  let compareTarget = $state<{ id: string; label: string } | null>(null);
 
   // Re-fetch whenever session or refresh tick changes.
   $effect(() => {
@@ -163,6 +170,9 @@
     cp: CheckpointOut,
   ): Record<string, import("../../context-menu/store.svelte").HandlerEntry> {
     return {
+      [MENU_ACTION_CHECKPOINT_COMPARE]: () => {
+        compareTarget = { id: cp.id, label: cp.label };
+      },
       [MENU_ACTION_CHECKPOINT_FORK]: () => {
         void (async () => {
           try {
@@ -238,3 +248,13 @@
     {/if}
   {/each}
 </aside>
+
+{#if compareTarget !== null}
+  <CheckpointCompareModal
+    checkpointId={compareTarget.id}
+    checkpointLabel={compareTarget.label}
+    onClose={() => {
+      compareTarget = null;
+    }}
+  />
+{/if}

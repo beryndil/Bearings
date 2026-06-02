@@ -3,19 +3,24 @@
 Per ``docs/architecture-v1.md`` §1.1.5 every route group lives in its
 own module; this one owns:
 
-* ``POST /api/checkpoints`` — create a checkpoint anchored at a message.
-* ``GET /api/checkpoints?session_id=...`` — list checkpoints for one session.
-* ``DELETE /api/checkpoints/{checkpoint_id}`` — delete one.
-* ``POST /api/checkpoints/{checkpoint_id}/fork`` — clone the source
-  session + copy messages up to & including the anchor into a new
-  session.
+* ``POST /api/checkpoints`` -- create a checkpoint anchored at a message.
+* ``GET /api/checkpoints?session_id=...`` -- list checkpoints for one session.
+* ``DELETE /api/checkpoints/{checkpoint_id}`` -- delete one.
+* ``POST /api/checkpoints/{checkpoint_id}/fork`` -- clone the source
+  session + copy messages up to & including the anchor into a new session.
+* ``GET /api/checkpoints/{checkpoint_id}/compare`` -- return messages
+  added after the checkpoint's anchor (the conversation delta).
 
 The fork endpoint is the surface :mod:`bearings.db.checkpoints` was
-written to support — per
+written to support -- per
 ``docs/behavior/context-menus.md`` §"Checkpoint (gutter chip)" the
 primary action is ``checkpoint.fork``. There is intentionally no
-"restore overwrite current session" semantic in v1 — fork is the only
+"restore overwrite current session" semantic in v1 -- fork is the only
 mutation the gutter chip exposes.
+
+The compare endpoint is the ``checkpoint.compare`` context-menu action
+(T1-08 parity gap). It returns every message added after the anchor so
+the frontend can render a diff view without a full transcript re-fetch.
 
 Per ``docs/behavior/chat.md`` §"Slash commands in the composer" the
 ``/checkpoint`` slash command resolves to ``POST /api/checkpoints``
@@ -24,9 +29,9 @@ with the most-recent assistant message as the anchor; G3's
 actions also dispatch through here (split = create checkpoint, fork =
 create + immediately fork).
 
-Handler bodies stay thin per arch §1.1.5: parse → single domain call →
-shape adapter → response. Errors surface via :class:`HTTPException`
-with structured ``detail`` strings — 404 for absent rows, 409 when the
+Handler bodies stay thin per arch §1.1.5: parse -> single domain call ->
+shape adapter -> response. Errors surface via :class:`HTTPException`
+with structured ``detail`` strings -- 404 for absent rows, 409 when the
 per-session checkpoint cap is exceeded, 422 from the Pydantic input
 validators (auto-emitted).
 """
@@ -48,6 +53,8 @@ from bearings.db import sessions as sessions_db
 from bearings.db._id import new_id, now_iso
 from bearings.db.checkpoints import Checkpoint
 from bearings.web.models.checkpoints import (
+    CheckpointCompareResult,
+    CheckpointDeltaMessage,
     CheckpointForkResult,
     CheckpointIn,
     CheckpointOut,
@@ -89,7 +96,7 @@ async def create_checkpoint(payload: CheckpointIn, request: Request) -> Checkpoi
 
     When ``payload.label`` is omitted the route synthesises one from
     :data:`DEFAULT_CHECKPOINT_LABEL_TEMPLATE` using the next ordinal for
-    the session ("Checkpoint 1", "Checkpoint 2", …).
+    the session ("Checkpoint 1", "Checkpoint 2", ...).
 
     404 when the session or message is absent (FK violation in the DB
     layer surfaces as ``IntegrityError``).
@@ -146,7 +153,7 @@ async def list_checkpoints(
     """Every checkpoint for ``session_id``, newest-first.
 
     Returns ``[]`` for an unknown session (matches the zero-row case for
-    a session that exists but has no checkpoints — the gutter renders
+    a session that exists but has no checkpoints -- the gutter renders
     empty either way).
     """
     db = _db(request)
@@ -241,6 +248,55 @@ async def fork_checkpoint(checkpoint_id: str, request: Request) -> CheckpointFor
     )
 
 
+@router.get(
+    "/api/checkpoints/{checkpoint_id}/compare",
+    response_model=CheckpointCompareResult,
+    operation_id="compare-checkpoint",
+)
+async def compare_checkpoint(checkpoint_id: str, request: Request) -> CheckpointCompareResult:
+    """Return messages added to the session *after* ``checkpoint_id``'s anchor.
+
+    The diff is computed from the ``messages`` table: every row whose
+    ``rowid`` is strictly greater than the anchor message's ``rowid``
+    belongs to the delta. Only messages on the same session as the
+    checkpoint are included.
+
+    404 when the checkpoint or its anchor message is absent. Empty
+    ``delta_messages`` (and ``delta_message_count == 0``) when no new
+    messages exist -- the caller renders a "no changes" state without
+    treating it as an error.
+
+    Per ``docs/behavior/context-menus.md`` §"Checkpoint (gutter chip)":
+    ``checkpoint.compare`` is the T1-08 parity-gap action -- right-click
+    a checkpoint chip -> compare -> modal shows message delta.
+    """
+    db = _db(request)
+    checkpoint = await checkpoints_db.get(db, checkpoint_id)
+    if checkpoint is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no checkpoint matches {checkpoint_id!r}",
+        )
+    anchor_message = await messages_db.get(db, checkpoint.message_id)
+    if anchor_message is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"checkpoint {checkpoint_id!r} points at a missing message",
+        )
+    delta = await _list_delta_messages(
+        db,
+        session_id=checkpoint.session_id,
+        after_seq=anchor_message.seq,
+    )
+    return CheckpointCompareResult(
+        checkpoint_id=checkpoint.id,
+        checkpoint_label=checkpoint.label,
+        anchor_message_id=checkpoint.message_id,
+        delta_message_count=len(delta),
+        delta_messages=delta,
+    )
+
+
 def _derive_fork_title(source_title: str) -> str:
     """Append ``" (fork)"`` to ``source_title``, trimming if it would overflow."""
     suffix = " (fork)"
@@ -260,10 +316,10 @@ async def _copy_messages_up_to_anchor(
     target_session_id: str,
     anchor_seq: int,
 ) -> int:
-    """Copy messages with ``rowid <= anchor_seq`` from source → target.
+    """Copy messages with ``rowid <= anchor_seq`` from source -> target.
 
-    Returns the number of rows inserted. Uses a single ``INSERT INTO …
-    SELECT …`` so the bulk copy is one round-trip; new ids are minted
+    Returns the number of rows inserted. Uses a single ``INSERT INTO ...
+    SELECT ...`` so the bulk copy is one round-trip; new ids are minted
     per-row so the target session has its own immutable identifiers.
     The ``message_count`` on ``sessions(target_session_id)`` is bumped
     once at the end to match.
@@ -271,7 +327,7 @@ async def _copy_messages_up_to_anchor(
     # SQLite's row generator can't mint app-prefix ids in-SQL, so we
     # iterate the rows and INSERT one at a time. The set is bounded by
     # the source session's transcript length up to the checkpoint anchor;
-    # for typical sessions (≤ 100 turns) this is an O(N) loop with no
+    # for typical sessions (<= 100 turns) this is an O(N) loop with no
     # noticeable latency.
     cursor = await connection.execute(
         "SELECT id, role, content, created_at, executor_model, advisor_model, "
@@ -306,7 +362,7 @@ async def _copy_messages_up_to_anchor(
                 target_session_id,
                 str(row[1]),  # role
                 str(row[2]),  # content
-                str(row[3]),  # created_at — preserve original ts so order matches
+                str(row[3]),  # created_at -- preserve original ts so order matches
                 row[4],
                 row[5],
                 row[6],
@@ -331,6 +387,40 @@ async def _copy_messages_up_to_anchor(
     )
     await connection.commit()
     return len(rows)
+
+
+async def _list_delta_messages(
+    connection: aiosqlite.Connection,
+    *,
+    session_id: str,
+    after_seq: int,
+) -> list[CheckpointDeltaMessage]:
+    """Return messages with ``rowid > after_seq`` on ``session_id``, oldest-first.
+
+    Intentionally fetches only the four columns the compare view needs
+    (id, role, content, created_at) rather than the full column set from
+    ``_SELECT_MESSAGE_COLUMNS`` -- the diff modal does not render routing
+    or token metadata.
+    """
+    cursor = await connection.execute(
+        "SELECT id, role, content, created_at "
+        "FROM messages WHERE session_id = ? AND rowid > ? "
+        "ORDER BY rowid ASC",
+        (session_id, after_seq),
+    )
+    try:
+        rows = list(await cursor.fetchall())
+    finally:
+        await cursor.close()
+    return [
+        CheckpointDeltaMessage(
+            id=str(row[0]),
+            role=str(row[1]),
+            content=str(row[2]),
+            created_at=str(row[3]),
+        )
+        for row in rows
+    ]
 
 
 __all__ = ["router"]

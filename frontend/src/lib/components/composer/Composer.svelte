@@ -49,6 +49,10 @@
   import { clearDraft, loadDraft, saveDraft } from "../../composer/draftStore.svelte";
   import { InputHistory } from "../../composer/inputHistory";
   import { bumpCheckpointRefresh } from "../../stores/checkpointBus.svelte";
+  import {
+    composerBridgeStore,
+    consumePendingPaste,
+  } from "../../stores/composerBridge.svelte";
   import { conversationStore } from "../../stores/conversation.svelte";
   import CommandMenu from "./CommandMenu.svelte";
 
@@ -146,6 +150,35 @@
   // string, so a successful send (draft = "") tidies storage automatically.
   $effect(() => {
     saveDraft(sessionId, draft);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Composer bridge (T1-06 + vault paste)
+  //
+  // Watch for paste requests targeting this composer's session. The
+  // pasteIntoComposer() caller sets composerBridgeStore.pending; we
+  // consume it here and splice the text into the draft at the cursor
+  // (or append if the textarea is unfocused / the cursor is at end).
+  // ---------------------------------------------------------------------------
+
+  $effect(() => {
+    const paste = composerBridgeStore.pending;
+    if (paste === null || paste.sessionId !== sessionId) return;
+    consumePendingPaste();
+    if (textareaEl !== null && document.activeElement === textareaEl) {
+      const start = textareaEl.selectionStart ?? draft.length;
+      const end = textareaEl.selectionEnd ?? draft.length;
+      draft = draft.slice(0, start) + paste.text + draft.slice(end);
+      requestAnimationFrame(() => {
+        if (textareaEl !== null) {
+          const pos = start + paste.text.length;
+          textareaEl.setSelectionRange(pos, pos);
+        }
+      });
+    } else {
+      draft = draft + (draft.length > 0 ? "\n" : "") + paste.text;
+    }
+    textareaEl?.focus();
   });
 
   // ---------------------------------------------------------------------------

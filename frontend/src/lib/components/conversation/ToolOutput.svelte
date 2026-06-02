@@ -31,9 +31,13 @@
     MENU_ACTION_TOOL_CALL_COPY_INPUT,
     MENU_ACTION_TOOL_CALL_COPY_NAME,
     MENU_ACTION_TOOL_CALL_COPY_OUTPUT,
+    MENU_ACTION_TOOL_CALL_DEBUG,
+    MENU_ACTION_TOOL_CALL_EDIT_INPUT,
+    MENU_ACTION_TOOL_CALL_RETRY,
     MENU_TARGET_TOOL_CALL,
   } from "../../config";
   import { contextMenu } from "../../actions/contextMenu";
+  import { sendPrompt } from "../../api/prompt";
   import { linkifyToHtml } from "../../linkify";
   import { sanitizeHtml } from "../../sanitize";
   import CollapsibleBody from "../common/CollapsibleBody.svelte";
@@ -53,9 +57,45 @@
      * §"Clickable file paths and URLs in output" (gap-cycle-06-004).
      */
     workingDir?: string | null;
+    /**
+     * The session this tool call belongs to. Forwarded from
+     * ``MessageTurn.svelte`` → ``ToolOutput.svelte`` to enable the
+     * T1-07 retry action (``POST /api/sessions/{id}/prompt``). When
+     * absent, retry is disabled.
+     */
+    sessionId?: string | null;
   }
 
-  const { call, workingDir = null }: Props = $props();
+  const { call, workingDir = null, sessionId = null }: Props = $props();
+
+  // ---- T1-07 debug drawer + edit input state ----------------------------------
+
+  /** True when the raw JSON debug drawer is expanded. */
+  let debugOpen = $state(false);
+  /** True when the inline edit-input textarea is open. */
+  let editInputOpen = $state(false);
+  let editInputDraft = $state("");
+
+  function openEditInput(): void {
+    editInputDraft = prettyJson(call.inputJson);
+    editInputOpen = true;
+  }
+
+  function cancelEditInput(): void {
+    editInputOpen = false;
+  }
+
+  async function submitEditInput(): Promise<void> {
+    if (sessionId === null || editInputDraft.trim().length === 0) return;
+    // Validate the edited JSON before sending.
+    try {
+      JSON.parse(editInputDraft);
+    } catch {
+      return; // invalid JSON — don't send
+    }
+    editInputOpen = false;
+    await sendPrompt(sessionId, `Retry ${call.name} with this input:\n\`\`\`json\n${editInputDraft}\n\`\`\``);
+  }
 
   // ---- context-menu handlers -------------------------------------------------
 
@@ -86,8 +126,37 @@
       void navigator.clipboard.writeText(call.id);
     },
 
-    // MENU_ACTION_TOOL_CALL_RETRY — advanced; no backend endpoint in v1.
-    // Omitting the handler renders the entry disabled in the menu.
+    /**
+     * T1-07 — retry: POST a prompt to the session asking the agent to
+     * re-invoke the tool with the same input. Disabled when no sessionId.
+     */
+    [MENU_ACTION_TOOL_CALL_RETRY]:
+      sessionId !== null
+        ? () => {
+            void sendPrompt(
+              sessionId,
+              `Please retry the ${call.name} tool call with the same input: \`\`\`json\n${call.inputJson}\n\`\`\``,
+            ).catch((err: unknown) => {
+              console.error("Retry tool call failed:", err);
+            });
+          }
+        : { disabledReason: "No session context — retry unavailable" },
+
+    /**
+     * T1-07 — edit input: open the inline edit textarea with the current
+     * input JSON pre-filled. Disabled when no sessionId.
+     */
+    [MENU_ACTION_TOOL_CALL_EDIT_INPUT]:
+      sessionId !== null
+        ? () => openEditInput()
+        : { disabledReason: "No session context — edit input unavailable" },
+
+    /**
+     * T1-07 — debug: toggle the raw JSON debug drawer below the output.
+     */
+    [MENU_ACTION_TOOL_CALL_DEBUG]: () => {
+      debugOpen = !debugOpen;
+    },
   });
 
   // ---- live elapsed clock ---------------------------------------------------
@@ -237,6 +306,53 @@
       >
         Error: {call.errorMessage}
       </p>
+    {/if}
+    {#if debugOpen}
+      <!-- T1-07 debug drawer — raw input + output JSON -->
+      <div
+        class="mt-2 rounded border border-border bg-surface-2 p-2 font-mono text-xs"
+        data-testid="tool-output-debug-drawer"
+      >
+        <p class="mb-1 text-fg-muted">Raw input JSON:</p>
+        <pre class="whitespace-pre-wrap break-words text-fg">{call.inputJson}</pre>
+        {#if call.done}
+          <p class="mb-1 mt-2 text-fg-muted">Raw output:</p>
+          <pre class="whitespace-pre-wrap break-words text-fg">{call.output}</pre>
+        {/if}
+      </div>
+    {/if}
+    {#if editInputOpen}
+      <!-- T1-07 edit input textarea -->
+      <div
+        class="mt-2 flex flex-col gap-1"
+        data-testid="tool-output-edit-input"
+      >
+        <textarea
+          class="w-full rounded border border-accent/60 bg-surface-1 p-2 font-mono text-xs text-fg-strong focus:outline-none focus:ring-1 focus:ring-accent/60"
+          rows="6"
+          bind:value={editInputDraft}
+          data-testid="tool-output-edit-input-textarea"
+        ></textarea>
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="rounded px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg-strong"
+            onclick={cancelEditInput}
+            data-testid="tool-output-edit-input-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="rounded bg-accent/20 px-2 py-0.5 text-xs text-fg-strong hover:bg-accent/30 disabled:opacity-50"
+            onclick={() => void submitEditInput()}
+            disabled={sessionId === null}
+            data-testid="tool-output-edit-input-submit"
+          >
+            Retry with edited input
+          </button>
+        </div>
+      </div>
     {/if}
   </div>
 </details>

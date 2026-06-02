@@ -175,6 +175,16 @@
         groupsByKey.get(key)!.sessions.push(session);
       }
     }
+    // Within each group: pinned sessions float to the top so the user
+    // can locate starred rows without scanning (T2-06). The pinned sort
+    // is stable — rows with the same pinned value keep the order they
+    // arrived in from the store (typically updated_at DESC from the API).
+    for (const group of groupsByKey.values()) {
+      group.sessions.sort((a, b) => {
+        if (a.pinned === b.pinned) return 0;
+        return a.pinned ? -1 : 1;
+      });
+    }
     // Stable ordering: alphabetical by group label, with the
     // ungrouped bucket last (it carries no tag identity).
     return Array.from(groupsByKey.values()).sort((a, b) => {

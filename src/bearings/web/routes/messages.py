@@ -39,6 +39,7 @@ from bearings.db import messages as messages_db
 from bearings.db import sessions as sessions_db
 from bearings.db.messages import Message
 from bearings.web.models.messages import (
+    MessageContentUpdate,
     MessageHiddenUpdate,
     MessageMoveRequest,
     MessageOut,
@@ -236,6 +237,43 @@ async def delete_message(message_id: str, request: Request) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no message matches {message_id!r}",
         )
+
+
+@router.patch(
+    "/api/messages/{message_id}/content",
+    response_model=MessageOut,
+    operation_id="patch-message-content",
+)
+async def patch_message_content(
+    message_id: str,
+    payload: MessageContentUpdate,
+    request: Request,
+) -> MessageOut:
+    """Rewrite the ``content`` field of a user-role message (T1-05).
+
+    Only user-role messages are editable — assistant / system turns are
+    the agent's immutable output.  Calling this on a non-user message
+    returns 422. Returns the updated row. 404 when absent.
+    """
+    db = _db(request)
+    row = await messages_db.get(db, message_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no message matches {message_id!r}",
+        )
+    if row.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="only user-role messages may be edited",
+        )
+    updated = await messages_db.update_content(db, message_id, content=payload.content)
+    if updated is None:  # pragma: no cover — just fetched above
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no message matches {message_id!r}",
+        )
+    return _to_out(updated)
 
 
 @router.post(

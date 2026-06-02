@@ -1862,3 +1862,63 @@ __all__ = [
     "WS_IDLE_PING_INTERVAL",
     "WS_IDLE_PING_INTERVAL_S",
 ]
+
+# ---------------------------------------------------------------------------
+# Auto-title suggestion (T1-03 — POST /api/sessions/{id}/suggest_title).
+#
+# Message limit: how many recent messages the route fetches to build the
+# conversation excerpt passed to the LLM.  Six is enough for meaningful
+# context while keeping the prompt under a token budget the model can
+# process quickly.
+#
+# Excerpt cap: hard char-limit on the concatenated excerpt before the
+# prompt prefix is prepended.  3 000 chars covers several medium-length
+# messages without exceeding typical context limits.
+#
+# Response cap: max chars we accept from the LLM reply.  Any title longer
+# than this is truncated rather than rejected so the endpoint stays robust
+# against verbose models.
+#
+# Timeout: wall-clock cap on the subprocess that calls the Claude CLI.
+# 30 s is generous for a one-shot non-streaming query.
+# ---------------------------------------------------------------------------
+
+SUGGEST_TITLE_MESSAGE_LIMIT: Final[int] = 6
+SUGGEST_TITLE_EXCERPT_MAX_CHARS: Final[int] = 3_000
+SUGGEST_TITLE_RESPONSE_MAX_CHARS: Final[int] = 200
+SUGGEST_TITLE_TIMEOUT_S: Final[float] = 30.0
+
+# Default model used when the session has no advisor configured and the
+# suggest_title endpoint falls back to a standalone call.  Sonnet is the
+# workhorse default for cost-sensitive background calls.
+SUGGEST_TITLE_DEFAULT_MODEL: Final[str] = "sonnet"
+
+# ---------------------------------------------------------------------------
+# Work evidence (T2-08 — GET /api/sessions/{id}/work_evidence).
+#
+# Tool-name sets that the work-evidence route queries for.  The names
+# mirror the exact ``tool_name`` values stored in the ``tool_calls`` table
+# by the SDK loop.  Two overlapping namespaces exist:
+#
+# * Claude Code built-in tools use PascalCase (``Bash``, ``Write``,
+#   ``Edit``).
+# * Bearings' own MCP tool uses the MCP-qualified name
+#   (``mcp__bearings__bash``).
+#
+# Including both namespaces ensures the summary is complete regardless of
+# which execution path the agent used.
+#
+# GIT_DIFF_STAT_TIMEOUT_S: wall-clock cap on the ``git diff --stat``
+# subprocess the work-evidence route optionally runs.  10 s is generous;
+# even large repos return the stat line in < 1 s.
+# ---------------------------------------------------------------------------
+
+WORK_EVIDENCE_BASH_TOOL_NAMES: Final[frozenset[str]] = frozenset(
+    {"Bash", "bash", "mcp__bearings__bash"}
+)
+WORK_EVIDENCE_WRITE_TOOL_NAMES: Final[frozenset[str]] = frozenset({"Write", "write"})
+WORK_EVIDENCE_EDIT_TOOL_NAMES: Final[frozenset[str]] = frozenset({"Edit", "edit"})
+WORK_EVIDENCE_ALL_TOOL_NAMES: Final[frozenset[str]] = (
+    WORK_EVIDENCE_BASH_TOOL_NAMES | WORK_EVIDENCE_WRITE_TOOL_NAMES | WORK_EVIDENCE_EDIT_TOOL_NAMES
+)
+GIT_DIFF_STAT_TIMEOUT_S: Final[float] = 10.0

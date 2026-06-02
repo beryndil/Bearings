@@ -18,7 +18,7 @@
    * modal — deferred features" for the documented carve-out.
    */
   import { untrack } from "svelte";
-  import { patchSession, type SessionOut } from "../../api/sessions";
+  import { patchSession, suggestSessionTitle, type SessionOut } from "../../api/sessions";
   import { attachTagToSession, createTag, type TagOut } from "../../api/tags";
   import { contextMenu } from "../../actions/contextMenu";
   import {
@@ -117,6 +117,7 @@
   // ---- save state --------------------------------------------------------
 
   let saving = $state(false);
+  let suggesting = $state(false);
   let errorMsg = $state<string | null>(null);
 
   // ---- focus-instructions ref -------------------------------------------
@@ -129,6 +130,23 @@
       instructionsEl.focus();
     }
   });
+
+  // ---- suggest title -------------------------------------------------------
+
+  async function handleSuggestTitle(): Promise<void> {
+    suggesting = true;
+    errorMsg = null;
+    try {
+      const result = await suggestSessionTitle(session.id);
+      if (result.suggested_title !== null) {
+        titleValue = result.suggested_title;
+      }
+    } catch (err) {
+      errorMsg = `Could not suggest title: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      suggesting = false;
+    }
+  }
 
   // ---- save --------------------------------------------------------------
 
@@ -249,15 +267,27 @@
       <label for="session-edit-title-input" class="session-edit-modal__label">
         {SESSION_EDIT_MODAL_STRINGS.titleLabel}
       </label>
-      <input
-        id="session-edit-title-input"
-        type="text"
-        class="session-edit-modal__input"
-        data-testid="session-edit-title-input"
-        bind:value={titleValue}
-        disabled={saving}
-        placeholder={SESSION_EDIT_MODAL_STRINGS.titlePlaceholder}
-      />
+      <div class="session-edit-modal__title-row">
+        <input
+          id="session-edit-title-input"
+          type="text"
+          class="session-edit-modal__input session-edit-modal__input--flex"
+          data-testid="session-edit-title-input"
+          bind:value={titleValue}
+          disabled={saving || suggesting}
+          placeholder={SESSION_EDIT_MODAL_STRINGS.titlePlaceholder}
+        />
+        <button
+          type="button"
+          class="session-edit-modal__btn session-edit-modal__btn--suggest"
+          data-testid="session-edit-suggest-title"
+          disabled={saving || suggesting}
+          onclick={() => void handleSuggestTitle()}
+          title="Suggest a title based on the conversation"
+        >
+          {suggesting ? "…" : "✨"}
+        </button>
+      </div>
     </div>
 
     <!-- Description -->
@@ -679,5 +709,38 @@
 
   .session-edit-modal__btn--save:hover:not(:disabled) {
     opacity: 0.85;
+  }
+
+  .session-edit-modal__title-row {
+    display: flex;
+    gap: 0.375rem;
+    align-items: stretch;
+  }
+
+  .session-edit-modal__input--flex {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .session-edit-modal__btn--suggest {
+    padding: 0.375rem 0.625rem;
+    flex-shrink: 0;
+    font-size: 1rem;
+    line-height: 1;
+    background: rgb(var(--bearings-surface-2));
+    border: 1px solid rgb(var(--bearings-border));
+    border-radius: 0.25rem;
+    cursor: pointer;
+    color: rgb(var(--bearings-fg));
+    transition: background 0.1s;
+  }
+
+  .session-edit-modal__btn--suggest:hover:not(:disabled) {
+    background: rgb(var(--bearings-surface-1));
+  }
+
+  .session-edit-modal__btn--suggest:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 </style>

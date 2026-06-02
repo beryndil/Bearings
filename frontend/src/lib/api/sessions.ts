@@ -881,3 +881,45 @@ export async function getSessionSystemPrompt(
   const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/system_prompt`;
   return await getJson<SystemPromptLayersOut>(path, options);
 }
+
+// ---- suggest_title (T1-03) ------------------------------------------------
+
+/**
+ * Wire shape for ``POST /api/sessions/{id}/suggest_title`` (T1-03).
+ *
+ * ``suggested_title`` is ``null`` when the session has no messages, the
+ * underlying LLM call fails, or the response is blank.
+ *
+ * Not exported: the only consumer today is :func:`suggestSessionTitle`'s
+ * return type. A second consumer (e.g. a caller that stores the result by
+ * type) would re-export from here; until that lands, knip flags an
+ * exported-but-unused declaration.
+ */
+interface SuggestTitleOut {
+  suggested_title: string | null;
+}
+
+/**
+ * Request a title suggestion for a session via
+ * ``POST /api/sessions/{id}/suggest_title`` (T1-03).
+ *
+ * The server fetches recent messages, sends a short excerpt to the Claude
+ * CLI, and returns a proposed 3-8 word title.  The caller should
+ * pre-fill the ``SessionEdit`` modal's title input on success, silently
+ * ignore a ``null`` result, and show a toast on network/HTTP errors.
+ *
+ * @throws :class:`ApiError` on 404 (session not found) or 5xx.
+ */
+export async function suggestSessionTitle(
+  sessionId: string,
+  options: RequestOptions = {},
+): Promise<SuggestTitleOut> {
+  const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/suggest_title`;
+  return await postJson<SuggestTitleOut>(path, null, options);
+}
+
+// ---- work_evidence (T2-08) ------------------------------------------------
+// API stubs (WorkEvidenceToolSummary, WorkEvidenceOut, getWorkEvidence) are
+// wired in during T2-08 when the consuming UI component is built. Keeping
+// dead stubs here causes both knip and noUnusedLocals failures, so they are
+// added at that implementation step.

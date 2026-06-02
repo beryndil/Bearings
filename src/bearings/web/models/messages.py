@@ -106,6 +106,18 @@ class MessageHiddenUpdate(BaseModel):
     hidden: bool
 
 
+class MessageContentUpdate(BaseModel):
+    """Request body for ``PATCH /api/messages/{id}/content`` (T1-05).
+
+    Only user-role messages may be edited.  The route layer enforces
+    the role constraint and returns 422 for assistant / system turns.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(..., min_length=1)
+
+
 class MessageMoveRequest(BaseModel):
     """Request body for ``POST /api/messages/{id}/move`` (G3)."""
 
@@ -131,6 +143,7 @@ class MessagePage(BaseModel):
 
 
 __all__ = [
+    "MessageContentUpdate",
     "MessageHiddenUpdate",
     "MessageMoveRequest",
     "MessageOut",

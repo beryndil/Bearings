@@ -231,3 +231,87 @@ async def test_fork_checkpoint_404_when_checkpoint_missing(
     with TestClient(app) as client:
         response = client.post("/api/checkpoints/cpt_nope/fork")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# compare endpoint (T1-08 parity gap)
+# ---------------------------------------------------------------------------
+
+
+async def test_compare_checkpoint_returns_delta_messages(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Compare returns messages added after the checkpoint anchor."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn, title="Compare test")
+    # Seed two turns then create the checkpoint at the end of turn 1.
+    _user1, anchor = await _seed_turn(conn, sid, "turn-1-user", "turn-1-assistant")
+    with TestClient(app) as client:
+        cp_resp = client.post(
+            "/api/checkpoints",
+            json={"session_id": sid, "message_id": anchor, "label": "T1"},
+        )
+        cp_id = cp_resp.json()["id"]
+        # No delta yet -- checkpoint is at the latest message.
+        compare_empty = client.get(f"/api/checkpoints/{cp_id}/compare")
+    assert compare_empty.status_code == 200
+    body_empty = compare_empty.json()
+    assert body_empty["checkpoint_id"] == cp_id
+    assert body_empty["checkpoint_label"] == "T1"
+    assert body_empty["anchor_message_id"] == anchor
+    assert body_empty["delta_message_count"] == 0
+    assert body_empty["delta_messages"] == []
+
+    # Add a second turn after the checkpoint.
+    _user2, _assistant2_cmp = await _seed_turn(conn, sid, "turn-2-user", "turn-2-assistant")
+    with TestClient(app) as client:
+        compare_delta = client.get(f"/api/checkpoints/{cp_id}/compare")
+    assert compare_delta.status_code == 200
+    body_delta = compare_delta.json()
+    assert body_delta["delta_message_count"] == 2
+    assert len(body_delta["delta_messages"]) == 2
+    # Oldest message first.
+    assert body_delta["delta_messages"][0]["role"] == "user"
+    assert body_delta["delta_messages"][0]["content"] == "turn-2-user"
+    assert body_delta["delta_messages"][1]["role"] == "assistant"
+    assert body_delta["delta_messages"][1]["content"] == "turn-2-assistant"
+    # Each delta message has required fields.
+    for msg in body_delta["delta_messages"]:
+        assert "id" in msg
+        assert "role" in msg
+        assert "content" in msg
+        assert "created_at" in msg
+
+
+async def test_compare_checkpoint_404_on_missing_checkpoint(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    app, _ = app_and_db
+    with TestClient(app) as client:
+        response = client.get("/api/checkpoints/cpt_nope/compare")
+    assert response.status_code == 404
+
+
+async def test_compare_checkpoint_delta_only_includes_same_session(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Messages from other sessions must not appear in the delta."""
+    app, conn = app_and_db
+    sid_a = await _new_chat(conn, title="Session A")
+    sid_b = await _new_chat(conn, title="Session B")
+    # Checkpoint on A after its first turn.
+    _u, anchor_a = await _seed_turn(conn, sid_a, "a-user", "a-assistant")
+    # Add a turn on the OTHER session -- should not appear in A's compare.
+    await _seed_turn(conn, sid_b, "b-user", "b-assistant")
+    with TestClient(app) as client:
+        cp_resp = client.post(
+            "/api/checkpoints",
+            json={"session_id": sid_a, "message_id": anchor_a, "label": "Isolation"},
+        )
+        cp_id = cp_resp.json()["id"]
+        compare_resp = client.get(f"/api/checkpoints/{cp_id}/compare")
+    assert compare_resp.status_code == 200
+    body = compare_resp.json()
+    # Session B's messages must not leak into session A's delta.
+    assert body["delta_message_count"] == 0
+    assert body["delta_messages"] == []

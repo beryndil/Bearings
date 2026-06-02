@@ -30,6 +30,7 @@ import {
   MENU_ACTION_CODE_BLOCK_COPY,
   MENU_ACTION_CODE_BLOCK_COPY_WITH_FENCE,
   MENU_ACTION_CODE_BLOCK_OPEN_IN_EDITOR,
+  MENU_ACTION_CODE_BLOCK_RUN,
   MENU_ACTION_CODE_BLOCK_SAVE_TO_FILE,
   MENU_ACTION_LINK_COPY_TEXT,
   MENU_ACTION_LINK_COPY_URL,
@@ -41,6 +42,7 @@ import {
 import { openMenu } from "../context-menu/store.svelte";
 import { shellOpenInEditor } from "../api/shell";
 import { showShellOpError } from "../stores/shellOpNotification.svelte";
+import { pasteIntoComposer } from "../stores/composerBridge.svelte";
 
 /**
  * Return the absolute path from a ``file://`` URL or a bare absolute
@@ -148,13 +150,31 @@ function findCmTarget(start: EventTarget | null, container: HTMLElement): Elemen
 }
 
 /**
+ * Optional configuration for :func:`markdownContextMenu`.
+ *
+ * ``sessionId`` — when provided, the ``code_block.run`` action (T1-06)
+ * is wired to inject the code block content into that session's composer
+ * via :func:`pasteIntoComposer`. Omit when the rendered Markdown is not
+ * associated with a live chat session (e.g. vault preview pane).
+ */
+export interface MarkdownContextMenuConfig {
+  sessionId?: string;
+}
+
+/**
  * Svelte action that installs a delegating right-click handler on a
  * container that holds ``{@html …}``-injected Markdown HTML.
  *
- * No parameters required — the action is purely additive (adds one
- * event listener, tears it down on ``destroy``).
+ * Accepts an optional :interface:`MarkdownContextMenuConfig` for T1-06
+ * code-block injection; pass ``{ sessionId }`` to enable the "Run in
+ * composer" action.
  */
-export function markdownContextMenu(container: HTMLElement): { destroy: () => void } {
+export function markdownContextMenu(
+  container: HTMLElement,
+  config: MarkdownContextMenuConfig = {},
+): { update: (c: MarkdownContextMenuConfig) => void; destroy: () => void } {
+  let currentConfig = config;
+
   function handleContextMenu(event: MouseEvent): void {
     const target = findCmTarget(event.target, container);
     if (target === null) return;
@@ -190,6 +210,20 @@ export function markdownContextMenu(container: HTMLElement): { destroy: () => vo
                   void shellOpenInEditor(code.trim()).catch((err: unknown) => {
                     const detail = err instanceof Error ? err.message : "unknown error";
                     showShellOpError(detail);
+                  });
+                },
+              }
+            : {}),
+          // T1-06 — inject code block into the session's composer for
+          // confirmation before the user sends it.  Only wired when a
+          // sessionId is provided (chat transcript context).
+          ...(currentConfig.sessionId !== undefined
+            ? {
+                [MENU_ACTION_CODE_BLOCK_RUN]: () => {
+                  pasteIntoComposer({
+                    sessionId: currentConfig.sessionId as string,
+                    text: code,
+                    kind: "code",
                   });
                 },
               }
@@ -251,6 +285,9 @@ export function markdownContextMenu(container: HTMLElement): { destroy: () => vo
   container.addEventListener("contextmenu", handleContextMenu);
 
   return {
+    update(newConfig: MarkdownContextMenuConfig): void {
+      currentConfig = newConfig;
+    },
     destroy(): void {
       container.removeEventListener("contextmenu", handleContextMenu);
     },

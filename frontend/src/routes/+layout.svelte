@@ -781,8 +781,10 @@
           <SystemStatusCard />
 
           <!-- Identity block — pinned at sidebar bottom; opens Settings on click
-               (gap-cycle-08-002). flex-shrink:0 keeps it from being squeezed
-               by the session list when the list is long. -->
+               (gap-cycle-08-002 / T2-05). flex-shrink:0 keeps it from being
+               squeezed by the session list when the list is long. The gear
+               icon on the right makes the settings affordance discoverable;
+               clicking anywhere in the row navigates to /settings. -->
           <div class="flex-shrink-0 border-t border-border">
             <button
               type="button"
@@ -798,6 +800,25 @@
                 cacheBust={preferencesStore.cacheBust}
                 size="1.75rem"
               />
+              <!-- Gear icon — visually anchors the settings affordance -->
+              <svg
+                class="ml-auto flex-shrink-0 text-fg-muted opacity-60 transition-opacity group-hover:opacity-100"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                data-testid="sidebar-identity-gear"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path
+                  d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+                />
+              </svg>
             </button>
           </div>
         </aside>

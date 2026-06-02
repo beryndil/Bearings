@@ -51,7 +51,10 @@ domain call, response formatting. Errors map :class:`PromptDispatchOutcome`
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+from collections import Counter
 from typing import Annotated, cast
 
 import aiosqlite
@@ -67,11 +70,21 @@ from bearings.agent.prompt_dispatch import (
 from bearings.agent.runner import RunnerFactory
 from bearings.config.constants import (
     CLOSEABLE_SESSION_KINDS,
+    GIT_DIFF_STAT_TIMEOUT_S,
     KNOWN_SESSION_KINDS,
     PROMPT_ACK_QUEUED_KEY,
     PROMPT_ACK_SESSION_ID_KEY,
     SESSIONS_DEFAULT_PAGE_SIZE,
     SESSIONS_MAX_PAGE_SIZE,
+    SUGGEST_TITLE_DEFAULT_MODEL,
+    SUGGEST_TITLE_EXCERPT_MAX_CHARS,
+    SUGGEST_TITLE_MESSAGE_LIMIT,
+    SUGGEST_TITLE_RESPONSE_MAX_CHARS,
+    SUGGEST_TITLE_TIMEOUT_S,
+    WORK_EVIDENCE_ALL_TOOL_NAMES,
+    WORK_EVIDENCE_BASH_TOOL_NAMES,
+    WORK_EVIDENCE_EDIT_TOOL_NAMES,
+    WORK_EVIDENCE_WRITE_TOOL_NAMES,
 )
 from bearings.db import checklists as checklists_db
 from bearings.db import checkpoints as checkpoints_db
@@ -97,10 +110,13 @@ from bearings.web.models.sessions import (
     SessionsPage,
     SessionTodosOut,
     SessionUpdate,
+    SuggestTitleOut,
     SystemPromptLayerOut,
     SystemPromptLayersOut,
     TokenTotalsOut,
     ToolCallOut,
+    WorkEvidenceOut,
+    WorkEvidenceToolSummary,
 )
 from bearings.web.models.tags import TagOut
 from bearings.web.routes.tags import _validate_tag_cardinality
@@ -108,6 +124,8 @@ from bearings.web.routes.ws_sessions import SessionsBroadcaster
 from bearings.web.runner_factory import InProcessRunnerRegistry
 
 router = APIRouter()
+
+_log = logging.getLogger(__name__)
 
 
 def _db(request: Request) -> aiosqlite.Connection:
@@ -1699,6 +1717,224 @@ async def prompt_session(
         force_advisor=payload.force_advisor,
     )
     return _dispatch_result_to_response(result, session_id)
+
+
+# ---- suggest_title (T1-03) -------------------------------------------------
+
+
+async def _run_suggest_title(excerpt: str, model: str) -> str | None:
+    """Spawn ``claude -p`` to suggest a session title from a conversation excerpt.
+
+    Args:
+        excerpt: Concatenated conversation excerpt (pre-capped by the caller).
+        model: Short-name or full-ID executor model to pass to the CLI.
+
+    Returns:
+        Suggested title string (stripped), or ``None`` on any error.
+
+    The subprocess is killed if it runs past :data:`SUGGEST_TITLE_TIMEOUT_S`.
+    Failures are silent at this layer — the route handler logs + returns
+    ``suggested_title=None`` so the UI can still render the modal.
+    """
+    prompt = (
+        "Based on the conversation excerpt below, reply with a concise 3-8 word title "
+        "that captures the main topic.  Reply with the title only — no quotes, no "
+        "punctuation at the end, no explanation.\n\n" + excerpt
+    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "claude",
+            "-p",
+            prompt,
+            "-m",
+            model,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=SUGGEST_TITLE_TIMEOUT_S,
+        )
+        if proc.returncode == 0:
+            raw = stdout.decode(errors="replace").strip()
+            return raw[:SUGGEST_TITLE_RESPONSE_MAX_CHARS] if raw else None
+        return None
+    except Exception as exc:
+        _log.debug("suggest_title subprocess error: %s", exc)
+        return None
+
+
+@router.post(
+    "/api/sessions/{session_id}/suggest_title",
+    response_model=SuggestTitleOut,
+    operation_id="suggest-session-title",
+)
+async def suggest_session_title(
+    session_id: str,
+    request: Request,
+) -> SuggestTitleOut:
+    """Suggest a title for a session based on its conversation excerpt (T1-03).
+
+    Fetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`
+    messages and sends a short excerpt to the Claude CLI via subprocess.
+    The LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``
+    modal's title input when the user clicks the **✨ Suggest** button.
+
+    * ``200`` — :class:`SuggestTitleOut` with ``suggested_title`` (may be
+      ``None`` when the session has no messages, the subprocess fails, or
+      the response is blank).
+    * ``404`` — session not found.
+
+    The underlying LLM call is injected via ``app.state.title_suggester``
+    so tests can replace it without spawning a real subprocess.  The
+    callable signature is
+    ``(excerpt: str, model: str) -> Awaitable[str | None]``.
+    """
+    db = _db(request)
+    row = await sessions_db.get(db, session_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no session matches {session_id!r}",
+        )
+    messages = await messages_db.list_for_session(db, session_id, limit=SUGGEST_TITLE_MESSAGE_LIMIT)
+    if not messages:
+        return SuggestTitleOut(suggested_title=None)
+
+    # Build a short excerpt: include role prefix + first 500 chars of content.
+    lines = []
+    for m in messages:
+        role_label = m.role.upper()
+        snippet = m.content[:500].replace("\n", " ")
+        lines.append(f"{role_label}: {snippet}")
+    excerpt = "\n\n".join(lines)
+    excerpt = excerpt[:SUGGEST_TITLE_EXCERPT_MAX_CHARS]
+
+    # Resolve model: advisor if configured, else executor, else default.
+    model = row.routing_advisor_model or row.model or SUGGEST_TITLE_DEFAULT_MODEL
+
+    # Pull injectable suggester (tests override; production uses subprocess).
+    suggester = getattr(request.app.state, "title_suggester", None)
+    if suggester is None:
+        suggester = _run_suggest_title
+
+    suggested_title: str | None = await suggester(excerpt, model)
+    return SuggestTitleOut(suggested_title=suggested_title)
+
+
+# ---- work_evidence (T2-08) -------------------------------------------------
+
+
+async def _run_git_diff_stat(working_dir: str) -> str | None:
+    """Run ``git diff --stat`` in ``working_dir`` with a hard timeout.
+
+    Returns the stdout string (stripped) on success, or ``None`` when:
+
+    * ``working_dir`` is not a git repo (non-zero exit code).
+    * ``git`` is not on PATH.
+    * The subprocess exceeds :data:`~bearings.config.constants.GIT_DIFF_STAT_TIMEOUT_S`.
+    * Any other OS-level error.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "-C",
+            working_dir,
+            "diff",
+            "--stat",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _stderr = await asyncio.wait_for(
+            proc.communicate(),
+            timeout=GIT_DIFF_STAT_TIMEOUT_S,
+        )
+        if proc.returncode == 0:
+            return stdout.decode(errors="replace").strip() or None
+        return None
+    except Exception as exc:
+        _log.debug("git diff --stat error in %r: %s", working_dir, exc)
+        return None
+
+
+@router.get(
+    "/api/sessions/{session_id}/work_evidence",
+    response_model=WorkEvidenceOut,
+    operation_id="get-session-work-evidence",
+)
+async def get_work_evidence(
+    session_id: str,
+    request: Request,
+) -> WorkEvidenceOut:
+    """Return a structured summary of work performed by the session (T2-08).
+
+    Queries ``tool_calls`` for bash, write, and edit invocations, then
+    optionally runs ``git diff --stat`` in the session's ``working_dir``
+    to report uncommitted changes.
+
+    * ``200`` — :class:`WorkEvidenceOut` with tool-call counts and git diff.
+    * ``404`` — session not found.
+
+    ``git_diff_stat`` is ``None`` (and ``git_diff_available`` is ``False``)
+    when the working directory is not a git repo, ``git`` is unavailable,
+    or the ``git diff`` subprocess times out.  The route always returns
+    ``200``; callers should treat a ``None`` diff as "git state unknown."
+
+    The ``git diff --stat`` subprocess call is injected via
+    ``app.state.git_diff_runner`` so tests can replace it without a real
+    git repo.  The callable signature is
+    ``(working_dir: str) -> Awaitable[str | None]``.
+    """
+    db = _db(request)
+    row = await sessions_db.get(db, session_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no session matches {session_id!r}",
+        )
+
+    # Query all work-evidence tool calls in one shot.
+    placeholders = ",".join("?" * len(WORK_EVIDENCE_ALL_TOOL_NAMES))
+    cursor = await db.execute(
+        f"SELECT tool_name FROM tool_calls "
+        f"WHERE session_id = ? AND tool_name IN ({placeholders}) "
+        f"ORDER BY rowid ASC",
+        (session_id, *sorted(WORK_EVIDENCE_ALL_TOOL_NAMES)),
+    )
+    try:
+        rows = await cursor.fetchall()
+    finally:
+        await cursor.close()
+
+    name_counts: Counter[str] = Counter(str(r[0]) for r in rows)
+
+    # Aggregate into category buckets.
+    bash_calls = sum(name_counts[n] for n in WORK_EVIDENCE_BASH_TOOL_NAMES)
+    write_calls = sum(name_counts[n] for n in WORK_EVIDENCE_WRITE_TOOL_NAMES)
+    edit_calls = sum(name_counts[n] for n in WORK_EVIDENCE_EDIT_TOOL_NAMES)
+
+    tool_calls_summary = [
+        WorkEvidenceToolSummary(tool_name=name, call_count=count)
+        for name, count in sorted(name_counts.items())
+        if count > 0
+    ]
+
+    # Git diff — optional subprocess.
+    git_runner = getattr(request.app.state, "git_diff_runner", None)
+    if git_runner is None:
+        git_runner = _run_git_diff_stat
+
+    git_diff_stat: str | None = await git_runner(row.working_dir)
+
+    return WorkEvidenceOut(
+        tool_calls_summary=tool_calls_summary,
+        bash_calls=bash_calls,
+        write_calls=write_calls,
+        edit_calls=edit_calls,
+        total_work_tool_calls=bash_calls + write_calls + edit_calls,
+        git_diff_stat=git_diff_stat,
+        git_diff_available=bool(git_diff_stat),
+    )
 
 
 __all__ = ["router"]

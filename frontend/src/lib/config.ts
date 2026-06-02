@@ -100,6 +100,13 @@ export const messagePinnedEndpoint = (messageId: string): string =>
 export const messageHiddenEndpoint = (messageId: string): string =>
   `${messageEndpoint(messageId)}/hidden`;
 
+/**
+ * ``PATCH /api/messages/{id}/content`` — rewrite a user-role message
+ * body in place (T1-05 ``message.edit`` action).
+ */
+export const messageContentEndpoint = (messageId: string): string =>
+  `${messageEndpoint(messageId)}/content`;
+
 /** ``DELETE /api/messages/{id}`` — delete a message (G3). */
 export const messageDeleteEndpoint = (messageId: string): string => messageEndpoint(messageId);
 
@@ -134,6 +141,15 @@ export const checkpointEndpoint = (checkpointId: string): string =>
  */
 export const checkpointForkEndpoint = (checkpointId: string): string =>
   `${checkpointEndpoint(checkpointId)}/fork`;
+
+/**
+ * ``GET /api/checkpoints/{id}/compare`` -- message delta since the checkpoint.
+ *
+ * Returns :class:`bearings.web.models.checkpoints.CheckpointCompareResult`:
+ * messages added to the session after the checkpoint's anchor message.
+ */
+export const checkpointCompareEndpoint = (checkpointId: string): string =>
+  `${checkpointEndpoint(checkpointId)}/compare`;
 
 /**
  * ``GET /api/templates`` — list all templates alphabetically (G7).
@@ -941,6 +957,17 @@ export const CHECKPOINT_GUTTER_STRINGS = {
   createFailed: "Couldn't create checkpoint.",
   /** Toast when there is no message to anchor a checkpoint at. */
   createNoAnchor: "Checkpoint needs at least one message to anchor.",
+  /** Error toast when compare fetch fails. */
+  compareFailed: "Couldn't load checkpoint comparison.",
+  /** Modal title prefix -- appended with the checkpoint label. */
+  compareModalTitlePrefix: "Changes since",
+  /** Modal empty-state when no messages were added since the checkpoint. */
+  compareModalEmpty: "No messages have been added since this checkpoint.",
+  /** Singular/plural label for the modal sub-header. */
+  compareModalCountSingular: "1 new message",
+  compareModalCountPlural: (n: number): string => `${n} new messages`,
+  /** Close button label in the compare modal. */
+  compareModalClose: "Close",
 } as const;
 
 /** String table for the slash-command typeahead palette (item 2.3). */
@@ -1707,6 +1734,17 @@ export const INSPECTOR_STRINGS = {
   agentMaxBudgetUnset: "no cap",
   agentTotalCostLabel: "Total cost (USD)",
   agentMessageCountLabel: "Messages",
+  // Work evidence subsection (T2-08) — bash/write/edit call counts +
+  // optional ``git diff --stat`` for the session's working directory.
+  agentWorkEvidenceHeading: "Work evidence",
+  agentWorkEvidenceBashLabel: "Bash calls",
+  agentWorkEvidenceWriteLabel: "Write calls",
+  agentWorkEvidenceEditLabel: "Edit calls",
+  agentWorkEvidenceTotalLabel: "Total work calls",
+  agentWorkEvidenceGitDiffLabel: "git diff --stat",
+  agentWorkEvidenceGitDiffUnavailable: "(not a git repo or no changes)",
+  agentWorkEvidenceLoading: "Loading work evidence…",
+  agentWorkEvidenceError: "Couldn't load work evidence.",
   // Context subsection — mirrors the context-window / cost data the
   // header band carries (chat.md §"opens an existing chat") in the
   // inspector's longer-form layout. The system-prompt + tag-default
@@ -2920,6 +2958,12 @@ export const MENU_TARGET_CHECKPOINT = "checkpoint";
 export const MENU_TARGET_MULTI_SELECT = "multi_select";
 export const MENU_TARGET_ATTACHMENT = "attachment";
 export const MENU_TARGET_PENDING_OPERATION = "pending_operation";
+/**
+ * Message-level multi-select target — activated when the user
+ * Ctrl+clicks messages in the conversation and then right-clicks
+ * one of the selected messages (T2-12 parity gap).
+ */
+export const MENU_TARGET_MESSAGE_MULTI_SELECT = "message_multi_select";
 
 export const KNOWN_MENU_TARGETS = [
   MENU_TARGET_SESSION,
@@ -2933,6 +2977,7 @@ export const KNOWN_MENU_TARGETS = [
   MENU_TARGET_MULTI_SELECT,
   MENU_TARGET_ATTACHMENT,
   MENU_TARGET_PENDING_OPERATION,
+  MENU_TARGET_MESSAGE_MULTI_SELECT,
 ] as const;
 export type MenuTargetId = (typeof KNOWN_MENU_TARGETS)[number];
 
@@ -2994,11 +3039,17 @@ export const MENU_ACTION_MESSAGE_JUMP_TO_TURN = "message.jump_to_turn";
 export const MENU_ACTION_MESSAGE_COPY_CONTENT = "message.copy_content";
 export const MENU_ACTION_MESSAGE_COPY_AS_MARKDOWN = "message.copy_as_markdown";
 export const MENU_ACTION_MESSAGE_COPY_ID = "message.copy_id";
+/** T2-11 — copy all fenced code blocks from the message body. */
+export const MENU_ACTION_MESSAGE_COPY_CODE = "message.copy_code";
+/** T2-11 — copy all valid JSON objects/arrays from the message body. */
+export const MENU_ACTION_MESSAGE_COPY_JSON = "message.copy_json";
 export const MENU_ACTION_MESSAGE_PIN = "message.pin";
 export const MENU_ACTION_MESSAGE_HIDE_FROM_CONTEXT = "message.hide_from_context";
 export const MENU_ACTION_MESSAGE_MOVE_TO_SESSION = "message.move_to_session";
 export const MENU_ACTION_MESSAGE_SPLIT_HERE = "message.split_here";
 export const MENU_ACTION_MESSAGE_FORK_FROM_HERE = "message.fork.from_here";
+/** T1-05 — open an inline text-area to reword the user message body. */
+export const MENU_ACTION_MESSAGE_EDIT = "message.edit";
 export const MENU_ACTION_MESSAGE_REGENERATE = "message.regenerate";
 export const MENU_ACTION_MESSAGE_REGENERATE_IN_PLACE = "message.regenerate.in_place";
 export const MENU_ACTION_MESSAGE_DELETE = "message.delete";
@@ -3017,11 +3068,17 @@ export const MENU_ACTION_TOOL_CALL_COPY_INPUT = "tool_call.copy.input";
 export const MENU_ACTION_TOOL_CALL_COPY_OUTPUT = "tool_call.copy.output";
 export const MENU_ACTION_TOOL_CALL_COPY_ID = "tool_call.copy.id";
 export const MENU_ACTION_TOOL_CALL_RETRY = "tool_call.retry";
+/** T1-07 — show raw JSON input/output in a debug drawer. */
+export const MENU_ACTION_TOOL_CALL_DEBUG = "tool_call.debug";
+/** T1-07 — edit the tool input JSON before re-submitting. */
+export const MENU_ACTION_TOOL_CALL_EDIT_INPUT = "tool_call.edit_input";
 
 export const MENU_ACTION_CODE_BLOCK_COPY = "code_block.copy";
 export const MENU_ACTION_CODE_BLOCK_COPY_WITH_FENCE = "code_block.copy_with_fence";
 export const MENU_ACTION_CODE_BLOCK_SAVE_TO_FILE = "code_block.save_to_file";
 export const MENU_ACTION_CODE_BLOCK_OPEN_IN_EDITOR = "code_block.open_in.editor";
+/** T1-06 — inject code block into composer for confirmation before execution. */
+export const MENU_ACTION_CODE_BLOCK_RUN = "code_block.run";
 
 export const MENU_ACTION_LINK_COPY_URL = "link.copy_url";
 export const MENU_ACTION_LINK_COPY_TEXT = "link.copy_text";
@@ -3030,9 +3087,16 @@ export const MENU_ACTION_LINK_OPEN_IN_EDITOR = "link.open_in.editor";
 
 // Phase 14 — Checkpoint surface.
 export const MENU_ACTION_CHECKPOINT_FORK = "checkpoint.fork";
+export const MENU_ACTION_CHECKPOINT_COMPARE = "checkpoint.compare";
 export const MENU_ACTION_CHECKPOINT_COPY_LABEL = "checkpoint.copy_label";
 export const MENU_ACTION_CHECKPOINT_COPY_ID = "checkpoint.copy_id";
 export const MENU_ACTION_CHECKPOINT_DELETE = "checkpoint.delete";
+
+// T2-12 — message-level multi-select bulk actions.
+export const MENU_ACTION_MESSAGE_MULTI_SELECT_COPY = "message_multi_select.copy";
+export const MENU_ACTION_MESSAGE_MULTI_SELECT_DELETE = "message_multi_select.delete";
+export const MENU_ACTION_MESSAGE_MULTI_SELECT_PIN = "message_multi_select.pin";
+export const MENU_ACTION_MESSAGE_MULTI_SELECT_HIDE = "message_multi_select.hide";
 
 export const MENU_ACTION_MULTI_SELECT_CLEAR = "multi_select.clear";
 export const MENU_ACTION_MULTI_SELECT_TAG = "multi_select.tag";
@@ -3103,6 +3167,9 @@ export const CONTEXT_MENU_STRINGS = {
     [MENU_ACTION_MESSAGE_MOVE_TO_SESSION]: "Move to session…",
     [MENU_ACTION_MESSAGE_SPLIT_HERE]: "Split here…",
     [MENU_ACTION_MESSAGE_FORK_FROM_HERE]: "Fork from this message",
+    [MENU_ACTION_MESSAGE_EDIT]: "Edit message…",
+    [MENU_ACTION_MESSAGE_COPY_CODE]: "Copy code blocks",
+    [MENU_ACTION_MESSAGE_COPY_JSON]: "Copy JSON",
     [MENU_ACTION_MESSAGE_REGENERATE]: "Regenerate from this message…",
     [MENU_ACTION_MESSAGE_REGENERATE_IN_PLACE]: "Regenerate (rewrite in place)",
     [MENU_ACTION_MESSAGE_DELETE]: "Delete message",
@@ -3118,18 +3185,26 @@ export const CONTEXT_MENU_STRINGS = {
     [MENU_ACTION_TOOL_CALL_COPY_OUTPUT]: "Copy tool output",
     [MENU_ACTION_TOOL_CALL_COPY_ID]: "Copy tool call ID",
     [MENU_ACTION_TOOL_CALL_RETRY]: "Retry tool call",
+    [MENU_ACTION_TOOL_CALL_DEBUG]: "Debug (show raw JSON)",
+    [MENU_ACTION_TOOL_CALL_EDIT_INPUT]: "Edit input…",
     [MENU_ACTION_CODE_BLOCK_COPY]: "Copy code",
     [MENU_ACTION_CODE_BLOCK_COPY_WITH_FENCE]: "Copy with Markdown fence",
     [MENU_ACTION_CODE_BLOCK_SAVE_TO_FILE]: "Save to file…",
     [MENU_ACTION_CODE_BLOCK_OPEN_IN_EDITOR]: "Open in editor",
+    [MENU_ACTION_CODE_BLOCK_RUN]: "Run in composer",
     [MENU_ACTION_LINK_COPY_URL]: "Copy link URL",
     [MENU_ACTION_LINK_COPY_TEXT]: "Copy link text",
     [MENU_ACTION_LINK_OPEN_NEW_TAB]: "Open in new tab",
     [MENU_ACTION_LINK_OPEN_IN_EDITOR]: "Open in editor",
     [MENU_ACTION_CHECKPOINT_FORK]: "Fork from here",
+    [MENU_ACTION_CHECKPOINT_COMPARE]: "Compare with current",
     [MENU_ACTION_CHECKPOINT_COPY_LABEL]: "Copy label",
     [MENU_ACTION_CHECKPOINT_COPY_ID]: "Copy checkpoint ID",
     [MENU_ACTION_CHECKPOINT_DELETE]: "Delete checkpoint",
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_COPY]: "Copy messages",
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_DELETE]: "Delete messages",
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_PIN]: "Pin messages",
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_HIDE]: "Hide from context",
     [MENU_ACTION_MULTI_SELECT_CLEAR]: "Clear selection",
     [MENU_ACTION_MULTI_SELECT_TAG]: "Add tag",
     [MENU_ACTION_MULTI_SELECT_UNTAG]: "Remove tag",

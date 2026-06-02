@@ -26,12 +26,15 @@ export interface PendingPaste {
   /** Text to splice into the composer at the cursor (or end-of-buffer). */
   text: string;
   /**
-   * Discriminator for telemetry / toast wording — ``"link"`` is the
-   * Markdown title-as-link path; ``"body"`` is the full doc body
-   * paste. The composer doesn't branch on the value beyond surfacing
-   * a different toast.
+   * Discriminator for telemetry / toast wording:
+   * - ``"link"`` — Markdown title-as-link from the vault pane.
+   * - ``"body"`` — full doc body paste from the vault pane.
+   * - ``"code"`` — code block content from the code-block context menu
+   *   (T1-06); the composer treats this identically to ``"body"`` but
+   *   may surface a different toast ("Code block pasted into composer").
+   * The composer does not branch on the value beyond toast wording.
    */
-  kind: "link" | "body";
+  kind: "link" | "body" | "code";
 }
 
 interface ComposerBridgeState {

@@ -1634,3 +1634,244 @@ async def test_list_sessions_pages_are_non_overlapping_and_exhaustive(
             offset = body["next_offset"]
 
     assert collected == expected_ids
+
+
+# ---------------------------------------------------------------------------
+# suggest_title (T1-03)
+# ---------------------------------------------------------------------------
+
+
+async def test_suggest_title_no_messages_returns_null(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Session with no messages → ``suggested_title: null`` (no LLM call needed)."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn, "empty session")
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/sessions/{sid}/suggest_title")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["suggested_title"] is None
+
+
+async def test_suggest_title_injects_callable(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Injectable ``title_suggester`` is called with the excerpt and model."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn, "untitled")
+    await messages_db.insert_user(conn, session_id=sid, content="how do I write a for-loop?")
+
+    received: list[tuple[str, str]] = []
+
+    async def fake_suggester(excerpt: str, model: str) -> str | None:
+        received.append((excerpt, model))
+        return "Writing For Loops in Python"
+
+    app.state.title_suggester = fake_suggester
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/sessions/{sid}/suggest_title")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["suggested_title"] == "Writing For Loops in Python"
+    assert len(received) == 1
+    excerpt, _model = received[0]
+    assert "for-loop" in excerpt
+
+
+async def test_suggest_title_unknown_session_404(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Unknown session id → 404."""
+    app, _ = app_and_db
+
+    with TestClient(app) as client:
+        response = client.post("/api/sessions/ses_doesnotexist/suggest_title")
+
+    assert response.status_code == 404
+
+
+async def test_suggest_title_suggester_returns_none_ok(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """When the suggester returns None the route still returns 200 with null title."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn, "bad session")
+    await messages_db.insert_user(conn, session_id=sid, content="hello")
+
+    async def always_none(excerpt: str, model: str) -> str | None:
+        del excerpt, model
+        return None
+
+    app.state.title_suggester = always_none
+
+    with TestClient(app) as client:
+        response = client.post(f"/api/sessions/{sid}/suggest_title")
+
+    assert response.status_code == 200
+    assert response.json()["suggested_title"] is None
+
+
+# ---------------------------------------------------------------------------
+# work_evidence (T2-08)
+# ---------------------------------------------------------------------------
+
+
+_tc_counter = 0
+
+
+async def _insert_tool_call(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    tool_name: str,
+    message_id: str,
+) -> None:
+    """Insert a single tool-call row for testing ``work_evidence``."""
+    global _tc_counter
+    _tc_counter += 1
+    from bearings.db import tool_calls as tool_calls_db
+    from bearings.db.tool_calls import ToolCallRecord
+
+    await tool_calls_db.insert_batch(
+        conn,
+        session_id=session_id,
+        message_id=message_id,
+        records=[
+            ToolCallRecord(
+                tool_call_id=f"tc_{_tc_counter:08d}",
+                tool_name=tool_name,
+                input_json="{}",
+                output="",
+                ok=True,
+                duration_ms=1,
+                error_message=None,
+            )
+        ],
+    )
+
+
+async def test_work_evidence_empty_session_returns_zeros(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Session with no tool calls → all counts zero, no git diff."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn)
+
+    async def no_git(working_dir: str) -> str | None:
+        del working_dir
+        return None
+
+    app.state.git_diff_runner = no_git
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{sid}/work_evidence")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bash_calls"] == 0
+    assert body["write_calls"] == 0
+    assert body["edit_calls"] == 0
+    assert body["total_work_tool_calls"] == 0
+    assert body["tool_calls_summary"] == []
+    assert body["git_diff_stat"] is None
+    assert body["git_diff_available"] is False
+
+
+async def test_work_evidence_counts_by_category(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Bash/Write/Edit tool calls are aggregated into their category buckets."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn)
+    asst = await _insert_assistant_row(conn, sid)
+
+    # 2 Bash + 1 Write + 3 Edit
+    for _ in range(2):
+        await _insert_tool_call(conn, sid, "Bash", asst.id)
+    await _insert_tool_call(conn, sid, "Write", asst.id)
+    for _ in range(3):
+        await _insert_tool_call(conn, sid, "Edit", asst.id)
+
+    async def no_git(working_dir: str) -> str | None:
+        del working_dir
+        return None
+
+    app.state.git_diff_runner = no_git
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{sid}/work_evidence")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bash_calls"] == 2
+    assert body["write_calls"] == 1
+    assert body["edit_calls"] == 3
+    assert body["total_work_tool_calls"] == 6
+    # Summary rows should cover Bash + Edit + Write (alphabetically sorted).
+    names = {row["tool_name"] for row in body["tool_calls_summary"]}
+    assert "Bash" in names
+    assert "Write" in names
+    assert "Edit" in names
+
+
+async def test_work_evidence_git_diff_injected(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Injectable ``git_diff_runner`` result is included when non-empty."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn)
+
+    async def fake_git(working_dir: str) -> str | None:
+        del working_dir
+        return " main.py | 3 +++\n 1 file changed, 3 insertions(+)"
+
+    app.state.git_diff_runner = fake_git
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{sid}/work_evidence")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["git_diff_available"] is True
+    assert "main.py" in body["git_diff_stat"]
+
+
+async def test_work_evidence_unknown_session_404(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Unknown session id → 404."""
+    app, _ = app_and_db
+
+    with TestClient(app) as client:
+        response = client.get("/api/sessions/ses_doesnotexist/work_evidence")
+
+    assert response.status_code == 404
+
+
+async def test_work_evidence_mcp_bash_counts_as_bash(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """``mcp__bearings__bash`` is aggregated into ``bash_calls``."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn)
+    asst = await _insert_assistant_row(conn, sid)
+
+    await _insert_tool_call(conn, sid, "mcp__bearings__bash", asst.id)
+
+    async def no_git(working_dir: str) -> str | None:
+        del working_dir
+        return None
+
+    app.state.git_diff_runner = no_git
+
+    with TestClient(app) as client:
+        response = client.get(f"/api/sessions/{sid}/work_evidence")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["bash_calls"] == 1
+    assert body["total_work_tool_calls"] == 1

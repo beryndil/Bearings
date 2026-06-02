@@ -25,33 +25,52 @@
    * Conversation component iterates the list.
    */
   import {
+    CONTEXT_MENU_STRINGS,
     CONVERSATION_STRINGS,
     MENU_ACTION_MESSAGE_COPY_AS_MARKDOWN,
+    MENU_ACTION_MESSAGE_COPY_CODE,
     MENU_ACTION_MESSAGE_COPY_CONTENT,
     MENU_ACTION_MESSAGE_COPY_ID,
+    MENU_ACTION_MESSAGE_COPY_JSON,
     MENU_ACTION_MESSAGE_DELETE,
+    MENU_ACTION_MESSAGE_EDIT,
     MENU_ACTION_MESSAGE_FORK_FROM_HERE,
     MENU_ACTION_MESSAGE_HIDE_FROM_CONTEXT,
     MENU_ACTION_MESSAGE_JUMP_TO_TURN,
     MENU_ACTION_MESSAGE_MOVE_TO_SESSION,
+    MENU_ACTION_MESSAGE_MULTI_SELECT_COPY,
+    MENU_ACTION_MESSAGE_MULTI_SELECT_DELETE,
+    MENU_ACTION_MESSAGE_MULTI_SELECT_HIDE,
+    MENU_ACTION_MESSAGE_MULTI_SELECT_PIN,
     MENU_ACTION_MESSAGE_PIN,
     MENU_ACTION_MESSAGE_REGENERATE,
     MENU_ACTION_MESSAGE_REGENERATE_IN_PLACE,
     MENU_ACTION_MESSAGE_SPLIT_HERE,
     MENU_TARGET_MESSAGE,
+    MENU_TARGET_MESSAGE_MULTI_SELECT,
   } from "../../config";
   import { regenerateFromMessage, spawnFromReply } from "../../api/sessions";
   import { goto } from "$app/navigation";
   import { contextMenu } from "../../actions/contextMenu";
   import { markdownContextMenu } from "../../actions/markdownContextMenu";
   import { createCheckpoint, forkCheckpoint } from "../../api/checkpoints";
-  import { deleteMessage, patchMessageHidden, patchMessagePinned } from "../../api/messages";
+  import {
+    deleteMessage,
+    patchMessageContent,
+    patchMessageHidden,
+    patchMessagePinned,
+  } from "../../api/messages";
   import { regenerateSession } from "../../api/sessions";
   import { linkifyToHtml } from "../../linkify";
   import { renderMarkdown } from "../../render";
   import { sanitizeHtml } from "../../sanitize";
   import { bumpCheckpointRefresh } from "../../stores/checkpointBus.svelte";
   import { conversationStore, type MessageTurnView } from "../../stores/conversation.svelte";
+  import {
+    clearMessageSelection,
+    messageMultiSelectionStore,
+    toggleMessageId,
+  } from "../../stores/messageMultiSelectionStore.svelte";
   import { reorgStore } from "../../stores/reorg.svelte";
   import { scrollBehavior } from "../../utils/motion";
   import CollapsibleBody from "../common/CollapsibleBody.svelte";
@@ -173,6 +192,102 @@
    */
   let showRegenerateFromConfirm = $state(false);
 
+  // ---- T1-05 inline edit state -------------------------------------------
+
+  /** True when the inline edit textarea is open. User-role messages only. */
+  let editActive = $state(false);
+  /** Current value of the edit textarea — initialised to turn.body on open. */
+  let editDraft = $state("");
+  let editSaving = $state(false);
+  let editError = $state<string | null>(null);
+
+  function openEdit(): void {
+    editDraft = turn.body;
+    editError = null;
+    editActive = true;
+  }
+
+  function cancelEdit(): void {
+    editActive = false;
+    editError = null;
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (editDraft.trim().length === 0) return;
+    editSaving = true;
+    editError = null;
+    try {
+      await patchMessageContent(turn.id, editDraft);
+      editActive = false;
+    } catch (err) {
+      editError = err instanceof Error ? err.message : "Save failed.";
+    } finally {
+      editSaving = false;
+    }
+  }
+
+  // ---- T2-12 message multi-select ----------------------------------------
+
+  /**
+   * True when this message is part of the current multi-selection.
+   * The context menu target switches to MENU_TARGET_MESSAGE_MULTI_SELECT
+   * when any messages are selected.
+   */
+  const isSelected = $derived(messageMultiSelectionStore.ids.has(turn.id));
+  const hasSelection = $derived(messageMultiSelectionStore.ids.size > 0);
+
+  function handleClick(event: MouseEvent): void {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      toggleMessageId(turn.id);
+    } else if (hasSelection && !event.shiftKey) {
+      // Plain click clears the selection when one exists (unless Shift is
+      // being used for text selection).
+      clearMessageSelection();
+    }
+  }
+
+  /**
+   * Helpers for extracting code blocks and JSON from the message body (T2-11).
+   */
+  function extractCodeBlocks(body: string): string {
+    const blocks: string[] = [];
+    const re = /```(?:[^\n]*)?\n([\s\S]*?)```/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(body)) !== null) {
+      blocks.push(match[1]);
+    }
+    return blocks.join("\n---\n");
+  }
+
+  function extractJson(body: string): string {
+    const pieces: string[] = [];
+    // Inline fenced JSON blocks first.
+    const fenceRe = /```(?:json)?\n([\s\S]*?)```/gi;
+    let m: RegExpExecArray | null;
+    while ((m = fenceRe.exec(body)) !== null) {
+      const candidate = m[1].trim();
+      try {
+        JSON.parse(candidate);
+        pieces.push(candidate);
+      } catch {
+        // not valid JSON — skip
+      }
+    }
+    // Bare JSON objects/arrays (heuristic: starts with { or [).
+    const bareRe = /([{[][^]*?[}\]])/g;
+    while ((m = bareRe.exec(body)) !== null) {
+      const candidate = m[1].trim();
+      try {
+        JSON.parse(candidate);
+        if (!pieces.includes(candidate)) pieces.push(candidate);
+      } catch {
+        // not valid JSON — skip
+      }
+    }
+    return pieces.join("\n---\n");
+  }
+
   // ---- context-menu handlers ---------------------------------------------
 
   const menuHandlers = $derived({
@@ -200,6 +315,37 @@
     [MENU_ACTION_MESSAGE_COPY_ID]: () => {
       void navigator.clipboard.writeText(turn.id);
     },
+
+    /**
+     * T2-11 — copy all fenced code blocks as plain text (concatenated
+     * with ``---`` separators). Enabled only when the body contains at
+     * least one code block.
+     */
+    [MENU_ACTION_MESSAGE_COPY_CODE]: () => {
+      const extracted = extractCodeBlocks(turn.body);
+      if (extracted.length > 0) void navigator.clipboard.writeText(extracted);
+    },
+
+    /**
+     * T2-11 — copy all valid JSON objects/arrays found in the message
+     * body (fenced blocks + bare JSON heuristic). No-op when none found.
+     */
+    [MENU_ACTION_MESSAGE_COPY_JSON]: () => {
+      const extracted = extractJson(turn.body);
+      if (extracted.length > 0) void navigator.clipboard.writeText(extracted);
+    },
+
+    /**
+     * T1-05 — inline edit (user-role messages only). Disabled via
+     * ``disabledReason`` for assistant/system roles.
+     */
+    ...(turn.role === "user"
+      ? { [MENU_ACTION_MESSAGE_EDIT]: () => openEdit() }
+      : {
+          [MENU_ACTION_MESSAGE_EDIT]: {
+            disabledReason: "Only user messages can be edited",
+          },
+        }),
 
     /** Pin the message bubble to the conversation header. */
     [MENU_ACTION_MESSAGE_PIN]: () => {
@@ -302,6 +448,45 @@
     }
   }
 
+  // ---- T2-12 multi-select context menu handlers --------------------------
+
+  const multiSelectMenuHandlers = $derived({
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_COPY]: () => {
+      const ids = [...messageMultiSelectionStore.ids];
+      const turns = conversationStore.turns.filter((t) => ids.includes(t.id));
+      const text = turns.map((t) => `**${t.role}**: ${t.body}`).join("\n\n---\n\n");
+      void navigator.clipboard.writeText(text);
+    },
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_PIN]: () => {
+      for (const id of messageMultiSelectionStore.ids) {
+        void patchMessagePinned(id, true).catch((err) => {
+          console.error("Pin message failed:", err);
+        });
+      }
+      clearMessageSelection();
+    },
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_HIDE]: () => {
+      for (const id of messageMultiSelectionStore.ids) {
+        void patchMessageHidden(id, true).catch((err) => {
+          console.error("Hide message failed:", err);
+        });
+      }
+      clearMessageSelection();
+    },
+    [MENU_ACTION_MESSAGE_MULTI_SELECT_DELETE]: {
+      handler: async () => {
+        const ids = [...messageMultiSelectionStore.ids];
+        clearMessageSelection();
+        for (const id of ids) {
+          await deleteMessage(id).catch((err) => {
+            console.error("Delete message failed:", err);
+          });
+        }
+      },
+      skipMenuConfirm: false,
+    },
+  });
+
   // ---- tool-work drawer jump ---------------------------------------------
 
   /**
@@ -373,13 +558,16 @@
 {/if}
 
 <article
-  class="message-turn flex flex-col gap-2 px-4 py-4"
+  class="message-turn flex flex-col gap-2 px-4 py-4{isSelected
+    ? ' ring-1 ring-accent/40 rounded'
+    : ''}"
   data-testid="message-turn"
   data-turn-id={turn.id}
   data-role={turn.role}
+  onclick={handleClick}
   use:contextMenu={{
-    target: MENU_TARGET_MESSAGE,
-    handlers: menuHandlers,
+    target: hasSelection ? MENU_TARGET_MESSAGE_MULTI_SELECT : MENU_TARGET_MESSAGE,
+    handlers: hasSelection ? multiSelectMenuHandlers : menuHandlers,
     data: { messageId: turn.id, sessionId },
     stale: isTurnStale,
   }}
@@ -395,24 +583,60 @@
           {CONVERSATION_STRINGS.turnResumedLabel}
         </span>
       {/if}
-      <div
-        class="user-bubble self-end rounded px-3 py-2 text-sm text-fg-strong"
-        data-testid="message-turn-user-body"
-      >
-        <!-- User bubbles get linkifier-anchored URLs / paths but no
-             Markdown reflow (chat.md notes user bubbles render as
-             Markdown — applying the same renderMarkdown pipeline as
-             assistant bubbles is a TODO once the linkifier integrates
-             with the marked tokeniser). The HTML output of
-             ``linkifyToHtml`` is escaped per-segment; we still pass it
-             through ``sanitizeHtml`` for defense in depth. -->
-        <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-        {@html sanitizeHtml(linkifyToHtml(turn.body))}
-        <!-- Attachment chips at the bottom of the user bubble —
-             gap-cycle-01-015 / docs/behavior/chat.md §"What a message
-             turn looks like". Renders nothing when the array is empty. -->
-        <SentAttachmentChips attachments={turn.attachments} />
-      </div>
+      {#if editActive}
+        <!-- T1-05 inline edit overlay -->
+        <div class="flex w-full flex-col gap-1" data-testid="message-turn-edit">
+          <textarea
+            class="w-full rounded border border-accent/60 bg-surface-1 p-2 text-sm text-fg-strong focus:outline-none focus:ring-1 focus:ring-accent/60"
+            rows="4"
+            bind:value={editDraft}
+            disabled={editSaving}
+            data-testid="message-turn-edit-textarea"
+          ></textarea>
+          {#if editError !== null}
+            <p class="text-xs text-red-400" data-testid="message-turn-edit-error">{editError}</p>
+          {/if}
+          <div class="flex justify-end gap-2">
+            <button
+              type="button"
+              class="rounded px-2 py-0.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg-strong"
+              onclick={cancelEdit}
+              disabled={editSaving}
+              data-testid="message-turn-edit-cancel"
+            >
+              {CONTEXT_MENU_STRINGS.destructiveCancelLabel}
+            </button>
+            <button
+              type="button"
+              class="rounded bg-accent/20 px-2 py-0.5 text-xs text-fg-strong hover:bg-accent/30 disabled:opacity-50"
+              onclick={() => void saveEdit()}
+              disabled={editSaving || editDraft.trim().length === 0}
+              data-testid="message-turn-edit-save"
+            >
+              {editSaving ? CONTEXT_MENU_STRINGS.confirmPendingLabel : "Save"}
+            </button>
+          </div>
+        </div>
+      {:else}
+        <div
+          class="user-bubble self-end rounded px-3 py-2 text-sm text-fg-strong"
+          data-testid="message-turn-user-body"
+        >
+          <!-- User bubbles get linkifier-anchored URLs / paths but no
+               Markdown reflow (chat.md notes user bubbles render as
+               Markdown — applying the same renderMarkdown pipeline as
+               assistant bubbles is a TODO once the linkifier integrates
+               with the marked tokeniser). The HTML output of
+               ``linkifyToHtml`` is escaped per-segment; we still pass it
+               through ``sanitizeHtml`` for defense in depth. -->
+          <!-- eslint-disable-next-line svelte/no-at-html-tags -->
+          {@html sanitizeHtml(linkifyToHtml(turn.body))}
+          <!-- Attachment chips at the bottom of the user bubble —
+               gap-cycle-01-015 / docs/behavior/chat.md §"What a message
+               turn looks like". Renders nothing when the array is empty. -->
+          <SentAttachmentChips attachments={turn.attachments} />
+        </div>
+      {/if}
     </div>
   {:else}
     {#if turn.toolCalls.length > 0}
@@ -427,7 +651,7 @@
         </summary>
         <div class="px-2 py-1">
           {#each turn.toolCalls as call (call.id)}
-            <ToolOutput {call} {workingDir} />
+            <ToolOutput {call} {workingDir} {sessionId} />
           {/each}
         </div>
       </details>
@@ -447,7 +671,11 @@
       {/if}
       {#if bodyHtml.length > 0}
         <CollapsibleBody>
-          <div class="message-turn__body" data-testid="message-turn-body" use:markdownContextMenu>
+          <div
+            class="message-turn__body"
+            data-testid="message-turn-body"
+            use:markdownContextMenu={{ sessionId: sessionId ?? undefined }}
+          >
             <!-- eslint-disable-next-line svelte/no-at-html-tags -->
             {@html bodyHtml}
           </div>

@@ -143,9 +143,12 @@ per-chip fetch). This lets a user tell at a glance which tags are
 | Section | Label | ID |
 |---|---|---|
 | primary | Fork from here | `checkpoint.fork` |
+| view | Compare with current | `checkpoint.compare` |
 | copy | Copy label | `checkpoint.copy_label` |
 | copy | Copy checkpoint ID | `checkpoint.copy_id` (advanced) |
 | destructive | Delete checkpoint | `checkpoint.delete` |
+
+`Compare with current` opens a modal diff view listing every message added to the session after the checkpoint's anchor message (the delta). The modal title reads "Changes since "{label}"". When no messages have been added since the checkpoint, the modal shows "No messages have been added since this checkpoint." rather than an empty list. The compare is read-only — there is no in-modal action to restore or revert.
 
 ### Multi-select (≥1 sidebar row selected)
 

@@ -8,6 +8,7 @@
  * backward via ``loadOlder()`` (item 1.3 cursor pagination).
  */
 import {
+  messageContentEndpoint,
   messageDeleteEndpoint,
   messageEndpoint,
   messageHiddenEndpoint,
@@ -199,6 +200,19 @@ export async function moveMessage(
     { target_session_id: targetSessionId },
     options,
   );
+}
+
+/**
+ * Rewrite the ``content`` field of a user-role message via
+ * ``PATCH /api/messages/{id}/content`` (T1-05).
+ * Returns 422 if the message is not a user-role message.
+ */
+export async function patchMessageContent(
+  messageId: string,
+  content: string,
+  options: RequestOptions = {},
+): Promise<MessageOut> {
+  return await patchJson<MessageOut>(messageContentEndpoint(messageId), { content }, options);
 }
 
 /**

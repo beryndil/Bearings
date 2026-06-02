@@ -576,6 +576,31 @@ async def update_hidden(
     return await get(connection, message_id)
 
 
+async def update_content(
+    connection: aiosqlite.Connection,
+    message_id: str,
+    *,
+    content: str,
+) -> Message | None:
+    """Rewrite the ``content`` field of a user message; returns the updated row or ``None``.
+
+    Only user-role messages may be edited via this path (assistant turns
+    are immutable — they are the agent's output). The caller is
+    responsible for validating the role constraint before calling; this
+    helper does not enforce it so it can be reused in tests that need
+    to patch content for other roles.
+    """
+    existing = await get(connection, message_id)
+    if existing is None:
+        return None
+    await connection.execute(
+        "UPDATE messages SET content = ? WHERE id = ?",
+        (content, message_id),
+    )
+    await connection.commit()
+    return await get(connection, message_id)
+
+
 async def delete(
     connection: aiosqlite.Connection,
     message_id: str,

@@ -3,8 +3,7 @@
 
 Per ``docs/architecture-v1.md`` §1.1.5 the wire DTOs live alongside
 their route module. The shapes mirror :class:`bearings.db.checkpoints.Checkpoint`
-plus a thin :class:`CheckpointForkResult` envelope returned by the
-``POST /api/checkpoints/{id}/fork`` action.
+plus thin result envelopes for the fork and compare actions.
 
 The ``mypy: disable-error-code=explicit-any`` pragma is the same narrow
 carve-out the other ``web/models/*.py`` files make for Pydantic's
@@ -76,4 +75,47 @@ class CheckpointForkResult(BaseModel):
     message_count: int
 
 
-__all__ = ["CheckpointForkResult", "CheckpointIn", "CheckpointOut"]
+class CheckpointDeltaMessage(BaseModel):
+    """One message in the delta returned by ``GET /api/checkpoints/{id}/compare``.
+
+    Carries only the fields the diff-view modal needs: identity, role,
+    content, and timestamp. Routing/usage columns are omitted -- the
+    compare view surfaces *what* was said, not *how* it was routed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class CheckpointCompareResult(BaseModel):
+    """Response body for ``GET /api/checkpoints/{id}/compare``.
+
+    ``delta_messages`` contains every message whose ``rowid`` is
+    greater than the anchor message's ``rowid`` -- i.e. every message
+    added to the session *after* the checkpoint was created.
+
+    ``delta_message_count`` mirrors ``len(delta_messages)`` and is
+    provided as a convenience so the frontend can branch on zero without
+    iterating the array before it renders.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_id: str
+    checkpoint_label: str
+    anchor_message_id: str
+    delta_message_count: int
+    delta_messages: list[CheckpointDeltaMessage]
+
+
+__all__ = [
+    "CheckpointCompareResult",
+    "CheckpointDeltaMessage",
+    "CheckpointForkResult",
+    "CheckpointIn",
+    "CheckpointOut",
+]
