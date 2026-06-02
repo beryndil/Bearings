@@ -40,9 +40,9 @@ from typing import Final, Literal
 # Process-level defaults (project CLAUDE.md "Repo invariants")
 # ---------------------------------------------------------------------------
 
-# Concurrent-run port: v0.17.x stays on 8787; v1 lives on 8788 so both UIs
-# can be hosted at once during dogfood.
-DEFAULT_PORT: Final[int] = 8788
+# Daily-driver port: v1 is now the primary instance on 8787.
+# v0.17.x is retired as of the 2026-06-02 cutover.
+DEFAULT_PORT: Final[int] = 8787
 
 # Loopback bind: Bearings is single-user localhost; binding to anything else
 # would expose subscription-auth to the LAN.
