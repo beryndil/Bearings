@@ -59,7 +59,7 @@
       error = null;
       try {
         const [all, tags] = await Promise.all([listSessions(), listTags()]);
-        sessions = all.filter((s) => s.id !== srcSession.id);
+        sessions = all.sessions.filter((s) => s.id !== srcSession.id);
         allTags = tags;
       } catch (err) {
         error = err instanceof Error ? err.message : String(err);

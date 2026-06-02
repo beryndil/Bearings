@@ -110,11 +110,11 @@
       filterArr.length > 0 ? { includeClosed: false, tagIds: filterArr } : { includeClosed: false };
 
     void listSessions(params)
-      .then((rows) => {
+      .then((page) => {
         // Capture source session data before filtering it out so the
         // create form can inherit working_dir and model.
-        sourceSessionData = rows.find((s) => s.id === sourceId) ?? null;
-        sessions = rows.filter((s) => s.id !== sourceId);
+        sourceSessionData = page.sessions.find((s) => s.id === sourceId) ?? null;
+        sessions = page.sessions.filter((s) => s.id !== sourceId);
         loading = false;
       })
       .catch((err: unknown) => {

@@ -28,7 +28,7 @@
  * dependency graph one-way (components depend on stores; stores never
  * depend on each other).
  */
-import { listSessions, type SessionOut, type SessionTagOut } from "../api/sessions";
+import { listSessions, type SessionOut } from "../api/sessions";
 import type { TagOut } from "../api/tags";
 import { connectSessionsBroadcast } from "../api/wsSessions";
 import { _applyTagDelete, _applyTagUpsert } from "./tags.svelte";
@@ -249,8 +249,8 @@ interface SessionFilter {
  * Shared between :func:`refreshSessions` and :func:`loadMoreSessions`
  * so filter → params translation cannot drift between the two.
  */
-function _filterToParams(filter: SessionFilter): Parameters<typeof listSessions>[0] {
-  const params: Parameters<typeof listSessions>[0] = {};
+function _filterToParams(filter: SessionFilter): NonNullable<Parameters<typeof listSessions>[0]> {
+  const params: NonNullable<Parameters<typeof listSessions>[0]> = {};
   if (filter.project.size > 0) {
     params.tagIdsProject = filter.project;
   }
