@@ -67,7 +67,7 @@ class _BundleStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
-        except Exception as exc:  # pragma: no cover - delegated below
+        except Exception as exc:
             from starlette.exceptions import HTTPException as StarletteHTTPException
 
             if (
@@ -78,7 +78,13 @@ class _BundleStaticFiles(StaticFiles):
             request = Request(scope)
             if request.method != "GET":
                 raise
-            if "text/html" not in request.headers.get("accept", ""):
+            # API / WS / metrics paths must 404 as JSON, not receive the SPA
+            # shell — the caller expects a structured error, not an HTML page.
+            if _spa_path_excluded(request.url.path):
+                raise
+            # Asset references (any path segment containing a dot) get a real
+            # 404 so JS loaders are never fed an HTML body.
+            if "." in Path(request.url.path).name:
                 raise
             fallback = self._resolve_fallback()
             if fallback is None:

@@ -40,9 +40,9 @@ from typing import Final, Literal
 # Process-level defaults (project CLAUDE.md "Repo invariants")
 # ---------------------------------------------------------------------------
 
-# Daily-driver port: v1 is now the primary instance on 8787.
-# v0.17.x is retired as of the 2026-06-02 cutover.
-DEFAULT_PORT: Final[int] = 8787
+# v1 runs on port 8788 per project CLAUDE.md "Repo invariants".
+# v0.17.x / any other Bearings instance uses 8787.
+DEFAULT_PORT: Final[int] = 8788
 
 # Loopback bind: Bearings is single-user localhost; binding to anything else
 # would expose subscription-auth to the LAN.

@@ -73,6 +73,7 @@ from bearings.config.constants import (
     SESSIONS_DEFAULT_PAGE_SIZE,
     SESSIONS_MAX_PAGE_SIZE,
 )
+from bearings.db import checklists as checklists_db
 from bearings.db import checkpoints as checkpoints_db
 from bearings.db import messages as messages_db
 from bearings.db import sdk_entries as sdk_entries_db
@@ -730,7 +731,14 @@ async def patch_session(
     operation_id="delete-session",
 )
 async def delete_session(session_id: str, request: Request) -> None:
-    """Cascade-delete a session row + messages + checkpoints."""
+    """Cascade-delete a session row + messages + checkpoints.
+
+    After removing the session, explicitly NULLs ``chat_session_id`` on
+    any checklist items that referenced it.  The schema carries an ``ON
+    DELETE SET NULL`` FK that handles this automatically when foreign-key
+    enforcement is active, but that enforcement is opt-in per connection;
+    the explicit call here is a belt-and-suspenders guarantee.
+    """
     db = _db(request)
     removed = await sessions_db.delete(db, session_id)
     if not removed:
@@ -738,6 +746,7 @@ async def delete_session(session_id: str, request: Request) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no session matches {session_id!r}",
         )
+    await checklists_db.clear_orphaned_chat_session_id(db, session_id)
     broadcaster = _sessions_broadcaster(request)
     if broadcaster is not None:
         broadcaster.publish_delete(session_id)
