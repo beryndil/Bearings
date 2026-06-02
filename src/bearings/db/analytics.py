@@ -678,14 +678,18 @@ async def _query_block_rows(
     )
     if block_types:
         type_placeholders = ",".join("?" * len(block_types))
-        return await connection.execute_fetchall(
-            f"{select}WHERE spb.session_id IN ({placeholders}) "
-            f"AND pb.block_type IN ({type_placeholders}) {tail}",
-            (*session_ids, *block_types, min_repeats),
+        return list(
+            await connection.execute_fetchall(
+                f"{select}WHERE spb.session_id IN ({placeholders}) "
+                f"AND pb.block_type IN ({type_placeholders}) {tail}",
+                (*session_ids, *block_types, min_repeats),
+            )
         )
-    return await connection.execute_fetchall(
-        f"{select}WHERE spb.session_id IN ({placeholders}) {tail}",
-        (*session_ids, min_repeats),
+    return list(
+        await connection.execute_fetchall(
+            f"{select}WHERE spb.session_id IN ({placeholders}) {tail}",
+            (*session_ids, min_repeats),
+        )
     )
 
 

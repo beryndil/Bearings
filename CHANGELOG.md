@@ -7,6 +7,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **chore(deps): bump claude-agent-sdk compatible-release pin to ~=0.2.87 (C1):**
+  Updated SDK pin from `~=0.1.69` to `~=0.2.87`. Compatible-release now tracks
+  the 0.2.x patch series. Minor type annotation fixes in `db/analytics.py` and
+  `web/routes/analytics.py` to satisfy mypy 1.20 strict mode.
+
 ### Fixed
 
 - **fix(checklists): F6-rt-18/19/20/24 — /link kind+closed+nonexistent validation + /run/start 404 (A16):**

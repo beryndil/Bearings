@@ -324,19 +324,19 @@ def _build_redundancy_out(raw: list[dict[str, object]]) -> list[RedundancyBlockO
         RedundancyBlockOut(
             hash=str(r["hash"]),
             block_type=str(r["block_type"]),
-            token_count=int(r["token_count"]),  # type: ignore[arg-type]
+            token_count=int(r["token_count"]),  # type: ignore[call-overload]
             token_count_model=str(r["token_count_model"]),
-            repeat_count=int(r["repeat_count"]),  # type: ignore[arg-type]
-            total_cost_tokens=int(r["total_cost_tokens"]),  # type: ignore[arg-type]
+            repeat_count=int(r["repeat_count"]),  # type: ignore[call-overload]
+            total_cost_tokens=int(r["total_cost_tokens"]),  # type: ignore[call-overload]
             source_path=r["source_path"],  # type: ignore[arg-type]
             sessions=[
                 RedundancySessionRef(
                     id=str(s["id"]),
                     title=str(s["title"]),
-                    timestamp=int(s["timestamp"]),  # type: ignore[arg-type]
-                    tags=[str(t) for t in s["tags"]],  # type: ignore[union-attr]
+                    timestamp=int(s["timestamp"]),
+                    tags=[str(t) for t in s["tags"]],
                 )
-                for s in r["sessions"]  # type: ignore[union-attr]
+                for s in r["sessions"]  # type: ignore[attr-defined]
             ],
         )
         for r in raw
