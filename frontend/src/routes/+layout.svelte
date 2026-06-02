@@ -150,6 +150,7 @@
   let inspectorWidth = $state(INSPECTOR_DEFAULT_PX);
   let sidebarCollapsed = $state(false);
   let inspectorCollapsed = $state(false);
+  let sidebarChromeCollapsed = $state(false);
 
   const sidebarColPx = $derived(sidebarCollapsed ? 0 : sidebarWidth);
   const inspectorColPx = $derived(inspectorCollapsed ? 0 : inspectorWidth);
@@ -158,7 +159,13 @@
     try {
       localStorage.setItem(
         "bearings-pane-widths",
-        JSON.stringify({ sidebarWidth, inspectorWidth, sidebarCollapsed, inspectorCollapsed }),
+        JSON.stringify({
+          sidebarWidth,
+          inspectorWidth,
+          sidebarCollapsed,
+          inspectorCollapsed,
+          sidebarChromeCollapsed,
+        }),
       );
     } catch {
       // ignore quota / security errors
@@ -172,6 +179,11 @@
 
   function toggleInspector(): void {
     inspectorCollapsed = !inspectorCollapsed;
+    savePaneWidths();
+  }
+
+  function toggleSidebarChrome(): void {
+    sidebarChromeCollapsed = !sidebarChromeCollapsed;
     savePaneWidths();
   }
 
@@ -416,6 +428,8 @@
           if (typeof p.inspectorWidth === "number") inspectorWidth = p.inspectorWidth;
           if (typeof p.sidebarCollapsed === "boolean") sidebarCollapsed = p.sidebarCollapsed;
           if (typeof p.inspectorCollapsed === "boolean") inspectorCollapsed = p.inspectorCollapsed;
+          if (typeof p.sidebarChromeCollapsed === "boolean")
+            sidebarChromeCollapsed = p.sidebarChromeCollapsed;
         }
       }
     } catch {
@@ -494,68 +508,86 @@
                 <circle cx="347.92" cy="164.08" r="24" />
               </g>
             </svg>
-            <span class="text-base font-semibold tracking-tight">{SIDEBAR_STRINGS.heading}</span>
+            <span class="flex-1 text-base font-semibold tracking-tight"
+              >{SIDEBAR_STRINGS.heading}</span
+            >
             <PendingOpsBadge />
-          </div>
-
-          <!-- New Session + Import -->
-          <div class="px-2 pb-2 flex flex-col gap-1">
             <button
               type="button"
-              class="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-muted focus:outline-none focus:ring-2 focus:ring-accent/70"
-              aria-label={SIDEBAR_STRINGS.newSessionAriaLabel}
-              data-testid="new-session-pill"
-              onclick={() => void goto("/sessions/new")}
+              class="rounded p-0.5 text-xs text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
+              aria-label={sidebarChromeCollapsed
+                ? "Show navigation"
+                : "Hide navigation"}
+              aria-expanded={!sidebarChromeCollapsed}
+              aria-controls="sidebar-chrome"
+              data-testid="sidebar-chrome-toggle"
+              onclick={toggleSidebarChrome}
             >
-              <span aria-hidden="true">+</span>
-              <span>{SIDEBAR_STRINGS.newSessionLabel}</span>
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-surface-1 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
-              aria-label="Import session from JSON export"
-              data-testid="import-session-btn"
-              onclick={() => {
-                showImportDialog = true;
-              }}
-            >
-              <span aria-hidden="true">↓</span>
-              <span>Import session…</span>
-            </button>
-            <button
-              type="button"
-              class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-surface-1 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
-              aria-label={SIDEBAR_STRINGS.templatesButtonAriaLabel}
-              data-testid="sidebar-templates-button"
-              onclick={toggleTemplatePicker}
-            >
-              <span aria-hidden="true">⊞</span>
-              <span>{SIDEBAR_STRINGS.templatesButtonLabel}</span>
+              {sidebarChromeCollapsed ? "▾" : "▴"}
             </button>
           </div>
 
-          <!-- Drag-and-drop import status (gap-cycle-08-005) -->
-          {#if sidebarImportProgress !== null || sidebarImportErrors !== null}
-            <div class="px-2 pb-1 text-xs" data-testid="sidebar-import-status">
-              {#if sidebarImportProgress !== null}
-                <p class="text-fg-muted" data-testid="sidebar-import-progress">
-                  {sidebarImportProgress}
-                </p>
-              {/if}
-              {#if sidebarImportErrors !== null}
-                <p class="text-red-400" data-testid="sidebar-import-errors">
-                  {sidebarImportErrors}
-                </p>
-              {/if}
-            </div>
-          {/if}
+          <!-- Collapsible chrome: buttons + nav -->
+          {#if !sidebarChromeCollapsed}
+            <div id="sidebar-chrome" class="flex flex-col overflow-y-auto">
+              <!-- New Session + Import -->
+              <div class="px-2 pb-2 flex flex-col gap-1">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-muted focus:outline-none focus:ring-2 focus:ring-accent/70"
+                  aria-label={SIDEBAR_STRINGS.newSessionAriaLabel}
+                  data-testid="new-session-pill"
+                  onclick={() => void goto("/sessions/new")}
+                >
+                  <span aria-hidden="true">+</span>
+                  <span>{SIDEBAR_STRINGS.newSessionLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-surface-1 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
+                  aria-label="Import session from JSON export"
+                  data-testid="import-session-btn"
+                  onclick={() => {
+                    showImportDialog = true;
+                  }}
+                >
+                  <span aria-hidden="true">↓</span>
+                  <span>Import session…</span>
+                </button>
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-center gap-2 rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs text-fg-muted transition-colors hover:bg-surface-1 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
+                  aria-label={SIDEBAR_STRINGS.templatesButtonAriaLabel}
+                  data-testid="sidebar-templates-button"
+                  onclick={toggleTemplatePicker}
+                >
+                  <span aria-hidden="true">⊞</span>
+                  <span>{SIDEBAR_STRINGS.templatesButtonLabel}</span>
+                </button>
+              </div>
 
-          <!-- Primary nav -->
-          <nav
-            class="flex flex-col gap-0.5 px-1 pb-1"
-            aria-label={SIDEBAR_STRINGS.navAriaLabel}
-            data-testid="sidebar-nav"
-          >
+              <!-- Drag-and-drop import status (gap-cycle-08-005) -->
+              {#if sidebarImportProgress !== null || sidebarImportErrors !== null}
+                <div class="px-2 pb-1 text-xs" data-testid="sidebar-import-status">
+                  {#if sidebarImportProgress !== null}
+                    <p class="text-fg-muted" data-testid="sidebar-import-progress">
+                      {sidebarImportProgress}
+                    </p>
+                  {/if}
+                  {#if sidebarImportErrors !== null}
+                    <p class="text-red-400" data-testid="sidebar-import-errors">
+                      {sidebarImportErrors}
+                    </p>
+                  {/if}
+                </div>
+              {/if}
+
+              <!-- Primary nav -->
+              <nav
+                class="flex flex-col gap-0.5 px-1 pb-1"
+                aria-label={SIDEBAR_STRINGS.navAriaLabel}
+                data-testid="sidebar-nav"
+              >
             <a
               href="/"
               class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
@@ -736,6 +768,8 @@
               {SIDEBAR_STRINGS.navSettings}
             </a>
           </nav>
+        </div>
+      {/if}
 
           <!-- Session list -->
           <div class="app-shell__sidebar-body" data-testid="app-shell-sidebar-body">

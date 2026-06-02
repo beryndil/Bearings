@@ -174,11 +174,31 @@
   data-testid="tag-filter-panel"
   aria-label={SIDEBAR_STRINGS.tagFilterLabel}
 >
-  <header class="mb-2 flex items-center justify-between">
-    <h2 class="text-xs font-semibold uppercase tracking-wider text-fg-muted">
+  <header class="flex items-center justify-between py-1">
+    <button
+      type="button"
+      class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-fg-muted hover:text-fg transition-colors"
+      aria-expanded={!panelCollapsed}
+      aria-controls="tag-filter-chip-body"
+      data-testid="tag-filter-collapse-toggle"
+      onclick={toggleTagPanel}
+    >
+      <span
+        class="select-none text-[10px] transition-transform duration-150"
+        class:rotate-90={!panelCollapsed}
+      >▶</span>
       {SIDEBAR_STRINGS.tagFilterLabel}
-    </h2>
-    {#if hasSelection}
+      {#if panelCollapsed && activeCount > 0}
+        <span
+          class="ml-1 rounded bg-accent/20 px-1 text-[10px] font-normal text-ok"
+          data-testid="tag-filter-collapsed-active-count"
+          aria-label="{activeCount} filter{activeCount === 1 ? '' : 's'} active"
+        >
+          {activeCount}
+        </span>
+      {/if}
+    </button>
+    {#if hasSelection && !panelCollapsed}
       <button
         type="button"
         class="text-xs text-accent hover:underline"
@@ -197,7 +217,7 @@
     points at the body id when it is in the DOM.
   -->
   {#if !panelCollapsed}
-    <div id="tag-filter-chip-body">
+    <div id="tag-filter-chip-body" class="mt-2">
       {#if tags.length === 0}
         <p class="text-xs text-fg-muted" data-testid="tag-filter-empty">No tags yet.</p>
       {:else}
@@ -294,40 +314,4 @@
     </div>
   {/if}
 
-  <!--
-    Footer collapse toggle — always visible so the user can always
-    reach the expand affordance without scrolling. Only rendered when
-    there are tags to collapse; an empty panel needs no toggle.
-
-    aria-expanded reflects the chip-body visibility; aria-controls
-    names the body element when it is present in the DOM.
-  -->
-  {#if tags.length > 0}
-    <footer class="mt-1 flex items-center justify-between">
-      <button
-        type="button"
-        class="flex items-center gap-1 text-xs text-fg-muted hover:text-fg-strong"
-        aria-expanded={!panelCollapsed}
-        aria-controls="tag-filter-chip-body"
-        data-testid="tag-filter-collapse-toggle"
-        onclick={toggleTagPanel}
-      >
-        <span class="select-none transition-transform {panelCollapsed ? '' : 'rotate-90'}">▶</span>
-        {panelCollapsed ? SIDEBAR_STRINGS.tagFilterShowLabel : SIDEBAR_STRINGS.tagFilterHideLabel}
-      </button>
-      {#if panelCollapsed && activeCount > 0}
-        <!--
-          Compact active-filter breadcrumb: lets the user see filters are
-          still applied without expanding the panel.
-        -->
-        <span
-          class="text-xs text-ok"
-          data-testid="tag-filter-collapsed-active-count"
-          aria-label="{activeCount} filter{activeCount === 1 ? '' : 's'} active"
-        >
-          {activeCount} on
-        </span>
-      {/if}
-    </footer>
-  {/if}
 </section>
