@@ -48,7 +48,7 @@ export interface ReorgSplitOut {
  * Wire shape for the audit-list response — one-to-one with
  * :class:`bearings.web.models.reorg.ReorgAuditListOut`.
  */
-export interface ReorgAuditListOut {
+interface ReorgAuditListOut {
   items: ReorgAuditOut[];
 }
 
@@ -56,7 +56,7 @@ export interface ReorgAuditListOut {
  * Wire shape for a successful undo response — one-to-one with
  * :class:`bearings.web.models.reorg.UndoReorgOut`.
  */
-export interface UndoMergeOut {
+interface UndoMergeOut {
   new_session_id: string;
 }
 

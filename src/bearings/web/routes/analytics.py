@@ -318,6 +318,31 @@ async def get_attribution(
     return out
 
 
+def _build_redundancy_out(raw: list[dict[str, object]]) -> list[RedundancyBlockOut]:
+    """Convert raw DB rows from :func:`list_redundant_plug_blocks` to API output."""
+    return [
+        RedundancyBlockOut(
+            hash=str(r["hash"]),
+            block_type=str(r["block_type"]),
+            token_count=int(r["token_count"]),  # type: ignore[arg-type]
+            token_count_model=str(r["token_count_model"]),
+            repeat_count=int(r["repeat_count"]),  # type: ignore[arg-type]
+            total_cost_tokens=int(r["total_cost_tokens"]),  # type: ignore[arg-type]
+            source_path=r["source_path"],  # type: ignore[arg-type]
+            sessions=[
+                RedundancySessionRef(
+                    id=str(s["id"]),
+                    title=str(s["title"]),
+                    timestamp=int(s["timestamp"]),  # type: ignore[arg-type]
+                    tags=[str(t) for t in s["tags"]],  # type: ignore[union-attr]
+                )
+                for s in r["sessions"]  # type: ignore[union-attr]
+            ],
+        )
+        for r in raw
+    ]
+
+
 @router.get(
     "/api/analytics/redundancy",
     response_model=list[RedundancyBlockOut],
@@ -384,27 +409,7 @@ async def get_redundancy(
         block_types=parsed_types,
     )
 
-    return [
-        RedundancyBlockOut(
-            hash=str(r["hash"]),
-            block_type=str(r["block_type"]),
-            token_count=int(r["token_count"]),
-            token_count_model=str(r["token_count_model"]),
-            repeat_count=int(r["repeat_count"]),
-            total_cost_tokens=int(r["total_cost_tokens"]),
-            source_path=r["source_path"],
-            sessions=[
-                RedundancySessionRef(
-                    id=str(s["id"]),
-                    title=str(s["title"]),
-                    timestamp=int(s["timestamp"]),
-                    tags=[str(t) for t in s["tags"]],
-                )
-                for s in r["sessions"]
-            ],
-        )
-        for r in raw
-    ]
+    return _build_redundancy_out(raw)
 
 
 @router.get(

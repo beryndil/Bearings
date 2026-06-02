@@ -31,7 +31,7 @@ import { API_DIAG_SERVER_ENDPOINT, FEEDBACK_GITHUB_ISSUES_URL } from "../config"
  * - ``"feature"`` — pre-fills a use-case / proposed-behavior scaffold
  *   and ``labels=feature``.
  */
-export type FeedbackKind = "bug" | "feature";
+type FeedbackKind = "bug" | "feature";
 
 /** Subset of ``ServerDiagOut`` that :func:`fetchVersion` reads. */
 interface DiagServerOut {

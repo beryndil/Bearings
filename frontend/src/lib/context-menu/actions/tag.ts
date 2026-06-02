@@ -34,7 +34,7 @@ import type { HandlerEntry } from "../store.svelte";
  * can show a confirmation dialog; the consumer then calls the returned
  * ``confirmDelete`` function to proceed.
  */
-export interface TagMenuCallbacks {
+interface TagMenuCallbacks {
   /** Open the TagEdit modal for this tag. */
   onEdit: (tag: TagOut) => void;
   /**

@@ -18,7 +18,7 @@
 export const VIEWPORT_MARGIN_PX = 4;
 
 /** Input to :func:`placeAtCursor`. */
-export interface PlaceAtCursorInput {
+interface PlaceAtCursorInput {
   /** Raw cursor X (``event.clientX``). */
   readonly x: number;
   /** Raw cursor Y (``event.clientY``). */
@@ -34,7 +34,7 @@ export interface PlaceAtCursorInput {
 }
 
 /** Clamped ``position: fixed`` origin for a floating menu. */
-export interface Position {
+interface Position {
   /** CSS ``left`` value in px. */
   readonly left: number;
   /** CSS ``top`` value in px. */

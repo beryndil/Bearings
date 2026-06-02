@@ -26,7 +26,7 @@
  * :file:`src/app.html` can match it without an import. Must stay in
  * sync with ``THEME_STORAGE_KEY`` in :file:`src/lib/config.ts`.
  */
-export const BOOT_STORAGE_KEY = "bearings-theme-v1";
+const BOOT_STORAGE_KEY = "bearings-theme-v1";
 
 /**
  * Theme → address-bar hex map — an inline literal that mirrors

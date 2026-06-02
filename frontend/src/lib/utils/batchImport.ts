@@ -44,7 +44,7 @@ export interface BatchImportProgress {
 }
 
 /** Per-file error entry. */
-export interface BatchImportFileError {
+interface BatchImportFileError {
   /** Original filename (``File.name``). */
   name: string;
   /** Human-readable detail string (API ``detail`` field or parse error). */
@@ -52,7 +52,7 @@ export interface BatchImportFileError {
 }
 
 /** Aggregate result returned after all files have been processed. */
-export interface BatchImportResult {
+interface BatchImportResult {
   /** Sessions successfully imported (in import order). */
   imported: SessionOut[];
   /** Files that failed, with a per-file error message. */

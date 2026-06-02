@@ -662,7 +662,7 @@ export async function patchSessionTitle(
  *
  * Gap: gap-cycle-10-001 (SessionEdit modal).
  */
-export interface SessionPatchBody {
+interface SessionPatchBody {
   title?: string;
   description?: string | null;
   max_budget_usd?: number | null;
@@ -723,7 +723,7 @@ export async function importSessionJson(
  * ``created`` is ``true`` on first spawn (HTTP 201) and ``false``
  * when the idempotent path returned an existing open session (HTTP 200).
  */
-export interface SpawnFromReplyOut {
+interface SpawnFromReplyOut {
   chat_session_id: string;
   parent_session_id: string;
   pivot_message_id: string;
@@ -800,7 +800,7 @@ export async function getSessionTokens(
  * ``TodoWrite`` call's input — identical in shape to the ``todos_json``
  * field on the ``todo_write_update`` WebSocket event.
  */
-export interface SessionTodosOut {
+interface SessionTodosOut {
   todos_json: string;
 }
 

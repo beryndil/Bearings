@@ -24,11 +24,6 @@ export interface SaveStatus {
   message?: string;
 }
 
-/** Minimal prop surface that every section component honours. */
-export interface SectionProps {
-  onsaveStatus?: (status: SaveStatus) => void;
-}
-
 /** One entry in the settings section registry. */
 export interface SettingsSectionDef {
   /** Stable URL-safe identifier; mirrors the ``?settings=<id>`` param. */

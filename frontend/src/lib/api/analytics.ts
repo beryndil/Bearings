@@ -309,7 +309,7 @@ export interface PromoteToOnOpenOut {
  * Request body for ``POST /api/analytics/draft-new-session``.
  * Mirrors :class:`bearings.web.models.analytics.DraftNewSessionIn`.
  */
-export interface DraftNewSessionIn {
+interface DraftNewSessionIn {
   source_session_id: string;
   carry_tags?: string[];
 }
@@ -328,7 +328,7 @@ export interface DraftNewSessionOut {
  * Request body for ``POST /api/analytics/sessions/from-draft``.
  * Mirrors :class:`bearings.web.models.analytics.SessionFromDraftIn`.
  */
-export interface SessionFromDraftIn {
+interface SessionFromDraftIn {
   draft_plug: string;
   tags?: string[];
   working_directory: string;

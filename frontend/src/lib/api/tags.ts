@@ -88,16 +88,6 @@ export async function listTags(params: ListTagsParams = {}): Promise<TagOut[]> {
   return await getJson<TagOut[]>(API_TAGS_ENDPOINT, options);
 }
 
-export async function listSessionTags(
-  sessionId: string,
-  params: { signal?: AbortSignal } = {},
-): Promise<TagOut[]> {
-  const options: RequestOptions = {};
-  if (params.signal !== undefined) {
-    options.signal = params.signal;
-  }
-  return await getJson<TagOut[]>(sessionTagsEndpoint(sessionId), options);
-}
 
 /**
  * Wire shape for ``POST /api/tags`` + ``PATCH /api/tags/{id}`` —

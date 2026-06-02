@@ -10,14 +10,14 @@
  * attribute so tests can query sections by identity.
  */
 
-export interface NonRegistryBinding {
+interface NonRegistryBinding {
   /** Key-cap labels — each becomes a ``<kbd>`` element. */
   readonly keys: readonly string[];
   /** Descriptive label for the action. */
   readonly label: string;
 }
 
-export interface NonRegistrySection {
+interface NonRegistrySection {
   /** Stable id used as the ``data-section`` attribute. */
   readonly id: string;
   /** Section heading text. */

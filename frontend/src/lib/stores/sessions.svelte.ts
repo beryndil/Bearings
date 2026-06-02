@@ -237,7 +237,7 @@ connectSessionsBroadcast(
  * tags.svelte's ``currentFilter``) can type the value they pass
  * without importing the shape from a different module.
  */
-export interface SessionFilter {
+interface SessionFilter {
   project: ReadonlySet<number>;
   severity: ReadonlySet<number>;
   other: ReadonlySet<number>;

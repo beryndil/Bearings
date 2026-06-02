@@ -24,7 +24,7 @@ import { ApiError } from "./client";
  * names exactly so the cast in :func:`uploadFile` is correct without
  * runtime validation.
  */
-export interface UploadOut {
+interface UploadOut {
   id: number;
   sha256: string;
   filename: string;

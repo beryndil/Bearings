@@ -363,3 +363,23 @@ The two remaining parts are deferred to v1.1.0:
    present on `GET /api/tag-groups`, absent on non-deprecated routes.
 
 Must land before any deprecated surface is removed (earliest: v1.2.0).
+
+## svelte-check: 9 pre-existing type errors (2026-06-02)
+
+`npm run check` exits non-zero with 9 errors across 3 files. These predate
+the quality-gate sweep in this commit and are not regressions from it.
+
+**`frontend/src/lib/stores/sessions.svelte.ts`** (3 errors):
+- Line 31: `SessionTagOut` imported but never read.
+- Lines 311, 359: `params` is possibly `undefined`.
+
+**`frontend/src/lib/components/menus/SessionPickerModal.svelte`** (3 errors):
+- Line 62: `Property 'filter' does not exist on type 'SessionsPage'` — component
+  calls `.filter()` directly on the paginated API envelope instead of on
+  `.sessions`. Fix: unwrap `store.sessions` before filtering.
+
+**`frontend/src/lib/components/reorg/ReorgPicker.svelte`** (4 errors):
+- Lines 116–117: same `SessionsPage.find/filter` issue as above.
+
+Fix: update the two Svelte components to read `.sessions` from the store
+value before calling array methods; remove the unused `SessionTagOut` import.

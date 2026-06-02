@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 /** One reversible action kept in the stack. */
-export interface UndoEntry {
+interface UndoEntry {
   /** Client-generated id for keying and targeted dismissal. */
   id: string;
   /** Human-readable label shown in the toast (e.g. "Session archived"). */
@@ -39,7 +39,7 @@ export interface UndoEntry {
 }
 
 /** Parameters for :func:`undoStore.push`. */
-export interface PushParams {
+interface PushParams {
   message: string;
   inverse: () => void | Promise<void>;
   /** Defaults to ``DEFAULT_UNDO_WINDOW_MS`` when omitted. */

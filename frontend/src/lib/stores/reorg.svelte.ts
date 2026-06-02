@@ -53,7 +53,7 @@ export interface ReorgUndoPayload {
 }
 
 /** Picker open state — null when closed. */
-export interface ReorgPickerState {
+interface ReorgPickerState {
   /** Which context-menu action triggered the picker. */
   mode: "move" | "split";
   /** The message the user right-clicked. */

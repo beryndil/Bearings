@@ -33,10 +33,10 @@ const LONG_PRESS_MOVEMENT_THRESHOLD_PX = 8;
  * - ``idle``  — no qualifying pointer is down.
  * - ``armed`` — a qualifying pointerdown was received; timer is running.
  */
-export type LongPressPhase = "idle" | "armed";
+type LongPressPhase = "idle" | "armed";
 
 /** Immutable FSM state record. */
-export interface LongPressState {
+interface LongPressState {
   /** Current phase. */
   readonly phase: LongPressPhase;
   /** Viewport X of the initiating ``pointerdown`` event (0 when idle). */
@@ -53,7 +53,7 @@ export const LONG_PRESS_IDLE: LongPressState = {
 };
 
 /** Events that the :func:`reduceLongPress` pure reducer accepts. */
-export type LongPressInputEvent =
+type LongPressInputEvent =
   | {
       readonly type: "pointerdown";
       readonly x: number;
@@ -150,7 +150,7 @@ export function isCoarsePointer(): boolean {
 // ---------------------------------------------------------------------------
 
 /** Parameters accepted by the :func:`longpress` Svelte action. */
-export interface LongPressParams {
+interface LongPressParams {
   /**
    * Callback invoked with the viewport ``(x, y)`` of the initiating
    * ``pointerdown`` when the long-press threshold is reached.

@@ -91,4 +91,3 @@ export async function shellOpenInTerminal(dir: string): Promise<void> {
   } satisfies ShellExecIn);
 }
 
-export type { ShellExecIn, ShellExecOut };

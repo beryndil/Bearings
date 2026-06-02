@@ -77,18 +77,3 @@ export function applyPreferences(prefs: PreferencesOut): void {
   state.cacheBust = prefs.updated_at;
 }
 
-// ---------------------------------------------------------------------------
-// Test seam
-// ---------------------------------------------------------------------------
-
-/**
- * Reset store to initial empty state.
- *
- * Call in ``beforeEach`` alongside the store reset for any other stores
- * touched in the test file.
- */
-export function _resetForTests(): void {
-  state.displayName = null;
-  state.avatarUrl = null;
-  state.cacheBust = "";
-}

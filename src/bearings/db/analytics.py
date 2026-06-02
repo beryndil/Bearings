@@ -653,6 +653,98 @@ async def compute_tag_attribution(
 # ---------------------------------------------------------------------------
 
 
+async def _query_block_rows(
+    connection: aiosqlite.Connection,
+    session_ids: list[str],
+    min_repeats: int,
+    block_types: list[str] | None,
+) -> list[Any]:
+    """Fetch block rows for :func:`list_redundant_plug_blocks` step 2.
+
+    Separating the two SQL branches (with/without ``block_types``) keeps the
+    parent function below the xenon CC ≤ B gate.
+    """
+    placeholders = ",".join("?" * len(session_ids))
+    select = (
+        "SELECT pb.hash, pb.block_type, pb.token_count, pb.token_count_model, "
+        "pb.source_path, COUNT(DISTINCT spb.session_id) AS repeat_count "
+        "FROM session_plug_blocks spb "
+        "JOIN plug_blocks pb ON pb.hash = spb.block_hash "
+    )
+    tail = (
+        "GROUP BY pb.hash "
+        "HAVING repeat_count >= ? "
+        "ORDER BY repeat_count DESC, repeat_count * pb.token_count DESC"
+    )
+    if block_types:
+        type_placeholders = ",".join("?" * len(block_types))
+        return await connection.execute_fetchall(
+            f"{select}WHERE spb.session_id IN ({placeholders}) "
+            f"AND pb.block_type IN ({type_placeholders}) {tail}",
+            (*session_ids, *block_types, min_repeats),
+        )
+    return await connection.execute_fetchall(
+        f"{select}WHERE spb.session_id IN ({placeholders}) {tail}",
+        (*session_ids, min_repeats),
+    )
+
+
+async def _enrich_block_rows(
+    connection: aiosqlite.Connection,
+    block_rows: list[Any],
+    session_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Fetch session references for each block row (step 3 of redundancy query).
+
+    Extracted from :func:`list_redundant_plug_blocks` to keep that function's
+    cyclomatic complexity below the xenon gate (≤ B rank).
+    """
+    placeholders = ",".join("?" * len(session_ids))
+    results: list[dict[str, Any]] = []
+    for r in block_rows:
+        block_hash = str(r[0])
+        repeat_count = int(r[5])
+        token_count = int(r[2])
+        sess_rows = await connection.execute_fetchall(
+            f"SELECT s.id, s.title, "
+            f"CAST(strftime('%s', s.created_at) AS INTEGER) * 1000 AS ts, "
+            f"GROUP_CONCAT(t.name) AS tag_names "
+            f"FROM session_plug_blocks spb "
+            f"JOIN sessions s ON s.id = spb.session_id "
+            f"LEFT JOIN session_tags st ON st.session_id = s.id "
+            f"LEFT JOIN tags t ON t.id = st.tag_id "
+            f"WHERE spb.block_hash = ? AND spb.session_id IN ({placeholders}) "
+            f"GROUP BY s.id "
+            f"ORDER BY s.created_at DESC",
+            (block_hash, *session_ids),
+        )
+        sess_refs: list[dict[str, Any]] = []
+        for sr in sess_rows:
+            raw_tags = str(sr[3]) if sr[3] is not None else ""
+            tag_names = [t for t in raw_tags.split(",") if t] if raw_tags else []
+            sess_refs.append(
+                {
+                    "id": str(sr[0]),
+                    "title": str(sr[1]),
+                    "timestamp": int(sr[2]),
+                    "tags": tag_names,
+                }
+            )
+        results.append(
+            {
+                "hash": block_hash,
+                "block_type": str(r[1]),
+                "token_count": token_count,
+                "token_count_model": str(r[3]),
+                "repeat_count": repeat_count,
+                "total_cost_tokens": repeat_count * token_count,
+                "source_path": str(r[4]) if r[4] is not None else None,
+                "sessions": sess_refs,
+            }
+        )
+    return results
+
+
 async def list_redundant_plug_blocks(
     connection: aiosqlite.Connection,
     *,
@@ -702,80 +794,10 @@ async def list_redundant_plug_blocks(
         return []
 
     # Step 2: count per-block repeat frequency within the session sample.
-    placeholders = ",".join("?" * len(session_ids))
-    if block_types:
-        type_placeholders = ",".join("?" * len(block_types))
-        block_rows = await connection.execute_fetchall(
-            f"SELECT pb.hash, pb.block_type, pb.token_count, pb.token_count_model, "
-            f"pb.source_path, COUNT(DISTINCT spb.session_id) AS repeat_count "
-            f"FROM session_plug_blocks spb "
-            f"JOIN plug_blocks pb ON pb.hash = spb.block_hash "
-            f"WHERE spb.session_id IN ({placeholders}) "
-            f"AND pb.block_type IN ({type_placeholders}) "
-            f"GROUP BY pb.hash "
-            f"HAVING repeat_count >= ? "
-            f"ORDER BY repeat_count DESC, repeat_count * pb.token_count DESC",
-            (*session_ids, *block_types, min_repeats),
-        )
-    else:
-        block_rows = await connection.execute_fetchall(
-            f"SELECT pb.hash, pb.block_type, pb.token_count, pb.token_count_model, "
-            f"pb.source_path, COUNT(DISTINCT spb.session_id) AS repeat_count "
-            f"FROM session_plug_blocks spb "
-            f"JOIN plug_blocks pb ON pb.hash = spb.block_hash "
-            f"WHERE spb.session_id IN ({placeholders}) "
-            f"GROUP BY pb.hash "
-            f"HAVING repeat_count >= ? "
-            f"ORDER BY repeat_count DESC, repeat_count * pb.token_count DESC",
-            (*session_ids, min_repeats),
-        )
+    block_rows = await _query_block_rows(connection, session_ids, min_repeats, block_types)
 
-    # Step 3: for each block, fetch the session references.
-    results: list[dict[str, Any]] = []
-    for r in block_rows:
-        block_hash = str(r[0])
-        repeat_count = int(r[5])
-        token_count = int(r[2])
-
-        sess_rows = await connection.execute_fetchall(
-            f"SELECT s.id, s.title, "
-            f"CAST(strftime('%s', s.created_at) AS INTEGER) * 1000 AS ts, "
-            f"GROUP_CONCAT(t.name) AS tag_names "
-            f"FROM session_plug_blocks spb "
-            f"JOIN sessions s ON s.id = spb.session_id "
-            f"LEFT JOIN session_tags st ON st.session_id = s.id "
-            f"LEFT JOIN tags t ON t.id = st.tag_id "
-            f"WHERE spb.block_hash = ? AND spb.session_id IN ({placeholders}) "
-            f"GROUP BY s.id "
-            f"ORDER BY s.created_at DESC",
-            (block_hash, *session_ids),
-        )
-        sessions: list[dict[str, Any]] = []
-        for sr in sess_rows:
-            raw_tags = str(sr[3]) if sr[3] is not None else ""
-            tag_names = [t for t in raw_tags.split(",") if t] if raw_tags else []
-            sessions.append(
-                {
-                    "id": str(sr[0]),
-                    "title": str(sr[1]),
-                    "timestamp": int(sr[2]),
-                    "tags": tag_names,
-                }
-            )
-
-        results.append(
-            {
-                "hash": block_hash,
-                "block_type": str(r[1]),
-                "token_count": token_count,
-                "token_count_model": str(r[3]),
-                "repeat_count": repeat_count,
-                "total_cost_tokens": repeat_count * token_count,
-                "source_path": str(r[4]) if r[4] is not None else None,
-                "sessions": sessions,
-            }
-        )
-    return results
+    # Step 3: enrich each block row with session references.
+    return await _enrich_block_rows(connection, block_rows, session_ids)
 
 
 # ---------------------------------------------------------------------------

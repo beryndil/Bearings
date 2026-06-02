@@ -418,7 +418,12 @@ def run_data_walk(client: httpx.Client) -> DataWalkResult:
     if response.status_code != 200:
         failures.append(f"GET /api/sessions returned {response.status_code}")
     else:
-        sessions = response.json()
+        payload = response.json()
+        # /api/sessions returns a SessionsPage envelope: {sessions: [...], ...}
+        if isinstance(payload, dict) and "sessions" in payload:
+            sessions = payload["sessions"]
+        else:
+            sessions = payload
         if not isinstance(sessions, list):
             failures.append(f"GET /api/sessions: expected list, got {type(sessions).__name__}")
         else:

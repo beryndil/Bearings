@@ -30,14 +30,6 @@ interface DiagServerBillingOut {
 /** Module-level cache — ``null`` until the first :func:`fetchBillingMode` call. */
 let _billingModePromise: Promise<BillingMode> | null = null;
 
-/**
- * Reset the cached billing-mode promise between tests.
- *
- * Not part of the public production surface — exported for vitest only.
- */
-export function _resetBillingModeCacheForTests(): void {
-  _billingModePromise = null;
-}
 
 /**
  * Return a promise that resolves to the server's configured billing mode.

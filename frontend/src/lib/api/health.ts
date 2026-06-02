@@ -38,4 +38,3 @@ export async function getHealth(): Promise<HealthOut> {
   return getJson<HealthOut>(API_HEALTH_ENDPOINT);
 }
 
-export type { HealthOut as HealthResponse };

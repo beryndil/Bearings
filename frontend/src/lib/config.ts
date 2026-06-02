@@ -23,11 +23,6 @@
  */
 export const SESSIONS_DEFAULT_PAGE_SIZE = 100;
 
-/**
- * Maximum page size for ``GET /api/sessions`` — mirrors
- * :data:`bearings.config.constants.SESSIONS_MAX_PAGE_SIZE`.
- */
-export const SESSIONS_MAX_PAGE_SIZE = 500;
 
 // ---- API endpoints ---------------------------------------------------------
 
@@ -358,7 +353,7 @@ export const API_USAGE_OVERRIDE_RATES_ENDPOINT = `${API_BASE}/usage/override_rat
  * ``/api/analytics/`` endpoints share this prefix; derived constants
  * below follow the same ``API_<RESOURCE>_ENDPOINT`` naming convention.
  */
-export const API_ANALYTICS_BASE = `${API_BASE}/analytics`;
+const API_ANALYTICS_BASE = `${API_BASE}/analytics`;
 
 /**
  * ``GET /api/analytics/bucket/current`` — latest ``/usage`` poll
@@ -1496,7 +1491,7 @@ export const OVERRIDE_RATE_WINDOW_DAYS = 14;
 export const EXECUTOR_MODEL_SONNET = "sonnet";
 export const EXECUTOR_MODEL_HAIKU = "haiku";
 export const EXECUTOR_MODEL_OPUS = "opus";
-export const EXECUTOR_MODEL_OPUSPLAN = "opusplan";
+const EXECUTOR_MODEL_OPUSPLAN = "opusplan";
 export const KNOWN_EXECUTOR_MODELS = [
   EXECUTOR_MODEL_SONNET,
   EXECUTOR_MODEL_HAIKU,

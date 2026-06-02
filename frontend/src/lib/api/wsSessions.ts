@@ -20,7 +20,7 @@ import type { TagOut } from "./tags";
 import type { SessionOut } from "./sessions";
 
 /** Union of all message types the sessions-broadcast channel emits. */
-export type SessionsBroadcastEvent =
+type SessionsBroadcastEvent =
   | { type: "session_upsert"; session: SessionOut }
   | { type: "session_delete"; session_id: string }
   | {
@@ -43,7 +43,7 @@ type SessionsBroadcastHandler = (event: SessionsBroadcastEvent) => void;
  * handler. Only the callbacks that are actually needed must be provided —
  * omitting a callback is always safe.
  */
-export interface SessionsBroadcastOptions {
+interface SessionsBroadcastOptions {
   /** Called when the socket opens (or reconnects) successfully. */
   onOpen?: () => void;
   /**

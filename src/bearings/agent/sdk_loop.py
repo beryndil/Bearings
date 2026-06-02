@@ -287,6 +287,32 @@ def _build_tool_records(
     ]
 
 
+async def _record_turn_analytics(
+    db: Any,
+    session: AgentSession,
+    last_result: ResultMessage | None,
+) -> None:
+    """Capture per-turn token usage for the analytics tables (spec §4.1).
+
+    Extracted from :func:`_finish_turn` to keep that function's cyclomatic
+    complexity below the xenon gate (≤ B rank). :func:`capture_turn` absorbs
+    and logs all DB failures so analytics never surfaces in the agent loop.
+    """
+    _usage = extract_model_usage(
+        last_result.model_usage if last_result is not None else None,
+        session.config.decision,
+    )
+    await capture_turn(
+        db,
+        session_id=session.config.session_id,
+        model=session.config.decision.executor_model,
+        input_tokens=_usage.executor_input_tokens + _usage.advisor_input_tokens,
+        output_tokens=_usage.executor_output_tokens + _usage.advisor_output_tokens,
+        cache_read_tokens=_usage.cache_read_tokens,
+        cache_creation_tokens=_usage.cache_creation_tokens,
+    )
+
+
 async def _finish_turn(
     runner: SessionRunner,
     session: AgentSession,
@@ -346,23 +372,10 @@ async def _finish_turn(
                 records=_build_tool_records(pending_starts, pending_ends),
             )
     # Analytics Phase 2 — per-turn token capture (spec §4.1).
-    # Runs even when there is no assistant body (tool-only turns still
-    # consume tokens). capture_turn catches and logs all DB failures
-    # so analytics never crashes the agent loop.
+    # capture_turn catches and logs all DB failures so analytics never
+    # crashes the agent loop.
     if db is not None:
-        _usage = extract_model_usage(
-            last_result.model_usage if last_result is not None else None,
-            session.config.decision,
-        )
-        await capture_turn(
-            db,
-            session_id=session.config.session_id,
-            model=session.config.decision.executor_model,
-            input_tokens=_usage.executor_input_tokens + _usage.advisor_input_tokens,
-            output_tokens=_usage.executor_output_tokens + _usage.advisor_output_tokens,
-            cache_read_tokens=_usage.cache_read_tokens,
-            cache_creation_tokens=_usage.cache_creation_tokens,
-        )
+        await _record_turn_analytics(db, session, last_result)
 
 
 async def _do_run_one_turn(
