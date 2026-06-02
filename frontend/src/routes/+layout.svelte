@@ -140,6 +140,95 @@
   let pairedChatInfo = $state<PairedChatInfo | null>(null);
   let showImportDialog = $state(false);
 
+  // ---- Pane resize / collapse state ------------------------------------
+  const SIDEBAR_DEFAULT_PX = 256;
+  const INSPECTOR_DEFAULT_PX = 320;
+  const PANE_MIN_PX = 160;
+  const PANE_SNAP_PX = 80;
+
+  let sidebarWidth = $state(SIDEBAR_DEFAULT_PX);
+  let inspectorWidth = $state(INSPECTOR_DEFAULT_PX);
+  let sidebarCollapsed = $state(false);
+  let inspectorCollapsed = $state(false);
+
+  const sidebarColPx = $derived(sidebarCollapsed ? 0 : sidebarWidth);
+  const inspectorColPx = $derived(inspectorCollapsed ? 0 : inspectorWidth);
+
+  function savePaneWidths(): void {
+    try {
+      localStorage.setItem(
+        "bearings-pane-widths",
+        JSON.stringify({ sidebarWidth, inspectorWidth, sidebarCollapsed, inspectorCollapsed }),
+      );
+    } catch {
+      // ignore quota / security errors
+    }
+  }
+
+  function toggleSidebar(): void {
+    sidebarCollapsed = !sidebarCollapsed;
+    savePaneWidths();
+  }
+
+  function toggleInspector(): void {
+    inspectorCollapsed = !inspectorCollapsed;
+    savePaneWidths();
+  }
+
+  function startSidebarResize(e: MouseEvent): void {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = sidebarCollapsed ? 0 : sidebarWidth;
+    document.body.classList.add("pane-resizing");
+
+    function onMove(ev: MouseEvent): void {
+      const raw = startW + (ev.clientX - startX);
+      if (raw < PANE_SNAP_PX) {
+        sidebarCollapsed = true;
+      } else {
+        sidebarCollapsed = false;
+        sidebarWidth = Math.max(PANE_MIN_PX, raw);
+      }
+    }
+
+    function onUp(): void {
+      document.body.classList.remove("pane-resizing");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      savePaneWidths();
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  function startInspectorResize(e: MouseEvent): void {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = inspectorCollapsed ? 0 : inspectorWidth;
+    document.body.classList.add("pane-resizing");
+
+    function onMove(ev: MouseEvent): void {
+      const raw = startW + (startX - ev.clientX);
+      if (raw < PANE_SNAP_PX) {
+        inspectorCollapsed = true;
+      } else {
+        inspectorCollapsed = false;
+        inspectorWidth = Math.max(PANE_MIN_PX, raw);
+      }
+    }
+
+    function onUp(): void {
+      document.body.classList.remove("pane-resizing");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      savePaneWidths();
+    }
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
   function handleImported(session: SessionOut): void {
     showImportDialog = false;
     void goto(`/sessions/${encodeURIComponent(session.id)}`);
@@ -316,6 +405,23 @@
   });
 
   onMount(() => {
+    // Load saved pane widths
+    try {
+      const raw = localStorage.getItem("bearings-pane-widths");
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw);
+        if (typeof parsed === "object" && parsed !== null) {
+          const p = parsed as Record<string, unknown>;
+          if (typeof p.sidebarWidth === "number") sidebarWidth = p.sidebarWidth;
+          if (typeof p.inspectorWidth === "number") inspectorWidth = p.inspectorWidth;
+          if (typeof p.sidebarCollapsed === "boolean") sidebarCollapsed = p.sidebarCollapsed;
+          if (typeof p.inspectorCollapsed === "boolean") inspectorCollapsed = p.inspectorCollapsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     const releases: Array<() => void> = [
       bindHandler(KEYBINDING_ACTION_NEW_CHAT_DEFAULTS, () => void goto("/sessions/new")),
       bindHandler(KEYBINDING_ACTION_NEW_CHAT_BARE, () => void goto("/sessions/new?bare=1")),
@@ -346,7 +452,11 @@
 <ThemeProvider>
   <KeybindingsProvider {activeWorkingDir}>
     <ContextMenuProvider>
-      <div class="app-shell" data-testid="app-shell">
+      <div
+        class="app-shell"
+        data-testid="app-shell"
+        style="--sidebar-w: {sidebarColPx}px; --inspector-w: {inspectorColPx}px"
+      >
         <aside
           class="app-shell__sidebar border-r border-border bg-surface-1"
           class:app-shell__sidebar--dragging={isSidebarDragActive}
@@ -658,6 +768,31 @@
           </div>
         </aside>
 
+        <!-- Left resizer: sidebar ↔ main -->
+        <div
+          class="app-shell__resizer"
+          role="slider"
+          aria-orientation="vertical"
+          aria-label="Sidebar width"
+          aria-valuemin={PANE_MIN_PX}
+          aria-valuemax={800}
+          aria-valuenow={sidebarColPx}
+          tabindex="0"
+          data-testid="sidebar-resizer"
+          onmousedown={startSidebarResize}
+        >
+          <button
+            type="button"
+            class="resizer-toggle rounded-full bg-surface-2 border border-border text-fg-muted hover:text-fg hover:bg-surface-1 focus:outline-none focus:ring-2 focus:ring-accent/70"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            data-testid="sidebar-collapse-btn"
+            onmousedown={(e) => e.stopPropagation()}
+            onclick={toggleSidebar}
+          >
+            {sidebarCollapsed ? "›" : "‹"}
+          </button>
+        </div>
+
         <main
           class="app-shell__main bg-surface-0"
           data-testid="app-shell-main"
@@ -779,6 +914,31 @@
           </footer>
         </main>
 
+        <!-- Right resizer: main ↔ inspector -->
+        <div
+          class="app-shell__resizer"
+          role="slider"
+          aria-orientation="vertical"
+          aria-label="Inspector width"
+          aria-valuemin={PANE_MIN_PX}
+          aria-valuemax={800}
+          aria-valuenow={inspectorColPx}
+          tabindex="0"
+          data-testid="inspector-resizer"
+          onmousedown={startInspectorResize}
+        >
+          <button
+            type="button"
+            class="resizer-toggle rounded-full bg-surface-2 border border-border text-fg-muted hover:text-fg hover:bg-surface-1 focus:outline-none focus:ring-2 focus:ring-accent/70"
+            aria-label={inspectorCollapsed ? "Expand inspector" : "Collapse inspector"}
+            data-testid="inspector-collapse-btn"
+            onmousedown={(e) => e.stopPropagation()}
+            onclick={toggleInspector}
+          >
+            {inspectorCollapsed ? "‹" : "›"}
+          </button>
+        </div>
+
         <aside
           class="app-shell__inspector border-l border-border bg-surface-1"
           data-testid="app-shell-inspector"
@@ -841,9 +1001,24 @@
     color: rgb(var(--bearings-accent));
   }
 
+  :global(body.pane-resizing) {
+    cursor: col-resize !important;
+    user-select: none !important;
+  }
+
   .app-shell {
     display: grid;
-    grid-template-columns: 16rem minmax(0, 1fr) 20rem;
+    /*
+     * Columns: sidebar | left-resizer | main | right-resizer | inspector
+     * --sidebar-w and --inspector-w are driven by JS drag / collapse state.
+     * Defaults match the original static widths (16rem / 20rem).
+     */
+    grid-template-columns:
+      var(--sidebar-w, 16rem)
+      6px
+      minmax(0, 1fr)
+      6px
+      var(--inspector-w, 20rem);
     grid-template-rows: 1fr auto;
     height: 100vh;
     width: 100vw;
@@ -931,5 +1106,45 @@
 
   .app-shell__main-body {
     overflow-y: auto;
+  }
+
+  .app-shell__resizer {
+    position: relative;
+    cursor: col-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    transition: background 0.12s;
+    /* Widen the hit target slightly without consuming visible space */
+    margin: 0 -2px;
+    z-index: 10;
+  }
+
+  .app-shell__resizer:hover,
+  .app-shell__resizer:focus-within {
+    background: rgb(var(--bearings-accent) / 0.1);
+  }
+
+  .resizer-toggle {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+    /* Override the parent col-resize cursor */
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  .app-shell__resizer:hover .resizer-toggle,
+  .app-shell__resizer:focus-within .resizer-toggle {
+    opacity: 1;
   }
 </style>

@@ -1,0 +1,1 @@
+import"./UPaikLcu.js";
