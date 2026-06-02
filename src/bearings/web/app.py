@@ -85,6 +85,7 @@ from bearings.db import checklists as checklists_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
 from bearings.metrics import BearingsMetrics
+from bearings.web.middleware import SunsetMiddleware
 from bearings.web.routes.analytics import router as analytics_router
 from bearings.web.routes.approvals import router as approvals_router
 from bearings.web.routes.checklists import router as checklists_router
@@ -366,6 +367,9 @@ def create_app(
         description=OPENAPI_DESCRIPTION,
         version=__version__,
     )
+    # Sunset header middleware — emits ``Sunset:`` for deprecated routes
+    # per ``docs/deprecation-convention.md`` §3 / RFC 8594.
+    app.add_middleware(SunsetMiddleware)
     app.state.runner_factory = factory
     app.state.sessions_broadcaster = sessions_broadcaster
     app.state.heartbeat_interval_s = heartbeat_interval_s

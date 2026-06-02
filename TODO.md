@@ -149,6 +149,8 @@ SDK-version issue. Plausible angles before the next occurrence:
 When this recurs, the new `_log.warning` in `sdk_loop` will surface
 the traceback in journald — capture it before doing anything else.
 
+**Status check 2026-06-02**: no root-cause fix commits found. Entry remains open.
+
 ~~### `POST /api/sessions/{id}/recover` HTTP route — missing~~
 
 ~~Resolved by commit `cc4ea35` (Phase 4 of the UI/UX gap sweep). Route
@@ -210,11 +212,10 @@ your theme" toast when the preferences PATCH fails. v1 ships
 - Bearings v1 is a single-user localhost app — "per account" degenerates
   to "the only account on this device", which is what localStorage
   already keys on.
-- The arch §1.1.5 routes table lists ``web/routes/preferences.py``, but
-  no preferences route, Pydantic models, or DB table exist yet. Adding
-  schema + route + tests would expand this frontend item into a backend
-  concern that a separate item should own (alongside other per-user
-  preferences like the display timezone the doc mentions).
+- ~~The arch §1.1.5 routes table lists ``web/routes/preferences.py``, but
+  no preferences route, Pydantic models, or DB table exist yet.~~ **Update
+  2026-06-02**: `preferences.py` now exists. Review whether the route surface
+  is sufficient for theme server-sync, or if DB/model work remains.
 - The store interface is forward-compatible: a future item adds
   ``persistThemeToServer(theme)`` behind the same
   :func:`saveTheme` / :func:`loadTheme` shape used by the localStorage
@@ -248,16 +249,16 @@ The audit flagged 12 spec'd route modules absent from
 ``src/bearings/web/routes/``:
 
 * ~~``sessions_bulk.py`` — bulk close/reopen/delete/tag.~~ (resolved: gap-cycle-13-001)
-* ``checkpoints.py`` — chat-undo checkpoint CRUD.
-* ``templates.py`` — Templates CRUD.
-* ``reorg.py`` — session-reorg analyze + apply.
+* ~~``checkpoints.py`` — chat-undo checkpoint CRUD.~~ (resolved: module exists 2026-06-02)
+* ~~``templates.py`` — Templates CRUD.~~ (resolved: module exists 2026-06-02)
+* ~~``reorg.py`` — session-reorg analyze + apply.~~ (resolved: module exists 2026-06-02)
 * ~~``spawn_from_reply.py`` — ``+ SPAWN`` action on a reply.~~ (resolved: gap-cycle-03-007)
 * ``reply_actions.py`` — inline reply-action execution.
 * ``artifacts.py`` — artifact register + serve.
-* ``commands.py`` — slash-command palette scan.
-* ``preferences.py`` — per-user preferences.
-* ``pending.py`` — ``.bearings/pending.toml`` ops.
-* ``history.py`` — ``history.jsonl`` reader.
+* ~~``commands.py`` — slash-command palette scan.~~ (resolved: module exists 2026-06-02)
+* ~~``preferences.py`` — per-user preferences.~~ (resolved: module exists 2026-06-02)
+* ~~``pending.py`` — ``.bearings/pending.toml`` ops.~~ (resolved: module exists 2026-06-02)
+* ~~``history.py`` — ``history.jsonl`` reader.~~ (resolved: module exists 2026-06-02)
 * ``config.py`` — ``/api/ui-config`` runtime knob exposure.
 
 Per-commit grep over ``frontend/src/**/*.{ts,svelte}`` (excluding
@@ -304,6 +305,8 @@ Then `git push` to drain the backlog. Resolve in the same commit that
 sweeps the fix. The agent worktree runs with `--no-new-privileges`, so
 the chown must be issued from a regular shell.
 
+**Status check 2026-06-02**: still blocked. Push fails with same SSH proxy error.
+
 ~~## CLAUDE.md stale v17 path (2026-05-06)~~
 
 ~~Project `CLAUDE.md` and the "Reference-read protocol" section refer to
@@ -317,9 +320,9 @@ references to the archive path in the next chore commit.~~
 
 ~~Resolved by chore commit (chore: strike resolved TODO entries (knip, svelte-check, CLAUDE.md path)). CLAUDE.md updated to reference `/home/beryndil/Projects/archive/bearings-v0.17.x/`.~~
 
-## API gap: no PATCH for session description (2026-05-05)
+~~## API gap: no PATCH for session description (2026-05-05)~~
 
-`PATCH /api/sessions/{id}` accepts only `SessionTitleUpdate` (title
+~~`PATCH /api/sessions/{id}` accepts only `SessionTitleUpdate` (title
 field). Other per-attribute PATCHes exist for `model`,
 `permission_mode`, `pinned`, etc. — but `description` has no update
 endpoint, even though `SessionOut` and `SessionCreate` carry the field.
@@ -328,7 +331,11 @@ Blocks the dual-persist contract in `~/.claude/skills/persisting-plans`
 `PATCH /api/sessions/{id}/description` or extend `SessionTitleUpdate`
 into `SessionMetadataUpdate` accepting both fields. Surfaced while
 authoring `~/.claude/plans/resolute-restructuring-projects.md` from
-session `ses_3794490d13075208149c2903fed6b8c0`.
+session `ses_3794490d13075208149c2903fed6b8c0`.~~
+
+~~Resolved: `SessionUpdate` model already supported description patching
+via `PATCH /api/sessions/{id}`. Tests added confirming functionality.
+Item A1 of Orch-A sweep, 2026-06-02.~~
 
 ~~## feature-12-001: pre-existing cyclomatic complexity violations (2026-05-07)~~
 
@@ -360,22 +367,27 @@ but never emits it. Template `system_prompt_baseline` is baked into
 on the session row to recover the original text. Emit `template_baseline` when
 sessions gain a `template_id` column.
 
-## feature-13-010 deferred: x-sunset extension + Sunset header middleware
+~~## feature-13-010 deferred: x-sunset extension + Sunset header middleware~~
 
-Deprecation convention (docs/deprecation-convention.md) is established.
-The two remaining parts are deferred to v1.1.0:
+~~Deprecation convention (docs/deprecation-convention.md) is established.
+The two remaining parts are deferred to v1.1.0:~~
 
-1. **`x-sunset` extension** — add `openapi_extra={"x-sunset": "v1.2.0"}` to
+~~1. **`x-sunset` extension** — add `openapi_extra={"x-sunset": "v1.2.0"}` to
    `GET /api/tag-groups` (tags.py) and the `tag_ids` param route decorator
-   (sessions.py). Regen openapi.json in the same commit.
+   (sessions.py). Regen openapi.json in the same commit.~~
 
-2. **Sunset response header middleware** — author
+~~2. **Sunset response header middleware** — author
    `src/bearings/web/middleware/sunset.py`: ASGI middleware that emits
    `Sunset: <date>` for requests whose matched route carries `x-sunset` in
    `openapi_extra`. Wire into `create_app()`. Add unit test asserting header
-   present on `GET /api/tag-groups`, absent on non-deprecated routes.
+   present on `GET /api/tag-groups`, absent on non-deprecated routes.~~
 
-Must land before any deprecated surface is removed (earliest: v1.2.0).
+~~Must land before any deprecated surface is removed (earliest: v1.2.0).~~
+
+~~Resolved: `openapi_extra={"x-sunset": "v1.2.0"}` added to `GET /api/tag-groups`.
+`SunsetMiddleware` in `src/bearings/web/middleware/sunset.py` emits `Sunset`
+header for routes with `x-sunset`. Tests in `tests/test_middleware_sunset.py`.
+Item A2 of Orch-A sweep, 2026-06-02.~~
 
 ~~## svelte-check: 9 pre-existing type errors (2026-06-02)~~
 

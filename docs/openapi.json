@@ -175,7 +175,8 @@
             }
           }
         },
-        "deprecated": true
+        "deprecated": true,
+        "x-sunset": "v1.2.0"
       }
     },
     "/api/tags/{tag_id}": {
@@ -2363,7 +2364,7 @@
           "sessions"
         ],
         "summary": "List Sessions",
-        "description": "List sessions filtered by ``kind`` + ``include_closed`` + tag filters.\n\nTwo filter shapes coexist:\n\n* ``tag_ids`` \u2014 legacy flat OR (back-compat). Returns sessions\n  attached to **at least one** of the listed tags regardless of\n  class. Repeat the parameter for multi-select.\n* ``tag_ids_project`` / ``tag_ids_severity`` / ``tag_ids_other`` \u2014\n  three-section faceted filter from the tag-class feature. OR\n  within each class; AND across classes. An omitted (or empty)\n  section means \"no constraint from this class,\" NOT \"exclude\n  everything\" \u2014 the empty-section state lets the filter panel\n  render an empty section without blanking out results.\n\nAll four can be combined; each is an additional AND constraint at\nthe SQL layer (legacy ``tag_ids`` joins; per-class params use\ncorrelated EXISTS subqueries). A frontend that only uses the new\nsurface should leave ``tag_ids`` empty.\n\n``severity_none=true`` activates the \"No severity\" synthetic filter\n(gap-cycle-18-003): returns sessions that have no severity-class tag\nattached. When combined with ``tag_ids_severity``, the two compose\nOR within the severity section (sessions with no severity OR sessions\nmatching the listed severity ids).",
+        "description": "List sessions filtered by ``kind`` + ``include_closed`` + tag filters (paginated).\n\n**Pagination** (PERF-BUG-001 + PERF-BUG-005): responses are now pages\nrather than full-table dumps. The wire shape is\n``{sessions: [...], total: <int>, next_offset: <int|null>}``.\n\n* ``limit`` \u2014 rows per page (default :data:`SESSIONS_DEFAULT_PAGE_SIZE`,\n  max :data:`SESSIONS_MAX_PAGE_SIZE`). Pass ``?limit=500`` for a large\n  snapshot; even at the max the payload is bounded to ~500 rows.\n* ``offset`` \u2014 zero-based row skip; ``0`` returns the first page.\n* ``next_offset`` \u2014 ``offset`` value for the next page; ``null`` when all\n  rows have been delivered.\n* ``total`` \u2014 total rows matching the filter (irrespective of pagination).\n\n**Filter shapes** (unchanged from the pre-pagination surface):\n\n* ``tag_ids`` \u2014 legacy flat OR (back-compat). Returns sessions\n  attached to **at least one** of the listed tags regardless of\n  class. Repeat the parameter for multi-select.\n* ``tag_ids_project`` / ``tag_ids_severity`` / ``tag_ids_other`` \u2014\n  three-section faceted filter from the tag-class feature. OR\n  within each class; AND across classes. An omitted (or empty)\n  section means \"no constraint from this class,\" NOT \"exclude\n  everything\" \u2014 the empty-section state lets the filter panel\n  render an empty section without blanking out results.\n\nAll four can be combined; each is an additional AND constraint at\nthe SQL layer (legacy ``tag_ids`` joins; per-class params use\ncorrelated EXISTS subqueries). A frontend that only uses the new\nsurface should leave ``tag_ids`` empty.\n\n``severity_none=true`` activates the \"No severity\" synthetic filter\n(gap-cycle-18-003): returns sessions that have no severity-class tag\nattached. When combined with ``tag_ids_severity``, the two compose\nOR within the severity section (sessions with no severity OR sessions\nmatching the listed severity ids).",
         "operationId": "list-sessions",
         "parameters": [
           {
@@ -2479,6 +2480,33 @@
               "default": false,
               "title": "Severity None"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "description": "Maximum sessions to return per page (1-500). Default 100.",
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Maximum sessions to return per page (1-500). Default 100."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Zero-based row offset for pagination. Default 0 (first page).",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Zero-based row offset for pagination. Default 0 (first page)."
           }
         ],
         "responses": {
@@ -2487,11 +2515,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SessionOut"
-                  },
-                  "title": "Response List-Sessions"
+                  "$ref": "#/components/schemas/SessionsPage"
                 }
               }
             }
@@ -10643,6 +10667,42 @@
         "type": "object",
         "title": "SessionUpdate",
         "description": "Request shape for the full ``PATCH /api/sessions/{id}`` surface.\n\nAll fields are optional; omitted fields are not written (true PATCH\nsemantics, gated by ``model_fields_set``).  Nullable fields (\n``description``, ``max_budget_usd``, ``session_instructions``) may\nbe sent as ``null`` to clear the column.  ``title`` must be a\nnon-empty string when present.\n\n``tag_ids`` when present replaces the session's tag set wholesale via\n:func:`bearings.db.tags.set_for_session`. Omitting ``tag_ids``\nleaves existing tags unchanged.\n\nSupersedes :class:`SessionTitleUpdate` \u2014 existing callers that send\nonly ``{\"title\": \"\u2026\"}`` are still served correctly because ``title``\nis the only field in their ``model_fields_set``.\n\nGap: gap-cycle-10-001 (SessionEdit modal \u2014 full PATCH surface)."
+      },
+      "SessionsPage": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionOut"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset",
+            "description": "Offset for the next page request; null when all sessions have been returned. Clients should pass this value as ``?offset=<next_offset>`` with the same ``limit`` (default 100, max 500)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "sessions",
+          "total"
+        ],
+        "title": "SessionsPage",
+        "description": "Paginated response for ``GET /api/sessions`` (PERF-BUG-001 + PERF-BUG-005).\n\n``sessions`` carries the page slice. ``total`` is the count of ALL rows\nmatching the active filters \u2014 clients use it to decide whether a\n\"load more\" affordance should be shown. ``next_offset`` is the offset\nthe client should pass for the next page, or ``None`` when the last\npage has been returned.\n\nThe shape is derived from the :class:`~bearings.config.constants`\n``SESSIONS_DEFAULT_PAGE_SIZE`` / ``SESSIONS_MAX_PAGE_SIZE`` pair so\nno inline literals appear downstream."
       },
       "ShellExecIn": {
         "properties": {

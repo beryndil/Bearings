@@ -267,6 +267,7 @@ async def update_tags_sort_order(payload: TagSortOrderUpdate, request: Request) 
     "/api/tag-groups",
     response_model=list[str],
     deprecated=True,
+    openapi_extra={"x-sunset": "v1.2.0"},
     operation_id="list-tag-groups",
 )
 async def list_tag_groups(request: Request) -> list[str]:

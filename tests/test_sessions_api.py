@@ -494,6 +494,61 @@ async def test_patch_session_empty_title_422(
     assert response.status_code == 422
 
 
+async def test_patch_session_description_only(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """PATCH with only description field updates the plug text.
+
+    Per TODO.md "API gap: no PATCH for session description" — the
+    ``SessionUpdate`` model accepts both ``title`` and ``description``;
+    this test confirms description-only PATCH works correctly.
+    """
+    app, conn = app_and_db
+    sid = await _new_chat(conn, "original-title")
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/sessions/{sid}",
+            json={"description": "This is the session plug"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["description"] == "This is the session plug"
+    assert body["title"] == "original-title"  # Title unchanged
+
+
+async def test_patch_session_title_and_description(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """PATCH with both title and description updates both fields."""
+    app, conn = app_and_db
+    sid = await _new_chat(conn, "old-title")
+    with TestClient(app) as client:
+        response = client.patch(
+            f"/api/sessions/{sid}",
+            json={"title": "new-title", "description": "new plug"},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "new-title"
+    assert body["description"] == "new plug"
+
+
+async def test_patch_session_description_null_clears(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """PATCH with ``description: null`` clears an existing description."""
+    app, conn = app_and_db
+    # Create session, then set a description, then clear it.
+    sid = await _new_chat(conn, "t")
+    with TestClient(app) as client:
+        # Set description
+        client.patch(f"/api/sessions/{sid}", json={"description": "initial plug"})
+        # Clear description
+        response = client.patch(f"/api/sessions/{sid}", json={"description": None})
+    assert response.status_code == 200
+    assert response.json()["description"] is None
+
+
 async def test_patch_session_two_project_tags_422(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:

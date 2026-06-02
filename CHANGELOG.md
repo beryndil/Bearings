@@ -7,6 +7,24 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **feat(api): x-sunset OpenAPI extension + Sunset response header middleware (A2):**
+  Per `docs/deprecation-convention.md` §3, routes marked `x-sunset` in their
+  `openapi_extra` now emit an RFC 8594 `Sunset` response header. The
+  `SunsetMiddleware` ASGI middleware (`src/bearings/web/middleware/sunset.py`)
+  inspects matched routes and appends the header when present. Currently
+  `GET /api/tag-groups` carries `openapi_extra={"x-sunset": "v1.2.0"}`,
+  signalling removal in v1.2.0 with `Sunset: Sat, 01 Jan 2027 00:00:00 GMT`.
+  Tests in `tests/test_middleware_sunset.py` verify header presence/absence.
+
+- **test(api): description PATCH coverage for PATCH /api/sessions/{id} (A1):**
+  The `SessionUpdate` model already supports patching `description` alongside
+  `title`; added three tests (`test_patch_session_description_only`,
+  `test_patch_session_title_and_description`, `test_patch_session_description_null_clears`)
+  confirming the existing functionality. Strikes TODO.md entry "API gap: no
+  PATCH for session description (2026-05-05)".
+
 ### Changed
 
 - **chore(deps): bump claude-agent-sdk compatible-release pin to ~=0.2.87 (C1):**
