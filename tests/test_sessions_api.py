@@ -1066,6 +1066,42 @@ async def test_delete_session_404(
     assert response.status_code == 404
 
 
+async def test_delete_session_nulls_checklist_item_chat_session_id(
+    app_and_db: tuple[FastAPI, aiosqlite.Connection],
+) -> None:
+    """Deleting a paired chat session NULLs chat_session_id on the checklist item.
+
+    Regression test for feature-6-003: the item previously kept a stale
+    pointer after the chat was deleted, causing a broken link in the UI.
+    """
+    app, conn = app_and_db
+    # Create a checklist session to own the item.
+    checklist = await sessions_db.create(
+        conn,
+        kind=SESSION_KIND_CHECKLIST,
+        title="cl",
+        working_dir="/wd",
+        model="sonnet",
+    )
+    # Create a chat session to pair to the item.
+    chat_id = await _new_chat(conn, "paired-chat")
+    # Create a checklist item and link the chat session to it.
+    item = await checklists_db.create(conn, checklist_id=checklist.id, label="item A")
+    await checklists_db.set_paired_chat(conn, item.id, chat_session_id=chat_id)
+    # Confirm the pointer is set.
+    linked = await checklists_db.get(conn, item.id)
+    assert linked is not None
+    assert linked.chat_session_id == chat_id
+    # Delete the chat session via the API.
+    with TestClient(app) as client:
+        response = client.delete(f"/api/sessions/{chat_id}")
+    assert response.status_code == 204
+    # The checklist item's chat_session_id must now be NULL.
+    after = await checklists_db.get(conn, item.id)
+    assert after is not None
+    assert after.chat_session_id is None
+
+
 # ---- stop endpoint --------------------------------------------------------
 
 

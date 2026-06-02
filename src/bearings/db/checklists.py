@@ -600,6 +600,35 @@ async def clear_paired_chat(
     return await get(connection, item_id)
 
 
+async def clear_orphaned_chat_session_id(
+    connection: aiosqlite.Connection,
+    session_id: str,
+) -> int:
+    """NULL out ``chat_session_id`` on every item that pointed at ``session_id``.
+
+    Called by the session DELETE handler after the session row is removed
+    so any checklist item whose ``chat_session_id`` referenced the deleted
+    session reverts to unpaired.  The ``ON DELETE SET NULL`` FK in
+    ``schema.sql`` handles this automatically when SQLite foreign-key
+    enforcement is active, but that enforcement is opt-in per connection.
+    This explicit UPDATE is a belt-and-suspenders guarantee: a no-op when
+    the FK already fired, a live fix when it did not.
+
+    Returns the number of rows updated (0 when the FK already cleared them
+    or no items were paired to the deleted session).
+    """
+    timestamp = now_iso()
+    cursor = await connection.execute(
+        "UPDATE checklist_items SET chat_session_id = NULL, updated_at = ? "
+        "WHERE chat_session_id = ?",
+        (timestamp, session_id),
+    )
+    rowcount = cursor.rowcount
+    await cursor.close()
+    await connection.commit()
+    return rowcount
+
+
 async def record_leg(
     connection: aiosqlite.Connection,
     *,
@@ -897,6 +926,7 @@ __all__ = [
     "ChecklistItem",
     "PairedChatLeg",
     "cascade_parent_checks",
+    "clear_orphaned_chat_session_id",
     "clear_outcome",
     "clear_paired_chat",
     "close_leg",
