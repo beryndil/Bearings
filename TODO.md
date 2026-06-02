@@ -27,9 +27,9 @@ Not blocking Phase 2 — server is now running. Schedule as a maintenance item.~
 `test_pivot_message_id_upgrade_on_legacy_db`,
 `test_pivot_message_id_reinit_is_idempotent`.~~
 
-## knip gate failure — pre-existing unused frontend exports (2026-05-08)
+~~## knip gate failure — pre-existing unused frontend exports (2026-05-08)~~
 
-`uv run pre-commit run --all-files` exits 1 because the knip hook finds 1
+~~`uv run pre-commit run --all-files` exits 1 because the knip hook finds 1
 unused file (`frontend/src/lib/components/common/DataViewHarness.svelte`),
 4 unused exports (including `EXECUTOR_MODEL_OPUSPLAN`, `_resetForTests`,
 `BOOT_STORAGE_KEY`, `_resetBillingModeCacheForTests`), and 27 unused
@@ -41,7 +41,9 @@ session `d3a0fc02a9e64f359aeb7bc5cfb4e18f`. Resolve by: (a) removing
 or internalising `DataViewHarness.svelte`, (b) deciding per export
 whether to delete, narrow export scope, or add a `// knip:ignore`
 comment, and (c) for API types consumed only by tests, either move them
-to test helpers or add `@internal` annotations per the knip config.
+to test helpers or add `@internal` annotations per the knip config.~~
+
+~~Resolved by commit `0e59f0a8` (fix(quality-gates): pytest smoke, xenon CC, knip). All unused exports removed; knip exits 0 cleanly.~~
 
 ## v1.1 closing-sweep (2026-05-02) — corrects v1.0's lying close
 
@@ -302,16 +304,18 @@ Then `git push` to drain the backlog. Resolve in the same commit that
 sweeps the fix. The agent worktree runs with `--no-new-privileges`, so
 the chown must be issued from a regular shell.
 
-## CLAUDE.md stale v17 path (2026-05-06)
+~~## CLAUDE.md stale v17 path (2026-05-06)~~
 
-Project `CLAUDE.md` and the "Reference-read protocol" section refer to
+~~Project `CLAUDE.md` and the "Reference-read protocol" section refer to
 `/home/beryndil/Projects/Bearings/` as the v0.17.x reference tree.
 That path no longer exists — v0.17.x was relocated to
 `/home/beryndil/Projects/archive/bearings-v0.17.x/`. The autonomous
 parity loop driven from `~/.claude/plans/melodic-toasting-axolotl.md`
 uses the archive path in its auditor instructions. Update the project
 `CLAUDE.md` "Authoritative documents" / "Reference-read protocol"
-references to the archive path in the next chore commit.
+references to the archive path in the next chore commit.~~
+
+~~Resolved by chore commit (chore: strike resolved TODO entries (knip, svelte-check, CLAUDE.md path)). CLAUDE.md updated to reference `/home/beryndil/Projects/archive/bearings-v0.17.x/`.~~
 
 ## API gap: no PATCH for session description (2026-05-05)
 
@@ -371,22 +375,24 @@ The two remaining parts are deferred to v1.1.0:
 
 Must land before any deprecated surface is removed (earliest: v1.2.0).
 
-## svelte-check: 9 pre-existing type errors (2026-06-02)
+~~## svelte-check: 9 pre-existing type errors (2026-06-02)~~
 
-`npm run check` exits non-zero with 9 errors across 3 files. These predate
-the quality-gate sweep in this commit and are not regressions from it.
+~~`npm run check` exits non-zero with 9 errors across 3 files. These predate
+the quality-gate sweep in this commit and are not regressions from it.~~
 
-**`frontend/src/lib/stores/sessions.svelte.ts`** (3 errors):
-- Line 31: `SessionTagOut` imported but never read.
-- Lines 311, 359: `params` is possibly `undefined`.
+~~**`frontend/src/lib/stores/sessions.svelte.ts`** (3 errors):~~
+~~- Line 31: `SessionTagOut` imported but never read.~~
+~~- Lines 311, 359: `params` is possibly `undefined`.~~
 
-**`frontend/src/lib/components/menus/SessionPickerModal.svelte`** (3 errors):
-- Line 62: `Property 'filter' does not exist on type 'SessionsPage'` — component
+~~**`frontend/src/lib/components/menus/SessionPickerModal.svelte`** (3 errors):~~
+~~- Line 62: `Property 'filter' does not exist on type 'SessionsPage'` — component
   calls `.filter()` directly on the paginated API envelope instead of on
-  `.sessions`. Fix: unwrap `store.sessions` before filtering.
+  `.sessions`. Fix: unwrap `store.sessions` before filtering.~~
 
-**`frontend/src/lib/components/reorg/ReorgPicker.svelte`** (4 errors):
-- Lines 116–117: same `SessionsPage.find/filter` issue as above.
+~~**`frontend/src/lib/components/reorg/ReorgPicker.svelte`** (4 errors):~~
+~~- Lines 116–117: same `SessionsPage.find/filter` issue as above.~~
 
-Fix: update the two Svelte components to read `.sessions` from the store
-value before calling array methods; remove the unused `SessionTagOut` import.
+~~Fix: update the two Svelte components to read `.sessions` from the store
+value before calling array methods; remove the unused `SessionTagOut` import.~~
+
+~~Resolved by commit `c1b2177c` (fix(frontend): resolve 9 pre-existing svelte-check type errors).~~

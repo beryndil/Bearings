@@ -2,7 +2,7 @@
 
 Localhost web UI that streams Claude Code agent sessions. This branch
 (`v1-rebuild`) is the v0.18.0 rebuild; v0.17.x lives at
-`/home/beryndil/Projects/Bearings/` and is **behavioral reference only**
+`/home/beryndil/Projects/archive/bearings-v0.17.x/` and is **behavioral reference only**
 past Phase 0.
 
 ## Authoritative documents
@@ -165,8 +165,8 @@ excluded from codespell.
 ## Reference-read protocol (binding on every executor)
 
 * Items 0.4 onward must NOT read any file under
-  `/home/beryndil/Projects/Bearings/src/` or
-  `/home/beryndil/Projects/Bearings/frontend/`.
+  `/home/beryndil/Projects/archive/bearings-v0.17.x/src/` or
+  `/home/beryndil/Projects/archive/bearings-v0.17.x/frontend/`.
 * The auditor inspects the executor transcript for tool calls touching
   those paths. Any match → automatic GAPS regardless of output quality.
 * Behavioral specs at `docs/behavior/<subsystem>.md` (added in item 0.3)
