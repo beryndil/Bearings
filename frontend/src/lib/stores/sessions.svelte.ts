@@ -278,7 +278,7 @@ function _tagsMapFromSessions(sessions: readonly SessionOut[]): Record<string, T
   const map: Record<string, TagOut[]> = {};
   for (const session of sessions) {
     // ``session.tags`` may be absent on cached/legacy rows — treat as [].
-    map[session.id] = ((session.tags ?? []) as unknown as TagOut[]);
+    map[session.id] = (session.tags ?? []) as unknown as TagOut[];
   }
   return map;
 }

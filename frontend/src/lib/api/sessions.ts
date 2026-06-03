@@ -882,15 +882,15 @@ export async function getSessionSystemPrompt(
   return await getJson<SystemPromptLayersOut>(path, options);
 }
 
-// ---- suggest_title (T1-03) ------------------------------------------------
+// ---- preview_title (T1-03) ------------------------------------------------
 
 /**
- * Wire shape for ``POST /api/sessions/{id}/suggest_title`` (T1-03).
+ * Wire shape for ``POST /api/sessions/{id}/preview_title`` (T1-03).
  *
  * ``suggested_title`` is ``null`` when the session has no messages, the
  * underlying LLM call fails, or the response is blank.
  *
- * Not exported: the only consumer today is :func:`suggestSessionTitle`'s
+ * Not exported: the only consumer today is :func:`previewSessionTitle`'s
  * return type. A second consumer (e.g. a caller that stores the result by
  * type) would re-export from here; until that lands, knip flags an
  * exported-but-unused declaration.
@@ -900,8 +900,8 @@ interface SuggestTitleOut {
 }
 
 /**
- * Request a title suggestion for a session via
- * ``POST /api/sessions/{id}/suggest_title`` (T1-03).
+ * Request a title preview for a session via
+ * ``POST /api/sessions/{id}/preview_title`` (T1-03).
  *
  * The server fetches recent messages, sends a short excerpt to the Claude
  * CLI, and returns a proposed 3-8 word title.  The caller should
@@ -910,11 +910,11 @@ interface SuggestTitleOut {
  *
  * @throws :class:`ApiError` on 404 (session not found) or 5xx.
  */
-export async function suggestSessionTitle(
+export async function previewSessionTitle(
   sessionId: string,
   options: RequestOptions = {},
 ): Promise<SuggestTitleOut> {
-  const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/suggest_title`;
+  const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/preview_title`;
   return await postJson<SuggestTitleOut>(path, null, options);
 }
 

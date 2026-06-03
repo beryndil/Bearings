@@ -185,8 +185,8 @@
     >
       <span
         class="select-none text-[10px] transition-transform duration-150"
-        class:rotate-90={!panelCollapsed}
-      >▶</span>
+        class:rotate-90={!panelCollapsed}>▶</span
+      >
       {SIDEBAR_STRINGS.tagFilterLabel}
       {#if panelCollapsed && activeCount > 0}
         <span
@@ -313,5 +313,4 @@
       {/if}
     </div>
   {/if}
-
 </section>

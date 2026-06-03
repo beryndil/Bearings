@@ -31,12 +31,10 @@
    */
   import { onMount, untrack } from "svelte";
   import {
-    compareCheckpoint,
     createCheckpoint,
     deleteCheckpoint,
     forkCheckpoint,
     listCheckpoints,
-    type CheckpointCompareResult,
     type CheckpointOut,
   } from "../../api/checkpoints";
   import CheckpointCompareModal from "./CheckpointCompareModal.svelte";

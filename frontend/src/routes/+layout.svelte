@@ -515,9 +515,7 @@
             <button
               type="button"
               class="rounded p-0.5 text-xs text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg focus:outline-none focus:ring-2 focus:ring-accent/70"
-              aria-label={sidebarChromeCollapsed
-                ? "Show navigation"
-                : "Hide navigation"}
+              aria-label={sidebarChromeCollapsed ? "Show navigation" : "Hide navigation"}
               aria-expanded={!sidebarChromeCollapsed}
               aria-controls="sidebar-chrome"
               data-testid="sidebar-chrome-toggle"
@@ -588,188 +586,189 @@
                 aria-label={SIDEBAR_STRINGS.navAriaLabel}
                 data-testid="sidebar-nav"
               >
-            <a
-              href="/"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/" || currentPath.startsWith("/sessions/")}
-              class:text-accent={currentPath === "/" || currentPath.startsWith("/sessions/")}
-              class:text-fg-muted={currentPath !== "/" && !currentPath.startsWith("/sessions/")}
-              class:hover:bg-surface-2={currentPath !== "/" &&
-                !currentPath.startsWith("/sessions/")}
-              class:hover:text-fg={currentPath !== "/" && !currentPath.startsWith("/sessions/")}
-              data-testid="sidebar-nav-sessions"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line
-                  x1="8"
-                  y1="18"
-                  x2="21"
-                  y2="18"
-                />
-                <circle cx="3.5" cy="6" r="1.2" /><circle cx="3.5" cy="12" r="1.2" /><circle
-                  cx="3.5"
-                  cy="18"
-                  r="1.2"
-                />
-              </svg>
-              {SIDEBAR_STRINGS.navSessions}
-            </a>
+                <a
+                  href="/"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/" ||
+                    currentPath.startsWith("/sessions/")}
+                  class:text-accent={currentPath === "/" || currentPath.startsWith("/sessions/")}
+                  class:text-fg-muted={currentPath !== "/" && !currentPath.startsWith("/sessions/")}
+                  class:hover:bg-surface-2={currentPath !== "/" &&
+                    !currentPath.startsWith("/sessions/")}
+                  class:hover:text-fg={currentPath !== "/" && !currentPath.startsWith("/sessions/")}
+                  data-testid="sidebar-nav-sessions"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="8" y1="6" x2="21" y2="6" /><line
+                      x1="8"
+                      y1="12"
+                      x2="21"
+                      y2="12"
+                    /><line x1="8" y1="18" x2="21" y2="18" />
+                    <circle cx="3.5" cy="6" r="1.2" /><circle cx="3.5" cy="12" r="1.2" /><circle
+                      cx="3.5"
+                      cy="18"
+                      r="1.2"
+                    />
+                  </svg>
+                  {SIDEBAR_STRINGS.navSessions}
+                </a>
 
-            <a
-              href="/tags"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/tags"}
-              class:text-accent={currentPath === "/tags"}
-              class:text-fg-muted={currentPath !== "/tags"}
-              class:hover:bg-surface-2={currentPath !== "/tags"}
-              class:hover:text-fg={currentPath !== "/tags"}
-              data-testid="sidebar-nav-tags"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path
-                  d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
-                />
-                <circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none" />
-              </svg>
-              {SIDEBAR_STRINGS.navTags}
-            </a>
+                <a
+                  href="/tags"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/tags"}
+                  class:text-accent={currentPath === "/tags"}
+                  class:text-fg-muted={currentPath !== "/tags"}
+                  class:hover:bg-surface-2={currentPath !== "/tags"}
+                  class:hover:text-fg={currentPath !== "/tags"}
+                  data-testid="sidebar-nav-tags"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                    />
+                    <circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none" />
+                  </svg>
+                  {SIDEBAR_STRINGS.navTags}
+                </a>
 
-            <a
-              href="/memories"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/memories"}
-              class:text-accent={currentPath === "/memories"}
-              class:text-fg-muted={currentPath !== "/memories"}
-              class:hover:bg-surface-2={currentPath !== "/memories"}
-              class:hover:text-fg={currentPath !== "/memories"}
-              data-testid="sidebar-nav-memories"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-              </svg>
-              {SIDEBAR_STRINGS.navMemories}
-            </a>
+                <a
+                  href="/memories"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/memories"}
+                  class:text-accent={currentPath === "/memories"}
+                  class:text-fg-muted={currentPath !== "/memories"}
+                  class:hover:bg-surface-2={currentPath !== "/memories"}
+                  class:hover:text-fg={currentPath !== "/memories"}
+                  data-testid="sidebar-nav-memories"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                  </svg>
+                  {SIDEBAR_STRINGS.navMemories}
+                </a>
 
-            <a
-              href="/vault"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/vault"}
-              class:text-accent={currentPath === "/vault"}
-              class:text-fg-muted={currentPath !== "/vault"}
-              class:hover:bg-surface-2={currentPath !== "/vault"}
-              class:hover:text-fg={currentPath !== "/vault"}
-              aria-label={SIDEBAR_STRINGS.navVaultAriaLabel}
-              data-testid="sidebar-nav-vault"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-              {SIDEBAR_STRINGS.navVault}
-            </a>
+                <a
+                  href="/vault"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/vault"}
+                  class:text-accent={currentPath === "/vault"}
+                  class:text-fg-muted={currentPath !== "/vault"}
+                  class:hover:bg-surface-2={currentPath !== "/vault"}
+                  class:hover:text-fg={currentPath !== "/vault"}
+                  aria-label={SIDEBAR_STRINGS.navVaultAriaLabel}
+                  data-testid="sidebar-nav-vault"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+                  </svg>
+                  {SIDEBAR_STRINGS.navVault}
+                </a>
 
-            <a
-              href="/analytics"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/analytics"}
-              class:text-accent={currentPath === "/analytics"}
-              class:text-fg-muted={currentPath !== "/analytics"}
-              class:hover:bg-surface-2={currentPath !== "/analytics"}
-              class:hover:text-fg={currentPath !== "/analytics"}
-              data-testid="sidebar-nav-analytics"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="6" y1="20" x2="6" y2="14" /><line x1="12" y1="20" x2="12" y2="4" /><line
-                  x1="18"
-                  y1="20"
-                  x2="18"
-                  y2="10"
-                />
-              </svg>
-              {SIDEBAR_STRINGS.navAnalytics}
-            </a>
+                <a
+                  href="/analytics"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/analytics"}
+                  class:text-accent={currentPath === "/analytics"}
+                  class:text-fg-muted={currentPath !== "/analytics"}
+                  class:hover:bg-surface-2={currentPath !== "/analytics"}
+                  class:hover:text-fg={currentPath !== "/analytics"}
+                  data-testid="sidebar-nav-analytics"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <line x1="6" y1="20" x2="6" y2="14" /><line
+                      x1="12"
+                      y1="20"
+                      x2="12"
+                      y2="4"
+                    /><line x1="18" y1="20" x2="18" y2="10" />
+                  </svg>
+                  {SIDEBAR_STRINGS.navAnalytics}
+                </a>
 
-            <a
-              href="/settings"
-              class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
-              class:nav-link--active={currentPath === "/settings"}
-              class:text-accent={currentPath === "/settings"}
-              class:text-fg-muted={currentPath !== "/settings"}
-              class:hover:bg-surface-2={currentPath !== "/settings"}
-              class:hover:text-fg={currentPath !== "/settings"}
-              data-testid="sidebar-nav-settings"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path
-                  d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
-                />
-              </svg>
-              {SIDEBAR_STRINGS.navSettings}
-            </a>
-          </nav>
-        </div>
-      {/if}
+                <a
+                  href="/settings"
+                  class="flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors"
+                  class:nav-link--active={currentPath === "/settings"}
+                  class:text-accent={currentPath === "/settings"}
+                  class:text-fg-muted={currentPath !== "/settings"}
+                  class:hover:bg-surface-2={currentPath !== "/settings"}
+                  class:hover:text-fg={currentPath !== "/settings"}
+                  data-testid="sidebar-nav-settings"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="3" />
+                    <path
+                      d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
+                    />
+                  </svg>
+                  {SIDEBAR_STRINGS.navSettings}
+                </a>
+              </nav>
+            </div>
+          {/if}
 
           <!-- Session list -->
           <div class="app-shell__sidebar-body" data-testid="app-shell-sidebar-body">

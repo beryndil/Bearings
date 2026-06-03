@@ -143,8 +143,5 @@ export async function compareCheckpoint(
   checkpointId: string,
   options: RequestOptions = {},
 ): Promise<CheckpointCompareResult> {
-  return await getJson<CheckpointCompareResult>(
-    checkpointCompareEndpoint(checkpointId),
-    options,
-  );
+  return await getJson<CheckpointCompareResult>(checkpointCompareEndpoint(checkpointId), options);
 }

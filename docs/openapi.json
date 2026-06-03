@@ -2116,9 +2116,9 @@
         "tags": [
           "checkpoints"
         ],
-        "summary": "Compare Checkpoint",
+        "summary": "Get Checkpoint Compare",
         "description": "Return messages added to the session *after* ``checkpoint_id``'s anchor.\n\nThe diff is computed from the ``messages`` table: every row whose\n``rowid`` is strictly greater than the anchor message's ``rowid``\nbelongs to the delta. Only messages on the same session as the\ncheckpoint are included.\n\n404 when the checkpoint or its anchor message is absent. Empty\n``delta_messages`` (and ``delta_message_count == 0``) when no new\nmessages exist -- the caller renders a \"no changes\" state without\ntreating it as an error.\n\nPer ``docs/behavior/context-menus.md`` \u00a7\"Checkpoint (gutter chip)\":\n``checkpoint.compare`` is the T1-08 parity-gap action -- right-click\na checkpoint chip -> compare -> modal shows message delta.",
-        "operationId": "compare-checkpoint",
+        "operationId": "get-checkpoint-compare",
         "parameters": [
           {
             "name": "checkpoint_id",
@@ -3618,14 +3618,14 @@
         }
       }
     },
-    "/api/sessions/{session_id}/suggest_title": {
+    "/api/sessions/{session_id}/preview_title": {
       "post": {
         "tags": [
           "sessions"
         ],
-        "summary": "Suggest Session Title",
-        "description": "Suggest a title for a session based on its conversation excerpt (T1-03).\n\nFetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`\nmessages and sends a short excerpt to the Claude CLI via subprocess.\nThe LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``\nmodal's title input when the user clicks the **\u2728 Suggest** button.\n\n* ``200`` \u2014 :class:`SuggestTitleOut` with ``suggested_title`` (may be\n  ``None`` when the session has no messages, the subprocess fails, or\n  the response is blank).\n* ``404`` \u2014 session not found.\n\nThe underlying LLM call is injected via ``app.state.title_suggester``\nso tests can replace it without spawning a real subprocess.  The\ncallable signature is\n``(excerpt: str, model: str) -> Awaitable[str | None]``.",
-        "operationId": "suggest-session-title",
+        "summary": "Preview Session Title",
+        "description": "Preview a generated title for a session based on its conversation excerpt (T1-03).\n\nFetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`\nmessages and sends a short excerpt to the Claude CLI via subprocess.\nThe LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``\nmodal's title input when the user clicks the **\u2728 Suggest** button.\n\nBroadcasts a ``session_upsert`` frame after computing the suggestion so\nthat all WebSocket subscribers receive the current session state\n(CCW-3 contract).\n\n* ``200`` \u2014 :class:`SuggestTitleOut` with ``suggested_title`` (may be\n  ``None`` when the session has no messages, the subprocess fails, or\n  the response is blank).\n* ``404`` \u2014 session not found.\n\nThe underlying LLM call is injected via ``app.state.title_suggester``\nso tests can replace it without spawning a real subprocess.  The\ncallable signature is\n``(excerpt: str, model: str) -> Awaitable[str | None]``.",
+        "operationId": "preview-session-title",
         "parameters": [
           {
             "name": "session_id",

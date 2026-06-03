@@ -592,7 +592,9 @@
             class="rounded border border-border bg-surface-2 px-2 py-1 text-xs text-fg hover:bg-surface-1 disabled:opacity-50"
             data-testid="vault-panel-paste-link"
             disabled={effectiveSessionId === null}
-            title={effectiveSessionId === null ? VAULT_STRINGS.pasteToastNoActiveSession : undefined}
+            title={effectiveSessionId === null
+              ? VAULT_STRINGS.pasteToastNoActiveSession
+              : undefined}
             onclick={() => handlePasteLinkIntoComposer(vaultStore.selected!.entry)}
           >
             {VAULT_STRINGS.pasteMarkdownLinkIntoComposer}
@@ -602,7 +604,9 @@
             class="rounded border border-border bg-surface-2 px-2 py-1 text-xs text-fg hover:bg-surface-1 disabled:opacity-50"
             data-testid="vault-panel-paste-body"
             disabled={effectiveSessionId === null}
-            title={effectiveSessionId === null ? VAULT_STRINGS.pasteToastNoActiveSession : undefined}
+            title={effectiveSessionId === null
+              ? VAULT_STRINGS.pasteToastNoActiveSession
+              : undefined}
             onclick={() => handlePasteBodyIntoComposer(vaultStore.selected!)}
           >
             {VAULT_STRINGS.pasteBodyIntoComposer}

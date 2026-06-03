@@ -88,7 +88,6 @@ export async function listTags(params: ListTagsParams = {}): Promise<TagOut[]> {
   return await getJson<TagOut[]>(API_TAGS_ENDPOINT, options);
 }
 
-
 /**
  * Wire shape for ``POST /api/tags`` + ``PATCH /api/tags/{id}`` —
  * one-to-one with :class:`bearings.web.models.tags.TagIn`. ``color``

@@ -37,4 +37,3 @@ export interface HealthOut {
 export async function getHealth(): Promise<HealthOut> {
   return getJson<HealthOut>(API_HEALTH_ENDPOINT);
 }
-

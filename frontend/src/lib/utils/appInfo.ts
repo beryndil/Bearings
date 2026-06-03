@@ -30,7 +30,6 @@ interface DiagServerBillingOut {
 /** Module-level cache — ``null`` until the first :func:`fetchBillingMode` call. */
 let _billingModePromise: Promise<BillingMode> | null = null;
 
-
 /**
  * Return a promise that resolves to the server's configured billing mode.
  *

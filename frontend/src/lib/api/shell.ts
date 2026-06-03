@@ -90,4 +90,3 @@ export async function shellOpenInTerminal(dir: string): Promise<void> {
     argv: ["xdg-open", dir],
   } satisfies ShellExecIn);
 }
-

@@ -49,10 +49,7 @@
   import { clearDraft, loadDraft, saveDraft } from "../../composer/draftStore.svelte";
   import { InputHistory } from "../../composer/inputHistory";
   import { bumpCheckpointRefresh } from "../../stores/checkpointBus.svelte";
-  import {
-    composerBridgeStore,
-    consumePendingPaste,
-  } from "../../stores/composerBridge.svelte";
+  import { composerBridgeStore, consumePendingPaste } from "../../stores/composerBridge.svelte";
   import { conversationStore } from "../../stores/conversation.svelte";
   import CommandMenu from "./CommandMenu.svelte";
 

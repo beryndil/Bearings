@@ -23,7 +23,6 @@
  */
 export const SESSIONS_DEFAULT_PAGE_SIZE = 100;
 
-
 // ---- API endpoints ---------------------------------------------------------
 
 /** Base path for FastAPI routes; vite.config proxies this to port 8788 in dev. */

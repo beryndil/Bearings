@@ -157,7 +157,7 @@ function findCmTarget(start: EventTarget | null, container: HTMLElement): Elemen
  * via :func:`pasteIntoComposer`. Omit when the rendered Markdown is not
  * associated with a live chat session (e.g. vault preview pane).
  */
-export interface MarkdownContextMenuConfig {
+interface MarkdownContextMenuConfig {
   sessionId?: string;
 }
 

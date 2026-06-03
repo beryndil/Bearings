@@ -94,7 +94,10 @@
       return; // invalid JSON — don't send
     }
     editInputOpen = false;
-    await sendPrompt(sessionId, `Retry ${call.name} with this input:\n\`\`\`json\n${editInputDraft}\n\`\`\``);
+    await sendPrompt(
+      sessionId,
+      `Retry ${call.name} with this input:\n\`\`\`json\n${editInputDraft}\n\`\`\``,
+    );
   }
 
   // ---- context-menu handlers -------------------------------------------------
@@ -323,10 +326,7 @@
     {/if}
     {#if editInputOpen}
       <!-- T1-07 edit input textarea -->
-      <div
-        class="mt-2 flex flex-col gap-1"
-        data-testid="tool-output-edit-input"
-      >
+      <div class="mt-2 flex flex-col gap-1" data-testid="tool-output-edit-input">
         <textarea
           class="w-full rounded border border-accent/60 bg-surface-1 p-2 font-mono text-xs text-fg-strong focus:outline-none focus:ring-1 focus:ring-accent/60"
           rows="6"

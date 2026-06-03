@@ -251,9 +251,9 @@ async def fork_checkpoint(checkpoint_id: str, request: Request) -> CheckpointFor
 @router.get(
     "/api/checkpoints/{checkpoint_id}/compare",
     response_model=CheckpointCompareResult,
-    operation_id="compare-checkpoint",
+    operation_id="get-checkpoint-compare",
 )
-async def compare_checkpoint(checkpoint_id: str, request: Request) -> CheckpointCompareResult:
+async def get_checkpoint_compare(checkpoint_id: str, request: Request) -> CheckpointCompareResult:
     """Return messages added to the session *after* ``checkpoint_id``'s anchor.
 
     The diff is computed from the ``messages`` table: every row whose

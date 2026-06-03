@@ -241,12 +241,7 @@ describe("sessionsStore.loadMoreSessions", () => {
 
     await loadMoreSessions(emptyFilter());
     expect(sessionsStore.sessions).toHaveLength(4);
-    expect(sessionsStore.sessions.map((s) => s.id)).toEqual([
-      "ses_a",
-      "ses_b",
-      "ses_c",
-      "ses_d",
-    ]);
+    expect(sessionsStore.sessions.map((s) => s.id)).toEqual(["ses_a", "ses_b", "ses_c", "ses_d"]);
   });
 
   it("sends ?offset=<nextOffset> on the load-more request", async () => {
@@ -255,9 +250,9 @@ describe("sessionsStore.loadMoreSessions", () => {
       .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_b")], 2, null)));
 
     await refreshSessions(emptyFilter());
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      jsonResponse(page([makeSession("ses_b")], 2, null)),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(jsonResponse(page([makeSession("ses_b")], 2, null)));
 
     // Reset the spy so we can check the load-more URL cleanly.
     vi.restoreAllMocks();

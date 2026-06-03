@@ -18,7 +18,7 @@
    * modal — deferred features" for the documented carve-out.
    */
   import { untrack } from "svelte";
-  import { patchSession, suggestSessionTitle, type SessionOut } from "../../api/sessions";
+  import { patchSession, previewSessionTitle, type SessionOut } from "../../api/sessions";
   import { attachTagToSession, createTag, type TagOut } from "../../api/tags";
   import { contextMenu } from "../../actions/contextMenu";
   import {
@@ -137,7 +137,7 @@
     suggesting = true;
     errorMsg = null;
     try {
-      const result = await suggestSessionTitle(session.id);
+      const result = await previewSessionTitle(session.id);
       if (result.suggested_title !== null) {
         titleValue = result.suggested_title;
       }

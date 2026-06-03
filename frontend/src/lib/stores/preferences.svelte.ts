@@ -76,4 +76,3 @@ export function applyPreferences(prefs: PreferencesOut): void {
   state.avatarUrl = prefs.avatar_url;
   state.cacheBust = prefs.updated_at;
 }
-

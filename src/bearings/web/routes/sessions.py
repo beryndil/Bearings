@@ -1765,20 +1765,24 @@ async def _run_suggest_title(excerpt: str, model: str) -> str | None:
 
 
 @router.post(
-    "/api/sessions/{session_id}/suggest_title",
+    "/api/sessions/{session_id}/preview_title",
     response_model=SuggestTitleOut,
-    operation_id="suggest-session-title",
+    operation_id="preview-session-title",
 )
-async def suggest_session_title(
+async def preview_session_title(
     session_id: str,
     request: Request,
 ) -> SuggestTitleOut:
-    """Suggest a title for a session based on its conversation excerpt (T1-03).
+    """Preview a generated title for a session based on its conversation excerpt (T1-03).
 
     Fetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`
     messages and sends a short excerpt to the Claude CLI via subprocess.
     The LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``
     modal's title input when the user clicks the **✨ Suggest** button.
+
+    Broadcasts a ``session_upsert`` frame after computing the suggestion so
+    that all WebSocket subscribers receive the current session state
+    (CCW-3 contract).
 
     * ``200`` — :class:`SuggestTitleOut` with ``suggested_title`` (may be
       ``None`` when the session has no messages, the subprocess fails, or
@@ -1791,6 +1795,7 @@ async def suggest_session_title(
     ``(excerpt: str, model: str) -> Awaitable[str | None]``.
     """
     db = _db(request)
+    broadcaster = _sessions_broadcaster(request)
     row = await sessions_db.get(db, session_id)
     if row is None:
         raise HTTPException(
@@ -1819,6 +1824,13 @@ async def suggest_session_title(
         suggester = _run_suggest_title
 
     suggested_title: str | None = await suggester(excerpt, model)
+
+    # Broadcast session_upsert so subscribers stay in sync (CCW-3).
+    if broadcaster is not None:
+        tags = await _fetch_tags_out(db, session_id)
+        out = _to_out(row, tags=tags)
+        broadcaster.publish_upsert(out)
+
     return SuggestTitleOut(suggested_title=suggested_title)
 
 
