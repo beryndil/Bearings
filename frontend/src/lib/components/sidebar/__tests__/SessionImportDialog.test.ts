@@ -25,7 +25,7 @@ const MOCK_SESSION: SessionOut = {
   description: null,
   session_instructions: null,
   working_dir: "/wd",
-  model: "claude-sonnet-4-5",
+  model: "claude-sonnet-4-8",
   permission_mode: null,
   max_budget_usd: null,
   total_cost_usd: 0,

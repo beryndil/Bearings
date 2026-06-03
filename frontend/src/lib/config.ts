@@ -1565,7 +1565,7 @@ export const DEFAULT_ADVISOR_MAX_USES_HAIKU = 3;
  * reflect Anthropic's published list prices as of v1.1; pin-bump if
  * pricing changes materially.
  *
- * Values: Sonnet 4.6 → $3.00/M, Haiku 4.5 → $0.80/M, Opus 4.7 → $15.00/M,
+ * Values: Sonnet 4.8 → $3.00/M, Haiku 4.8 → $0.80/M, Opus 4.8 → $15.00/M,
  * opusplan → $15.00/M (opusplan is a routing alias for Opus; same list price).
  */
 export const MODEL_INPUT_RATES_USD_PER_MILLION: Record<ExecutorModel, number> = {
@@ -2047,14 +2047,14 @@ export const NEW_SESSION_STRINGS = {
   // wire identifier (``sonnet`` / ``haiku`` / ``opus`` / ``auto`` /
   // ``low`` / ``medium`` / ``high`` / ``xhigh``).
   executorLabels: {
-    [EXECUTOR_MODEL_SONNET]: "Sonnet 4.6",
-    [EXECUTOR_MODEL_HAIKU]: "Haiku 4.5",
-    [EXECUTOR_MODEL_OPUS]: "Opus 4.7",
-    [EXECUTOR_MODEL_OPUSPLAN]: "Opus 4.7 (plan)",
+    [EXECUTOR_MODEL_SONNET]: "Sonnet 4.8",
+    [EXECUTOR_MODEL_HAIKU]: "Haiku 4.8",
+    [EXECUTOR_MODEL_OPUS]: "Opus 4.8",
+    [EXECUTOR_MODEL_OPUSPLAN]: "Opus 4.8 (plan)",
   } as const satisfies Record<ExecutorModel, string>,
   advisorLabels: {
     [ADVISOR_MODEL_NONE]: "(none)",
-    [ADVISOR_MODEL_OPUS]: "Opus 4.6",
+    [ADVISOR_MODEL_OPUS]: "Opus 4.8",
   } as const satisfies Record<AdvisorModelChoice, string>,
   effortLabels: {
     [EFFORT_LEVEL_AUTO]: "auto",
@@ -2817,11 +2817,11 @@ export const MODEL_SELECTOR_STRINGS = {
  */
 export const MODEL_SWITCH_DIALOG_STRINGS = {
   ariaLabel: "Switch executor model",
-  /** "Switch executor: Sonnet 4.6 → Opus 4.7" */
+  /** "Switch executor: Sonnet 4.8 → Opus 4.8" */
   titleTemplate: "Switch executor: {from} → {to}",
   /**
    * "This will re-cost ~38,000 input tokens of conversation history at
-   * Opus 4.7 rates."  Shown when ``last_context_tokens`` is available.
+   * Opus 4.8 rates."  Shown when ``last_context_tokens`` is available.
    */
   recostBodyTemplate:
     "This will re-cost ~{tokens} input tokens of conversation history at {to} rates.",

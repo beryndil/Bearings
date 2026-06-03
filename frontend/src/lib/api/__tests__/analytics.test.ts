@@ -119,7 +119,7 @@ describe("getAttribution", () => {
   it("returns the decoded payload", async () => {
     const row: TagAttributionOut = {
       tag: "infra",
-      tokens_by_model: { "claude-opus-4-7": 78_000 },
+      tokens_by_model: { "claude-opus-4-8": 78_000 },
       share_total: 0.42,
       burn_rate_per_min: 380,
     };
@@ -176,7 +176,7 @@ describe("getRedundancy", () => {
       hash: "abc123",
       block_type: "claude_md",
       token_count: 850,
-      token_count_model: "claude-opus-4-7",
+      token_count_model: "claude-opus-4-8",
       repeat_count: 14,
       total_cost_tokens: 11_900,
       source_path: "~/.claude/CLAUDE.md",

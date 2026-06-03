@@ -46,7 +46,7 @@ async def _new_chat(conn: aiosqlite.Connection, title: str = "Test Session") -> 
         kind=SESSION_KIND_CHAT,
         title=title,
         working_dir="/wd",
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-8",
     )
     return s.id
 

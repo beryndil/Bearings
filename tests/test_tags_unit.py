@@ -81,9 +81,9 @@ def test_tag_rejects_unknown_default_model() -> None:
 
 def test_tag_accepts_full_sdk_id_default_model() -> None:
     kwargs = _valid_kwargs()
-    kwargs["default_model"] = "claude-sonnet-4-5"
+    kwargs["default_model"] = "claude-sonnet-4-8"
     tag = Tag(**kwargs)  # type: ignore[arg-type]
-    assert tag.default_model == "claude-sonnet-4-5"
+    assert tag.default_model == "claude-sonnet-4-8"
 
 
 def test_tag_accepts_no_default_model() -> None:

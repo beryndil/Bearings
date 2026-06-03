@@ -61,7 +61,7 @@ from bearings.web.app import create_app
 # ---------------------------------------------------------------------------
 
 _SESS_ID = "ses_analytics_route_test_aaaa"
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-sonnet-4-8"
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 

@@ -8,9 +8,9 @@ license = { text = "MIT" }
 authors = [{ name = "Beryndil", email = "dwhennigan@gmail.com" }]
 
 dependencies = [
-    # Pinned to compatible-release of the SDK current as of v1 rebuild bootstrap (2026-04-28).
-    # Compatible-release allows 0.1.x patch updates but not 0.2+ surface changes.
-    "claude-agent-sdk~=0.2.87",
+    # Pinned to compatible-release of the SDK current as of 2026-06-03.
+    # Compatible-release allows 0.2.x patch updates but not 0.3+ surface changes.
+    "claude-agent-sdk~=0.2.88",
     # Web framework + ASGI server for the localhost UI backend (port 8788).
     "fastapi~=0.115",
     "uvicorn[standard]~=0.32",

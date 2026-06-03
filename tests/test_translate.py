@@ -392,7 +392,7 @@ def test_result_message_emits_message_complete_with_routing_usage() -> None:
         result=None,
         structured_output=None,
         model_usage={
-            "claude-sonnet-4-6": {
+            "claude-sonnet-4-8": {
                 "inputTokens": 100,
                 "outputTokens": 50,
                 "cacheReadInputTokens": 25,

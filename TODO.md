@@ -288,6 +288,32 @@ shape; the per-module test patterns in
 (gap-cycle-01-014). Entry removed per feature-6-009 closeout;
 resolving commit `404c1818`.~~
 
+## Pre-existing test failures (surfaced 2026-06-03)
+
+Four tests were already failing before the 4-8 model-update commit:
+
+- `test_broadcaster_ccw3.py::test_mutation_routes_have_publish_calls` —
+  `suggest_session_title (POST)` route is missing a `publish_*` call.
+  Fix: add a broadcaster publish call to the suggest-title handler in
+  `src/bearings/web/routes/sessions.py`.
+
+- `test_operation_ids.py::test_operation_id_count` — expected 148
+  operations, actual is 152. Four routes were added after the test
+  was last updated. Fix: update the count comment + assertion in
+  `tests/test_operation_ids.py` to 152 and document which 4 routes
+  were added.
+
+- `test_diff_probe.py::test_run_probe_diverge_path` — assertion failure
+  in the end-to-end diverge-path probe test. Independent of model versions.
+  Likely a test scaffolding issue post-refactor.
+
+- `test_consistency_lint.py::test_live_repo_is_clean` and
+  `test_main_returns_zero_on_clean_repo` — these pass on a clean working
+  tree and fail with uncommitted changes; they will auto-pass after the
+  next commit.
+
+**Status check 2026-06-03**: all four confirmed pre-existing.
+
 ## Push backlog — SSH proxy config permissions (2026-05-04)
 
 `git push` from the tag-class feature work (commit `a911687` and

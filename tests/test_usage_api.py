@@ -355,7 +355,7 @@ def test_turns_returns_seeded_rows(tmp_path: Path) -> None:
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 0, now_ms, "claude-sonnet-4-6", 500, 100, 20, 30),
+            ("s1", 0, now_ms, "claude-sonnet-4-8", 500, 100, 20, 30),
         )
         await conn.commit()
         return conn
@@ -372,7 +372,7 @@ def test_turns_returns_seeded_rows(tmp_path: Path) -> None:
             row = rows[0]
             assert row["session_id"] == "s1"
             assert row["turn_index"] == 0
-            assert row["model"] == "claude-sonnet-4-6"
+            assert row["model"] == "claude-sonnet-4-8"
             assert row["input_tokens"] == 500
             assert row["output_tokens"] == 100
             assert row["cache_read_tokens"] == 20
@@ -405,13 +405,13 @@ def test_turns_session_id_filter(tmp_path: Path) -> None:
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 0, now_ms, "claude-sonnet-4-6", 100, 10, 0, 0),
+            ("s1", 0, now_ms, "claude-sonnet-4-8", 100, 10, 0, 0),
         )
         await conn.execute(
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s2", 0, now_ms, "claude-sonnet-4-6", 200, 20, 0, 0),
+            ("s2", 0, now_ms, "claude-sonnet-4-8", 200, 20, 0, 0),
         )
         await conn.commit()
         return conn
@@ -462,14 +462,14 @@ def test_turns_period_boundary_excludes_old_turns(tmp_path: Path) -> None:
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 0, now_ms, "claude-sonnet-4-6", 100, 10, 0, 0),
+            ("s1", 0, now_ms, "claude-sonnet-4-8", 100, 10, 0, 0),
         )
         # Old turn — outside window
         await conn.execute(
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 1, old_ms, "claude-sonnet-4-6", 999, 99, 0, 0),
+            ("s1", 1, old_ms, "claude-sonnet-4-8", 999, 99, 0, 0),
         )
         await conn.commit()
         return conn
@@ -513,13 +513,13 @@ def test_turns_day_period_excludes_week_old_turn(tmp_path: Path) -> None:
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 0, now_ms, "claude-sonnet-4-6", 50, 5, 0, 0),
+            ("s1", 0, now_ms, "claude-sonnet-4-8", 50, 5, 0, 0),
         )
         await conn.execute(
             "INSERT INTO turns (session_id, turn_index, timestamp, model, "
             "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            ("s1", 1, two_days_ago_ms, "claude-sonnet-4-6", 777, 77, 0, 0),
+            ("s1", 1, two_days_ago_ms, "claude-sonnet-4-8", 777, 77, 0, 0),
         )
         await conn.commit()
         return conn

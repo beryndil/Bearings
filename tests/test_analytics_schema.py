@@ -49,7 +49,7 @@ from bearings.db.analytics import (
 # ---------------------------------------------------------------------------
 
 _SESS_ID = "sess-analytics-test"
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-sonnet-4-8"
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
 

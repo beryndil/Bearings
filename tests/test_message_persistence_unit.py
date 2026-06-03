@@ -79,7 +79,7 @@ def test_extract_none_returns_all_zero_breakdown() -> None:
 def test_extract_short_name_matches_full_sdk_id_keys() -> None:
     """Routing decision uses ``"sonnet"`` short name; SDK keys use full ids."""
     model_usage = {
-        "claude-sonnet-4-6": {
+        "claude-sonnet-4-8": {
             "inputTokens": 1200,
             "outputTokens": 350,
             "cacheReadInputTokens": 800,
@@ -102,7 +102,7 @@ def test_extract_short_name_matches_full_sdk_id_keys() -> None:
 def test_extract_no_advisor_yields_zero_advisor_totals() -> None:
     """``advisor_model=None`` → advisor totals are zero, count is zero."""
     model_usage = {
-        "claude-opus-4-7": {
+        "claude-opus-4-8": {
             "inputTokens": 500,
             "outputTokens": 200,
             "cacheReadInputTokens": 0,
@@ -122,12 +122,12 @@ def test_extract_full_sdk_id_decision_requires_exact_match() -> None:
     """A ``RoutingDecision.executor_model`` that is itself a full SDK
     id only matches the exact-key entry — substring won't apply."""
     model_usage = {
-        "claude-sonnet-4-6": {"inputTokens": 100, "outputTokens": 10},
+        "claude-sonnet-4-8": {"inputTokens": 100, "outputTokens": 10},
         "claude-sonnet-4-7": {"inputTokens": 999, "outputTokens": 88},
     }
     breakdown = extract_model_usage(
         model_usage,
-        _decision(executor="claude-sonnet-4-6", advisor=None),
+        _decision(executor="claude-sonnet-4-8", advisor=None),
     )
     # Only the 4-6 row counts; 4-7 is unmatched.
     assert breakdown.executor_input_tokens == 100
@@ -138,8 +138,8 @@ def test_extract_multiple_keys_per_role_sum() -> None:
     """SDK occasionally emits split entries (e.g. base + thinking
     variant); both attribute to the same role and sum."""
     model_usage = {
-        "claude-sonnet-4-6": {"inputTokens": 100, "outputTokens": 50},
-        "claude-sonnet-4-6-thinking": {
+        "claude-sonnet-4-8": {"inputTokens": 100, "outputTokens": 50},
+        "claude-sonnet-4-8-thinking": {
             "inputTokens": 200,
             "outputTokens": 75,
             "cacheReadInputTokens": 40,
@@ -161,7 +161,7 @@ def test_extract_multiple_keys_per_role_sum() -> None:
 def test_extract_unmatched_keys_still_contribute_cache_read() -> None:
     """A key that matches neither role still adds to cache_read total."""
     model_usage = {
-        "claude-haiku-4-5": {
+        "claude-haiku-4-8": {
             "inputTokens": 999,
             "outputTokens": 99,
             "cacheReadInputTokens": 200,
@@ -179,7 +179,7 @@ def test_extract_unmatched_keys_still_contribute_cache_read() -> None:
 def test_extract_missing_keys_default_to_zero() -> None:
     """A per-model dict that omits ``output_tokens`` doesn't crash."""
     model_usage = {
-        "claude-sonnet-4-6": {"inputTokens": 50},  # no output_tokens
+        "claude-sonnet-4-8": {"inputTokens": 50},  # no output_tokens
     }
     breakdown = extract_model_usage(model_usage, _decision(advisor=None))
     assert breakdown.executor_input_tokens == 50
@@ -189,7 +189,7 @@ def test_extract_missing_keys_default_to_zero() -> None:
 def test_extract_malformed_payload_skipped() -> None:
     """A non-mapping value in ``model_usage`` is silently skipped."""
     model_usage = {
-        "claude-sonnet-4-6": "not-a-dict",  # malformed
+        "claude-sonnet-4-8": "not-a-dict",  # malformed
         "claude-opus-4-6": {"inputTokens": 10, "outputTokens": 5},
     }
     breakdown = extract_model_usage(model_usage, _decision())
@@ -201,7 +201,7 @@ def test_extract_malformed_payload_skipped() -> None:
 def test_extract_non_int_token_value_coerces_to_zero() -> None:
     """Float / string / None token values coerce to ``0`` rather than raising."""
     model_usage = {
-        "claude-sonnet-4-6": {
+        "claude-sonnet-4-8": {
             "inputTokens": 3.5,  # float — invalid per spec
             "outputTokens": "100",  # numeric string — accepted
             "cacheReadInputTokens": None,
@@ -241,7 +241,7 @@ def test_extract_handles_real_sdk_payload_shape() -> None:
     fails before any session sees zero costs in production.
     """
     real_world_payload = {
-        "claude-opus-4-7[1m]": {
+        "claude-opus-4-8[1m]": {
             "inputTokens": 6,
             "outputTokens": 7,
             "cacheReadInputTokens": 17042,

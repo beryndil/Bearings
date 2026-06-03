@@ -30,7 +30,7 @@ Pure-function contract for :func:`extract_model_usage`:
   ``"sonnet"``/``"haiku"``/``"opus"`` short names per
   :data:`bearings.config.constants.KNOWN_EXECUTOR_MODELS` while the
   SDK keys ``model_usage`` by full SDK ids (e.g.
-  ``"claude-sonnet-4-6"``). The matcher folds case + does a substring
+  ``"claude-sonnet-4-8"``). The matcher folds case + does a substring
   test so ``"sonnet"`` matches every Sonnet variant the SDK
   surfaces. Full-id matches (``executor_model`` already
   ``"claude-…"``) take precedence and require an exact key hit.
@@ -258,7 +258,7 @@ def _classify_role(
        requires an exact case-folded match against ``model_key``.
     2. Short name (``sonnet`` / ``haiku`` / ``opus``) does a
        case-folded substring test against ``model_key``. SDK keys
-       like ``"claude-sonnet-4-6"`` match ``"sonnet"`` this way.
+       like ``"claude-sonnet-4-8"`` match ``"sonnet"`` this way.
     3. Executor wins ties (a key matching both the executor and
        advisor short names is attributed to the executor — should
        not occur in practice because executor and advisor are

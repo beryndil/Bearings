@@ -68,7 +68,7 @@ async def test_persist_writes_every_spec_5_column(
     sid = await _new_session(conn)
     decision = _decision()
     model_usage = {
-        "claude-sonnet-4-6": {
+        "claude-sonnet-4-8": {
             "inputTokens": 1500,
             "outputTokens": 400,
             "cacheReadInputTokens": 2000,
@@ -169,7 +169,7 @@ async def test_persist_no_advisor_decision_records_null_advisor_model(
         content="think hard",
         decision=decision,
         model_usage={
-            "claude-opus-4-7": {
+            "claude-opus-4-8": {
                 "inputTokens": 5000,
                 "outputTokens": 800,
                 "cacheReadInputTokens": 100,

@@ -114,8 +114,8 @@ def test_fallback_model_for_short_names(executor: str, expected_fallback: str) -
 
 
 def test_fallback_model_for_full_id_passes_through() -> None:
-    kwargs = build_options_kwargs(_decision(executor="claude-sonnet-4-5"))
-    assert kwargs.fallback_model == "claude-sonnet-4-5"
+    kwargs = build_options_kwargs(_decision(executor="claude-sonnet-4-8"))
+    assert kwargs.fallback_model == "claude-sonnet-4-8"
 
 
 def test_fallback_table_covers_every_known_short_name() -> None:
@@ -209,8 +209,8 @@ def test_subagent_spec_accepts_inherit_model() -> None:
 
 
 def test_subagent_spec_accepts_full_sdk_id() -> None:
-    spec = SubagentSpec(name="x", description="d", prompt="p", model="claude-sonnet-4-5")
-    assert spec.model == "claude-sonnet-4-5"
+    spec = SubagentSpec(name="x", description="d", prompt="p", model="claude-sonnet-4-8")
+    assert spec.model == "claude-sonnet-4-8"
 
 
 def test_subagent_spec_rejects_arbitrary_short_name() -> None:

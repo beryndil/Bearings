@@ -389,7 +389,7 @@ async def capture_turn(
     Args:
         db: Open aiosqlite connection.
         session_id: The session this turn belongs to.
-        model: Executor model (e.g. ``"claude-opus-4-7"``).
+        model: Executor model (e.g. ``"claude-opus-4-8"``).
         input_tokens: Total input tokens for this turn (executor +
             advisor combined, since the ``turns`` table has one row per
             turn — not one per model).

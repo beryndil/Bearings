@@ -99,7 +99,7 @@ async def test_list_messages_returns_routing_and_usage_fields(
         content="here is what I found",
         decision=_decision(),
         model_usage={
-            "claude-haiku-4-5": {
+            "claude-haiku-4-8": {
                 "inputTokens": 80,
                 "outputTokens": 200,
                 "cacheReadInputTokens": 50,

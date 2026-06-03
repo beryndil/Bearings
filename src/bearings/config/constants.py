@@ -241,7 +241,7 @@ WS_CLOSE_INVALID_SESSION_ID: Final[int] = 4400
 
 # Canonical short-name executor models the routing layer accepts as
 # ``RoutingDecision.executor_model`` (spec §App A). Long-form SDK model
-# IDs (e.g. ``claude-sonnet-4-5``) are accepted via the
+# IDs (e.g. ``claude-sonnet-4-8``) are accepted via the
 # ``EXECUTOR_MODEL_FULL_ID_PREFIX`` test below; the two together cover
 # both the user-facing vocabulary in tag rules and the SDK pinning the
 # rebuild does in ``agent/options.py:build_options`` (item 1.2). The

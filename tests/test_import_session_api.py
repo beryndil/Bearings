@@ -46,7 +46,7 @@ async def _make_session(conn: aiosqlite.Connection, title: str = "Orig") -> str:
         kind=SESSION_KIND_CHAT,
         title=title,
         working_dir="/wd",
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-8",
     )
     return s.id
 

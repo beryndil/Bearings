@@ -67,7 +67,7 @@ function fakeBucket(overrides: Partial<BucketCurrentOut> = {}): BucketCurrentOut
 function fakeAttribution(tag = "infra"): TagAttributionOut {
   return {
     tag,
-    tokens_by_model: { "claude-sonnet-4-6": 50_000 },
+    tokens_by_model: { "claude-sonnet-4-8": 50_000 },
     share_total: 0.42,
     burn_rate_per_min: 120,
   };
@@ -78,7 +78,7 @@ function fakeRedundancyBlock(overrides: Partial<RedundancyBlockOut> = {}): Redun
     hash: "abc123",
     block_type: "claude_md",
     token_count: 850,
-    token_count_model: "claude-opus-4-7",
+    token_count_model: "claude-opus-4-8",
     repeat_count: 5,
     total_cost_tokens: 4_250,
     source_path: "~/.claude/CLAUDE.md",

@@ -237,7 +237,7 @@
         kind: "chat",
         title: createTitle.trim(),
         working_dir: sourceSessionData?.working_dir ?? null,
-        model: sourceSessionData?.model ?? "claude-sonnet-4-5",
+        model: sourceSessionData?.model ?? "claude-sonnet-4-8",
         tag_ids: [...createTagIds],
       });
       if (pickerState.mode === "move") {

@@ -245,7 +245,7 @@ async def test_attach_tag_broadcasts_session_upsert(
     q = bc.subscribe()
 
     session = await sessions_db_m.create(
-        conn, kind="chat", title="s1", working_dir="/tmp", model="claude-sonnet-4-5"
+        conn, kind="chat", title="s1", working_dir="/tmp", model="claude-sonnet-4-8"
     )
     await conn.commit()
 
@@ -274,7 +274,7 @@ async def test_detach_tag_broadcasts_session_upsert(
     q = bc.subscribe()
 
     session = await sessions_db_m.create(
-        conn, kind="chat", title="s2", working_dir="/tmp", model="claude-sonnet-4-5"
+        conn, kind="chat", title="s2", working_dir="/tmp", model="claude-sonnet-4-8"
     )
     await conn.commit()
 

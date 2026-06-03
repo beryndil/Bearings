@@ -7,6 +7,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **chore(deps): bump claude-agent-sdk to 0.2.88 + update model display labels to Claude 4.8:**
+  SDK pin advanced from `~=0.2.87` to `~=0.2.88` (released 2026-06-02).
+  UI executor/advisor labels updated to reflect Claude 4.8 as current:
+  Sonnet 4.8, Haiku 4.8, Opus 4.8. The short-name routing layer (`sonnet`/
+  `haiku`/`opus`) is unchanged; the SDK resolves short names to the latest
+  available model. Hardcoded full model IDs in `ReorgPicker.svelte` and
+  all test fixtures updated to `claude-{model}-4-8`.
+
 ### Added
 
 - **feat(api): x-sunset OpenAPI extension + Sunset response header middleware (A2):**

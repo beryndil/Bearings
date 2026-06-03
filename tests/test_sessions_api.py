@@ -182,7 +182,7 @@ async def test_create_session_minimal(
         "kind": SESSION_KIND_CHAT,
         "title": "first chat",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
     }
     with TestClient(app) as client:
         response = client.post("/api/sessions", json=payload)
@@ -191,7 +191,7 @@ async def test_create_session_minimal(
     assert body["title"] == "first chat"
     assert body["kind"] == SESSION_KIND_CHAT
     assert body["working_dir"] == "/tmp/wd"
-    assert body["model"] == "claude-sonnet-4-5"
+    assert body["model"] == "claude-sonnet-4-8"
     assert body["id"].startswith("ses_")
     assert response.headers["Location"] == f"/api/sessions/{body['id']}"
     # Default fields surface as zeros / nulls per :class:`SessionOut`.
@@ -213,7 +213,7 @@ async def test_create_session_with_tags(
         "kind": SESSION_KIND_CHAT,
         "title": "tagged",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "tag_ids": [tag_a.id, tag_b.id],
     }
     with TestClient(app) as client:
@@ -236,7 +236,7 @@ async def test_create_session_unknown_kind_422(
         "kind": "bogus",
         "title": "x",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
     }
     with TestClient(app) as client:
         response = client.post("/api/sessions", json=payload)
@@ -253,7 +253,7 @@ async def test_create_session_unknown_tag_404(
         "kind": SESSION_KIND_CHAT,
         "title": "x",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "tag_ids": [9999],
     }
     with TestClient(app) as client:
@@ -283,7 +283,7 @@ async def test_create_session_two_project_tags_422(
         "kind": SESSION_KIND_CHAT,
         "title": "two-projects",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "tag_ids": [a.id, b.id],
     }
     with TestClient(app) as client:
@@ -307,7 +307,7 @@ async def test_create_session_two_severity_tags_422(
         "kind": SESSION_KIND_CHAT,
         "title": "two-severities",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "tag_ids": [low.id, high.id],
     }
     with TestClient(app) as client:
@@ -330,7 +330,7 @@ async def test_create_session_one_project_one_severity_ok(
         "kind": SESSION_KIND_CHAT,
         "title": "ok-shape",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "tag_ids": [proj.id, sev.id, gen.id],
     }
     with TestClient(app) as client:
@@ -431,7 +431,7 @@ async def test_create_session_empty_title_422(
         "kind": SESSION_KIND_CHAT,
         "title": "",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
     }
     with TestClient(app) as client:
         response = client.post("/api/sessions", json=payload)
@@ -447,7 +447,7 @@ async def test_create_session_extra_field_422(
         "kind": SESSION_KIND_CHAT,
         "title": "x",
         "working_dir": "/tmp/wd",
-        "model": "claude-sonnet-4-5",
+        "model": "claude-sonnet-4-8",
         "id": "ses_caller_chose_this",  # Not allowed.
     }
     with TestClient(app) as client:

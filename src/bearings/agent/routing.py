@@ -15,7 +15,7 @@ Validation lives in :meth:`RoutingDecision.__post_init__`. The set of
 acceptable ``executor_model`` short names, ``effort_level`` labels, and
 ``source`` enum values are pulled from
 :mod:`bearings.config.constants` per the item-0.5 "no inline literals"
-gate. Long-form SDK model IDs (e.g. ``claude-sonnet-4-5``) are accepted
+gate. Long-form SDK model IDs (e.g. ``claude-sonnet-4-8``) are accepted
 via the
 :data:`bearings.config.constants.EXECUTOR_MODEL_FULL_ID_PREFIX` test —
 the SDK resolves the long-form on its own, so the validator's job is to

@@ -55,8 +55,8 @@ def test_routing_decision_accepts_known_short_names() -> None:
 def test_routing_decision_accepts_full_sdk_id() -> None:
     """Any string starting with ``claude-`` passes (per arch §5 #4 +
     constants.EXECUTOR_MODEL_FULL_ID_PREFIX)."""
-    decision = _decision(executor_model="claude-sonnet-4-5")
-    assert decision.executor_model == "claude-sonnet-4-5"
+    decision = _decision(executor_model="claude-sonnet-4-8")
+    assert decision.executor_model == "claude-sonnet-4-8"
 
 
 def test_routing_decision_rejects_unknown_executor() -> None:

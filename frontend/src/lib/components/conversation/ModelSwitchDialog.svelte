@@ -5,9 +5,9 @@
    * Shown when the user picks a different executor in the conversation
    * header's :component:`ModelSelector` dropdown.  Displays:
    *
-   * - Title: "Switch executor: Sonnet 4.6 → Opus 4.7"
+   * - Title: "Switch executor: Sonnet 4.8 → Opus 4.8"
    * - Recost body: "This will re-cost ~N input tokens of conversation
-   *   history at Opus 4.7 rates."  Falls back to an "unknown" copy
+   *   history at Opus 4.8 rates."  Falls back to an "unknown" copy
    *   when ``contextTokens`` is null (session has not yet completed a
    *   turn so ``last_context_tokens`` is unpopulated).
    * - Estimated cost line: "Estimated additional cost: ~$X.XX"

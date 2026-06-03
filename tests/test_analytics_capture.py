@@ -46,7 +46,7 @@ from bearings.db.analytics import list_session_plug_blocks, list_turns_for_sessi
 # ---------------------------------------------------------------------------
 
 _SESS_ID = "sess-capture-test"
-_MODEL = "claude-sonnet-4-6"
+_MODEL = "claude-sonnet-4-8"
 
 
 @pytest.fixture
