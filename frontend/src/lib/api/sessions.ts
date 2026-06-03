@@ -919,7 +919,37 @@ export async function suggestSessionTitle(
 }
 
 // ---- work_evidence (T2-08) ------------------------------------------------
-// API stubs (WorkEvidenceToolSummary, WorkEvidenceOut, getWorkEvidence) are
-// wired in during T2-08 when the consuming UI component is built. Keeping
-// dead stubs here causes both knip and noUnusedLocals failures, so they are
-// added at that implementation step.
+
+/** Per-tool-name call count within a session (spec T2-08). */
+export interface WorkEvidenceToolSummary {
+  tool_name: string;
+  call_count: number;
+}
+
+/**
+ * Work evidence summary for a session — tool-call counts + optional git
+ * diff stat (spec T2-08, ``GET /api/sessions/{id}/work_evidence``).
+ */
+export interface WorkEvidenceOut {
+  bash_calls: number;
+  write_calls: number;
+  edit_calls: number;
+  total_work_tool_calls: number;
+  git_diff_stat: string | null;
+  git_diff_available: boolean;
+  tool_summaries: WorkEvidenceToolSummary[];
+}
+
+/**
+ * Fetch work evidence (bash/write/edit call counts + git diff stat) for
+ * the given session.
+ *
+ * @throws :class:`ApiError` on 404 (session not found) or 5xx.
+ */
+export async function getWorkEvidence(
+  sessionId: string,
+  options: RequestOptions = {},
+): Promise<WorkEvidenceOut> {
+  const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/work_evidence`;
+  return await getJson<WorkEvidenceOut>(path, options);
+}
