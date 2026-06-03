@@ -240,7 +240,7 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
         env_file=None,
     )
 
-    # Server bind. Master item 0.5 names ``port`` (default 8788) at the
+    # Server bind. Master item 0.5 names ``port`` (default 8787) at the
     # top level; the env-var ``BEARINGS_PORT`` resolves directly.
     port: int = Field(default=DEFAULT_PORT, ge=TCP_PORT_MIN, le=TCP_PORT_MAX)
     host: str = Field(default=DEFAULT_HOST)

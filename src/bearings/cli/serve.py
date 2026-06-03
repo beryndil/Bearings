@@ -48,7 +48,7 @@ def build_subparser(parent: argparse._SubParsersAction[argparse.ArgumentParser])
         "--port",
         type=int,
         default=None,
-        help="bind port (defaults to Settings.port — 8788 in v1)",
+        help="bind port (defaults to Settings.port — 8787 in v1)",
     )
     serve.add_argument(
         "--log-level",

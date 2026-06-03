@@ -336,7 +336,7 @@ def test_result_to_jsonl_roundtrips() -> None:
         detail="ok status=200",
     )
     v1 = SideResult(
-        base_url="http://127.0.0.1:8788",
+        base_url="http://127.0.0.1:8787",
         status_code=200,
         elapsed_ms=8,
         body='{"ok": true}',
@@ -390,7 +390,7 @@ def test_run_probe_match_path(monkeypatch: pytest.MonkeyPatch) -> None:
     result = run_probe(
         probe,
         v017_base_url="http://127.0.0.1:8787",
-        v1_base_url="http://127.0.0.1:8788",
+        v1_base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
     )
     assert result.passed is True
@@ -431,7 +431,7 @@ def test_run_probe_diverge_path(monkeypatch: pytest.MonkeyPatch) -> None:
     result = run_probe(
         probe,
         v017_base_url="http://127.0.0.1:8787",
-        v1_base_url="http://127.0.0.1:8788",
+        v1_base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
     )
     # passed is reachability-only; diverge does not flip it.
@@ -477,7 +477,7 @@ def test_run_probe_unreachable_v017(monkeypatch: pytest.MonkeyPatch) -> None:
     result = run_probe(
         probe,
         v017_base_url="http://127.0.0.1:8787",
-        v1_base_url="http://127.0.0.1:8788",
+        v1_base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
     )
     assert result.passed is False

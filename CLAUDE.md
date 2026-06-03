@@ -64,7 +64,7 @@ divergences from v0.17.x): `docs/architecture-v1.md`.
 * Versioning: SemVer 2.0.0; package version pinned in `pyproject.toml`.
   Conventional commits (`feat:` / `fix:` / `refactor:` / `docs:` /
   `test:` / `chore:`).
-* Concurrent run vs v0.17.x: port **8788** (vs 8787),
+* Port: **8787** (v0.17.x retired 2026-06-02; v1 is now sole primary),
   DB `~/.local/share/bearings-v1/` (vs `~/.local/share/bearings/`),
   systemd unit `bearings-v1.service` (vs `bearings.service`).
 * Inline literals downstream of `bearings.config.constants` are
@@ -112,8 +112,8 @@ The 11-tool stack is wired through `.pre-commit-config.yaml`:
 ## Common dev commands
 
 ```bash
-# Run the server (port 8788) — same invocation as the systemd unit.
-.venv/bin/bearings serve --host 127.0.0.1 --port 8788
+# Run the server (port 8787) — same invocation as the systemd unit.
+.venv/bin/bearings serve --host 127.0.0.1 --port 8787
 
 # Single test by node id, by file, or by -k expression
 uv run pytest tests/test_routing.py::test_priority_ladder -q

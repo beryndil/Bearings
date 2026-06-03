@@ -12,9 +12,9 @@ Every constant in this module is mandated by either:
 * ``docs/behavior/<subsystem>.md`` — user-observable timing /
   threshold values whose authoritative source is the per-subsystem
   behavior spec; or
-* the project ``CLAUDE.md`` repo invariants (port 8788 + DB at
-  ``~/.local/share/bearings-v1/``) that let v0.17.x and v1 run
-  side-by-side during the dogfood phase.
+* the project ``CLAUDE.md`` repo invariants (port 8787 + DB at
+  ``~/.local/share/bearings-v1/``) — v0.17.x retired 2026-06-02;
+  v1 is now the sole primary instance.
 
 Downstream modules MUST import from here instead of hard-coding
 literals — the auditor's "no inline literals" gate (item 0.5
@@ -40,9 +40,8 @@ from typing import Final, Literal
 # Process-level defaults (project CLAUDE.md "Repo invariants")
 # ---------------------------------------------------------------------------
 
-# v1 runs on port 8788 per project CLAUDE.md "Repo invariants".
-# v0.17.x / any other Bearings instance uses 8787.
-DEFAULT_PORT: Final[int] = 8788
+# v1 is now the sole primary instance (v0.17.x retired 2026-06-02); port 8787.
+DEFAULT_PORT: Final[int] = 8787
 
 # Loopback bind: Bearings is single-user localhost; binding to anything else
 # would expose subscription-auth to the LAN.

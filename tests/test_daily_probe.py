@@ -142,7 +142,7 @@ def test_run_probes_all_pass(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(_M, "_execute_probe", fake_execute)
-    results = run_probes(base_url="http://127.0.0.1:8788", timeout_s=1.0)
+    results = run_probes(base_url="http://127.0.0.1:8787", timeout_s=1.0)
     assert len(results) == len(PROBES)
     assert all(r.passed for r in results)
 
@@ -165,7 +165,7 @@ def test_run_probes_partial_fail(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(_M, "_execute_probe", fake_execute)
-    results = run_probes(base_url="http://127.0.0.1:8788", timeout_s=1.0)
+    results = run_probes(base_url="http://127.0.0.1:8787", timeout_s=1.0)
     assert len(results) == len(PROBES)
     assert all(not r.passed for r in results)
 
@@ -187,7 +187,7 @@ def test_run_probes_url_error(monkeypatch: pytest.MonkeyPatch) -> None:
         )
 
     monkeypatch.setattr(_M, "_execute_probe", fake_execute)
-    results = run_probes(base_url="http://127.0.0.1:8788", timeout_s=1.0)
+    results = run_probes(base_url="http://127.0.0.1:8787", timeout_s=1.0)
     assert all(r.status_code is None for r in results)
     assert all(not r.passed for r in results)
 
@@ -221,7 +221,7 @@ def test_run_probes_quota_current_404_is_pass(monkeypatch: pytest.MonkeyPatch) -
         )
 
     monkeypatch.setattr(_M, "_execute_probe", fake_execute)
-    results = run_probes(base_url="http://127.0.0.1:8788", timeout_s=1.0)
+    results = run_probes(base_url="http://127.0.0.1:8787", timeout_s=1.0)
     quota_result = next(r for r in results if r.probe.name == "quota_current")
     assert quota_result.status_code == 404
     assert quota_result.passed is True  # 404 ∈ {200, 404}
@@ -239,7 +239,7 @@ def test_run_probes_result_order_matches_probes(monkeypatch: pytest.MonkeyPatch)
         return ProbeResult(probe=current, status_code=200, elapsed_ms=1, detail="ok")
 
     monkeypatch.setattr(_M, "_execute_probe", fake_execute)
-    results = run_probes(base_url="http://127.0.0.1:8788", timeout_s=1.0)
+    results = run_probes(base_url="http://127.0.0.1:8787", timeout_s=1.0)
     assert [r.probe.name for r in results] == [p.name for p in PROBES]
 
 
@@ -546,7 +546,7 @@ def test_execute_probe_retry_success_on_second_attempt(
     monkeypatch.setattr(_M.urllib.request, "urlopen", fake_urlopen)
     result = _execute_probe(
         probe,
-        base_url="http://127.0.0.1:8788",
+        base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
         retry_attempts=3,
         retry_backoff_s=0.0,
@@ -572,7 +572,7 @@ def test_execute_probe_retry_all_attempts_exhausted(
     monkeypatch.setattr(_M.urllib.request, "urlopen", fake_urlopen)
     result = _execute_probe(
         probe,
-        base_url="http://127.0.0.1:8788",
+        base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
         retry_attempts=3,
         retry_backoff_s=0.0,
@@ -599,7 +599,7 @@ def test_execute_probe_retry_http_503_then_200(
         call_count += 1
         if call_count == 1:
             raise urllib.error.HTTPError(
-                "http://127.0.0.1:8788/api/health",
+                "http://127.0.0.1:8787/api/health",
                 503,
                 "Service Unavailable",
                 http.client.HTTPMessage(),
@@ -610,7 +610,7 @@ def test_execute_probe_retry_http_503_then_200(
     monkeypatch.setattr(_M.urllib.request, "urlopen", fake_urlopen)
     result = _execute_probe(
         probe,
-        base_url="http://127.0.0.1:8788",
+        base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
         retry_attempts=3,
         retry_backoff_s=0.0,

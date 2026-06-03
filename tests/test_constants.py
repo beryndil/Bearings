@@ -79,8 +79,8 @@ def test_executor_fallback_model_table() -> None:
 
 
 def test_v1_repo_invariants_match_claude_md() -> None:
-    """CLAUDE.md repo invariants — port 8788, db at bearings-v1 dir."""
-    assert constants.DEFAULT_PORT == 8788
+    """CLAUDE.md repo invariants — port 8787, db at bearings-v1 dir."""
+    assert constants.DEFAULT_PORT == 8787
     assert constants.DEFAULT_HOST == "127.0.0.1"
     assert "bearings-v1" in str(constants.DEFAULT_DB_PATH)
     assert constants.DEFAULT_DB_PATH.name == "sessions.db"
