@@ -19,7 +19,12 @@
 
   import { THEME_COLOR_HEX, THEME_META_NAME, THEME_STORAGE_KEY, THEME_STRINGS } from "../config";
   import { applyThemeToDom } from "./dom";
-  import { acknowledgeSaveStatus, syncFromStorage, themeStore } from "./store.svelte";
+  import {
+    acknowledgeSaveStatus,
+    acknowledgeServerSyncStatus,
+    syncFromStorage,
+    themeStore,
+  } from "./store.svelte";
 
   interface Props {
     children?: Snippet;
@@ -67,6 +72,14 @@
    * subsequent failure re-fires the effect).
    */
   const saveFailed = $derived(themeStore.lastSaveOk === false);
+
+  /**
+   * Server-sync-failed toast — surfaces when the fire-and-forget
+   * ``PATCH /api/preferences`` call reports a network error or non-2xx.
+   * The localStorage write already succeeded at this point, so the theme
+   * is active and locally persisted; only the server copy is stale.
+   */
+  const serverSyncFailed = $derived(themeStore.lastServerSyncOk === false);
 </script>
 
 {#if children}
@@ -81,6 +94,24 @@
       class="theme-provider__toast-dismiss"
       data-testid="theme-provider-save-failed-toast-dismiss"
       onclick={() => acknowledgeSaveStatus()}
+    >
+      ×
+    </button>
+  </div>
+{/if}
+
+{#if serverSyncFailed}
+  <div
+    class="theme-provider__toast theme-provider__toast--server-sync"
+    role="alert"
+    data-testid="theme-provider-server-sync-failed-toast"
+  >
+    <span>{THEME_STRINGS.serverSyncFailedToast}</span>
+    <button
+      type="button"
+      class="theme-provider__toast-dismiss"
+      data-testid="theme-provider-server-sync-failed-toast-dismiss"
+      onclick={() => acknowledgeServerSyncStatus()}
     >
       ×
     </button>
@@ -112,5 +143,8 @@
     font-size: 1.25rem;
     line-height: 1;
     padding: 0;
+  }
+  .theme-provider__toast--server-sync {
+    bottom: 4rem;
   }
 </style>

@@ -18,7 +18,7 @@
  */
 import { type ThemeId } from "../config";
 import { applyThemeToDom } from "./dom";
-import { loadStoredTheme, resolveBootTheme, saveStoredTheme } from "./persistence";
+import { loadStoredTheme, resolveBootTheme, saveStoredTheme, syncThemeToServer } from "./persistence";
 
 interface ThemeState {
   /**
@@ -28,17 +28,26 @@ interface ThemeState {
    */
   theme: ThemeId;
   /**
-   * Last persistence-attempt status. ``null`` while no attempt has
-   * happened; ``true`` after a successful write; ``false`` after a
-   * failed write. The provider component reads this to flash the
+   * Last localStorage persistence-attempt status. ``null`` while no
+   * attempt has happened; ``true`` after a successful write; ``false``
+   * after a failed write. The provider component reads this to flash the
    * "couldn't save your theme" toast on ``false``.
    */
   lastSaveOk: boolean | null;
+  /**
+   * Last server-sync attempt status. ``null`` when no sync has been
+   * attempted or the last one succeeded; ``false`` when the most recent
+   * PATCH ``/api/preferences`` call failed (network error or non-2xx).
+   * The provider component reads this to flash the
+   * "couldn't sync to server" toast on ``false``.
+   */
+  lastServerSyncOk: boolean | null;
 }
 
 const state: ThemeState = $state({
   theme: resolveBootTheme(),
   lastSaveOk: null,
+  lastServerSyncOk: null,
 });
 
 /**
@@ -71,6 +80,13 @@ export function setTheme(next: ThemeId): boolean {
   if (ok) {
     state.theme = next;
     state.lastSaveOk = true;
+    // Fire-and-forget server sync — do NOT block the UI on it.
+    // On failure the store surfaces a separate toast via lastServerSyncOk.
+    void syncThemeToServer(next).then((serverOk) => {
+      if (!serverOk) {
+        state.lastServerSyncOk = false;
+      }
+    });
     return true;
   }
   // Failure path: revert to the previously-saved value (or OS fallback).
@@ -108,8 +124,18 @@ export function acknowledgeSaveStatus(): void {
   state.lastSaveOk = null;
 }
 
+/**
+ * Acknowledge that the provider has surfaced the most-recent
+ * server-sync-failed toast. Resets ``lastServerSyncOk`` so a subsequent
+ * sync failure re-fires the toast effect.
+ */
+export function acknowledgeServerSyncStatus(): void {
+  state.lastServerSyncOk = null;
+}
+
 /** Test seam — restore the boot state without re-importing the module. */
 export function _resetForTests(theme: ThemeId): void {
   state.theme = theme;
   state.lastSaveOk = null;
+  state.lastServerSyncOk = null;
 }

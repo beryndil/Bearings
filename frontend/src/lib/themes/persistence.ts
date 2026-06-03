@@ -20,6 +20,7 @@
  *   ``isThemeId`` guard below.
  */
 import {
+  API_PREFERENCES_ENDPOINT,
   KNOWN_THEMES,
   THEME_EVERGREEN,
   THEME_PAPER_LIGHT,
@@ -84,6 +85,29 @@ export function saveStoredTheme(theme: ThemeId): boolean {
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
     return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fire-and-forget server sync — PATCHes the selected theme to
+ * ``/api/preferences`` so the preference is also persisted server-side.
+ *
+ * Returns ``true`` when the server acknowledged (2xx), ``false`` on any
+ * network error or non-2xx response. The caller is responsible for
+ * wiring the result into the UI (e.g. surfacing a toast on ``false``).
+ *
+ * Never throws — all errors are caught and mapped to ``false``.
+ */
+export async function syncThemeToServer(theme: ThemeId): Promise<boolean> {
+  try {
+    const response = await fetch(API_PREFERENCES_ENDPOINT, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme }),
+    });
+    return response.ok;
   } catch {
     return false;
   }

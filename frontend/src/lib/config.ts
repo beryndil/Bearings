@@ -2522,6 +2522,7 @@ export const THEME_STRINGS = {
   pickerAriaLabel: "Theme",
   pickerCaption: "Saved per device. Applies immediately.",
   saveFailedToast: "Couldn't save your theme — try again.",
+  serverSyncFailedToast: "Theme saved locally — couldn't sync to server.",
   themeLabels: {
     [THEME_EVERGREEN]: "Evergreen (forest-green, flat)",
     [THEME_MIDNIGHT_GLASS]: "Midnight Glass (warm-navy, glass panels)",
