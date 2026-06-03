@@ -1637,11 +1637,11 @@ async def test_list_sessions_pages_are_non_overlapping_and_exhaustive(
 
 
 # ---------------------------------------------------------------------------
-# suggest_title (T1-03)
+# preview_title (T1-03)
 # ---------------------------------------------------------------------------
 
 
-async def test_suggest_title_no_messages_returns_null(
+async def test_preview_title_no_messages_returns_null(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:
     """Session with no messages → ``suggested_title: null`` (no LLM call needed)."""
@@ -1649,14 +1649,14 @@ async def test_suggest_title_no_messages_returns_null(
     sid = await _new_chat(conn, "empty session")
 
     with TestClient(app) as client:
-        response = client.post(f"/api/sessions/{sid}/suggest_title")
+        response = client.post(f"/api/sessions/{sid}/preview_title")
 
     assert response.status_code == 200
     body = response.json()
     assert body["suggested_title"] is None
 
 
-async def test_suggest_title_injects_callable(
+async def test_preview_title_injects_callable(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:
     """Injectable ``title_suggester`` is called with the excerpt and model."""
@@ -1673,7 +1673,7 @@ async def test_suggest_title_injects_callable(
     app.state.title_suggester = fake_suggester
 
     with TestClient(app) as client:
-        response = client.post(f"/api/sessions/{sid}/suggest_title")
+        response = client.post(f"/api/sessions/{sid}/preview_title")
 
     assert response.status_code == 200
     body = response.json()
@@ -1683,19 +1683,19 @@ async def test_suggest_title_injects_callable(
     assert "for-loop" in excerpt
 
 
-async def test_suggest_title_unknown_session_404(
+async def test_preview_title_unknown_session_404(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:
     """Unknown session id → 404."""
     app, _ = app_and_db
 
     with TestClient(app) as client:
-        response = client.post("/api/sessions/ses_doesnotexist/suggest_title")
+        response = client.post("/api/sessions/ses_doesnotexist/preview_title")
 
     assert response.status_code == 404
 
 
-async def test_suggest_title_suggester_returns_none_ok(
+async def test_preview_title_suggester_returns_none_ok(
     app_and_db: tuple[FastAPI, aiosqlite.Connection],
 ) -> None:
     """When the suggester returns None the route still returns 200 with null title."""
@@ -1710,7 +1710,7 @@ async def test_suggest_title_suggester_returns_none_ok(
     app.state.title_suggester = always_none
 
     with TestClient(app) as client:
-        response = client.post(f"/api/sessions/{sid}/suggest_title")
+        response = client.post(f"/api/sessions/{sid}/preview_title")
 
     assert response.status_code == 200
     assert response.json()["suggested_title"] is None
