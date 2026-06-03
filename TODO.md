@@ -288,6 +288,20 @@ shape; the per-module test patterns in
 (gap-cycle-01-014). Entry removed per feature-6-009 closeout;
 resolving commit `404c1818`.~~
 
+## Pre-existing frontend build failure (surfaced 2026-06-03)
+
+`npm run build` fails with:
+```
+[MISSING_EXPORT] "getWorkEvidence" is not exported by "src/lib/api/sessions.ts"
+```
+Caused by `frontend/src/lib/components/inspector/InspectorAgent.svelte`
+importing `getWorkEvidence` and `WorkEvidenceOut` from `../../api/sessions`.
+Neither export exists. Fix: either add the export to `api/sessions.ts` or
+remove the import from `InspectorAgent.svelte` if the feature is deferred.
+
+Also pre-existing: `CheckpointGutter.svelte` has two unused imports
+(`compareCheckpoint`, `CheckpointCompareResult`) that cause svelte-check errors.
+
 ## Pre-existing test failures (surfaced 2026-06-03)
 
 Four tests were already failing before the 4-8 model-update commit:

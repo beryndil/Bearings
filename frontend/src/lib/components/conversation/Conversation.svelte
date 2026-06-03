@@ -47,6 +47,7 @@
   import LiveTodos from "./LiveTodos.svelte";
   import MessageTurn from "./MessageTurn.svelte";
   import StopUndoInline from "./StopUndoInline.svelte";
+  import BearingsMark from "../icons/BearingsMark.svelte";
   import VirtualItem from "../common/VirtualItem.svelte";
   import { checkpointBus } from "../../stores/checkpointBus.svelte";
   import { recoverSession } from "../../api/sessions";
@@ -105,6 +106,21 @@
   const hasInFlightTurn = $derived(
     conversationStore.streamingActive &&
       conversationStore.turns.some((t) => t.role === "assistant" && !t.complete),
+  );
+
+  // ``true`` while the runner is streaming but no visible assistant content
+  // has arrived yet — covers both the pre-turn gap (between prompt POST and
+  // the first ``message_start`` / ``thinking`` / ``token`` event) and the
+  // brief window where a turn exists but is still blank. Once any body text,
+  // thinking text, or tool call appears the indicator clears automatically.
+  const isThinking = $derived(
+    conversationStore.streamingActive &&
+      !conversationStore.turns.some(
+        (t) =>
+          t.role === "assistant" &&
+          !t.complete &&
+          (t.body.length > 0 || t.thinking.length > 0 || t.toolCalls.length > 0),
+      ),
   );
 
   // Index of the last assistant turn in the turns list, or -1 when none.
@@ -390,6 +406,18 @@
     </div>
     <CheckpointGutter {sessionId} {bodyEl} refreshKey={checkpointBus.refreshKey} />
   </div>
+
+  {#if isThinking}
+    <div
+      class="flex items-center gap-2 px-4 py-2 text-xs text-fg-muted"
+      data-testid="thinking-indicator"
+      aria-live="polite"
+      aria-label="Claude is thinking"
+    >
+      <BearingsMark size={14} loading class="text-accent opacity-70" />
+      <span>Thinking…</span>
+    </div>
+  {/if}
 
   {#if hasInFlightTurn && sessionId !== null}
     <StopUndoInline {sessionId} />
