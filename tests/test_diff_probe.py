@@ -417,7 +417,7 @@ def test_run_probe_diverge_path(monkeypatch: pytest.MonkeyPatch) -> None:
         timeout_s: float,
     ) -> object:
         del p, timeout_s
-        # v017 returns ``status: str``; v1 returns ``status: int``.
+        # v017 (port 8080) returns ``status: int``; v1 (port 8787) returns ``status: str``.
         body = '{"status": "ok"}' if base_url.endswith("8787") else '{"status": 200}'
         return SideResult(
             base_url=base_url,
@@ -430,7 +430,7 @@ def test_run_probe_diverge_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_M, "_execute_side", fake_execute_side)
     result = run_probe(
         probe,
-        v017_base_url="http://127.0.0.1:8787",
+        v017_base_url="http://127.0.0.1:8080",
         v1_base_url="http://127.0.0.1:8787",
         timeout_s=1.0,
     )
