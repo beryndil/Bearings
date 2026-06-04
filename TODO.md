@@ -8,6 +8,31 @@ When a TODO is resolved, strike it from this file in the same commit
 that lands the fix and cite the resolving commit hash in the removal
 trailer.
 
+## SDK runner: treat 401 auth-credential errors as transient (token-rotation race) (2026-06-04)
+
+The Claude Max OAuth token in `~/.claude/.credentials.json` has an ~8h
+lifetime and rotates periodically (observed rewrites 15:18 → 20:18 on
+2026-06-04; `expiresAt` ≈ 04:18 UTC next day). The orchestrator CLI, the
+Bearings server, and every executor SDK subprocess share that single
+token file. When the token rotates mid-request, an in-flight call still
+carrying the old bearer gets `API Error: 401 Invalid authentication
+credentials`, which the runner currently surfaces as a *terminal*
+assistant message — killing the session. Long, slow, high-effort **opus**
+sessions have a wide window to be caught by a rotation; short sonnet
+calls finish inside one token window and never trip it. Observed during
+the 617-623 pipeline: Exec-6 (opus, item 622) ran ~$9.57 of real work,
+then began 401ing after a rotation boundary; re-dispatched on sonnet and
+completed cleanly. Opus itself is healthy (verified via bundled-binary
+and live-API PONG probes on a fresh token) — this is purely a credential
+hand-off race, not a model/plan issue.
+
+Real fix: in the agent runner's SDK error handling, classify `401
+Invalid authentication credentials` as transient/retryable — re-read
+`~/.claude/.credentials.json` (or trigger SDK credential reload) and
+retry the request once before surfacing any error. Add a regression test
+that simulates a mid-session token swap. Not yet scheduled into the
+master checklist — promote to a checklist item when picked up.
+
 ~~## load_schema executescript ordering bug — legacy DB server restart failure (2026-05-09)~~
 
 ~~`load_schema` calls `executescript(schema_sql)` before `_ensure_added_columns`.
