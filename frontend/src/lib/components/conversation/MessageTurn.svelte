@@ -291,7 +291,7 @@
   // ---- context-menu handlers ---------------------------------------------
 
   const menuHandlers = $derived({
-    /** Scroll the article element into view. */
+    /** Scroll the element into view. */
     [MENU_ACTION_MESSAGE_JUMP_TO_TURN]: () => {
       const el = document.querySelector(`[data-turn-id="${CSS.escape(turn.id)}"]`);
       el?.scrollIntoView({ behavior: scrollBehavior(), block: "center" });
@@ -557,15 +557,22 @@
   />
 {/if}
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-<article
+<div
   class="message-turn flex flex-col gap-2 px-4 py-4{isSelected
     ? ' ring-1 ring-accent/40 rounded'
     : ''}"
   data-testid="message-turn"
   data-turn-id={turn.id}
   data-role={turn.role}
+  role="button"
+  tabindex="0"
   onclick={handleClick}
+  onkeydown={(e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleMessageId(turn.id);
+    }
+  }}
   use:contextMenu={{
     target: hasSelection ? MENU_TARGET_MESSAGE_MULTI_SELECT : MENU_TARGET_MESSAGE,
     handlers: hasSelection ? multiSelectMenuHandlers : menuHandlers,
@@ -757,7 +764,7 @@
       {/if}
     </div>
   {/if}
-</article>
+</div>
 
 <style>
   /* User bubble — soft brand-tinted surface to visually distinguish from

@@ -251,7 +251,7 @@ async def create_item(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     return _to_item_out(item)
 
@@ -325,7 +325,7 @@ async def update_item(
             item = await checklists_db.update_notes(db, item_id, notes=payload.notes)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if item is None:  # pragma: no cover — guarded by 404 above
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="vanished")
@@ -417,7 +417,7 @@ async def block_item(
     db = _db(request)
     if payload.category not in KNOWN_ITEM_OUTCOMES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(f"category {payload.category!r} not in {sorted(KNOWN_ITEM_OUTCOMES)}"),
         )
     try:
@@ -426,7 +426,7 @@ async def block_item(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if item is None:
         raise HTTPException(
@@ -468,7 +468,7 @@ async def link_chat(
     db = _db(request)
     if payload.spawned_by not in KNOWN_PAIRED_CHAT_SPAWNED_BY:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"spawned_by {payload.spawned_by!r} not in {sorted(KNOWN_PAIRED_CHAT_SPAWNED_BY)}"
             ),
@@ -483,13 +483,13 @@ async def link_chat(
     # F6-rt-18: target must be a chat-kind session.
     if chat_session.kind != SESSION_KIND_CHAT:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"session {payload.chat_session_id!r} is not a chat session",
         )
     # F6-rt-19: target must not be closed.
     if chat_session.closed_at is not None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="session is closed",
         )
     try:
@@ -498,11 +498,11 @@ async def link_chat(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     except aiosqlite.IntegrityError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="session reference constraint failed",
         ) from exc
     if item is None:
@@ -575,7 +575,7 @@ async def move_item(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if item is None:
         raise HTTPException(
@@ -596,7 +596,7 @@ async def indent_item(item_id: int, request: Request) -> ChecklistItemOut:
         item = await checklists_db.indent(db, item_id)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if item is None:
         raise HTTPException(
@@ -617,7 +617,7 @@ async def outdent_item(item_id: int, request: Request) -> ChecklistItemOut:
         item = await checklists_db.outdent(db, item_id)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if item is None:
         raise HTTPException(
@@ -658,7 +658,7 @@ async def start_run(
         )
     if payload.failure_policy not in KNOWN_AUTO_DRIVER_FAILURE_POLICIES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"failure_policy {payload.failure_policy!r} not in "
                 f"{sorted(KNOWN_AUTO_DRIVER_FAILURE_POLICIES)}"
@@ -682,7 +682,7 @@ async def start_run(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
     # Dispatch the live driver task when both the registry and the

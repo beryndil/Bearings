@@ -119,7 +119,7 @@ async def create_template(payload: TemplateIn, request: Request) -> TemplateOut:
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     return _to_out(template)
 
@@ -258,7 +258,7 @@ async def patch_template(template_id: int, payload: TemplatePatch, request: Requ
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if updated is None:  # pragma: no cover — already confirmed existence above
         raise HTTPException(
@@ -476,7 +476,7 @@ async def create_session_from_template(
     resolved_working_dir = await _resolve_template_working_dir(db, payload, template, tag_ids)
     if resolved_working_dir is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 "working_dir is required — supply it via the override body, "
                 "set working_dir_default on the template, or attach a tag with a working_dir set"
@@ -507,7 +507,7 @@ async def create_session_from_template(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
     # -- Attach resolved tags. --------------------------------------------

@@ -371,7 +371,7 @@ async def _import_messages_and_checkpoints(
             await messages_db.import_messages(db, messages=[m.model_dump() for m in body.messages])
         except ValueError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
             ) from exc
     for cp in body.checkpoints:
         try:
@@ -385,7 +385,7 @@ async def _import_messages_and_checkpoints(
             )
         except ValueError as exc:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
             ) from exc
 
 
@@ -450,7 +450,7 @@ async def _resolve_patch_tag_ids(
         missing = sorted({tid for tid in tag_ids_list if tid not in existing_ids})
         if missing:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"unknown tag_ids: {missing}",
             )
     new_tag_ids = tuple(tag_ids_list)
@@ -467,7 +467,7 @@ def _build_patch_kwargs(
     if "title" in fs:
         if payload.title is None:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="title must not be null",
             )
         kwargs["title"] = payload.title
@@ -476,7 +476,7 @@ def _build_patch_kwargs(
     if "max_budget_usd" in fs:
         if payload.max_budget_usd is not None and payload.max_budget_usd < 0:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="max_budget_usd must be ≥ 0",
             )
         kwargs["max_budget_usd"] = payload.max_budget_usd
@@ -557,7 +557,7 @@ async def list_sessions(
     db = _db(request)
     if kind is not None and kind not in KNOWN_SESSION_KINDS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"kind {kind!r} not in {sorted(KNOWN_SESSION_KINDS)}",
         )
     # Normalize the empty-list-from-query edge cases. FastAPI hands
@@ -632,7 +632,7 @@ async def create_session(
     db = _db(request)
     if payload.kind not in KNOWN_SESSION_KINDS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"kind {payload.kind!r} not in {sorted(KNOWN_SESSION_KINDS)}",
         )
     tag_ids = tuple(payload.tag_ids)
@@ -646,7 +646,7 @@ async def create_session(
         resolved_working_dir = await _resolve_working_dir_from_tags(db, tag_ids)
     if resolved_working_dir is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="working_dir is required — supply it explicitly or attach a tag with "
             "a working_dir set",
         )
@@ -667,7 +667,7 @@ async def create_session(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if tag_ids:
         await tags_db.set_for_session(db, session_id=row.id, tag_ids=tag_ids)
@@ -725,7 +725,7 @@ async def patch_session(
         row = await sessions_db.update_fields(db, session_id, **_build_patch_kwargs(payload, fs))
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if row is None:
         raise HTTPException(
@@ -794,7 +794,7 @@ async def close_session(session_id: str, request: Request) -> SessionOut:
         )
     if existing_kind not in CLOSEABLE_SESSION_KINDS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"sessions of kind {existing_kind!r} cannot be closed; "
                 f"close is only supported for: {sorted(CLOSEABLE_SESSION_KINDS)}"
@@ -849,7 +849,7 @@ async def patch_session_model(
         row = await sessions_db.update_model(db, session_id, model=payload.model)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if row is None:
         raise HTTPException(
@@ -898,7 +898,7 @@ async def patch_session_permission_mode(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if row is None:
         raise HTTPException(
@@ -1501,7 +1501,7 @@ async def import_session(
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     await _import_messages_and_checkpoints(db, body)
     if body.tool_calls:
@@ -1618,7 +1618,7 @@ async def regenerate_from_message(
         )
     if pivot_assistant.role != "assistant":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"message {message_id!r} is not an assistant turn",
         )
     pivot_user = await messages_db.get_preceding_user_message(

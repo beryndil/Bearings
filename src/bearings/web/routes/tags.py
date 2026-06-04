@@ -158,7 +158,7 @@ async def _validate_tag_cardinality(
         # and string-typed ternaries are accepted).
         message = "; ".join(violations)
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"{message}",
         )
 
@@ -189,7 +189,7 @@ async def create_tag(payload: TagIn, request: Request) -> TagOut:
         ) from exc
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     out = _to_out(tag)
     broadcaster = _broadcaster(request)
@@ -217,7 +217,7 @@ async def list_tags(
     db = _db(request)
     if class_ is not None and class_ not in KNOWN_TAG_CLASSES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"class_ {class_!r} is not in {sorted(KNOWN_TAG_CLASSES)}",
         )
     rows = await tags_db.list_all_with_counts(db, class_=class_, group=group)
@@ -250,7 +250,7 @@ async def update_tags_sort_order(payload: TagSortOrderUpdate, request: Request) 
         )
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     broadcaster = _broadcaster(request)
     if broadcaster is not None and ordered_ids:
@@ -314,7 +314,7 @@ async def update_tag(tag_id: int, payload: TagIn, request: Request) -> TagOut:
         ) from exc
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     if tag is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"tag {tag_id} not found")

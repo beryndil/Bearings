@@ -54,7 +54,7 @@ def _period_to_seconds(period: str) -> int:
     if period == "week":
         return 7 * 86_400
     raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=f"period {period!r} not in {sorted(_KNOWN_USAGE_PERIODS)}",
     )
 
@@ -78,7 +78,7 @@ async def by_model(
     """
     if period not in _KNOWN_USAGE_PERIODS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"period {period!r} not in {sorted(_KNOWN_USAGE_PERIODS)}",
         )
     cutoff_unix = int(time.time()) - _period_to_seconds(period)
@@ -171,7 +171,7 @@ async def by_tag(
     """
     if period not in _KNOWN_USAGE_PERIODS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"period {period!r} not in {sorted(_KNOWN_USAGE_PERIODS)}",
         )
     cutoff_unix = int(time.time()) - _period_to_seconds(period)
@@ -272,7 +272,7 @@ async def list_turns(
     """
     if period not in _KNOWN_USAGE_PERIODS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"period {period!r} not in {sorted(_KNOWN_USAGE_PERIODS)}",
         )
     # turns.timestamp is unix ms; convert the period window to ms.

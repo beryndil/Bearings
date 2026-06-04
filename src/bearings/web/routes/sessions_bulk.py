@@ -305,7 +305,7 @@ async def _handle_bulk_tag(
     """Handle tag / untag ops; raises 422 when tag_id is missing."""
     if payload.tag_id is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="tag_id is required for tag and untag ops",
         )
     results = await _bulk_tag(db, session_ids, payload.tag_id, attach=(payload.op == BULK_OP_TAG))
@@ -368,7 +368,7 @@ async def run_sessions_bulk(payload: BulkSessionsIn, request: Request) -> Respon
     """
     if payload.op not in KNOWN_BULK_OPS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"op {payload.op!r} not in {sorted(KNOWN_BULK_OPS)}",
         )
 

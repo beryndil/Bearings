@@ -82,7 +82,7 @@ async def spawn_chat(
     db = _db(request)
     if payload.spawned_by not in KNOWN_PAIRED_CHAT_SPAWNED_BY:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"spawned_by {payload.spawned_by!r} not in {sorted(KNOWN_PAIRED_CHAT_SPAWNED_BY)}"
             ),
@@ -109,11 +109,11 @@ async def spawn_chat(
         )
     except PairedChatSpawnError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     except SessionAssemblyError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
     chat = await sessions_db.get(db, chat_id)
     if chat is None:  # pragma: no cover — spawn just succeeded

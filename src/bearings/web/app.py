@@ -30,7 +30,8 @@ from __future__ import annotations
 import logging
 import re
 import time
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import aiosqlite
@@ -362,10 +363,27 @@ def create_app(
     # ``/ws/sessions`` endpoint is always available.
     sessions_broadcaster = SessionsBroadcaster()
     factory = _build_runner_factory(runner_factory, db_connection, sessions_broadcaster)
+
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+        """Lifespan handler — startup before yield, shutdown after yield."""
+        # Startup
+        if quota_poller is not None:
+            quota_poller.start()
+        if isinstance(factory, InProcessRunnerRegistry):
+            factory.start_reaper()
+        yield
+        # Shutdown
+        if quota_poller is not None:
+            await quota_poller.stop()
+        if isinstance(factory, InProcessRunnerRegistry):
+            await factory.aclose()
+
     app = FastAPI(
         title=OPENAPI_TITLE,
         description=OPENAPI_DESCRIPTION,
         version=__version__,
+        lifespan=_lifespan,
     )
     # Sunset header middleware — emits ``Sunset:`` for deprecated routes
     # per ``docs/deprecation-convention.md`` §3 / RFC 8594.
@@ -497,37 +515,6 @@ def create_app(
     # ``web/static.py``). Idempotent on a missing ``dist/`` so
     # backend-only test runs do not need a built frontend.
     mount_static_bundle(app)
-
-    # Quota poller lifecycle — start on server boot so the first poll
-    # fires immediately (spec §4 "first poll fires immediately on
-    # server start"), stop on shutdown so the background task exits
-    # cleanly before the event loop closes.
-    if quota_poller is not None:
-        _poller_ref = quota_poller
-
-        @app.on_event("startup")
-        async def _start_quota_poller() -> None:
-            _poller_ref.start()
-
-        @app.on_event("shutdown")
-        async def _stop_quota_poller() -> None:
-            await _poller_ref.stop()
-
-    # Shutdown drain — when the factory is the InProcessRunnerRegistry
-    # (the production path), cancel every per-session supervisor task
-    # so the SDK CLI subprocesses tear down cleanly. Wired as a
-    # FastAPI shutdown event so uvicorn's graceful-shutdown path
-    # awaits the drain before exiting. Per ``~/.claude/plans/wiring-
-    # agent-loop.md`` Slice A1.3.
-    if isinstance(factory, InProcessRunnerRegistry):
-
-        @app.on_event("startup")
-        async def _start_reaper() -> None:
-            factory.start_reaper()
-
-        @app.on_event("shutdown")
-        async def _drain_supervisors() -> None:
-            await factory.aclose()
 
     return app
 

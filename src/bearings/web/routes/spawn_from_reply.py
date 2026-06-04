@@ -98,7 +98,7 @@ async def spawn_from_reply(
         )
     if pivot.role != "assistant":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"message {message_id!r} has role {pivot.role!r}; "
                 "only assistant messages can be the spawn pivot"

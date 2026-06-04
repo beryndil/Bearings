@@ -264,7 +264,7 @@ async def patch_message_content(
         )
     if row.role != "user":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="only user-role messages may be edited",
         )
     updated = await messages_db.update_content(db, message_id, content=payload.content)

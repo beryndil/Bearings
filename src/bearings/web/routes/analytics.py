@@ -187,7 +187,7 @@ async def post_plug_blocks_batch(request: Request, body: PlugBlocksBatchIn) -> d
     for blk in body.blocks:
         if blk.block_type not in KNOWN_ANALYTICS_BLOCK_TYPES:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(f"block_type {blk.block_type!r} is not a known analytics block type"),
             )
         await upsert_plug_block(
@@ -277,12 +277,12 @@ async def get_attribution(
     """
     if window not in KNOWN_ANALYTICS_ATTRIBUTION_WINDOWS:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"window {window!r} not in {sorted(KNOWN_ANALYTICS_ATTRIBUTION_WINDOWS)}",
         )
     if group_by != "tag":
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="group_by must be 'tag'",
         )
     db = _db(request)
@@ -397,7 +397,7 @@ async def get_redundancy(
         unknown = [t for t in parsed_types if t not in KNOWN_ANALYTICS_BLOCK_TYPES]
         if unknown:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=f"unknown block_types: {unknown}",
             )
 
@@ -604,7 +604,7 @@ async def create_on_open_from_plug_block(
     is_dir = await asyncio.to_thread(work_dir.is_dir)
     if not is_dir:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=f"working_directory {body.working_directory!r} is not an existing directory",
         )
     bearings_dir = work_dir / _BEARINGS_ON_OPEN_DIR
@@ -736,7 +736,7 @@ async def create_warning_suppression(
     """
     if body.warning_type not in KNOWN_ANALYTICS_WARNING_TYPES:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=(
                 f"warning_type {body.warning_type!r} not in {sorted(KNOWN_ANALYTICS_WARNING_TYPES)}"
             ),
