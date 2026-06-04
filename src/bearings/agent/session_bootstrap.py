@@ -224,7 +224,7 @@ def build_session_setup(
             decision=decision,
             session_instructions=row.session_instructions,
             working_dir=sdk_cwd,
-            permission_profile=PermissionProfile.STANDARD.value
+            permission_profile=PermissionProfile.EXPANDED.value
             if row.permission_mode is None
             else DEFAULT_TEMPLATE_PERMISSION_PROFILE,
             permission_mode_override=row.permission_mode,
