@@ -8,6 +8,38 @@ When a TODO is resolved, strike it from this file in the same commit
 that lands the fix and cite the resolving commit hash in the removal
 trailer.
 
+## Runner crash visibility + error_pending DB persistence (2026-06-04)
+
+Diagnosed during the gap-closure pipeline (ses_5eaee838). Three illness layers:
+
+**Illness 1 — Unhandled task exceptions are invisible.**
+Exceptions raised *before* `run_session_loop`'s try/except (e.g. in
+`_to_sdk_options`) cause the asyncio task to end silently. Python routes
+the exception to stderr, which is a Unix socket when the server runs
+headless — unreadable by operators. No error indicator is set; session
+looks like it has queued messages with no response.
+
+**Illness 2 — `_enter_error_state` does not write `error_pending` to DB.**
+`mark_error()` updates the in-memory `AgentSession` state only. The
+`sessions.error_pending` DB column is never set, so the red-dot sidebar
+indicator doesn't survive a page reload and the orchestrator can't detect
+the failure by polling the session row.
+
+**Illness 3 — Partial working-tree contamination on runner crash.**
+When a runner crashes mid-turn before committing, uncommitted file changes
+remain in the shared worktree. The next executor inherits a dirty tree.
+
+**Cures landed in `fix(reliability): runner crash visibility + error_pending persistence`:**
+- `runner_factory._spawn_supervisor` now wires a `done_callback` via
+  `_make_task_exception_logger` that logs unhandled task exceptions to the
+  structlog pipeline (appears in operator logs).
+- `sdk_loop_errors._enter_error_state` now writes `error_pending = True`
+  to the DB after `mark_error()` so the red dot persists across reloads.
+- Executor session instructions updated in the pipeline plan to include a
+  dirty-tree guard (`git status --porcelain`) at session start.
+
+Resolved in this commit. See fix(reliability) commit for details.
+
 ## SDK runner: treat 401 auth-credential errors as transient (token-rotation race) (2026-06-04)
 
 The Claude Max OAuth token in `~/.claude/.credentials.json` has an ~8h

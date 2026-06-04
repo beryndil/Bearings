@@ -17,12 +17,14 @@ import json
 import logging
 from typing import Any
 
+import aiosqlite
 from claude_agent_sdk import ClaudeAgentOptions
 
 from bearings.agent.events import ErrorEvent, TodoWriteUpdate
 from bearings.agent.options import OptionsKwargs
 from bearings.agent.runner import RunnerStatus, SessionRunner
 from bearings.agent.session import AgentSession, SessionStateError
+from bearings.db import sessions as sessions_db
 
 _log = logging.getLogger(__name__)
 
@@ -37,6 +39,10 @@ async def _enter_error_state(
     Defensive against the session already being in a terminal state
     (e.g. close() raced with a fatal SDK error) — silently absorbs
     SessionStateError so we still emit the wire frame for any live subscriber.
+
+    Also writes ``error_pending = True`` to the DB so the sidebar error
+    indicator survives page reloads (the in-memory ``mark_error`` alone is
+    not durable across reconnects).
     """
     _log.warning(
         "session %s: agent loop fatal — %s: %s",
@@ -47,6 +53,13 @@ async def _enter_error_state(
     )
     with contextlib.suppress(SessionStateError):
         await session.mark_error(str(exc))
+    # Persist error_pending = True to DB so the red dot survives page reload.
+    # Use the session's own DB connection; suppress failures so DB hiccups
+    # never shadow the real error.
+    db: aiosqlite.Connection | None = getattr(session.config, "db", None)
+    if db is not None:
+        with contextlib.suppress(Exception):
+            await sessions_db.set_error_pending(db, session.config.session_id, True)
     await runner.emit(
         ErrorEvent(
             session_id=session.config.session_id,

@@ -37,7 +37,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import time
+from collections.abc import Callable
 
 from bearings.agent.runner import (
     RunnerFactory,
@@ -52,6 +54,38 @@ from bearings.config.constants import (
     IDLE_REAP_THRESHOLD_S,
 )
 from bearings.web.routes.ws_sessions import SessionsBroadcaster
+
+_log = logging.getLogger(__name__)
+
+
+def _make_task_exception_logger(session_id: str) -> Callable[[asyncio.Task[None]], None]:
+    """Return a ``done_callback`` that logs unhandled exceptions from a
+    supervisor task.
+
+    ``run_session_loop`` wraps the SDK client lifecycle in a try/except and
+    calls ``_enter_error_state`` on caught errors.  But any exception raised
+    *before* that try block (e.g. in ``_to_sdk_options`` or
+    ``dataclasses.replace``) becomes an unhandled task exception — Python
+    logs it to stderr only, which is unreadable when the server writes to a
+    Unix socket.  This callback captures those escapes and routes them to the
+    structlog pipeline so they appear in journald / the operator log.
+    """
+
+    def _on_done(task: asyncio.Task[None], _sid: str = session_id) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            _log.error(
+                "sdk_loop task for session %s ended with unhandled exception "
+                "%s: %s — runner is dead; next prompt will trigger respawn",
+                _sid,
+                type(exc).__name__,
+                exc,
+                exc_info=exc,
+            )
+
+    return _on_done
 
 
 class InProcessRunnerRegistry:
@@ -189,6 +223,7 @@ class InProcessRunnerRegistry:
             run_session_loop(runner, setup.session, setup.options),
             name=f"sdk_loop:{session_id}",
         )
+        task.add_done_callback(_make_task_exception_logger(session_id))
         self._supervisors[session_id] = task
 
     def _needs_respawn(self, session_id: str) -> bool:
