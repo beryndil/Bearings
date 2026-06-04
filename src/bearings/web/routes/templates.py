@@ -320,6 +320,7 @@ def _session_to_out(session: Session) -> SessionOut:
         closing_summary=session.closing_summary,
         pivot_message_id=session.pivot_message_id,
         parent_session_id=session.parent_session_id,
+        template_id=session.template_id,
     )
 
 
@@ -502,6 +503,7 @@ async def create_session_from_template(
             routing_advisor_model=merged["advisor_model"],
             routing_advisor_max_uses=merged["advisor_max_uses"],
             routing_effort_level=merged["effort_level"],
+            template_id=template_id,
         )
     except ValueError as exc:
         raise HTTPException(

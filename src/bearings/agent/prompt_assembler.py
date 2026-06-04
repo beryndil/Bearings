@@ -29,13 +29,13 @@ Layer order
     reversed-precedence tag order. Memory bodies are DB-resident;
     ``source_path`` is ``None``. Within each tag, memories are ordered
     by insertion (``id ASC``).
-5. **``template_baseline``** — not emitted in v18.  Template
-   ``system_prompt_baseline`` is copied into ``session_instructions``
-   at session-creation time
-   (``agent/templates.py`` §"system-prompt baseline flows through").
-   There is no ``template_id`` FK on the session row, so the original
-   baseline cannot be recovered.  The kind is defined here for API-shape
-   stability; the assembler never emits it.
+5. **``template_baseline``** — emitted when the session row carries a
+   ``template_id`` (item 622).  The template's ``system_prompt_baseline``
+   is resolved from the ``templates`` table and surfaced as its own
+   layer so the inspector can attribute the baked-in baseline back to the
+   template it came from.  Omitted when ``template_id`` is ``NULL`` (the
+   session was not created from a template) or when the referenced
+   template row no longer exists / has an empty baseline.
 
 Token counts
 ------------
@@ -59,6 +59,7 @@ from bearings.agent.bearings_mcp import CLOSE_SESSION_INSTRUCTION
 from bearings.db import memories as memories_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
+from bearings.db import templates as templates_db
 from bearings.db.sessions import Session
 from bearings.db.tags import Tag
 
@@ -263,6 +264,36 @@ async def _append_tag_layers(
             )
 
 
+async def _append_template_baseline_layer(
+    connection: aiosqlite.Connection,
+    row: Session,
+    layers: list[SystemPromptLayer],
+) -> None:
+    """Add layer 5 (template_baseline) when the session carries a template_id.
+
+    Resolves the referenced template's ``system_prompt_baseline`` from the
+    ``templates`` table.  Omitted (no layer appended) when ``template_id``
+    is ``None``, the template row no longer exists, or its baseline is
+    ``None`` / empty-after-strip.
+    """
+    if row.template_id is None:
+        return
+    template = await templates_db.get(connection, row.template_id)
+    if template is None or template.system_prompt_baseline is None:
+        return
+    stripped = template.system_prompt_baseline.strip()
+    if not stripped:
+        return
+    layers.append(
+        SystemPromptLayer(
+            kind=LAYER_KIND_TEMPLATE_BASELINE,
+            body=stripped,
+            token_count=_approx_tokens(stripped),
+            source_path=None,
+        )
+    )
+
+
 async def assemble_system_prompt_layers(
     connection: aiosqlite.Connection,
     session_id: str,
@@ -309,7 +340,9 @@ async def assemble_system_prompt_layers(
     ordered_tags = await tags_db.list_for_session_ordered(connection, session_id)
     await _append_tag_layers(connection, ordered_tags, layers)
 
-    # Layer 5: template_baseline (deferred — see project TODO.md).
+    # Layer 5: template_baseline — emitted when the session carries a
+    # template_id (item 622).
+    await _append_template_baseline_layer(connection, row, layers)
 
     total_tokens = sum(layer.token_count for layer in layers)
     return SystemPromptLayers(layers=layers, total_tokens=total_tokens)

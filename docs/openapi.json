@@ -3259,7 +3259,7 @@
           "sessions"
         ],
         "summary": "Get Session System Prompt",
-        "description": "Return the assembled system-prompt layer breakdown for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"System-prompt layers contract\"\n(gap-cycle-13-004).  The Inspector Instructions tab calls this to\nrender the full set of layers the agent sees \u2014 baseline, project\nCLAUDE.md walk-up, tag memories, and per-session instructions.\n\n* ``200`` \u2014 :class:`SystemPromptLayersOut` with the ordered layer\n  list and total approximate token count.\n* ``404`` \u2014 session not found.\n\nLayer kinds in response order:\n\n1. ``session_instructions`` \u2014 omitted when ``None`` or empty.\n2. ``baseline`` \u2014 always present.\n3. ``project_claude_md`` \u2014 one row per CLAUDE.md found walking up\n   from the session's ``working_dir``; omitted section when none\n   found.\n4a. ``tag_claude_md`` \u2014 one row per tag-attached CLAUDE.md; omitted\n    section when none found.\n4b. ``tag_memory`` \u2014 one row per enabled ``tag_memories`` DB row;\n    ``source_path`` is always ``null``; omitted when none found.\n\nToken counts are approximated as ``len(body) // 4``; the response\ndocuments this via ``token_count_approximate: true``.",
+        "description": "Return the assembled system-prompt layer breakdown for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"System-prompt layers contract\"\n(gap-cycle-13-004).  The Inspector Instructions tab calls this to\nrender the full set of layers the agent sees \u2014 baseline, project\nCLAUDE.md walk-up, tag memories, and per-session instructions.\n\n* ``200`` \u2014 :class:`SystemPromptLayersOut` with the ordered layer\n  list and total approximate token count.\n* ``404`` \u2014 session not found.\n\nLayer kinds in response order:\n\n1. ``session_instructions`` \u2014 omitted when ``None`` or empty.\n2. ``baseline`` \u2014 always present.\n3. ``project_claude_md`` \u2014 one row per CLAUDE.md found walking up\n   from the session's ``working_dir``; omitted section when none\n   found.\n4a. ``tag_claude_md`` \u2014 one row per tag-attached CLAUDE.md; omitted\n    section when none found.\n4b. ``tag_memory`` \u2014 one row per enabled ``tag_memories`` DB row;\n    ``source_path`` is always ``null``; omitted when none found.\n5. ``template_baseline`` \u2014 the ``system_prompt_baseline`` of the\n   template this session was instantiated from (item 622); omitted\n   when the session has no ``template_id`` or the baseline is empty.\n\nToken counts are approximated as ``len(body) // 4``; the response\ndocuments this via ``token_count_approximate: true``.",
         "operationId": "get-session-system-prompt",
         "parameters": [
           {
@@ -10747,6 +10747,17 @@
               }
             ],
             "title": "Parent Session Id"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
           },
           "tags": {
             "items": {

@@ -240,6 +240,13 @@ class Session:
     # spawn_from_reply/{msg_id}. NULL on every other session row.
     pivot_message_id: str | None
     parent_session_id: str | None
+    # Template back-pointer (item 622). Set by POST
+    # /api/templates/{id}/instantiate to the templates row this session
+    # was created from so the system-prompt assembler can recover the
+    # template's ``system_prompt_baseline`` and emit it as the
+    # ``template_baseline`` layer. NULL on every session not created from
+    # a template (and on rows that predate the column).
+    template_id: int | None
 
     def __post_init__(self) -> None:
         _validate_session_required(self.id, self.title, self.working_dir, self.model)
@@ -272,6 +279,7 @@ async def create(
     routing_effort_level: str = "auto",
     pivot_message_id: str | None = None,
     parent_session_id: str | None = None,
+    template_id: int | None = None,
 ) -> Session:
     """Insert a fresh session row.
 
@@ -287,6 +295,10 @@ async def create(
     ``pivot_message_id`` / ``parent_session_id`` are set only by the
     spawn-from-reply route (gap-cycle-03-007); all other callers leave
     them ``None``.
+
+    ``template_id`` (item 622) is set only by the template-instantiate
+    route (``POST /api/templates/{id}/instantiate``); all other callers
+    leave it ``None``.
     """
     timestamp = now_iso()
     session_id = new_id(SESSION_ID_PREFIX)
@@ -321,15 +333,16 @@ async def create(
         routing_effort_level=routing_effort_level,
         pivot_message_id=pivot_message_id,
         parent_session_id=parent_session_id,
+        template_id=template_id,
     )
     await connection.execute(
         "INSERT INTO sessions "
         "(id, kind, title, description, session_instructions, working_dir, model, "
         "permission_mode, max_budget_usd, checklist_item_id, "
         "routing_advisor_model, routing_advisor_max_uses, routing_effort_level, "
-        "pivot_message_id, parent_session_id, "
+        "pivot_message_id, parent_session_id, template_id, "
         "created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             session_id,
             kind,
@@ -346,6 +359,7 @@ async def create(
             routing_effort_level,
             pivot_message_id,
             parent_session_id,
+            template_id,
             timestamp,
             timestamp,
         ),
@@ -407,7 +421,9 @@ async def import_session(
 
     ``checklist_item_id`` is always ``None`` on import — the FK target
     (a ``checklist_items`` row) does not exist in the destination
-    instance.  The routing-decision columns
+    instance.  ``template_id`` is likewise always ``None`` on import —
+    the source template row does not exist in the destination.  The
+    routing-decision columns
     (``routing_advisor_model``, ``routing_advisor_max_uses``,
     ``routing_effort_level``) are set to their schema defaults (``NULL``,
     ``5``, ``'auto'``) because ``SessionOut`` does not carry them.
@@ -447,6 +463,7 @@ async def import_session(
         routing_effort_level="auto",
         pivot_message_id=None,
         parent_session_id=None,
+        template_id=None,
     )
     await connection.execute(
         "INSERT INTO sessions "
@@ -1354,7 +1371,7 @@ _SELECT_SESSION_COLUMNS = (
     "checklist_item_id, created_at, updated_at, last_viewed_at, last_completed_at, "
     "closed_at, closing_summary, "
     "routing_advisor_model, routing_advisor_max_uses, routing_effort_level, "
-    "pivot_message_id, parent_session_id "
+    "pivot_message_id, parent_session_id, template_id "
     "FROM sessions"
 )
 
@@ -1377,7 +1394,8 @@ _SELECT_SESSION_COLUMNS_DISTINCT = (
     "sessions.closing_summary, "
     "sessions.routing_advisor_model, sessions.routing_advisor_max_uses, "
     "sessions.routing_effort_level, "
-    "sessions.pivot_message_id, sessions.parent_session_id FROM sessions"
+    "sessions.pivot_message_id, sessions.parent_session_id, "
+    "sessions.template_id FROM sessions"
 )
 
 
@@ -1427,6 +1445,7 @@ def _row_to_session(row: aiosqlite.Row | tuple[object, ...]) -> Session:
         routing_effort_level=str(row[25]),
         pivot_message_id=_opt_str(row[26]),
         parent_session_id=_opt_str(row[27]),
+        template_id=_opt_int(row[28]),
     )
 
 

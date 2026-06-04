@@ -222,6 +222,7 @@ def _to_out(
         paired_parent_title=paired_parent_title,
         pivot_message_id=session.pivot_message_id,
         parent_session_id=session.parent_session_id,
+        template_id=session.template_id,
         tags=tags if tags is not None else [],
     )
 
@@ -1247,6 +1248,9 @@ async def get_session_system_prompt(
         section when none found.
     4b. ``tag_memory`` — one row per enabled ``tag_memories`` DB row;
         ``source_path`` is always ``null``; omitted when none found.
+    5. ``template_baseline`` — the ``system_prompt_baseline`` of the
+       template this session was instantiated from (item 622); omitted
+       when the session has no ``template_id`` or the baseline is empty.
 
     Token counts are approximated as ``len(body) // 4``; the response
     documents this via ``token_count_approximate: true``.

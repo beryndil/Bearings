@@ -148,6 +148,13 @@ _ADDED_COLUMNS: Final[tuple[tuple[str, str, str], ...]] = (
     # data captured before this column landed; treated as 0 by COALESCE in
     # aggregation queries per analytics spec §4.1).
     ("messages", "cache_creation_tokens", "INTEGER"),
+    # item 622: template_id FK back-pointer on sessions. FK constraints
+    # cannot be added via ALTER TABLE in SQLite (same constraint that
+    # forced pivot_message_id/parent_session_id to ship as plain TEXT
+    # here), so this lands as a plain INTEGER for existing DBs; schema.sql
+    # carries the REFERENCES templates(id) ON DELETE SET NULL clause for
+    # fresh DBs. Existing rows get NULL (no template recoverable).
+    ("sessions", "template_id", "INTEGER"),
 )
 
 

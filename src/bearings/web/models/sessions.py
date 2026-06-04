@@ -109,6 +109,9 @@ class SessionOut(BaseModel):
     # session that was not created via spawn_from_reply.
     pivot_message_id: str | None = None
     parent_session_id: str | None = None
+    # Template back-pointer (item 622). The templates row this session was
+    # instantiated from, or null when not created from a template.
+    template_id: int | None = None
     # Embedded tag list (PERF-NET-01). Populated by GET /api/sessions via a
     # single batch JOIN; empty list for sessions with no tags. Callers should
     # treat an absent field the same as an empty list for back-compat; the

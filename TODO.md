@@ -399,13 +399,18 @@ codebase is the non-compliant party.~~
 
 ~~Resolved by commit `0e59f0a8` (fix(quality-gates): pytest smoke, xenon CC, knip). xenon exits 0 cleanly.~~
 
-## gap-cycle-13-004: template_baseline layer deferred
+~~## gap-cycle-13-004: template_baseline layer deferred~~
 
-`GET /api/sessions/{id}/system_prompt` defines `template_baseline` as a layer kind
+~~`GET /api/sessions/{id}/system_prompt` defines `template_baseline` as a layer kind
 but never emits it. Template `system_prompt_baseline` is baked into
 `session_instructions` at session-creation time and there is no `template_id` FK
 on the session row to recover the original text. Emit `template_baseline` when
-sessions gain a `template_id` column.
+sessions gain a `template_id` column.~~
+
+~~Resolved by item 622 (`feat(db,api): template_id FK + template_baseline layer`):
+`sessions.template_id` FK added (schema.sql + `_ADDED_COLUMNS` ALTER for legacy
+DBs), set by `POST /api/templates/{id}/instantiate`, and the assembler now emits
+the `template_baseline` layer when it is non-null.~~
 
 ~~## feature-13-010 deferred: x-sunset extension + Sunset header middleware~~
 

@@ -91,9 +91,19 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- session id so the UI can render the sidebar back-link.
     pivot_message_id         TEXT,
     parent_session_id        TEXT,
+    -- template_id (item 622) — the templates row this session was
+    -- instantiated from, set by POST /api/templates/{id}/instantiate so
+    -- the system-prompt assembler can recover the original
+    -- ``system_prompt_baseline`` and emit it as the ``template_baseline``
+    -- layer. NULL on every session not created from a template; existing
+    -- rows (added via the connection.py ALTER pass) get NULL. ON DELETE
+    -- SET NULL so deleting the template leaves the session intact, just
+    -- without the recoverable baseline.
+    template_id              INTEGER,
     FOREIGN KEY (checklist_item_id) REFERENCES checklist_items(id) ON DELETE SET NULL,
     FOREIGN KEY (pivot_message_id)  REFERENCES messages(id)        ON DELETE SET NULL,
-    FOREIGN KEY (parent_session_id) REFERENCES sessions(id)        ON DELETE SET NULL
+    FOREIGN KEY (parent_session_id) REFERENCES sessions(id)        ON DELETE SET NULL,
+    FOREIGN KEY (template_id)       REFERENCES templates(id)       ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_kind_updated_at
