@@ -30,8 +30,13 @@ Real fix: in the agent runner's SDK error handling, classify `401
 Invalid authentication credentials` as transient/retryable — re-read
 `~/.claude/.credentials.json` (or trigger SDK credential reload) and
 retry the request once before surfacing any error. Add a regression test
-that simulates a mid-session token swap. Not yet scheduled into the
-master checklist — promote to a checklist item when picked up.
+that simulates a mid-session token swap.
+
+**Scheduled** into the master checklist (id
+`0f6e4006fb1d4340bda9983af3432064`) as item **625** on 2026-06-04. Per
+TODO discipline, scheduled work lives in the checklist, not here — this
+entry is retained only as the discovery record; track the fix on item
+625.
 
 ~~## load_schema executescript ordering bug — legacy DB server restart failure (2026-05-09)~~
 
