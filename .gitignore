@@ -73,3 +73,6 @@ output/playwright/
 
 # Orchestrator scratch space (v1 ship-readiness loop)
 .v1-ship/
+
+# Per-session Claude Code state (executor/orchestrator scratch)
+.claude/

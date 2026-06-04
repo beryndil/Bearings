@@ -7,6 +7,52 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-06-04
+
+### Added
+
+- **feat(db,api): template_id FK + template_baseline prompt layer (item 622):**
+  `sessions` table gains a nullable `template_id INTEGER REFERENCES session_templates(id)
+  ON DELETE SET NULL` column (migration adds the column + index; schema.sql updated).
+  A new `template_baseline` prompt-layer type is inserted ahead of `session_instructions`
+  in the system-prompt stack so template-sourced context is applied before per-session
+  overrides. `GET /api/sessions/{id}` and the sessions-list response now include
+  `template_id`. Tests updated to cover FK constraint and baseline ordering.
+
+- **feat(ui): theme persistence via server preferences API (item 621):**
+  `saveTheme()` fires a fire-and-forget `PATCH /api/preferences` after the local
+  `localStorage` write so the selected theme survives multi-client sessions.
+  New `syncThemeToServer()` wrapper in `persistence.ts`; `lastServerSyncOk` state
+  field + `acknowledgeServerSyncStatus()` in `store.svelte.ts`; stacked
+  server-sync-failed toast in `ThemeProvider.svelte` uses the `THEME_STRINGS`
+  i18n table. Bundle rebuilt.
+
+### Fixed
+
+- **fix(routes): route-verb renames + broadcaster wire (CCW-3, item 617):**
+  Two operation IDs promoted to approved HTTP-verb prefixes:
+  `compare-checkpoint` → `get-checkpoint-compare` (checkpoints router);
+  `suggest-session-title` → `preview-session-title` (sessions router);
+  matching route paths updated (`/suggest_title` → `/preview_title`).
+  `create_session`, `patch_session`, `patch_session_model`, `close_session`,
+  `reopen_session`, and `delete_session` now call the `SessionsBroadcaster`
+  after each mutation (CCW-3 contract). `CheckpointGutter` unused imports
+  removed; stale `svelte-ignore` comments dropped. `openapi.json` regenerated
+  (152 operations). Bundle rebuilt.
+
+- **fix(tests): operation-ID count updated 148→152 (item 619):**
+  `test_preflight_openapi_match.py` constant and count-history docstring updated
+  to match the 4 additional operations landed in item 617.
+
+- **fix(tests): diverge-path fake-base-URL corrected in diff-probe suite (item 618):**
+  `tests/test_diff_probe.py` diverge-path fixtures used a malformed base URL that
+  caused false failures under strict URL validation; corrected to a well-formed
+  `http://testserver` origin.
+
+- **fix(tests): rename suggest_title → preview_title in test suite (item 620):**
+  Completes the route rename from item 617 — test function names and endpoint path
+  strings updated to `preview_title` throughout `tests/test_sessions_api.py`.
+
 ### Changed
 
 - **chore(deps): bump claude-agent-sdk to 0.2.88 + update model display labels to Claude 4.8:**
@@ -1383,5 +1429,6 @@ uv run python scripts/cutover_smoke.py --skip-e2e  # fast iteration
 uv run python scripts/cutover_smoke.py --json      # machine-readable
 ```
 
+[1.1.0]: https://github.com/Beryndil/Bearings/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Beryndil/Bearings/releases/tag/v1.0.0
 [0.18.0]: https://github.com/Beryndil/Bearings/tree/v1-rebuild
