@@ -2407,7 +2407,7 @@
           "sessions"
         ],
         "summary": "List Sessions",
-        "description": "List sessions filtered by ``kind`` + ``include_closed`` + tag filters (paginated).\n\n**Pagination** (PERF-BUG-001 + PERF-BUG-005): responses are now pages\nrather than full-table dumps. The wire shape is\n``{sessions: [...], total: <int>, next_offset: <int|null>}``.\n\n* ``limit`` \u2014 rows per page (default :data:`SESSIONS_DEFAULT_PAGE_SIZE`,\n  max :data:`SESSIONS_MAX_PAGE_SIZE`). Pass ``?limit=500`` for a large\n  snapshot; even at the max the payload is bounded to ~500 rows.\n* ``offset`` \u2014 zero-based row skip; ``0`` returns the first page.\n* ``next_offset`` \u2014 ``offset`` value for the next page; ``null`` when all\n  rows have been delivered.\n* ``total`` \u2014 total rows matching the filter (irrespective of pagination).\n\n**Filter shapes** (unchanged from the pre-pagination surface):\n\n* ``tag_ids`` \u2014 legacy flat OR (back-compat). Returns sessions\n  attached to **at least one** of the listed tags regardless of\n  class. Repeat the parameter for multi-select.\n* ``tag_ids_project`` / ``tag_ids_severity`` / ``tag_ids_other`` \u2014\n  three-section faceted filter from the tag-class feature. OR\n  within each class; AND across classes. An omitted (or empty)\n  section means \"no constraint from this class,\" NOT \"exclude\n  everything\" \u2014 the empty-section state lets the filter panel\n  render an empty section without blanking out results.\n\nAll four can be combined; each is an additional AND constraint at\nthe SQL layer (legacy ``tag_ids`` joins; per-class params use\ncorrelated EXISTS subqueries). A frontend that only uses the new\nsurface should leave ``tag_ids`` empty.\n\n``severity_none=true`` activates the \"No severity\" synthetic filter\n(gap-cycle-18-003): returns sessions that have no severity-class tag\nattached. When combined with ``tag_ids_severity``, the two compose\nOR within the severity section (sessions with no severity OR sessions\nmatching the listed severity ids).",
+        "description": "List sessions filtered by ``kind`` + ``include_closed`` + tag filters (paginated).\n\n``limit`` / ``offset`` / ``next_offset`` implement the page contract\n(PERF-BUG-001 + PERF-BUG-005). ``tag_ids`` is the legacy flat OR filter;\n``tag_ids_project`` / ``tag_ids_severity`` / ``tag_ids_other`` are the\nthree-section faceted filter.  ``severity_none=true`` adds the \"No\nseverity\" synthetic filter (gap-cycle-18-003).",
         "operationId": "list-sessions",
         "parameters": [
           {
@@ -2580,7 +2580,7 @@
           "sessions"
         ],
         "summary": "Create Session",
-        "description": "Create a session row + attach tags atomically.\n\nPer arch \u00a71.1.5 the v1 session-create surface \u2014 the closing-sweep\naudit (2026-05-02) found this endpoint missing despite the master\nchecklist marking the item DONE.\n\nValidation precedence:\n\n* ``kind`` must be in :data:`KNOWN_SESSION_KINDS` \u2192 422 otherwise.\n* Every id in ``tag_ids`` must reference an existing tag row \u2192 404\n  with the missing list otherwise. Tag existence is checked BEFORE\n  :func:`sessions_db.create` so a bad tag id never leaves an\n  orphaned session.\n* ``working_dir`` is required. If omitted, the first tag (in order)\n  with a non-null ``working_dir`` is used. Returns 422 if both the\n  payload field is None/omitted and no tag provides a directory.\n* Deeper field invariants (model name format, permission-mode enum,\n  title bounds beyond Pydantic's) raise ``ValueError`` from\n  :class:`Session.__post_init__` and surface as 422.\n\nReturns 201 with ``Location: /api/sessions/<id>``.",
+        "description": "Create a session row + attach tags atomically.\n\n``kind`` must be in :data:`KNOWN_SESSION_KINDS`.  Every id in\n``tag_ids`` must reference an existing tag row (checked before INSERT).\n``working_dir`` is resolved from the first tag with a non-null\n``working_dir`` when not supplied explicitly.  Returns 201 +\n``Location: /api/sessions/<id>``.",
         "operationId": "create-session",
         "requestBody": {
           "required": true,
@@ -2658,12 +2658,46 @@
           }
         }
       },
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session",
+        "description": "Cascade-delete a session row + messages + checkpoints.\n\nExplicitly NULLs ``chat_session_id`` on any checklist items that\nreferenced it (belt-and-suspenders on top of ON DELETE SET NULL).",
+        "operationId": "delete-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "sessions"
         ],
         "summary": "Patch Session",
-        "description": "Full-field PATCH for a session.\n\nAccepts any subset of ``title``, ``description``, ``max_budget_usd``,\n``session_instructions``, and ``tag_ids`` \u2014 only supplied fields are\nwritten (true PATCH semantics via ``model_fields_set``).  When\n``tag_ids`` is present the session's tag set is replaced wholesale.\n\nGap: gap-cycle-10-001 (SessionEdit modal).",
+        "description": "Full-field PATCH for a session (gap-cycle-10-001).\n\nAccepts any subset of ``title``, ``description``, ``max_budget_usd``,\n``session_instructions``, and ``tag_ids``.  When ``tag_ids`` is present\nthe session's tag set is replaced wholesale.",
         "operationId": "patch-session",
         "parameters": [
           {
@@ -2708,40 +2742,6 @@
             }
           }
         }
-      },
-      "delete": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Delete Session",
-        "description": "Cascade-delete a session row + messages + checkpoints.\n\nAfter removing the session, explicitly NULLs ``chat_session_id`` on\nany checklist items that referenced it.  The schema carries an ``ON\nDELETE SET NULL`` FK that handles this automatically when foreign-key\nenforcement is active, but that enforcement is opt-in per connection;\nthe explicit call here is a belt-and-suspenders guarantee.",
-        "operationId": "delete-session",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/sessions/{session_id}/close": {
@@ -2750,7 +2750,7 @@
           "sessions"
         ],
         "summary": "Close Session",
-        "description": "Stamp ``closed_at`` so the prompt-endpoint returns 409 on next POST.\n\nOnly session kinds in :data:`~bearings.config.constants.CLOSEABLE_SESSION_KINDS`\nsupport the close/reopen lifecycle.  Checklist sessions are long-lived and\nnot subject to this lifecycle (per ``docs/behavior/checklists.md``); a\n``POST /close`` on one returns 422 to prevent the inconsistent\n``(kind='checklist', closed_at IS NOT NULL)`` row state.",
+        "description": "Stamp ``closed_at`` (only for kinds in :data:`CLOSEABLE_SESSION_KINDS`).\n\nReturns 422 for checklist sessions (not subject to the close/reopen\nlifecycle per ``docs/behavior/checklists.md``).",
         "operationId": "close-session",
         "parameters": [
           {
@@ -2763,165 +2763,6 @@
             }
           }
         ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/model": {
-      "patch": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Patch Session Model",
-        "description": "Swap the session's executor model (spec \u00a77; arch \u00a71.1.5).\n\nPersists the new model name on the session row, then recycles the\nlive SDK supervisor for that session via\n:meth:`InProcessRunnerRegistry.recycle`. The Claude CLI bakes\n``--model`` in at process spawn \u2014 there is no in-band control\nmessage to swap models on a running subprocess \u2014 so the live\nforward reduces to \"tear the subprocess down and let the next\nprompt respawn it.\" The ring buffer survives the recycle (the\nrunner stays in ``_runners``), so the prior turn's deltas remain\navailable for replay; only the SDK worker bound to the old model\nis torn down. The next prompt arriving at this session triggers\nthe registry's reap-recovery branch, which re-spawns\n``run_session_loop`` with a freshly-bootstrapped\n:class:`AgentSession` reading the just-updated ``model`` column.\n\n422 on unknown model names; the validator delegates to\n:func:`sessions_db._is_known_model_name` so the alphabet stays in\none place.",
-        "operationId": "patch-session-model",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionModelUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/permission_mode": {
-      "patch": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Patch Session Permission Mode",
-        "description": "Swap the session's permission mode mid-session (item 3.3).\n\nDB-only today: persists the new mode on the session row so the\nrunner picks it up on the next turn. ``None`` clears the column,\nletting the runner fall back to the profile default.\n\n422 on unknown mode strings (validated against\n:data:`KNOWN_SDK_PERMISSION_MODES`); 404 when the session is absent.",
-        "operationId": "patch-session-permission-mode",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionPermissionModeUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/pinned": {
-      "patch": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Patch Session Pinned",
-        "description": "Pin or unpin a session row via ``PATCH /api/sessions/{id}/pinned``.\n\n``{pinned: true}`` pins the row; ``{pinned: false}`` unpins it.\nIdempotent \u2014 setting the same value twice is a no-op. Returns the\nupdated session row. 404 when the session is absent.",
-        "operationId": "patch-session-pinned",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SessionPinnedUpdate"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -2989,14 +2830,14 @@
         }
       }
     },
-    "/api/sessions/{session_id}/viewed": {
-      "post": {
+    "/api/sessions/{session_id}/model": {
+      "patch": {
         "tags": [
           "sessions"
         ],
-        "summary": "Update Session Viewed",
-        "description": "Stamp ``last_viewed_at`` to now; broadcast the upsert.\n\nCalled by the frontend whenever the user selects a sidebar row or\nrefocuses the browser tab while a row is already selected. The\nbroadcast clears the unviewed amber dot on every other open tab /\nwindow within a single WebSocket tick.\n\n- ``404`` \u2014 session not found.\n- ``200`` \u2014 updated session row with a fresh ``last_viewed_at``.",
-        "operationId": "mark-session-viewed",
+        "summary": "Patch Session Model",
+        "description": "Swap the session's executor model (spec \u00a77; arch \u00a71.1.5).\n\nPersists the new model name on the session row, then recycles the\nlive SDK supervisor via :meth:`InProcessRunnerRegistry.recycle`.\n422 on unknown model names.",
+        "operationId": "patch-session-model",
         "parameters": [
           {
             "name": "session_id",
@@ -3008,6 +2849,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionModelUpdate"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -3032,14 +2883,388 @@
         }
       }
     },
+    "/api/sessions/{session_id}/permission_mode": {
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Patch Session Permission Mode",
+        "description": "Swap the session's permission mode mid-session (item 3.3).\n\n``None`` clears the column; the runner falls back to the profile\ndefault on next boot.  422 on unknown mode strings.",
+        "operationId": "patch-session-permission-mode",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionPermissionModeUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/pinned": {
+      "patch": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Patch Session Pinned",
+        "description": "Pin or unpin a session row.  Idempotent; 404 when absent.",
+        "operationId": "patch-session-pinned",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionPinnedUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/prompt": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Prompt Session",
+        "description": "Inject a user-role prompt into a session's queue.\n\nPer ``docs/behavior/prompt-endpoint.md`` \u00a7\"202 semantics\" the success\nresponse is 202 Accepted with ``{queued: true, session_id: <id>}``.",
+        "operationId": "prompt-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptAck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/stop": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Stop Session Turn",
+        "description": "Ask the runner to interrupt the current in-flight turn.\n\nIdempotent \u2014 returns 204 even when no turn is running.  404 when\nno session row exists.  503 when the runner registry is not wired.",
+        "operationId": "stop-session-turn",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}/recover": {
       "post": {
         "tags": [
           "sessions"
         ],
         "summary": "Resume Session",
-        "description": "User-driven recovery from ERROR state.\n\nClears the ``error_pending`` flag in the DB and triggers a runner\nrespawn so the next user prompt can proceed. Per\n``docs/behavior/chat.md`` \u00a7\"Error states\" and ``TODO.md`` \u00a7\"POST\n/api/sessions/{id}/recover HTTP route\".\n\n- ``404`` \u2014 session not found.\n- ``200`` \u2014 session row returned with ``error_pending=False``; the\n  runner respawn is a side-effect (transparent to the caller).",
+        "description": "User-driven recovery from ERROR state.\n\nClears ``error_pending`` and triggers a runner respawn so the next\nprompt can proceed.  Per ``docs/behavior/chat.md`` \u00a7\"Error states\".",
         "operationId": "recover-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/regenerate": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Regenerate Session",
+        "description": "Re-enqueue the latest user prompt.\n\n404 when the session is missing or has no user messages.  409 on\nclosed session.  429 on rate limit.  Returns 202 mirror of the\nprompt endpoint's ack.",
+        "operationId": "regenerate-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptAck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/regenerate_from/{message_id}": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Regenerate From Message",
+        "description": "Truncate the transcript to the pivot user message and re-queue it.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Regenerate from here\" (gap-cycle-03-006).\n``message_id`` must name an assistant-role turn; the preceding user\nmessage becomes the re-queued content.",
+        "operationId": "regenerate-session-from-message",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromptAck"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/preview_title": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Preview Session Title",
+        "description": "Preview a generated title for a session based on its conversation excerpt (T1-03).\n\nFetches the last :data:`SUGGEST_TITLE_MESSAGE_LIMIT` messages and sends a\nshort excerpt to the Claude CLI.  ``app.state.title_suggester`` overrides\nthe subprocess call in tests.  Broadcasts ``session_upsert`` after (CCW-3).",
+        "operationId": "preview-session-title",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestTitleOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/viewed": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Update Session Viewed",
+        "description": "Stamp ``last_viewed_at`` to now; broadcast the upsert.\n\nClears the unviewed amber dot on every other open tab within one WS tick.\n404 when the session is absent.",
+        "operationId": "mark-session-viewed",
         "parameters": [
           {
             "name": "session_id",
@@ -3081,7 +3306,7 @@
           "sessions"
         ],
         "summary": "Get Paired Chat Info Route",
-        "description": "Fetch paired-chat metadata for a chat session.\n\nPer ``docs/behavior/paired-chats.md`` \u00a7\"From the chat side\" \u2014 when a\nchat session is paired to a checklist item, the breadcrumb shows\n``<parent checklist title> > <item label>``. This endpoint returns\nthose two fields when a pairing exists, or ``None`` when the chat is\nunpaired.\n\nContract (mirrors sibling endpoints ``/messages`` and ``/export``):\n\n* ``200`` with ``{parent_title, item_label}`` \u2014 session exists and is\n  paired to a checklist item.\n* ``200`` with ``null`` \u2014 session exists but carries no pairing\n  (``checklist_item_id`` is ``NULL``).  The UI reads the ``null`` value\n  and hides the breadcrumb chip.\n* ``404`` \u2014 no session row matches ``session_id``.  Callers can\n  distinguish \"session missing\" from \"session unpaired\" via this\n  status code; previously both collapsed into 200/null (BUG-NET-21).",
+        "description": "Fetch paired-chat metadata (parent title + item label) for a chat session.\n\nPer ``docs/behavior/paired-chats.md`` \u00a7\"From the chat side\".\nReturns ``null`` when the session is unpaired; 404 when the session is absent.",
         "operationId": "get-session-paired-chat-info",
         "parameters": [
           {
@@ -3142,7 +3367,7 @@
           "sessions"
         ],
         "summary": "List Session Tool Calls",
-        "description": "Return persisted tool-call rows for the listed message ids.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Tool-call hydration contract\" the\nconversation pane calls this endpoint once per fetched message page,\nalongside :func:`list_messages`, to populate tool-work drawer rows\non assistant turns whose events are no longer in the ring buffer.\n\n* ``200`` \u2014 list of :class:`ToolCallOut` (possibly empty).\n* ``404`` \u2014 session not found.\n\n``?message_ids=ID1&message_ids=ID2`` narrows the result to tool calls\nattached to the listed assistant message ids. Omitting the parameter\nreturns all tool calls for the session (useful for export / admin).\nTool calls are returned in insertion order (the order they executed\nwithin each turn).",
+        "description": "Return persisted tool-call rows for the listed message ids.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Tool-call hydration contract\".\nOmitting ``message_ids`` returns all tool calls for the session.",
         "operationId": "list-session-tool-calls",
         "parameters": [
           {
@@ -3208,7 +3433,7 @@
           "sessions"
         ],
         "summary": "Get Session Todos",
-        "description": "Return the most-recent persisted ``TodoWrite`` payload for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"LiveTodos hydration contract\" the\nconversation pane calls this once on session open to seed the\n``LiveTodos`` panel before any WebSocket event arrives.\n\n* ``200`` with :class:`SessionTodosOut` \u2014 ``todos_json`` is the\n  serialised ``todos`` array from the most-recent ``TodoWrite``\n  call's input, identical in shape to the ``todo_write_update``\n  WebSocket event's ``todos_json`` field.\n* ``200`` with ``null`` \u2014 session exists but has never emitted a\n  ``TodoWrite`` call.\n* ``404`` \u2014 session not found.\n\nReturning ``null`` (rather than ``404``) for a session with no\ntodos avoids the client having to distinguish \"session missing\"\nfrom \"no todos yet\" \u2014 the UI reads ``null`` and leaves the panel\nhidden.",
+        "description": "Return the most-recent persisted ``TodoWrite`` payload for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"LiveTodos hydration contract\".\nReturns ``null`` (200) when the session exists but has never emitted\na ``TodoWrite`` call; 404 when the session is absent.",
         "operationId": "get-session-todos",
         "parameters": [
           {
@@ -3259,7 +3484,7 @@
           "sessions"
         ],
         "summary": "Get Session System Prompt",
-        "description": "Return the assembled system-prompt layer breakdown for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"System-prompt layers contract\"\n(gap-cycle-13-004).  The Inspector Instructions tab calls this to\nrender the full set of layers the agent sees \u2014 baseline, project\nCLAUDE.md walk-up, tag memories, and per-session instructions.\n\n* ``200`` \u2014 :class:`SystemPromptLayersOut` with the ordered layer\n  list and total approximate token count.\n* ``404`` \u2014 session not found.\n\nLayer kinds in response order:\n\n1. ``session_instructions`` \u2014 omitted when ``None`` or empty.\n2. ``baseline`` \u2014 always present.\n3. ``project_claude_md`` \u2014 one row per CLAUDE.md found walking up\n   from the session's ``working_dir``; omitted section when none\n   found.\n4a. ``tag_claude_md`` \u2014 one row per tag-attached CLAUDE.md; omitted\n    section when none found.\n4b. ``tag_memory`` \u2014 one row per enabled ``tag_memories`` DB row;\n    ``source_path`` is always ``null``; omitted when none found.\n5. ``template_baseline`` \u2014 the ``system_prompt_baseline`` of the\n   template this session was instantiated from (item 622); omitted\n   when the session has no ``template_id`` or the baseline is empty.\n\nToken counts are approximated as ``len(body) // 4``; the response\ndocuments this via ``token_count_approximate: true``.",
+        "description": "Return the assembled system-prompt layer breakdown for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"System-prompt layers contract\"\n(gap-cycle-13-004).  404 when the session is absent.",
         "operationId": "get-session-system-prompt",
         "parameters": [
           {
@@ -3302,7 +3527,7 @@
           "sessions"
         ],
         "summary": "Get Session Tokens",
-        "description": "Return aggregated lifetime token totals for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Token totals hydration contract\"\n(gap-cycle-13-003), the conversation pane calls this once on\nsession open alongside ``listMessagesPage`` / ``hydrateToolCalls`` /\n``hydrateTodos`` so the Inspector Metrics tab and the header\ndollar/token meter paint non-zero totals on first render instead of\nstarting from zero and waiting for WebSocket replay.\n\n* ``200`` \u2014 :class:`TokenTotalsOut` with ``input``, ``output``,\n  ``cache_read``, and ``cache_creation`` summed across all\n  assistant-role message rows for the session.\n* ``404`` \u2014 session not found.\n\nReturns ``0`` for all fields when the session exists but has no\nassistant turns yet (newly created session, first prompt not yet\ncompleted).",
+        "description": "Return aggregated lifetime token totals for a session.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Token totals hydration contract\"\n(gap-cycle-13-003).  Returns ``0`` for all fields when no assistant\nturns exist yet.  404 when the session is absent.",
         "operationId": "get-session-tokens",
         "parameters": [
           {
@@ -3345,7 +3570,7 @@
           "sessions"
         ],
         "summary": "Export Session",
-        "description": "Snapshot-export a session to a self-contained JSON blob.\n\nPer ``docs/behavior/sessions.md`` \u00a7\"Export contract\":\n\n* ``200`` \u2014 JSON body conforming to :class:`SessionExport`; the\n  ``Content-Disposition`` header carries a suggested download\n  filename ``<slug>.json`` derived from the session title.\n* ``404`` \u2014 session not found.\n\nClosed sessions are exportable \u2014 ``closed_at`` being set does not\nblock this endpoint (contrast with the prompt endpoint which returns\n409 on closed sessions).\n\nThe export body contains:\n\n* ``session`` \u2014 session row (``SessionOut`` shape).\n* ``messages`` \u2014 every message in chronological order.\n* ``tool_calls`` \u2014 raw SDK transcript entries (opaque blobs).\n* ``checkpoints`` \u2014 every checkpoint chronologically.\n* ``attachments`` \u2014 always ``[]`` in v0.18.x (no per-session upload\n  linking table yet).",
+        "description": "Snapshot-export a session to a self-contained JSON blob.\n\nPer ``docs/behavior/sessions.md`` \u00a7\"Export contract\".  Closed\nsessions are exportable.  The ``Content-Disposition`` header\ncarries ``<slug>.json`` derived from the session title.",
         "operationId": "export-session",
         "parameters": [
           {
@@ -3386,7 +3611,7 @@
           "sessions"
         ],
         "summary": "Import Session",
-        "description": "Restore a session from an export blob.\n\nPer ``docs/behavior/sessions.md`` \u00a7\"Import contract\":\n\n* ``201`` \u2014 session row (plus messages, tool_calls, checkpoints)\n  inserted; ``Location`` header points at the new row.\n* ``409`` \u2014 ``session_id`` already exists AND ``force=false``.\n  Pass ``?force=true`` to delete the existing row first and\n  reimport.\n* ``422`` \u2014 body does not parse as ``SessionExport`` or a field\n  fails DB-layer validation (e.g. unknown model name, bad kind).\n\n``checklist_item_id`` is cleared on import \u2014 the FK target\n(``checklist_items``) does not exist in the destination instance.\nRouting-decision columns default to ``auto/5/null`` because\n``SessionOut`` does not carry them.",
+        "description": "Restore a session from an export blob.\n\nPer ``docs/behavior/sessions.md`` \u00a7\"Import contract\".\n409 when the session_id already exists and ``force=false``.\n``checklist_item_id`` and ``template_id`` are cleared on import.",
         "operationId": "import-session",
         "parameters": [
           {
@@ -3434,240 +3659,13 @@
         }
       }
     },
-    "/api/sessions/{session_id}/regenerate": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Regenerate Session",
-        "description": "Re-enqueue the latest user prompt for ``session_id``.\n\nPer arch \u00a71.1.5 the v1 regenerate surface \u2014 landed in the v1.1\nclosing-sweep. Semantics: the latest user-role message is replayed\nthrough :func:`dispatch_prompt`, which queues it behind any\nin-flight turn. The previous assistant turn is left in the\ntranscript; \"regenerate\" produces a new assistant turn alongside\nrather than replacing the old one.\n\nFailure modes mirror the prompt endpoint:\n\n* 404 \u2014 session missing OR session has no user messages yet to\n  regenerate from.\n* 409 \u2014 session closed (the prompt queue rejects).\n* 429 \u2014 rate limit (per-session window enforced by the same\n  limiter the prompt endpoint uses).\n\nReturns 202 with a JSON envelope echoing the queued state, mirror\nof the prompt endpoint's ack shape.",
-        "operationId": "regenerate-session",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromptAck"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/regenerate_from/{message_id}": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Regenerate From Message",
-        "description": "Truncate the transcript to the pivot user message and re-queue it.\n\nPer ``docs/behavior/chat.md`` \u00a7\"Regenerate from here\" (gap-cycle-03-006).\n\n``message_id`` must name an **assistant**-role turn in ``session_id``.\nThe endpoint:\n\n1. Validates ``message_id`` belongs to ``session_id`` with\n   ``role='assistant'``.\n2. Finds the user message immediately preceding it (the pivot).\n3. Deletes all messages with ``rowid > pivot.seq`` (the clicked\n   assistant turn plus any later messages).\n4. Re-dispatches the pivot user message content through\n   :func:`dispatch_prompt`.\n\nFailure modes:\n\n* ``404`` \u2014 session missing, message not found in session, or no\n  user message precedes the named assistant turn.\n* ``409`` \u2014 session closed (the prompt queue rejects).\n* ``422`` \u2014 ``message_id`` exists but is not an assistant turn.\n* ``429`` \u2014 rate limit (per-session window).\n\nReturns ``202`` with the same JSON envelope as the prompt endpoint.",
-        "operationId": "regenerate-session-from-message",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          },
-          {
-            "name": "message_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Message Id"
-            }
-          }
-        ],
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromptAck"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/stop": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Stop Session Turn",
-        "description": "Ask the runner to interrupt the current in-flight turn.\n\nCalls :meth:`SessionRunner.request_stop`, which sets the runner's\nstop event. The SDK loop's watcher coroutine detects the edge and\nforwards an interrupt to :meth:`AgentSession.interrupt` \u2192\n:meth:`ClaudeSDKClient.interrupt`.\n\nIdempotent: returns 204 even when no turn is running (the stop\nsignal will be picked up at the start of the next turn and cleared\nimmediately, or ignored if the queue is empty).\n\nFailure modes:\n\n* ``404`` \u2014 no session row found (prevents spurious stop on a\n  typo'd session id that has never existed).\n* ``503`` \u2014 the runner registry is not wired (misconfigured app).",
-        "operationId": "stop-session-turn",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/prompt": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Prompt Session",
-        "description": "Inject a user-role prompt into a session's queue.\n\nPer ``docs/behavior/prompt-endpoint.md`` \u00a7\"202 semantics\" the\nsuccess response is 202 Accepted with ``Location:\n/api/sessions/<id>``, body ``{queued: true, session_id: <id>}``.\nFailure modes per \u00a7\"Failure responses\": 400 (empty content / bad\nkind), 404 (session missing), 409 (closed), 422 (Pydantic\nvalidation), 429 (rate limit).\n\nThe 422 path is handled by FastAPI / Pydantic *before* this body\nruns (a non-string ``content`` or missing key surfaces as 422\nautomatically). The 400 + 404 + 409 + 429 paths are mapped from\n:class:`PromptDispatchOutcome` below.",
-        "operationId": "prompt-session",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PromptIn"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PromptAck"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/sessions/{session_id}/preview_title": {
-      "post": {
-        "tags": [
-          "sessions"
-        ],
-        "summary": "Preview Session Title",
-        "description": "Preview a generated title for a session based on its conversation excerpt (T1-03).\n\nFetches the last :data:`~bearings.config.constants.SUGGEST_TITLE_MESSAGE_LIMIT`\nmessages and sends a short excerpt to the Claude CLI via subprocess.\nThe LLM returns a 3-8 word title; the route pre-fills the ``SessionEdit``\nmodal's title input when the user clicks the **\u2728 Suggest** button.\n\nBroadcasts a ``session_upsert`` frame after computing the suggestion so\nthat all WebSocket subscribers receive the current session state\n(CCW-3 contract).\n\n* ``200`` \u2014 :class:`SuggestTitleOut` with ``suggested_title`` (may be\n  ``None`` when the session has no messages, the subprocess fails, or\n  the response is blank).\n* ``404`` \u2014 session not found.\n\nThe underlying LLM call is injected via ``app.state.title_suggester``\nso tests can replace it without spawning a real subprocess.  The\ncallable signature is\n``(excerpt: str, model: str) -> Awaitable[str | None]``.",
-        "operationId": "preview-session-title",
-        "parameters": [
-          {
-            "name": "session_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Session Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuggestTitleOut"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/sessions/{session_id}/work_evidence": {
       "get": {
         "tags": [
           "sessions"
         ],
         "summary": "Get Work Evidence",
-        "description": "Return a structured summary of work performed by the session (T2-08).\n\nQueries ``tool_calls`` for bash, write, and edit invocations, then\noptionally runs ``git diff --stat`` in the session's ``working_dir``\nto report uncommitted changes.\n\n* ``200`` \u2014 :class:`WorkEvidenceOut` with tool-call counts and git diff.\n* ``404`` \u2014 session not found.\n\n``git_diff_stat`` is ``None`` (and ``git_diff_available`` is ``False``)\nwhen the working directory is not a git repo, ``git`` is unavailable,\nor the ``git diff`` subprocess times out.  The route always returns\n``200``; callers should treat a ``None`` diff as \"git state unknown.\"\n\nThe ``git diff --stat`` subprocess call is injected via\n``app.state.git_diff_runner`` so tests can replace it without a real\ngit repo.  The callable signature is\n``(working_dir: str) -> Awaitable[str | None]``.",
+        "description": "Return a structured summary of work performed by the session (T2-08).\n\nQueries ``tool_calls`` for bash, write, and edit invocations, then\noptionally runs ``git diff --stat``.  ``app.state.git_diff_runner``\noverrides the subprocess in tests.  Always returns 200.",
         "operationId": "get-session-work-evidence",
         "parameters": [
           {
@@ -5741,6 +5739,28 @@
         }
       }
     },
+    "/api/history/export": {
+      "get": {
+        "tags": [
+          "history"
+        ],
+        "summary": "Export all sessions, messages, and tags as JSON",
+        "description": "Return every session, its messages, and its tags in a single payload.\n\nReturns 503 when no DB connection is configured.  For large instances\nthis may be slow (O(sessions) DB round-trips); intended for backup /\nportability use rather than real-time queries.",
+        "operationId": "export-history",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryExportOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/uploads": {
       "post": {
         "tags": [
@@ -6988,10 +7008,257 @@
           }
         }
       }
+    },
+    "/api/reply_actions/catalog": {
+      "get": {
+        "tags": [
+          "reply-actions"
+        ],
+        "summary": "List available reply-action transformations",
+        "description": "Return the static catalog of available transformations.",
+        "operationId": "list-reply-action-catalog",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ActionDescriptor"
+                  },
+                  "type": "array",
+                  "title": "Response List-Reply-Action-Catalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/reply_actions": {
+      "post": {
+        "tags": [
+          "reply-actions"
+        ],
+        "summary": "Apply a reply-action transformation to a message",
+        "description": "Apply *transformation_id* to *source_content*.\n\nReturns 404 when the session does not exist.\nReturns 422 when *transformation_id* is not in the catalog.\nReturns 501 when the advisor callable has not been configured.\nReturns 502 when the advisor call fails.",
+        "operationId": "run-reply-action",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyActionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApplyActionOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts": {
+      "post": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Register an artifact against a session",
+        "description": "Register *path* as an artifact for *session_id*.\n\nReturns 404 when the referenced session does not exist.\nReturns 201 with the new artifact row on success.",
+        "operationId": "create-artifact",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ArtifactIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact_id}": {
+      "get": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Serve an artifact file",
+        "description": "Return the artifact file with ``Content-Disposition: inline``.\n\nReturns 404 when the artifact is not registered or the local file is\nabsent.  Remote URLs are not proxied \u2014 use the registration row's\n``path`` field directly.",
+        "operationId": "get-artifact",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "artifacts"
+        ],
+        "summary": "Unregister and delete an artifact",
+        "description": "Remove the artifact registration and delete the file if local.\n\nReturns 404 when the artifact is not registered.",
+        "operationId": "delete-artifact",
+        "parameters": [
+          {
+            "name": "artifact_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Artifact Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ui-config": {
+      "get": {
+        "tags": [
+          "ui-config"
+        ],
+        "summary": "Return frontend feature-gate configuration",
+        "description": "Return the frontend configuration payload.\n\nIn v1 all feature flags are always ``True``; future items may gate\nindividual features behind Settings fields.",
+        "operationId": "get-ui-config",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UiConfigOut"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ActionDescriptor": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "instruction": {
+            "type": "string",
+            "title": "Instruction"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "description",
+          "instruction"
+        ],
+        "title": "ActionDescriptor",
+        "description": "One entry in the reply-actions catalog."
+      },
       "AllMemoriesOut": {
         "properties": {
           "tag_id": {
@@ -7049,6 +7316,60 @@
         "title": "AllMemoriesOut",
         "description": "Response body for ``GET /api/memories`` \u2014 global flat-list.\n\nEach row is a denormalised join of one tag-memory with its parent\ntag so the frontend global-index view can display tag context\nwithout a second round-trip. ``memory_body_preview`` is the body\ntruncated to\n:data:`bearings.config.constants.MEMORY_BODY_PREVIEW_MAX_LENGTH`\nchars; the full body is available via ``GET /api/memories/{id}``.\n\nThe list is sorted by ``(tag_name, memory_title)`` \u2014 grouping by\ntag is implied by the alphabetical sort."
       },
+      "ApplyActionIn": {
+        "properties": {
+          "source_content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Content",
+            "description": "The message text to transform."
+          },
+          "transformation_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Transformation Id",
+            "description": "Catalog id of the transformation to apply."
+          },
+          "insert_follow_up": {
+            "type": "boolean",
+            "title": "Insert Follow Up",
+            "description": "When True, insert the transformed content as a follow-up system message on the session.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_content",
+          "transformation_id"
+        ],
+        "title": "ApplyActionIn",
+        "description": "Request body for POST /api/sessions/{id}/reply_actions."
+      },
+      "ApplyActionOut": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "transformation_id": {
+            "type": "string",
+            "title": "Transformation Id"
+          },
+          "inserted": {
+            "type": "boolean",
+            "title": "Inserted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "transformation_id",
+          "inserted"
+        ],
+        "title": "ApplyActionOut",
+        "description": "Response body for POST /api/sessions/{id}/reply_actions."
+      },
       "ApprovalResolution": {
         "properties": {
           "approved": {
@@ -7074,6 +7395,72 @@
         ],
         "title": "ApprovalResolution",
         "description": "Request body for ``POST /api/sessions/{id}/approvals/{request_id}``.\n\n``approved`` carries the user's allow/deny choice. ``answer`` is an\noptional text payload used exclusively for ``AskUserQuestion`` tool\napprovals \u2014 the frontend sends the user's typed answer and the\nbroker threads it back to the SDK callback as\n``PermissionResultAllow.updated_input``, giving the agent the text\nit asked for."
+      },
+      "ArtifactIn": {
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Session Id",
+            "description": "ID of the session this artifact belongs to."
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Path",
+            "description": "Absolute local file path or remote URL."
+          },
+          "mime_type": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Mime Type",
+            "description": "MIME type of the artifact (e.g. image/png, application/pdf)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "path",
+          "mime_type"
+        ],
+        "title": "ArtifactIn",
+        "description": "Request body for POST /api/artifacts."
+      },
+      "ArtifactOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "mime_type": {
+            "type": "string",
+            "title": "Mime Type"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "path",
+          "mime_type",
+          "created_at"
+        ],
+        "title": "ArtifactOut",
+        "description": "Wire representation of a registered artifact."
       },
       "AutoDriverRunOut": {
         "properties": {
@@ -7986,6 +8373,35 @@
         "title": "DriverDiagOut",
         "description": "One entry in ``GET /api/diag/drivers``."
       },
+      "FeatureFlags": {
+        "properties": {
+          "reply_actions": {
+            "type": "boolean",
+            "title": "Reply Actions"
+          },
+          "artifacts": {
+            "type": "boolean",
+            "title": "Artifacts"
+          },
+          "analytics": {
+            "type": "boolean",
+            "title": "Analytics"
+          },
+          "spawn_from_reply": {
+            "type": "boolean",
+            "title": "Spawn From Reply"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply_actions",
+          "artifacts",
+          "analytics",
+          "spawn_from_reply"
+        ],
+        "title": "FeatureFlags",
+        "description": "Feature-gate map returned by GET /api/ui-config."
+      },
       "FsEntryOut": {
         "properties": {
           "name": {
@@ -8172,6 +8588,45 @@
         ],
         "title": "HealthOut",
         "description": "Response shape for ``GET /api/health``."
+      },
+      "HistoryExportOut": {
+        "properties": {
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/_SessionItem"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "messages": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/_MessageItem"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Messages"
+          },
+          "tags": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/_TagItem"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sessions",
+          "messages",
+          "tags"
+        ],
+        "title": "HistoryExportOut",
+        "description": "Full history export payload."
       },
       "HistorySearchResult": {
         "properties": {
@@ -12339,6 +12794,29 @@
         "title": "TurnOut",
         "description": "One row of ``GET /api/usage/turns``.\n\nExposes the Phase 1 ``turns`` table \u2014 one row per Claude Agent SDK\nturn, carrying the per-model token counts reported by the API.\n\nPer spec \u00a73.2, token counts from different models must not be\naggregated without grouping by model first.  Callers must group\nby ``model`` before summing ``input_tokens`` + ``output_tokens``.\n\n``timestamp`` is unix milliseconds (spec \u00a74.1 convention)."
       },
+      "UiConfigOut": {
+        "properties": {
+          "commands_scope": {
+            "type": "string",
+            "title": "Commands Scope"
+          },
+          "billing_mode": {
+            "type": "string",
+            "title": "Billing Mode"
+          },
+          "feature_flags": {
+            "$ref": "#/components/schemas/FeatureFlags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "commands_scope",
+          "billing_mode",
+          "feature_flags"
+        ],
+        "title": "UiConfigOut",
+        "description": "Response body for GET /api/ui-config."
+      },
       "UndoReorgOut": {
         "properties": {
           "new_session_id": {
@@ -12767,6 +13245,119 @@
         ],
         "title": "WorkEvidenceToolSummary",
         "description": "Per-tool aggregated call count in a work-evidence summary.\n\n``tool_name`` is the exact value stored in ``tool_calls.tool_name``\n(e.g. ``\"Bash\"``, ``\"Edit\"``, ``\"Write\"``).  ``call_count`` is the\nnumber of invocations recorded for that tool in the session."
+      },
+      "_MessageItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "_MessageItem"
+      },
+      "_SessionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "working_dir": {
+            "type": "string",
+            "title": "Working Dir"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "working_dir",
+          "model",
+          "created_at",
+          "updated_at",
+          "closed_at"
+        ],
+        "title": "_SessionItem"
+      },
+      "_TagItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "color"
+        ],
+        "title": "_TagItem"
       }
     }
   }

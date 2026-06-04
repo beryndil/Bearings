@@ -103,6 +103,9 @@ EXPECTED_TABLES = frozenset(
         "plug_blocks_fts_idx",
         "plug_blocks_fts_config",
         "plug_blocks_fts_docsize",
+        # Exec-2A addition — artifact-registration table (path + mime_type
+        # per session; served via GET /api/artifacts/{id}).
+        "artifacts",
     }
 )
 

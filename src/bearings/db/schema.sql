@@ -651,6 +651,31 @@ CREATE INDEX IF NOT EXISTS idx_uploads_created_at
     ON uploads(created_at DESC);
 
 -- ---------------------------------------------------------------------------
+-- artifacts — registered output files produced by or associated with a
+-- session (images, PDFs, exported data, etc.).
+--
+-- Design notes:
+--   • id is TEXT ``art_<32-hex>`` per the new_id() convention.
+--   • session_id back-points to the owning session; ON DELETE CASCADE so
+--     artifacts are cleaned up when a session is deleted.
+--   • path is the absolute on-disk path (or a URL for remote artifacts).
+--     ``ARTIFACT_PATH_MAX_LENGTH`` (4 000 chars) is the API-layer cap.
+--   • mime_type is caller-supplied; validated against
+--     ``ARTIFACT_MIME_TYPE_MAX_LENGTH`` (200 chars) at the API boundary.
+--   • created_at is ISO-8601 UTC (same TEXT convention as sessions/messages).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS artifacts (
+    id          TEXT    PRIMARY KEY,
+    session_id  TEXT    NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    path        TEXT    NOT NULL,
+    mime_type   TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_artifacts_session_id
+    ON artifacts(session_id);
+
+-- ---------------------------------------------------------------------------
 -- User preferences — singleton row (id = 1 enforced by CHECK).
 --
 -- Stores global defaults that the settings page reads + saves and that

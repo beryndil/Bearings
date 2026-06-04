@@ -1389,6 +1389,23 @@ ROUTE_TAG_REORG: Final[str] = "reorg"
 ROUTE_TAG_PENDING: Final[str] = "pending"
 ROUTE_TAG_SESSIONS_BULK: Final[str] = "sessions-bulk"
 ROUTE_TAG_ANALYTICS: Final[str] = "analytics"
+ROUTE_TAG_REPLY_ACTIONS: Final[str] = "reply-actions"
+ROUTE_TAG_ARTIFACTS: Final[str] = "artifacts"
+ROUTE_TAG_UI_CONFIG: Final[str] = "ui-config"
+
+# Artifact row id prefix — ``art_<32-hex>``.  Mirrors the ``ses_``/``msg_``
+# convention so a stray id in a log line is self-describing.
+ARTIFACT_ID_PREFIX: Final[str] = "art"
+
+# Artifact field length bounds (mirrors UPLOAD_MIME_TYPE_MAX_LENGTH /
+# UPLOAD_FILENAME_MAX_LENGTH for consistency across storage surfaces).
+ARTIFACT_MIME_TYPE_MAX_LENGTH: Final[int] = 200
+ARTIFACT_PATH_MAX_LENGTH: Final[int] = 4_000
+
+# Reply-action transformation id max length.  Catalog ids are short
+# ASCII slugs (e.g. ``summarize``); the cap prevents a runaway client
+# from embedding a large blob in the transformation_id field.
+REPLY_ACTION_ID_MAX_LENGTH: Final[int] = 64
 
 # Bulk-session operation alphabet (gap-cycle-13-001).
 # These string constants feed the ``op`` field of ``POST /api/sessions/bulk``
@@ -1596,6 +1613,9 @@ __all__ = [
     "ANALYTICS_REDUNDANCY_LAST_N_MIN",
     "ANALYTICS_WARNING_TYPE_RED",
     "ANALYTICS_WARNING_TYPE_YELLOW",
+    "ARTIFACT_ID_PREFIX",
+    "ARTIFACT_MIME_TYPE_MAX_LENGTH",
+    "ARTIFACT_PATH_MAX_LENGTH",
     "AUTO_DRIVER_FAILURE_POLICY_HALT",
     "AUTO_DRIVER_FAILURE_POLICY_SKIP",
     "AUTO_DRIVER_STATE_ERRORED",
@@ -1763,9 +1783,11 @@ __all__ = [
     "QUOTA_BAR_RED_PCT",
     "QUOTA_BAR_YELLOW_PCT",
     "QUOTA_THRESHOLD_PCT",
+    "REPLY_ACTION_ID_MAX_LENGTH",
     "RING_BUFFER_MAX",
     "ROUTE_TAG_ANALYTICS",
     "ROUTE_TAG_APPROVALS",
+    "ROUTE_TAG_ARTIFACTS",
     "ROUTE_TAG_CHECKLISTS",
     "ROUTE_TAG_CHECKPOINTS",
     "ROUTE_TAG_COMMANDS",
@@ -1782,6 +1804,7 @@ __all__ = [
     "ROUTE_TAG_PREFERENCES",
     "ROUTE_TAG_QUOTA",
     "ROUTE_TAG_REORG",
+    "ROUTE_TAG_REPLY_ACTIONS",
     "ROUTE_TAG_ROUTING",
     "ROUTE_TAG_SEARCH",
     "ROUTE_TAG_SESSIONS",
@@ -1789,6 +1812,7 @@ __all__ = [
     "ROUTE_TAG_SHELL",
     "ROUTE_TAG_TAGS",
     "ROUTE_TAG_TEMPLATES",
+    "ROUTE_TAG_UI_CONFIG",
     "ROUTE_TAG_UPLOADS",
     "ROUTE_TAG_USAGE",
     "ROUTE_TAG_VAULT",

@@ -50,6 +50,7 @@ from bearings.config.constants import (
     OPENAPI_TITLE,
     ROUTE_TAG_ANALYTICS,
     ROUTE_TAG_APPROVALS,
+    ROUTE_TAG_ARTIFACTS,
     ROUTE_TAG_CHECKLISTS,
     ROUTE_TAG_CHECKPOINTS,
     ROUTE_TAG_COMMANDS,
@@ -66,6 +67,7 @@ from bearings.config.constants import (
     ROUTE_TAG_PREFERENCES,
     ROUTE_TAG_QUOTA,
     ROUTE_TAG_REORG,
+    ROUTE_TAG_REPLY_ACTIONS,
     ROUTE_TAG_ROUTING,
     ROUTE_TAG_SEARCH,
     ROUTE_TAG_SESSIONS,
@@ -73,6 +75,7 @@ from bearings.config.constants import (
     ROUTE_TAG_SHELL,
     ROUTE_TAG_TAGS,
     ROUTE_TAG_TEMPLATES,
+    ROUTE_TAG_UI_CONFIG,
     ROUTE_TAG_UPLOADS,
     ROUTE_TAG_USAGE,
     ROUTE_TAG_VAULT,
@@ -89,9 +92,11 @@ from bearings.metrics import BearingsMetrics
 from bearings.web.middleware import SunsetMiddleware
 from bearings.web.routes.analytics import router as analytics_router
 from bearings.web.routes.approvals import router as approvals_router
+from bearings.web.routes.artifacts import router as artifacts_router
 from bearings.web.routes.checklists import router as checklists_router
 from bearings.web.routes.checkpoints import router as checkpoints_router
 from bearings.web.routes.commands import router as commands_router
+from bearings.web.routes.config import router as config_router
 from bearings.web.routes.diag import router as diag_router
 from bearings.web.routes.fs import router as fs_router
 from bearings.web.routes.health import router as health_router
@@ -105,6 +110,7 @@ from bearings.web.routes.pending import router as pending_router
 from bearings.web.routes.preferences import router as preferences_router
 from bearings.web.routes.quota import router as quota_router
 from bearings.web.routes.reorg import router as reorg_router
+from bearings.web.routes.reply_actions import router as reply_actions_router
 from bearings.web.routes.routing import router as routing_router
 from bearings.web.routes.search import router as search_router
 from bearings.web.routes.sessions import router as sessions_router
@@ -503,6 +509,10 @@ def create_app(
     app.include_router(import_db_router, tags=[ROUTE_TAG_IMPORT])
     # Analytics Phase 4 — /api/analytics/ surface.
     app.include_router(analytics_router, tags=[ROUTE_TAG_ANALYTICS])
+    # Exec-2A — reply-actions, artifacts, ui-config.
+    app.include_router(reply_actions_router, tags=[ROUTE_TAG_REPLY_ACTIONS])
+    app.include_router(artifacts_router, tags=[ROUTE_TAG_ARTIFACTS])
+    app.include_router(config_router, tags=[ROUTE_TAG_UI_CONFIG])
     # E2E harness extension seam (item 3.1) — extra routers mount
     # *between* the production routers and the static bundle so debug
     # endpoints take precedence over the SPA fallback. Production
