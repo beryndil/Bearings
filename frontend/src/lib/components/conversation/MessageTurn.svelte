@@ -76,6 +76,7 @@
   import CollapsibleBody from "../common/CollapsibleBody.svelte";
   import ConfirmDialog from "../sidebar/ConfirmDialog.svelte";
   import RoutingBadge from "./RoutingBadge.svelte";
+  import ReplyActionPreview from "./ReplyActionPreview.svelte";
   import SentAttachmentChips from "./SentAttachmentChips.svelte";
   import ToolOutput from "./ToolOutput.svelte";
 
@@ -763,6 +764,14 @@
         </span>
       {/if}
     </div>
+    <!--
+      Reply-action strip (T1-09) — rendered below the assistant bubble for
+      complete turns with a non-empty body. Hidden on incomplete or empty
+      turns so the strip doesn't appear mid-stream.
+    -->
+    {#if turn.complete && turn.body.length > 0 && sessionId !== null && sessionId !== undefined}
+      <ReplyActionPreview {sessionId} messageBody={turn.body} />
+    {/if}
   {/if}
 </div>
 

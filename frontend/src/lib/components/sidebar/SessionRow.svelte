@@ -33,6 +33,7 @@
     duplicateSession,
     exportSessionJson,
     markSessionViewed,
+    patchSessionModel,
     patchSessionPinned,
     patchSessionTitle,
     reopenSession,
@@ -46,7 +47,12 @@
   import { createTemplate } from "../../api/templates";
   import { contextMenu } from "../../actions/contextMenu";
   import {
+    CHANGE_MODEL_STRINGS,
+    EXECUTOR_MODEL_HAIKU,
+    EXECUTOR_MODEL_OPUS,
+    EXECUTOR_MODEL_SONNET,
     MENU_ACTION_SESSION_ARCHIVE,
+    MENU_ACTION_SESSION_CHANGE_MODEL,
     MENU_ACTION_SESSION_COPY_ID,
     MENU_ACTION_SESSION_COPY_SHARE_LINK,
     MENU_ACTION_SESSION_COPY_TITLE,
@@ -338,6 +344,30 @@
 
   let showMergePicker = $state(false);
 
+  // ---- change-model state (T1-12) -----------------------------------------
+
+  /** Available models for the change-model picker. */
+  const PICKER_MODELS = [EXECUTOR_MODEL_SONNET, EXECUTOR_MODEL_HAIKU, EXECUTOR_MODEL_OPUS] as const;
+
+  let showModelPicker = $state(false);
+  let modelPickerError = $state<string | null>(null);
+  let modelPickerSaving = $state(false);
+
+  async function handleChangeModel(model: string): Promise<void> {
+    if (modelPickerSaving) return;
+    modelPickerSaving = true;
+    modelPickerError = null;
+    try {
+      await patchSessionModel(session.id, model);
+      await refreshSessions(currentFilter());
+      showModelPicker = false;
+    } catch (err) {
+      modelPickerError = `${CHANGE_MODEL_STRINGS.errorPrefix}${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      modelPickerSaving = false;
+    }
+  }
+
   async function handleDeleteConfirm(): Promise<void> {
     showDeleteConfirm = false;
     try {
@@ -356,6 +386,10 @@
   const menuHandlers = $derived({
     [MENU_ACTION_SESSION_OPEN_IN_NEW_TAB]: () => {
       window.open(sessionHref, "_blank", "noopener");
+    },
+    [MENU_ACTION_SESSION_CHANGE_MODEL]: () => {
+      modelPickerError = null;
+      showModelPicker = true;
     },
     [MENU_ACTION_SESSION_EDIT]: () => {
       void openEditModal();
@@ -446,6 +480,71 @@
       : {}),
   });
 </script>
+
+{#if showModelPicker}
+  <!-- Change-model picker (T1-12) — backdrop + centered card. -->
+  <div
+    class="fixed inset-0 z-200 flex items-center justify-center bg-black/50 p-4"
+    role="presentation"
+    data-testid="change-model-backdrop"
+    onclick={() => {
+      if (!modelPickerSaving) showModelPicker = false;
+    }}
+    onkeydown={() => {}}
+  >
+    <div
+      class="w-full max-w-xs rounded border border-border bg-surface-1 p-4 shadow-xl"
+      role="dialog"
+      aria-modal="true"
+      aria-label={CHANGE_MODEL_STRINGS.ariaLabel}
+      tabindex="-1"
+      data-testid="change-model-modal"
+      onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+    >
+      <h3 class="mb-1 text-sm font-semibold text-fg-strong">{CHANGE_MODEL_STRINGS.title}</h3>
+      <p class="mb-3 text-xs text-fg-muted">{CHANGE_MODEL_STRINGS.subtitle}</p>
+      <div class="flex flex-col gap-1.5">
+        {#each PICKER_MODELS as model (model)}
+          <button
+            type="button"
+            class="flex items-center gap-2 rounded border px-3 py-2 text-sm text-left transition-colors"
+            class:border-accent={session.model === model}
+            class:bg-accent-10={session.model === model}
+            class:text-fg-strong={session.model === model}
+            class:border-border={session.model !== model}
+            class:bg-surface-2={session.model !== model}
+            class:text-fg={session.model !== model}
+            data-testid="change-model-option"
+            data-model={model}
+            disabled={modelPickerSaving}
+            onclick={() => void handleChangeModel(model)}
+          >
+            <span class="flex-1">{model}</span>
+            {#if session.model === model}
+              <span class="text-xs text-accent">({CHANGE_MODEL_STRINGS.currentLabel})</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+      {#if modelPickerError !== null}
+        <p class="mt-2 text-xs text-error" data-testid="change-model-error">{modelPickerError}</p>
+      {/if}
+      <div class="mt-3 flex justify-end">
+        <button
+          type="button"
+          class="rounded border border-border bg-surface-2 px-3 py-1 text-xs text-fg hover:bg-surface-1 disabled:opacity-50"
+          disabled={modelPickerSaving}
+          onclick={() => {
+            showModelPicker = false;
+          }}
+        >
+          {CHANGE_MODEL_STRINGS.cancelLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if showEditModal}
   <SessionEdit

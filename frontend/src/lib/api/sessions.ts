@@ -82,6 +82,15 @@ export interface SessionOut {
    *  ``null`` on every session not created via that flow. */
   parent_session_id?: string | null;
   /**
+   * Classification flag (T2-07 / T3-03). Set to ``true`` by
+   * ``POST /api/sessions/{id}/spawn_classify`` when the session is found
+   * to contain credentials or PII. Consumed by
+   * :class:`SpawnClassifiedCard` to render a warning banner above the
+   * conversation body. Defaults to ``false`` when the backend row
+   * predates the column (via DB migration default ``0``).
+   */
+  classified?: boolean;
+  /**
    * Tags embedded in the session list response (PERF-NET-01 batch join).
    * Populated by ``GET /api/sessions`` via a single batch JOIN; an empty
    * array for sessions with no tags. Treat an absent field as ``[]`` for

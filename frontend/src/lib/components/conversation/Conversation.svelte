@@ -56,6 +56,7 @@
   import ReorgAuditDivider from "../reorg/ReorgAuditDivider.svelte";
   import ReorgPicker from "../reorg/ReorgPicker.svelte";
   import ReorgUndoToast from "../reorg/ReorgUndoToast.svelte";
+  import SpawnClassifiedCard from "./SpawnClassifiedCard.svelte";
 
   interface Props {
     sessionId: string | null;
@@ -169,6 +170,17 @@
     sessionId === null
       ? null
       : (sessionsStore.sessions.find((s) => s.id === sessionId)?.working_dir ?? null),
+  );
+
+  /**
+   * Classification flag for the active session (T3-03). Read from the
+   * sessions store; ``false`` when the session is not loaded or the field
+   * is absent (pre-migration rows). Drives ``SpawnClassifiedCard``.
+   */
+  const isClassified = $derived(
+    sessionId === null
+      ? false
+      : (sessionsStore.sessions.find((s) => s.id === sessionId)?.classified ?? false),
   );
 
   $effect(() => {
@@ -315,6 +327,10 @@
        Rendered between the header band and the message list per
        docs/behavior/chat.md §"AccentCards" (gap-cycle-01-019). -->
   <AccentCards />
+  <!-- SpawnClassifiedCard — warning banner when session.classified is true.
+       Rendered above the conversation body per T3-03.
+       Hidden when classified is false or the user dismisses it. -->
+  <SpawnClassifiedCard classified={isClassified} />
   <div class="relative flex-1 overflow-hidden">
     <div
       bind:this={bodyEl}

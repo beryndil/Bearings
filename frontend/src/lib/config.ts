@@ -3511,6 +3511,110 @@ export const COMPOSER_ATTACHMENT_STRINGS = {
   uploadingAriaLabel: "Uploading",
 } as const;
 
+// ---- T1-09: Reply-action strip strings (ReplyActionPreview.svelte) ---------
+
+/**
+ * UI strings for the reply-action strip rendered below completed assistant
+ * message bubbles (T1-09 ``ReplyActionPreview.svelte``).
+ */
+export const REPLY_ACTION_STRINGS = {
+  /** Label prefix rendered before the action buttons. */
+  stripLabel: "Transform:",
+  /** In-flight label shown on the active button while an apply is running. */
+  applyingLabel: "…",
+  /** Prefix prepended to the error message when the apply call fails. */
+  errorPrefix: "Failed: ",
+  /** ``aria-label`` for the result preview panel. */
+  previewAriaLabel: "Transformed reply preview",
+  /** "Copy" button label inside the result preview panel. */
+  copyLabel: "Copy",
+  /** "Close" button label inside the result preview panel. */
+  closeLabel: "Close",
+} as const;
+
+// ---- T3-03: Classified session banner (SpawnClassifiedCard.svelte) ---------
+
+/**
+ * UI strings for the warning banner rendered above the conversation body
+ * when ``SessionOut.classified`` is ``true`` (T3-03).
+ */
+export const CLASSIFIED_CARD_STRINGS = {
+  /** ``aria-label`` for the banner container (``role="alert"``). */
+  ariaLabel: "Classified session warning",
+  /** Banner headline. */
+  title: "Sensitive data detected",
+  /** One-line description shown below the headline. */
+  description:
+    "This session was scanned and found to contain credentials or personally identifiable information. Avoid sharing this transcript.",
+  /** Dismiss button label. */
+  dismissLabel: "Dismiss",
+  /** Dismiss button ``aria-label``. */
+  dismissAriaLabel: "Dismiss classified session warning",
+} as const;
+
+// ---- T2-10: Bulk title suggest modal (BulkTitleSuggestModal.svelte) --------
+
+/**
+ * UI strings for the bulk title suggestion modal rendered in the checklist
+ * view (T2-10 ``BulkTitleSuggestModal.svelte``).
+ */
+export const BULK_TITLE_SUGGEST_STRINGS = {
+  /** ``aria-label`` for the dialog. */
+  ariaLabel: "Bulk title suggestion",
+  /** Modal title. */
+  title: "Suggest titles for linked sessions",
+  /** Subtitle showing how many items will be processed. */
+  subtitle: (count: number): string =>
+    count === 0
+      ? "No checklist items have linked chat sessions."
+      : `${count} item${count === 1 ? "" : "s"} with linked sessions will be processed.`,
+  /** Per-item: waiting to run. */
+  statusPending: "—",
+  /** Per-item: no linked session. */
+  statusSkipped: "No linked session",
+  /** Per-item: currently fetching. */
+  statusRunning: "Suggesting…",
+  /** Per-item: API returned null / empty suggestion. */
+  statusNoSuggestion: "No suggestion",
+  /** Per-item: call failed. */
+  statusError: "Error",
+  /** Summary shown after all items are processed. */
+  summary: (applied: number): string =>
+    applied === 0
+      ? "No titles were updated."
+      : `${applied} title${applied === 1 ? "" : "s"} updated.`,
+  /** "Run" button label. */
+  runButton: "Suggest all",
+  /** "Run" button label while running. */
+  runningButton: "Running…",
+  /** "Cancel" button label (before run). */
+  cancelButton: "Cancel",
+  /** "Done" button label (after run completes). */
+  doneButton: "Done",
+} as const;
+
+// ---- T1-12: Change model modal (SessionRow.svelte) -------------------------
+
+/**
+ * UI strings for the inline model-picker opened by the
+ * ``session.change_model`` context-menu action (T1-12).
+ */
+export const CHANGE_MODEL_STRINGS = {
+  /** ``aria-label`` for the picker dialog. */
+  ariaLabel: "Change session model",
+  /** Modal title. */
+  title: "Change model for continuation",
+  /** Subtitle explaining the change is for future turns. */
+  subtitle:
+    "The selected model will be used for the next and all subsequent turns in this session.",
+  /** "Cancel" button label. */
+  cancelLabel: "Cancel",
+  /** Error message prefix if the PATCH fails. */
+  errorPrefix: "Failed to update model: ",
+  /** Currently active model label. */
+  currentLabel: "current",
+} as const;
+
 /**
  * Split a slash-namespaced tag name into ``[group, leaf]``.
  *

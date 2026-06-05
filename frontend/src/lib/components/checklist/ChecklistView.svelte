@@ -68,7 +68,8 @@
    */
   import { onMount } from "svelte";
 
-  import { CHECKLIST_STRINGS, AUTO_DRIVER_STATE_RUNNING } from "../../config";
+  import { CHECKLIST_STRINGS, AUTO_DRIVER_STATE_RUNNING, BULK_TITLE_SUGGEST_STRINGS } from "../../config";
+  import BulkTitleSuggestModal from "../modals/BulkTitleSuggestModal.svelte";
   import {
     checkChecklistItem as checkItemDefault,
     createChecklistItem as createItemDefault,
@@ -309,6 +310,15 @@
   onMount(() => {
     addInputEl?.focus();
   });
+
+  // ---- bulk title suggest (T2-10) -----------------------------------------
+
+  let showBulkTitleModal = $state(false);
+
+  /** Items that have a linked chat session — the set that can be title-suggested. */
+  const linkedItems = $derived(
+    checklistStore.items.filter((item) => item.chat_session_id !== null),
+  );
 </script>
 
 <section
@@ -327,6 +337,21 @@
       {sortedItemIds}
       onChange={refresh}
     />
+    {#if linkedItems.length > 0}
+      <div class="mt-2 flex justify-end">
+        <button
+          type="button"
+          class="rounded border border-border bg-surface-2 px-2 py-1 text-xs text-fg-muted hover:bg-surface-1 hover:text-fg-strong"
+          data-testid="bulk-title-suggest-btn"
+          title={BULK_TITLE_SUGGEST_STRINGS.subtitle(linkedItems.length)}
+          onclick={() => {
+            showBulkTitleModal = true;
+          }}
+        >
+          ✨ {BULK_TITLE_SUGGEST_STRINGS.runButton}
+        </button>
+      </div>
+    {/if}
   </header>
 
   <ChecklistChat {checklistId} />
@@ -455,3 +480,16 @@
     />
   </footer>
 </section>
+
+{#if showBulkTitleModal}
+  <BulkTitleSuggestModal
+    items={checklistStore.items}
+    onDone={() => {
+      showBulkTitleModal = false;
+      refresh();
+    }}
+    onCancel={() => {
+      showBulkTitleModal = false;
+    }}
+  />
+{/if}
