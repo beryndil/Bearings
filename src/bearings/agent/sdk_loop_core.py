@@ -44,6 +44,7 @@ from bearings.agent.sdk_loop_errors import (
     TokenExpiredError,
     _enter_error_state,
     _is_auth_error,
+    _is_init_timeout_error,
     _make_todo_update,
     _reload_sdk_credentials,
     _to_sdk_options,
@@ -136,28 +137,45 @@ async def run_session_loop(
     except _CancelledLike:
         raise
     except Exception as exc:
-        if not _is_auth_error(exc):
-            await _enter_error_state(runner, session, exc)
+        if _is_auth_error(exc):
+            # First 401 — check whether the token is fully expired (user must re-auth)
+            # or was merely rotated mid-flight (fresh token already in credentials file).
+            try:
+                _reload_sdk_credentials()
+            except TokenExpiredError as expired_exc:
+                # Token is past its expiry date — retrying with the same stale bearer
+                # will just produce another 401.  Surface an actionable error now.
+                await _enter_error_state(runner, session, expired_exc)
+                return
+            # Token was recently rotated; fresh bearer is in the file.  Retry once.
+            try:
+                await _run_sdk_client_body(
+                    factory, sdk_options, runner, session, translator, persist_fn
+                )
+            except _CancelledLike:
+                raise
+            except Exception as retry_exc:
+                await _enter_error_state(runner, session, retry_exc)
             return
-        # First 401 — check whether the token is fully expired (user must re-auth)
-        # or was merely rotated mid-flight (fresh token already in credentials file).
-        try:
-            _reload_sdk_credentials()
-        except TokenExpiredError as expired_exc:
-            # Token is past its expiry date — retrying with the same stale bearer
-            # will just produce another 401.  Surface an actionable error now.
-            await _enter_error_state(runner, session, expired_exc)
-            return
-        # Token was recently rotated; fresh bearer is in the file.  Retry once.
-        try:
-            await _run_sdk_client_body(
-                factory, sdk_options, runner, session, translator, persist_fn
+        if _is_init_timeout_error(exc):
+            # Subprocess startup timed out on the streaming-mode initialize
+            # handshake — transient under load.  Close the subprocess and retry
+            # once after a brief pause; a second timeout is surfaced as fatal.
+            _log.warning(
+                "session %s: SDK initialize handshake timed out — retrying subprocess once",
+                session_id,
             )
-        except _CancelledLike:
-            raise
-        except Exception as retry_exc:
-            await _enter_error_state(runner, session, retry_exc)
+            await asyncio.sleep(2.0)
+            try:
+                await _run_sdk_client_body(
+                    factory, sdk_options, runner, session, translator, persist_fn
+                )
+            except _CancelledLike:
+                raise
+            except Exception as retry_exc:
+                await _enter_error_state(runner, session, retry_exc)
             return
+        await _enter_error_state(runner, session, exc)
 
 
 async def _drain_prompt_queue(

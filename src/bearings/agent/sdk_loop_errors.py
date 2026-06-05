@@ -12,6 +12,14 @@
     ``_reload_sdk_credentials`` — reads ``~/.claude/.credentials.json`` to
     verify the rotated bearer is present and logs the event; the actual
     pick-up happens when the SDK spawns a fresh subprocess on re-entry.
+
+Initialize-timeout retry helpers:
+    ``_is_init_timeout_error`` — classifies "Control request timeout:
+    initialize" as TRANSIENT so the caller can close the subprocess, wait
+    briefly, and retry once.  The SDK raises this when the ``claude`` CLI
+    subprocess fails to respond to the streaming-mode initialize handshake
+    within 60 s — typically a transient startup slowdown under load or while
+    MCP servers are warming up.
 """
 
 from __future__ import annotations
@@ -40,6 +48,26 @@ _log = logging.getLogger(__name__)
 
 # The exact string the Claude SDK embeds when the bearer token is rejected.
 _AUTH_ERROR_MARKER: Final[str] = "Invalid authentication credentials"
+
+# ---------------------------------------------------------------------------
+# Initialize-timeout retry helpers
+# ---------------------------------------------------------------------------
+
+# The exact string raised by the SDK when the streaming-mode initialize
+# handshake with the CLI subprocess does not complete within 60 s.
+# Source: claude_agent_sdk/_internal/query.py _send_control_request().
+_INIT_TIMEOUT_MARKER: Final[str] = "Control request timeout: initialize"
+
+
+def _is_init_timeout_error(exc: BaseException) -> bool:
+    """Return ``True`` when *exc* is a transient initialize-handshake timeout.
+
+    The SDK raises ``"Control request timeout: initialize"`` when
+    ``anyio.fail_after(60.0)`` fires during the streaming-mode initialize
+    exchange.  This is a subprocess-startup transient — the next subprocess
+    spawn usually succeeds once system load subsides.
+    """
+    return _INIT_TIMEOUT_MARKER in str(exc)
 
 # Path to the Claude Max OAuth credentials file.
 _CREDENTIALS_PATH: Final[Path] = Path.home() / ".claude" / ".credentials.json"
