@@ -38,6 +38,8 @@ from typing import Final
 
 import aiosqlite
 
+from bearings.db._id import now_iso
+
 # Resolved at import time so a renamed/relocated schema.sql produces an
 # ImportError at module load rather than a runtime failure deep inside the
 # first ``load_schema`` call.
@@ -160,6 +162,11 @@ _ADDED_COLUMNS: Final[tuple[tuple[str, str, str], ...]] = (
     # Consumed by Exec-5 (SpawnClassifiedCard) via SessionOut.classified.
     # Existing rows default to 0 (not classified).
     ("sessions", "classified", "INTEGER NOT NULL DEFAULT 0"),
+    # T1-10: session_id on uploads — links an upload to the session that
+    # created it (first-uploader semantics; content-addressed dedup is
+    # preserved; NULL for uploads predating this column or uploaded outside
+    # a specific session context). Used by GET /api/uploads?session_id={id}.
+    ("uploads", "session_id", "TEXT"),
 )
 
 
@@ -176,6 +183,50 @@ _POST_ALTER_INDEXES: Final[tuple[str, ...]] = (
         "ON sessions(pivot_message_id) WHERE pivot_message_id IS NOT NULL"
     ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Severity tag seed data (T3-01).
+#
+# Seeded on first bootstrap when the severity class has zero tags.
+# Idempotent: each INSERT is guarded by a NOT EXISTS sub-select so a
+# second load_schema call is a no-op.  Names are the five canonical
+# Bearings severity levels; colors are Tailwind-palette hex values
+# chosen red → green so the shield colour gradient is intuitive.
+# ---------------------------------------------------------------------------
+_SEVERITY_SEED: Final[tuple[tuple[str, str, int], ...]] = (
+    ("Blocker", "#ef4444", 0),  # Tailwind red-500
+    ("Critical", "#f97316", 1),  # Tailwind orange-500
+    ("Medium", "#eab308", 2),  # Tailwind yellow-500
+    ("Low", "#3b82f6", 3),  # Tailwind blue-500
+    ("QoL", "#22c55e", 4),  # Tailwind green-500
+)
+
+
+async def ensure_severity_tags(connection: aiosqlite.Connection) -> None:
+    """Seed the five canonical severity tags if none exist yet.
+
+    Called at server-startup time (``cli/serve.py:_connect_db``) and by
+    ``bearings init`` so that a freshly-provisioned instance is usable
+    without manual tag creation.  Kept separate from :func:`load_schema`
+    so tests that create a bare DB via ``load_schema`` do not pick up
+    pre-seeded rows that would break their assertions.
+
+    Each insert is guarded by a per-name NOT EXISTS so the operation is
+    idempotent — a second call on a DB that already has all five rows is
+    a pure no-op.  Partial seeds (e.g. from a prior failed startup) are
+    completed by inserting only the missing names.
+    """
+    ts = now_iso()
+    for name, color, sort_order in _SEVERITY_SEED:
+        await connection.execute(
+            "INSERT INTO tags (name, color, class, sort_order, created_at, updated_at) "
+            "SELECT ?, ?, 'severity', ?, ?, ? "
+            "WHERE NOT EXISTS "
+            "  (SELECT 1 FROM tags WHERE name = ? AND class = 'severity')",
+            (name, color, sort_order, ts, ts, name),
+        )
+    await connection.commit()
 
 
 async def _ensure_added_columns(connection: aiosqlite.Connection) -> None:

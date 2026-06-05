@@ -28,6 +28,7 @@
   import { conversationStore, type MessageTurnView } from "../../stores/conversation.svelte";
   import { formatAbsolute } from "../../utils/datetime";
   import type { SessionOut } from "../../api/sessions";
+  import { listUploadsBySession, type UploadOut } from "../../api/uploads";
 
   /**
    * Aggregated row shape. One row per distinct file path, sorted
@@ -48,9 +49,7 @@
 
   interface Props {
     /**
-     * Active session row. Accepted for interface parity with the other
-     * inspector subsections — the Files tab derives its data from
-     * :data:`conversationStore`, not from the session row directly.
+     * Active session row. Used to fetch session-scoped uploads (T1-10).
      */
     session: SessionOut;
     /**
@@ -60,13 +59,53 @@
      * store.
      */
     turns?: readonly MessageTurnView[];
+    /**
+     * Test seam for uploads fetch. Production callers pass nothing; the
+     * component calls :func:`listUploadsBySession`.
+     */
+    fetchUploads?: typeof listUploadsBySession;
   }
 
-  // ``_session`` alias: the value is unused inside the body — accepted
-  // only so the Inspector shell can pass ``{session}`` uniformly to
-  // every subsection (a future per-session file filter would drop the
-  // underscore).
-  const { session: _session, turns: turnsProp = undefined }: Props = $props();
+  const {
+    session,
+    turns: turnsProp = undefined,
+    fetchUploads = listUploadsBySession,
+  }: Props = $props();
+
+  // ---- uploads (T1-10) ---------------------------------------------------
+
+  let uploads = $state<UploadOut[]>([]);
+  let uploadsLoading = $state(false);
+  let uploadsError = $state(false);
+
+  $effect(() => {
+    const sid = session.id;
+    uploads = [];
+    uploadsError = false;
+    uploadsLoading = true;
+    fetchUploads(sid)
+      .then((rows) => {
+        uploads = rows;
+      })
+      .catch(() => {
+        uploadsError = true;
+      })
+      .finally(() => {
+        uploadsLoading = false;
+      });
+  });
+
+  /** Human-readable file size — bytes → KB / MB. */
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /** Copy a string to the clipboard (best-effort). */
+  function copyToClipboard(text: string): void {
+    void navigator.clipboard.writeText(text);
+  }
 
   /** Tools whose output is never a specific file path — skip entirely. */
   const SKIP_TOOLS = new Set(["Bash", "Glob"]);
@@ -178,51 +217,120 @@
   });
 </script>
 
-<section class="inspector-files flex flex-col gap-3" data-testid="inspector-files">
-  <h3 class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-fg-muted">
-    {INSPECTOR_STRINGS.filesHeading}
-    {#if fileRows.length > 0}
-      <span
-        class="rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium tabular-nums text-fg"
-        data-testid="inspector-files-count"
-      >
-        {fileRows.length}
-      </span>
-    {/if}
-  </h3>
+<div class="inspector-files flex flex-col gap-6" data-testid="inspector-files">
+  <!-- Files Touched section (tool-call derived) -->
+  <section class="flex flex-col gap-3" data-testid="inspector-files-touched">
+    <h3
+      class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-fg-muted"
+    >
+      {INSPECTOR_STRINGS.filesHeading}
+      {#if fileRows.length > 0}
+        <span
+          class="rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium tabular-nums text-fg"
+          data-testid="inspector-files-count"
+        >
+          {fileRows.length}
+        </span>
+      {/if}
+    </h3>
 
-  {#if fileRows.length === 0}
-    <div data-testid="inspector-files-empty">
-      <p class="text-sm text-fg-muted">{INSPECTOR_STRINGS.filesEmptyHeading}</p>
-      <p class="mt-1 text-xs text-fg-muted">{INSPECTOR_STRINGS.filesEmptyBody}</p>
-    </div>
-  {:else}
-    <ul class="flex flex-col gap-1" data-testid="inspector-files-list">
-      {#each fileRows as row (row.path)}
-        <li class="flex min-w-0 items-baseline gap-2 text-xs" data-testid="inspector-files-row">
-          <span
-            class="min-w-0 flex-1 truncate font-mono text-fg"
-            title={row.path}
-            data-testid="inspector-files-path"
-          >
-            {row.shortPath}
-          </span>
-          <span class="shrink-0 text-fg-muted" data-testid="inspector-files-verb">
-            {row.lastVerb}
-          </span>
-          {#if row.touchCount > 1}
+    {#if fileRows.length === 0}
+      <div data-testid="inspector-files-empty">
+        <p class="text-sm text-fg-muted">{INSPECTOR_STRINGS.filesEmptyHeading}</p>
+        <p class="mt-1 text-xs text-fg-muted">{INSPECTOR_STRINGS.filesEmptyBody}</p>
+      </div>
+    {:else}
+      <ul class="flex flex-col gap-1" data-testid="inspector-files-list">
+        {#each fileRows as row (row.path)}
+          <li class="flex min-w-0 items-baseline gap-2 text-xs" data-testid="inspector-files-row">
             <span
-              class="shrink-0 tabular-nums text-fg-muted"
-              data-testid="inspector-files-count-badge"
+              class="min-w-0 flex-1 truncate font-mono text-fg"
+              title={row.path}
+              data-testid="inspector-files-path"
             >
-              × {row.touchCount}
+              {row.shortPath}
             </span>
-          {/if}
-          <span class="shrink-0 tabular-nums text-fg-muted" data-testid="inspector-files-time">
-            {row.lastTouchMs !== null ? formatAbsolute(row.lastTouchMs) : "—"}
-          </span>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-</section>
+            <span class="shrink-0 text-fg-muted" data-testid="inspector-files-verb">
+              {row.lastVerb}
+            </span>
+            {#if row.touchCount > 1}
+              <span
+                class="shrink-0 tabular-nums text-fg-muted"
+                data-testid="inspector-files-count-badge"
+              >
+                × {row.touchCount}
+              </span>
+            {/if}
+            <span class="shrink-0 tabular-nums text-fg-muted" data-testid="inspector-files-time">
+              {row.lastTouchMs !== null ? formatAbsolute(row.lastTouchMs) : "—"}
+            </span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+
+  <!-- Uploads section (T1-10) — fetched from GET /api/uploads?session_id -->
+  <section class="flex flex-col gap-3" data-testid="inspector-uploads">
+    <h3
+      class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-fg-muted"
+    >
+      {INSPECTOR_STRINGS.uploadsHeading}
+      {#if uploads.length > 0}
+        <span
+          class="rounded bg-surface-2 px-1.5 py-0.5 text-xs font-medium tabular-nums text-fg"
+          data-testid="inspector-uploads-count"
+        >
+          {uploads.length}
+        </span>
+      {/if}
+    </h3>
+
+    {#if uploadsLoading}
+      <p class="text-xs text-fg-muted" data-testid="inspector-uploads-loading">
+        {INSPECTOR_STRINGS.uploadsLoadingLabel}
+      </p>
+    {:else if uploadsError}
+      <p class="text-xs text-red-400" data-testid="inspector-uploads-error">
+        {INSPECTOR_STRINGS.uploadsErrorLabel}
+      </p>
+    {:else if uploads.length === 0}
+      <div data-testid="inspector-uploads-empty">
+        <p class="text-sm text-fg-muted">{INSPECTOR_STRINGS.uploadsEmptyHeading}</p>
+        <p class="mt-1 text-xs text-fg-muted">{INSPECTOR_STRINGS.uploadsEmptyBody}</p>
+      </div>
+    {:else}
+      <ul class="flex flex-col gap-1.5" data-testid="inspector-uploads-list">
+        {#each uploads as upload (upload.id)}
+          <li
+            class="flex min-w-0 items-center gap-2 text-xs"
+            data-testid="inspector-uploads-row"
+          >
+            <span
+              class="min-w-0 flex-1 truncate font-mono text-fg"
+              title={upload.filename}
+              data-testid="inspector-uploads-filename"
+            >
+              {upload.filename}
+            </span>
+            <span class="shrink-0 tabular-nums text-fg-muted" data-testid="inspector-uploads-size">
+              {formatSize(upload.size)}
+            </span>
+            <span class="shrink-0 tabular-nums text-fg-muted" data-testid="inspector-uploads-time">
+              {formatAbsolute(upload.created_at * 1000)}
+            </span>
+            <button
+              type="button"
+              class="shrink-0 rounded px-1 py-0.5 text-xs text-fg-muted hover:bg-surface-2 hover:text-fg"
+              aria-label={INSPECTOR_STRINGS.uploadsCopyPathAriaLabel}
+              data-testid="inspector-uploads-copy"
+              onclick={() => copyToClipboard(upload.filename)}
+            >
+              {INSPECTOR_STRINGS.uploadsCopyPathLabel}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </section>
+</div>

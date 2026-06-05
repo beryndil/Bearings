@@ -24,7 +24,7 @@ import uvicorn
 from bearings.agent.quota import QuotaPoller, build_noop_fetcher
 from bearings.config.constants import CLI_EXIT_OK, DEFAULT_AVATARS_STORAGE_ROOT
 from bearings.config.settings import Settings
-from bearings.db.connection import load_schema
+from bearings.db.connection import ensure_severity_tags, load_schema
 from bearings.web.app import create_app
 
 
@@ -110,10 +110,15 @@ async def _connect_db(db_path: Path) -> aiosqlite.Connection:
     gets the DDL applied before :func:`create_app` runs. The schema is fully
     idempotent (``IF NOT EXISTS`` + ``INSERT OR IGNORE`` guards) so
     re-application against an existing DB is a no-op.
+
+    Also calls :func:`ensure_severity_tags` so the five canonical severity
+    tags (Blocker/Critical/Medium/Low/QoL) are present on every server boot.
+    The call is idempotent — existing rows are never duplicated.
     """
     db = await aiosqlite.connect(db_path)
     db.row_factory = aiosqlite.Row
     await load_schema(db)
+    await ensure_severity_tags(db)
     return db
 
 

@@ -20,15 +20,22 @@
   type SeverityName = "low" | "medium" | "high" | "critical";
 
   interface Props {
-    /** Severity level name — determines the fill colour. */
+    /** Severity level name — determines the fill colour via Tailwind class. */
     severity: SeverityName | string;
+    /**
+     * Optional direct hex/rgb colour string that overrides the name-based
+     * Tailwind fill class (e.g. from a seeded severity tag's ``color``
+     * field). When provided, the inline style takes precedence over the
+     * class-based fill (CSS specificity: inline > class). T3-01.
+     */
+    color?: string | null;
     /** Icon size in px. Default: 16. */
     size?: number;
     /** CSS classes forwarded to the root ``<svg>``. */
     class?: string;
   }
 
-  const { severity, size = 16, class: className = "" }: Props = $props();
+  const { severity, color = null, size = 16, class: className = "" }: Props = $props();
 </script>
 
 <!--
@@ -49,13 +56,15 @@
 >
   <path
     d="M12 2 L20 5.5 L20 14 Q20 20 12 22 Q4 20 4 14 L4 5.5 Z"
-    class:fill-green-400={severity === "low"}
-    class:fill-yellow-400={severity === "medium"}
-    class:fill-orange-500={severity === "high"}
-    class:fill-red-500={severity === "critical"}
-    class:fill-fg-muted={severity !== "low" &&
+    class:fill-green-400={color === null && severity === "low"}
+    class:fill-yellow-400={color === null && severity === "medium"}
+    class:fill-orange-500={color === null && severity === "high"}
+    class:fill-red-500={color === null && severity === "critical"}
+    class:fill-fg-muted={color === null &&
+      severity !== "low" &&
       severity !== "medium" &&
       severity !== "high" &&
       severity !== "critical"}
+    style:fill={color ?? undefined}
   />
 </svg>

@@ -5850,7 +5850,7 @@
           "uploads"
         ],
         "summary": "List Uploads",
-        "description": "List uploads newest-first.",
+        "description": "List uploads newest-first, optionally filtered by session.",
         "operationId": "list-uploads",
         "parameters": [
           {
@@ -5866,6 +5866,24 @@
               "title": "Limit"
             },
             "description": "Max rows to return (1-1000)."
+          },
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to uploads linked to this session id (T1-10).",
+              "title": "Session Id"
+            },
+            "description": "Filter to uploads linked to this session id (T1-10)."
           }
         ],
         "responses": {

@@ -141,10 +141,17 @@ async def list_uploads(
         le=UPLOADS_LIST_MAX_LIMIT,
         description=f"Max rows to return (1-{UPLOADS_LIST_MAX_LIMIT}).",
     ),
+    session_id: str | None = Query(
+        default=None,
+        description="Filter to uploads linked to this session id (T1-10).",
+    ),
 ) -> UploadListOut:
-    """List uploads newest-first."""
+    """List uploads newest-first, optionally filtered by session."""
     db = _db(request)
-    rows = await uploads_db.list_all(db, limit=limit)
+    if session_id is not None:
+        rows = await uploads_db.list_by_session(db, session_id, limit=limit)
+    else:
+        rows = await uploads_db.list_all(db, limit=limit)
     return UploadListOut(uploads=[_to_out(r) for r in rows])
 
 

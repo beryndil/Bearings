@@ -13,6 +13,6 @@ keeping the public surface visible from ``bearings.db`` itself avoids the
 
 from __future__ import annotations
 
-from bearings.db.connection import get_connection_factory, load_schema
+from bearings.db.connection import ensure_severity_tags, get_connection_factory, load_schema
 
-__all__ = ["get_connection_factory", "load_schema"]
+__all__ = ["ensure_severity_tags", "get_connection_factory", "load_schema"]

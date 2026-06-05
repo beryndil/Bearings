@@ -174,6 +174,33 @@ async def get_by_sha256(conn: aiosqlite.Connection, sha256: str) -> UploadRow | 
     return _row_to_upload(row)
 
 
+async def list_by_session(
+    conn: aiosqlite.Connection,
+    session_id: str,
+    *,
+    limit: int = UPLOADS_LIST_DEFAULT_LIMIT,
+) -> list[UploadRow]:
+    """List uploads for one session, newest-first.
+
+    Returns rows where ``session_id`` matches the given value.  Returns
+    an empty list when no uploads have been linked to the session (either
+    because none were uploaded or because they predate the ``session_id``
+    column added in T1-10).  The ``limit`` cap mirrors :func:`list_all`.
+    """
+    if limit <= 0:
+        raise ValueError(f"limit must be > 0 (got {limit})")
+    bounded = min(limit, UPLOADS_LIST_MAX_LIMIT)
+    conn.row_factory = aiosqlite.Row
+    async with conn.execute(
+        "SELECT id, sha256, filename, mime_type, size, created_at "
+        "FROM uploads WHERE session_id = ? "
+        "ORDER BY created_at DESC, id DESC LIMIT ?",
+        (session_id, bounded),
+    ) as cur:
+        rows = await cur.fetchall()
+    return [_row_to_upload(row) for row in rows]
+
+
 async def list_all(
     conn: aiosqlite.Connection,
     *,
@@ -252,4 +279,5 @@ __all__ = [
     "list_all",
     "list_all_rows_for_gc",
     "list_all_sha256s",
+    "list_by_session",
 ]

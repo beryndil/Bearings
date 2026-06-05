@@ -39,8 +39,10 @@
   } from "../../api/sessions";
   import type { SessionOut } from "../../api/sessions";
   import SessionEdit from "../modals/SessionEdit.svelte";
-  import { attachTagToSession, detachTagFromSession, listTags } from "../../api/tags";
+  import { attachTagToSession, detachTagFromSession, listTags, TAG_CLASS_SEVERITY } from "../../api/tags";
   import type { TagOut } from "../../api/tags";
+  import SeverityShield from "../icons/SeverityShield.svelte";
+  import { fetchBillingMode, type BillingMode } from "../../utils/appInfo";
   import { createTemplate } from "../../api/templates";
   import { contextMenu } from "../../actions/contextMenu";
   import {
@@ -158,6 +160,49 @@
 
   /** Whether this row is part of the current multi-select set. */
   const isInSelection = $derived(multiSelectionStore.ids.has(session.id));
+
+  // ---- severity tag (T3-01) -----------------------------------------------
+
+  /** The single severity tag attached to this session, or null if none. */
+  const severityTag = $derived(tags.find((t) => t.class_ === TAG_CLASS_SEVERITY) ?? null);
+
+  // ---- billing mode (T3-02) -----------------------------------------------
+
+  /**
+   * Resolved billing mode — fetched once at module level (cached promise).
+   * Null while the fetch is in flight; falls back to "payg" on error.
+   */
+  let billingMode = $state<BillingMode | null>(null);
+
+  $effect(() => {
+    let cancelled = false;
+    void fetchBillingMode().then((m) => {
+      if (!cancelled) billingMode = m;
+    });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  /**
+   * Cost sub-line text for PAYG mode. Returns null when cost is exactly
+   * zero (no turns yet — don't show "$0.00" noise).
+   */
+  const paygCostLabel = $derived(
+    session.total_cost_usd > 0
+      ? `${SIDEBAR_STRINGS.sessionCostPrefix}${session.total_cost_usd.toFixed(2)}`
+      : null,
+  );
+
+  /**
+   * Message-count sub-line for subscription mode (always shown so the
+   * user knows how much context the session holds).
+   */
+  const subscriptionCountLabel = $derived(
+    session.message_count > 0
+      ? `${session.message_count} ${SIDEBAR_STRINGS.sessionMessageCountSuffix}`
+      : null,
+  );
 
   const sessionHref = $derived(`/sessions/${encodeURIComponent(session.id)}`);
 
@@ -622,6 +667,15 @@
         keyboard handler on this span would duplicate the anchor's own
         navigation semantics, so a11y rules are suppressed here.
       -->
+      <!-- Severity shield (T3-01) — shown when a severity tag is attached -->
+      {#if severityTag !== null}
+        <SeverityShield
+          severity={severityTag.name.toLowerCase()}
+          color={severityTag.color}
+          size={14}
+          class="shrink-0"
+        />
+      {/if}
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <span
@@ -785,6 +839,29 @@
     {#if session.paired_parent_title}
       <span class="text-xs text-fg-muted" data-testid="session-paired-parent">
         ↳ {session.paired_parent_title}
+      </span>
+    {/if}
+
+    <!--
+      Billing cost sub-line (T3-02): PAYG shows dollar cost when > $0;
+      subscription shows message count. Hidden while billing mode is
+      resolving (billingMode === null).
+    -->
+    {#if billingMode === "payg" && paygCostLabel !== null}
+      <span
+        class="tabular-nums text-xs text-fg-muted"
+        aria-label={SIDEBAR_STRINGS.sessionCostAriaLabel}
+        data-testid="session-cost-line"
+      >
+        {paygCostLabel}
+      </span>
+    {:else if billingMode === "subscription" && subscriptionCountLabel !== null}
+      <span
+        class="tabular-nums text-xs text-fg-muted"
+        aria-label={SIDEBAR_STRINGS.sessionMessageCountAriaLabel}
+        data-testid="session-msg-count-line"
+      >
+        {subscriptionCountLabel}
       </span>
     {/if}
   </a>

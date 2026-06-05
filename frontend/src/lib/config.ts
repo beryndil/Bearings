@@ -1044,6 +1044,15 @@ export const SIDEBAR_STRINGS = {
   templatesButtonAriaLabel: "Templates… — open picker",
   /** Pagination (PERF-BUG-001 + PERF-BUG-005) — load-more indicator. */
   loadingMoreSessions: "Loading more…",
+  // T3-02: billing-mode-aware cost sub-line on session rows.
+  /** PAYG mode: prefix for the dollar-cost sub-line. */
+  sessionCostPrefix: "$",
+  /** PAYG mode: aria-label for the cost sub-line. */
+  sessionCostAriaLabel: "Session cost",
+  /** Subscription mode: suffix for the message-count sub-line. */
+  sessionMessageCountSuffix: "msgs",
+  /** Subscription mode: aria-label for the message-count sub-line. */
+  sessionMessageCountAriaLabel: "Session message count",
 } as const;
 
 /**
@@ -1967,6 +1976,26 @@ export const INSPECTOR_STRINGS = {
   analyticsPromoteTagMemorySuccess: "Promoted to tag memory.",
   analyticsPromoteOnOpenSuccess: "Snippet written to on_open.sh.",
   analyticsPromoteError: "Promote failed. Check the console for details.",
+  // T1-10 Uploads section inside the Files tab.
+  uploadsHeading: "Uploads",
+  uploadsLoadingLabel: "Loading uploads…",
+  uploadsErrorLabel: "Couldn't load uploads.",
+  uploadsEmptyHeading: "No uploads yet",
+  uploadsEmptyBody: "A row appears each time a file is attached to this session.",
+  uploadsCopyPathLabel: "Copy path",
+  uploadsCopyPathAriaLabel: "Copy upload path to clipboard",
+  // T1-11 Reorg history section inside the Changes tab.
+  reorgHistoryHeading: "Reorg History",
+  reorgHistoryLoadingLabel: "Loading reorg history…",
+  reorgHistoryErrorLabel: "Couldn't load reorg history.",
+  reorgHistoryEmptyHeading: "No reorg operations yet",
+  reorgHistoryEmptyBody:
+    "A row appears after each merge, split, or message-move operation on this session.",
+  reorgHistoryKindLabels: {
+    merge: "Merged from",
+    split: "Split from",
+    move: "Moved message",
+  } as const satisfies Record<"merge" | "split" | "move", string>,
 } as const;
 
 // ---- Session-edit modal string table -------------------------------------

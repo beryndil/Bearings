@@ -16,7 +16,7 @@
  * manually.
  */
 import { API_UPLOADS_ENDPOINT } from "../config";
-import { ApiError } from "./client";
+import { ApiError, getJson } from "./client";
 
 /**
  * Wire shape — one-to-one with
@@ -24,13 +24,18 @@ import { ApiError } from "./client";
  * names exactly so the cast in :func:`uploadFile` is correct without
  * runtime validation.
  */
-interface UploadOut {
+export interface UploadOut {
   id: number;
   sha256: string;
   filename: string;
   mime_type: string;
   size: number;
   created_at: number;
+}
+
+/** Wire shape for the uploads list response. */
+interface UploadListOut {
+  uploads: UploadOut[];
 }
 
 const HTTP_OK_MIN = 200;
@@ -67,6 +72,18 @@ export async function uploadFile(file: File, signal?: AbortSignal): Promise<Uplo
     );
   }
   return (await response.json()) as UploadOut;
+}
+
+/**
+ * List uploads linked to ``sessionId``.
+ *
+ * Calls ``GET /api/uploads?session_id={id}``.  Returns an empty array
+ * when no uploads have been linked to the session yet.
+ */
+export async function listUploadsBySession(sessionId: string): Promise<UploadOut[]> {
+  const url = `${API_UPLOADS_ENDPOINT}?session_id=${encodeURIComponent(sessionId)}`;
+  const result = await getJson<UploadListOut>(url);
+  return result.uploads;
 }
 
 async function safeReadBody(response: Response): Promise<unknown> {
