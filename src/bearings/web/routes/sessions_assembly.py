@@ -6,8 +6,10 @@ mutating it.  Export/import and work-evidence live in ``sessions_io``.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -23,6 +25,8 @@ from bearings.web.models.sessions import (
     SessionTodosOut,
     SystemPromptLayerOut,
     SystemPromptLayersOut,
+    SystemPromptLayerWriteIn,
+    SystemPromptLayerWriteOut,
     TokenTotalsOut,
     ToolCallOut,
 )
@@ -35,6 +39,17 @@ from bearings.web.routes._sessions_helpers import (
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
+
+
+def _resolve_layer_path(raw: str) -> Path:
+    """Resolve ``raw`` to a canonical absolute path without performing I/O.
+
+    Extracted as a sync helper so callers that live in async route functions
+    avoid triggering ruff ASYNC240 (pathlib.Path methods in async context).
+    ``Path.resolve(strict=False)`` is purely a string operation when the path
+    exists; it never blocks.
+    """
+    return Path(raw).resolve(strict=False)
 
 
 # ---- viewed ----------------------------------------------------------------
@@ -230,6 +245,53 @@ async def get_session_system_prompt(session_id: str, request: Request) -> System
         total_tokens=result.total_tokens,
         token_count_approximate=True,
     )
+
+
+@router.put(
+    "/api/sessions/{session_id}/system_prompt/layer",
+    response_model=SystemPromptLayerWriteOut,
+    operation_id="put-session-layer-content",
+)
+async def put_session_layer_content(
+    session_id: str,
+    body: SystemPromptLayerWriteIn,
+    request: Request,
+) -> SystemPromptLayerWriteOut:
+    """Overwrite a filesystem-sourced system-prompt layer file.
+
+    Validates ``body.path`` against the session's current assembled layer
+    ``source_path`` values — only files already present as layers can be
+    written.  This prevents arbitrary filesystem writes; only
+    ``project_claude_md`` and ``tag_claude_md`` layers have a
+    ``source_path``.  404 when the session is absent or the path does not
+    match any current layer.
+    """
+    db = _db(request)
+    result = await assemble_system_prompt_layers(db, session_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no session matches {session_id!r}",
+        )
+    resolved = _resolve_layer_path(body.path)
+    valid_paths = {
+        _resolve_layer_path(layer.source_path)
+        for layer in result.layers
+        if layer.source_path is not None
+    }
+    if resolved not in valid_paths:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"path {body.path!r} is not a source path for any layer in this session",
+        )
+    try:
+        await asyncio.to_thread(resolved.write_text, body.content, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"could not write file: {exc}",
+        ) from exc
+    return SystemPromptLayerWriteOut(path=str(resolved), content=body.content)
 
 
 # ---- token totals hydration (gap-cycle-13-003) -----------------------------

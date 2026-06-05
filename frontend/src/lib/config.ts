@@ -1798,6 +1798,9 @@ export const INSPECTOR_STRINGS = {
     template_baseline: "No template baseline.",
   } as const,
   instructionsLayerSourceLabel: "Source:",
+  instructionsLayerEditButton: "Edit…",
+  instructionsCopyPathButton: "Copy path",
+  instructionsCopyPathDone: "Copied!",
   instructionsLayerExpand: "Expand",
   instructionsLayerCollapse: "Collapse",
   // Files subsection (gap-cycle-09-003) — derives rows from
@@ -2024,6 +2027,26 @@ export const SESSION_EDIT_MODAL_STRINGS = {
   tagNoMatches: "No matching tags — press Enter to create",
   instructionsLabel: "Session instructions",
   instructionsPlaceholder: "Per-session instructions injected into every prompt (optional)",
+  saveButton: "Save",
+  savingButton: "Saving…",
+  cancelButton: "Cancel",
+  errorPrefix: "Save failed:",
+} as const;
+
+// ---- CLAUDE.md file-edit modal string table --------------------------------
+
+/**
+ * UI strings for the CLAUDE.md file-edit modal opened from the
+ * Instructions inspector panel when the user clicks "Edit…" on a
+ * ``project_claude_md`` layer.
+ */
+export const CLAUDEMD_EDIT_STRINGS = {
+  title: "Edit CLAUDE.md",
+  ariaLabel: "Edit CLAUDE.md file modal",
+  pathLabel: "File path",
+  copyPathButton: "Copy",
+  copyPathDone: "Copied!",
+  contentLabel: "Content",
   saveButton: "Save",
   savingButton: "Saving…",
   cancelButton: "Cancel",

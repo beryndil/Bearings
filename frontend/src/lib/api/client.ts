@@ -122,6 +122,20 @@ export async function patchJson<T>(
 }
 
 /**
+ * Issue a PUT against ``path`` with a JSON body, decode the JSON
+ * response, and return it cast to ``T``. Mirrors :func:`patchJson`'s
+ * error contract. Used by the Instructions panel's CLAUDE.md file-write
+ * surface (``PUT /api/sessions/{id}/system_prompt/layer``).
+ */
+export async function putJson<T>(
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<T> {
+  return await sendJson<T>("PUT", path, body, options);
+}
+
+/**
  * Issue a DELETE against ``path``. The 204-no-content path returns
  * ``undefined`` cast to ``T``; callers that expect ``void`` should
  * type the call as ``deleteResource<void>(...)``.
@@ -134,7 +148,7 @@ export async function deleteResource<T = void>(
 }
 
 async function sendJson<T>(
-  method: "PATCH" | "DELETE",
+  method: "PATCH" | "DELETE" | "PUT",
   path: string,
   body: unknown,
   options: RequestOptions = {},

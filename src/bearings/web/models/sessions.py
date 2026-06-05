@@ -319,6 +319,33 @@ class SystemPromptLayersOut(BaseModel):
     token_count_approximate: bool = True
 
 
+class SystemPromptLayerWriteIn(BaseModel):
+    """Request body for ``PUT /api/sessions/{id}/system_prompt/layer``.
+
+    ``path`` must match a ``source_path`` already present in the session's
+    assembled layers so arbitrary file writes are prevented.  Only
+    filesystem-sourced layers (``project_claude_md``, ``tag_claude_md``)
+    carry a ``source_path``; attempting to write any other path returns 404.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    """Absolute path of the file to overwrite."""
+
+    content: str
+    """New utf-8 content to write."""
+
+
+class SystemPromptLayerWriteOut(BaseModel):
+    """Response shape for ``PUT /api/sessions/{id}/system_prompt/layer``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    content: str
+
+
 class TokenTotalsOut(BaseModel):
     """Response shape for ``GET /api/sessions/{id}/tokens`` (gap-cycle-13-003).
 

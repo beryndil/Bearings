@@ -78,6 +78,8 @@ def test_operation_id_count(openapi_spec: dict) -> None:  # type: ignore[type-ar
       159 — Exec-2A: 7 new operations (reply-actions catalog + apply,
              artifacts CRUD x3, ui-config, history/export)
       160 — Exec-2B: spawn_classify (T2-07)
+      161 — Instructions panel: PUT /api/sessions/{id}/system_prompt/layer
+             (put-session-layer-content) for in-place CLAUDE.md editing
     """
     operations = _iter_operations(openapi_spec)
-    assert len(operations) == 160, f"Expected 160 operations in OpenAPI spec, got {len(operations)}"
+    assert len(operations) == 161, f"Expected 161 operations in OpenAPI spec, got {len(operations)}"

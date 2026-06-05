@@ -25,6 +25,7 @@
   import { listTags, type TagOut } from "../../api/tags";
   import { refreshSessions } from "../../stores/sessions.svelte";
   import { currentFilter } from "../../stores/tags.svelte";
+  import ClaudemdEdit from "../modals/ClaudemdEdit.svelte";
   import SessionEdit from "../modals/SessionEdit.svelte";
 
   interface Props {
@@ -104,7 +105,7 @@
     collapsed[key] = !isCollapsed(kind, index);
   }
 
-  // ---- edit modal state -------------------------------------------------
+  // ---- session-instructions edit modal state ------------------------------
 
   let showEditModal = $state(false);
   let allTagsForEdit = $state<TagOut[]>([]);
@@ -129,6 +130,43 @@
       // Non-fatal — stale layers are acceptable until next mount.
     }
   }
+
+  // ---- CLAUDE.md file-edit modal state -------------------------------------
+
+  let showFileEditModal = $state(false);
+  let fileEditPath = $state("");
+  let fileEditContent = $state("");
+
+  function openFileEdit(layer: SystemPromptLayer): void {
+    if (!layer.source_path) return;
+    fileEditPath = layer.source_path;
+    fileEditContent = layer.body;
+    showFileEditModal = true;
+  }
+
+  async function handleFileEditSave(): Promise<void> {
+    showFileEditModal = false;
+    // Re-fetch layers so the updated body is reflected immediately.
+    try {
+      const out = await getSessionSystemPrompt(session.id);
+      allLayers = out.layers;
+    } catch {
+      // Non-fatal — stale layers are acceptable until next mount.
+    }
+  }
+
+  // ---- copy path -----------------------------------------------------------
+
+  let copiedPath = $state<string | null>(null);
+
+  function copyPath(path: string): void {
+    void navigator.clipboard.writeText(path).then(() => {
+      copiedPath = path;
+      setTimeout(() => {
+        copiedPath = null;
+      }, 1500);
+    });
+  }
 </script>
 
 {#if showEditModal}
@@ -140,6 +178,18 @@
     onSave={() => void handleEditSave()}
     onCancel={() => {
       showEditModal = false;
+    }}
+  />
+{/if}
+
+{#if showFileEditModal}
+  <ClaudemdEdit
+    sessionId={session.id}
+    path={fileEditPath}
+    initialContent={fileEditContent}
+    onSave={() => void handleFileEditSave()}
+    onCancel={() => {
+      showFileEditModal = false;
     }}
   />
 {/if}
@@ -195,33 +245,64 @@
               class="flex flex-col rounded border border-border bg-surface-2"
               data-testid={`instructions-layer-${kind}-${i}`}
             >
-              <!-- Layer header: source_path + token count + toggle -->
-              <button
-                type="button"
-                class="flex items-center justify-between gap-2 px-2 py-1.5 text-left hover:bg-surface-1"
-                data-testid={`instructions-layer-toggle-${kind}-${i}`}
-                aria-expanded={!isLayerCollapsed}
-                onclick={() => toggleCollapse(kind, i)}
-              >
-                <span class="min-w-0 truncate font-mono text-xs text-fg">
+              <!-- Layer header: source path (full, wrapping) + actions + toggle -->
+              <div class="flex flex-col gap-1 px-2 py-1.5">
+                <!-- Path row -->
+                <div class="flex items-start gap-1.5">
+                  <span
+                    class="min-w-0 flex-1 break-all font-mono text-xs text-fg"
+                    title={layer.source_path ?? undefined}
+                    data-testid={`instructions-layer-path-${kind}-${i}`}
+                  >
+                    {#if layer.source_path}
+                      <span class="text-fg-muted"
+                        >{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
+                      >
+                      {layer.source_path}
+                    {:else}
+                      <span class="text-fg-muted">{kindLabel}</span>
+                    {/if}
+                  </span>
+                </div>
+                <!-- Actions row: token count + copy + edit + expand toggle -->
+                <div class="flex items-center gap-1.5">
+                  <span class="shrink-0 text-xs text-fg-muted">
+                    {INSPECTOR_STRINGS.instructionsLayerTokensLabel(layer.token_count)}
+                  </span>
+                  <span class="flex-1"></span>
                   {#if layer.source_path}
-                    <span class="text-fg-muted"
-                      >{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
+                    <button
+                      type="button"
+                      class="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xs text-fg hover:bg-surface-1"
+                      data-testid={`instructions-layer-copy-${kind}-${i}`}
+                      onclick={() => copyPath(layer.source_path!)}
                     >
-                    {layer.source_path}
-                  {:else}
-                    <span class="text-fg-muted">{kindLabel}</span>
+                      {copiedPath === layer.source_path
+                        ? INSPECTOR_STRINGS.instructionsCopyPathDone
+                        : INSPECTOR_STRINGS.instructionsCopyPathButton}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xs text-fg hover:bg-surface-1"
+                      data-testid={`instructions-layer-edit-${kind}-${i}`}
+                      onclick={() => openFileEdit(layer)}
+                    >
+                      {INSPECTOR_STRINGS.instructionsLayerEditButton}
+                    </button>
                   {/if}
-                </span>
-                <span class="shrink-0 text-xs text-fg-muted">
-                  {INSPECTOR_STRINGS.instructionsLayerTokensLabel(layer.token_count)}
-                </span>
-                <span class="shrink-0 text-xs text-fg-muted">
-                  {isLayerCollapsed
-                    ? INSPECTOR_STRINGS.instructionsLayerExpand
-                    : INSPECTOR_STRINGS.instructionsLayerCollapse}
-                </span>
-              </button>
+                  <button
+                    type="button"
+                    class="rounded border border-border bg-surface-2 px-1.5 py-0.5 text-xs text-fg-muted hover:bg-surface-1"
+                    data-testid={`instructions-layer-toggle-${kind}-${i}`}
+                    aria-expanded={!isLayerCollapsed}
+                    onclick={() => toggleCollapse(kind, i)}
+                  >
+                    {isLayerCollapsed
+                      ? INSPECTOR_STRINGS.instructionsLayerExpand
+                      : INSPECTOR_STRINGS.instructionsLayerCollapse}
+                  </button>
+                </div>
+              </div>
 
               {#if !isLayerCollapsed}
                 <pre

@@ -27,6 +27,7 @@ import {
   getJson,
   patchJson,
   postJson,
+  putJson,
   type RequestOptions,
 } from "./client";
 
@@ -889,6 +890,39 @@ export async function getSessionSystemPrompt(
 ): Promise<SystemPromptLayersOut> {
   const path = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/system_prompt`;
   return await getJson<SystemPromptLayersOut>(path, options);
+}
+
+// ---- layer content write --------------------------------------------------
+
+/**
+ * Wire shape for ``PUT /api/sessions/{id}/system_prompt/layer`` response.
+ *
+ * Mirrors :class:`bearings.web.models.sessions.SystemPromptLayerWriteOut`.
+ */
+export interface SystemPromptLayerWriteOut {
+  path: string;
+  content: string;
+}
+
+/**
+ * Overwrite a filesystem-sourced system-prompt layer file.
+ *
+ * ``path`` must match a ``source_path`` present in the session's current
+ * assembled layers — the backend validates this to prevent arbitrary writes.
+ * Only ``project_claude_md`` / ``tag_claude_md`` layers carry a
+ * ``source_path`` and can be written.
+ *
+ * @throws :class:`ApiError` on 404 (session not found or path not a layer)
+ *         or 500 (OS-level write failure).
+ */
+export async function putSessionLayerContent(
+  sessionId: string,
+  path: string,
+  content: string,
+  options: RequestOptions = {},
+): Promise<SystemPromptLayerWriteOut> {
+  const endpoint = `${API_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionId)}/system_prompt/layer`;
+  return await putJson<SystemPromptLayerWriteOut>(endpoint, { path, content }, options);
 }
 
 // ---- preview_title (T1-03) ------------------------------------------------
