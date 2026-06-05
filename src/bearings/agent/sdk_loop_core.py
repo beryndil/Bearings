@@ -41,6 +41,7 @@ from bearings.agent.runner import (
     SessionRunner,
 )
 from bearings.agent.sdk_loop_errors import (
+    TokenExpiredError,
     _enter_error_state,
     _is_auth_error,
     _make_todo_update,
@@ -102,10 +103,14 @@ async def run_session_loop(
     """Run the SDK worker loop until the supervisor cancels.
 
     On a first ``"Invalid authentication credentials"`` (401) error the loop
-    triggers a credential reload — closing the current SDK subprocess and
-    spawning a fresh one that reads the updated ``~/.claude/.credentials.json``
-    — then retries once.  A second consecutive 401 surfaces as a terminal
-    error (``_enter_error_state``).
+    checks whether the OAuth token in ``~/.claude/.credentials.json`` is
+    expired.  If it is, :class:`~bearings.agent.sdk_loop_errors.TokenExpiredError`
+    is raised immediately with an actionable re-auth message — retrying with a
+    known-stale bearer would only produce a second 401.  If the token is still
+    valid (a mid-flight rotation), the loop closes the current subprocess,
+    spawns a fresh one that reads the updated credentials file, and retries
+    once.  A second consecutive 401 after a valid-token retry surfaces as a
+    terminal error (``_enter_error_state``).
 
     Args:
         runner: Per-session :class:`SessionRunner` (prompt queue + ring buffer).
@@ -134,8 +139,16 @@ async def run_session_loop(
         if not _is_auth_error(exc):
             await _enter_error_state(runner, session, exc)
             return
-        # First 401 — reload credentials, recreate the SDK subprocess, retry once.
-        _reload_sdk_credentials()
+        # First 401 — check whether the token is fully expired (user must re-auth)
+        # or was merely rotated mid-flight (fresh token already in credentials file).
+        try:
+            _reload_sdk_credentials()
+        except TokenExpiredError as expired_exc:
+            # Token is past its expiry date — retrying with the same stale bearer
+            # will just produce another 401.  Surface an actionable error now.
+            await _enter_error_state(runner, session, expired_exc)
+            return
+        # Token was recently rotated; fresh bearer is in the file.  Retry once.
         try:
             await _run_sdk_client_body(
                 factory, sdk_options, runner, session, translator, persist_fn

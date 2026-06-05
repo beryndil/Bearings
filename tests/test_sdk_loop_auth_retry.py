@@ -36,6 +36,7 @@ from bearings.agent.options import compose_session_options
 from bearings.agent.routing import RoutingDecision
 from bearings.agent.runner import SessionRunner
 from bearings.agent.sdk_loop import run_session_loop
+from bearings.agent.sdk_loop_errors import TokenExpiredError
 from bearings.agent.session import AgentSession, SessionConfig, SessionState
 from bearings.config.constants import SESSION_KIND_CHAT
 from bearings.db import sessions as sessions_db
@@ -241,3 +242,56 @@ async def test_401_retry_twice_surfaces_terminal_error(conn: aiosqlite.Connectio
     assert len(error_events) == 1
     assert error_events[0].fatal is True
     assert _AUTH_ERROR_MSG in error_events[0].message
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — expired token: no retry subprocess spawned, clear actionable error
+# ---------------------------------------------------------------------------
+
+
+async def test_401_expired_token_no_retry_subprocess(conn: aiosqlite.Connection) -> None:
+    """When _reload_sdk_credentials raises TokenExpiredError (token past its
+    expiry date), the loop must NOT spawn a second subprocess.  It transitions
+    to ERROR immediately with an actionable re-authentication message.
+
+    This covers long-idle sessions (14+ hours) where the token is fully
+    expired and re-authentication is required before any retry can succeed.
+    """
+    session_row = await sessions_db.create(
+        conn, kind=SESSION_KIND_CHAT, title="t3", working_dir="/tmp/wd", model="sonnet"
+    )
+    runner = SessionRunner(session_row.id)
+    agent = _build_session(conn, session_row.id)
+    server = build_bearings_mcp_server(
+        BearingsMcpDeps.minimal(
+            CloseSessionDeps(session_id=session_row.id, db_factory=_unused_factory())
+        )
+    )
+    runner.enqueue_prompt(message_id="msg_u3", content="long-idle session, token expired")
+
+    call_count = [0]
+
+    def _first_401_factory(*, options: Any) -> _FakeClient:
+        call_count[0] += 1
+        return _FakeClient(options=options, raise_on_query=_AUTH_ERROR_MSG)
+
+    def _raise_token_expired() -> None:
+        raise TokenExpiredError(
+            "OAuth token expired at 2026-01-01T00:00:00+00:00. "
+            "Re-authenticate by running 'claude' in a terminal."
+        )
+
+    with patch("bearings.agent.sdk_loop_core._reload_sdk_credentials", _raise_token_expired):
+        await run_session_loop(
+            runner, agent, _options(server), client_factory=_first_401_factory
+        )
+
+    # Session must be in ERROR state.
+    assert agent.state is SessionState.ERROR
+    # Exactly ONE client created — no retry subprocess when token is expired.
+    assert call_count[0] == 1, f"expected 1 client (no retry), got {call_count[0]}"
+    # The ErrorEvent message must carry the actionable re-auth hint.
+    error_events = [evt for _, evt in runner._buffer if isinstance(evt, ErrorEvent)]
+    assert len(error_events) == 1
+    assert error_events[0].fatal is True
+    assert "Re-authenticate" in error_events[0].message

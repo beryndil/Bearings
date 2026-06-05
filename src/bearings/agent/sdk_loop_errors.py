@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Any, Final
 
@@ -44,6 +45,15 @@ _AUTH_ERROR_MARKER: Final[str] = "Invalid authentication credentials"
 _CREDENTIALS_PATH: Final[Path] = Path.home() / ".claude" / ".credentials.json"
 
 
+class TokenExpiredError(RuntimeError):
+    """Raised when the OAuth token in the credentials file is already expired.
+
+    Distinct from a transient rotation 401 (where a fresh token is already in
+    the file).  Signals that re-authentication is required — the retry loop
+    must not attempt a subprocess spawn with the known-stale bearer.
+    """
+
+
 def _is_auth_error(exc: BaseException) -> bool:
     """Return ``True`` when *exc* carries the 401 auth-credentials marker.
 
@@ -63,19 +73,46 @@ def _reload_sdk_credentials() -> None:
     new subprocess) picks up the rotated bearer automatically.  This
     function verifies the file is readable, logs whether an
     ``accessToken`` is present, and records the event for diagnostics.
-    Failures to read the file are logged as warnings — the retry
-    proceeds regardless so the next subprocess attempt can surface a
+
+    Raises:
+        TokenExpiredError: When the ``expiresAt`` field in the credentials
+            file is in the past.  A mid-rotation 401 means Anthropic has
+            already issued a fresh bearer that the retry subprocess will pick
+            up; an *expired* token means the user needs to re-authenticate
+            (``claude`` CLI) before any subprocess attempt can succeed.
+            Raising here prevents a guaranteed-to-fail second 401 and
+            surfaces an actionable message instead.
+
+    Failures to read or parse the credentials file are logged as warnings —
+    the retry proceeds regardless so the next subprocess attempt surfaces a
     clearer error.
     """
     try:
         data = json.loads(_CREDENTIALS_PATH.read_text(encoding="utf-8"))
-        has_token = bool(data.get("claudeAiOauth", {}).get("accessToken"))
+        oauth = data.get("claudeAiOauth", {})
+        has_token = bool(oauth.get("accessToken"))
+        expires_at_ms: int = int(oauth.get("expiresAt") or 0)
+        now_ms = int(time.time() * 1000)
+        token_expired = expires_at_ms > 0 and expires_at_ms <= now_ms
         _log.info(
             "401 auth error: credential reload from %s "
-            "(accessToken present=%s) — recreating SDK subprocess",
+            "(accessToken present=%s, token_expired=%s) — recreating SDK subprocess",
             _CREDENTIALS_PATH,
             has_token,
+            token_expired,
         )
+        if token_expired:
+            import datetime
+
+            expires_iso = datetime.datetime.fromtimestamp(
+                expires_at_ms / 1000, tz=datetime.UTC
+            ).isoformat()
+            raise TokenExpiredError(
+                f"OAuth token expired at {expires_iso}. "
+                "Re-authenticate by running 'claude' in a terminal."
+            )
+    except TokenExpiredError:
+        raise
     except Exception as read_exc:
         _log.warning(
             "401 auth error: failed to read credentials at %s: %s — retrying SDK subprocess anyway",
