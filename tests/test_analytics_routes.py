@@ -45,7 +45,7 @@ Actions (§9.3):
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import aiosqlite
@@ -91,18 +91,24 @@ def db_path(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def client(db_path: Path) -> Iterator[TestClient]:
-    """TestClient backed by a real bootstrapped SQLite DB."""
+async def client(db_path: Path) -> AsyncIterator[TestClient]:
+    """TestClient backed by a real bootstrapped SQLite DB.
 
-    async def _build() -> aiosqlite.Connection:
-        return await _bootstrapped(db_path)
-
-    import asyncio
-
-    conn = asyncio.get_event_loop().run_until_complete(_build())
-    app = create_app(db_connection=conn)
-    with TestClient(app) as tc:
-        yield tc
+    The fixture is async so the aiosqlite connection is created in the
+    pytest-asyncio event loop rather than via a temporary
+    ``asyncio.get_event_loop().run_until_complete()`` call — the latter
+    pattern can cause the connection to be bound to a loop that has already
+    finished, leading to spurious hangs when multi-query route handlers
+    request the same connection from a different event loop (starlette
+    TestClient creates its own anyio portal).
+    """
+    conn = await _bootstrapped(db_path)
+    try:
+        app = create_app(db_connection=conn)
+        with TestClient(app) as tc:
+            yield tc
+    finally:
+        await conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +119,7 @@ def client(db_path: Path) -> Iterator[TestClient]:
 class TestLogTurn:
     """POST /api/analytics/turns."""
 
-    def test_happy_path_201(self, client: TestClient) -> None:
+    async def test_happy_path_201(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/turns",
             json={
@@ -127,7 +133,7 @@ class TestLogTurn:
         assert resp.status_code == 201
         assert resp.json()["status"] == "ok"
 
-    def test_duplicate_turn_is_idempotent(self, client: TestClient) -> None:
+    async def test_duplicate_turn_is_idempotent(self, client: TestClient) -> None:
         payload = {
             "session_id": _SESS_ID,
             "turn_index": 1,
@@ -140,7 +146,7 @@ class TestLogTurn:
         assert r1.status_code == 201
         assert r2.status_code == 201
 
-    def test_missing_required_field_422(self, client: TestClient) -> None:
+    async def test_missing_required_field_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/turns",
             json={"session_id": _SESS_ID, "turn_index": 0},
@@ -151,7 +157,7 @@ class TestLogTurn:
 class TestLogPlugBlocksBatch:
     """POST /api/analytics/plug-blocks/batch."""
 
-    def test_happy_path_201(self, client: TestClient) -> None:
+    async def test_happy_path_201(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/plug-blocks/batch",
             json={
@@ -170,7 +176,7 @@ class TestLogPlugBlocksBatch:
         assert resp.status_code == 201
         assert resp.json()["inserted"] == 1
 
-    def test_unknown_block_type_422(self, client: TestClient) -> None:
+    async def test_unknown_block_type_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/plug-blocks/batch",
             json={
@@ -196,7 +202,7 @@ class TestLogPlugBlocksBatch:
 class TestBucketCurrent:
     """GET /api/analytics/bucket/current."""
 
-    def test_no_snapshot_returns_null_windows(self, client: TestClient) -> None:
+    async def test_no_snapshot_returns_null_windows(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/bucket/current")
         assert resp.status_code == 200
         body = resp.json()
@@ -204,23 +210,19 @@ class TestBucketCurrent:
         assert body["weekly"] is None
         assert isinstance(body["as_of"], int)
 
-    def test_with_snapshot_returns_windows(self, db_path: Path, client: TestClient) -> None:
-        import asyncio
+    async def test_with_snapshot_returns_windows(self, db_path: Path, client: TestClient) -> None:
+        factory = get_connection_factory(db_path)
+        conn2 = await factory().__aenter__()
+        await load_schema(conn2)
+        await insert_bucket_snapshot(
+            conn2,
+            five_hour_used=80_000,
+            five_hour_limit=200_000,
+            weekly_used=1_500_000,
+            weekly_limit=5_000_000,
+        )
+        await conn2.__aexit__(None, None, None)
 
-        async def _insert_snap() -> None:
-            factory = get_connection_factory(db_path)
-            conn = await factory().__aenter__()
-            await load_schema(conn)
-            await insert_bucket_snapshot(
-                conn,
-                five_hour_used=80_000,
-                five_hour_limit=200_000,
-                weekly_used=1_500_000,
-                weekly_limit=5_000_000,
-            )
-            await conn.__aexit__(None, None, None)
-
-        asyncio.get_event_loop().run_until_complete(_insert_snap())
         resp = client.get("/api/analytics/bucket/current")
         assert resp.status_code == 200
         body = resp.json()
@@ -232,16 +234,16 @@ class TestBucketCurrent:
 class TestAttribution:
     """GET /api/analytics/attribution."""
 
-    def test_empty_db_returns_empty_list(self, client: TestClient) -> None:
+    async def test_empty_db_returns_empty_list(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/attribution")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_unknown_window_422(self, client: TestClient) -> None:
+    async def test_unknown_window_422(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/attribution?window=fortnight")
         assert resp.status_code == 422
 
-    def test_unknown_group_by_422(self, client: TestClient) -> None:
+    async def test_unknown_group_by_422(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/attribution?group_by=model")
         assert resp.status_code == 422
 
@@ -249,24 +251,24 @@ class TestAttribution:
 class TestRedundancy:
     """GET /api/analytics/redundancy."""
 
-    def test_empty_db_returns_empty_list(self, client: TestClient) -> None:
+    async def test_empty_db_returns_empty_list(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/redundancy")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_last_n_below_min_422(self, client: TestClient) -> None:
+    async def test_last_n_below_min_422(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/redundancy?last_n=3")
         assert resp.status_code == 422
 
-    def test_last_n_above_max_422(self, client: TestClient) -> None:
+    async def test_last_n_above_max_422(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/redundancy?last_n=201")
         assert resp.status_code == 422
 
-    def test_unknown_tag_404(self, client: TestClient) -> None:
+    async def test_unknown_tag_404(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/redundancy?tag=nonexistent_tag")
         assert resp.status_code == 404
 
-    def test_unknown_block_types_422(self, client: TestClient) -> None:
+    async def test_unknown_block_types_422(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/redundancy?block_types=not_a_type")
         assert resp.status_code == 422
 
@@ -274,7 +276,7 @@ class TestRedundancy:
 class TestPlugBlockDetail:
     """GET /api/analytics/plug-blocks/{hash}."""
 
-    def test_happy_path(self, client: TestClient) -> None:
+    async def test_happy_path(self, client: TestClient) -> None:
         client.post(
             "/api/analytics/plug-blocks/batch",
             json={
@@ -289,7 +291,7 @@ class TestPlugBlockDetail:
         assert body["hash"] == _HASH_A
         assert body["block_type"] == "claude_md"
 
-    def test_missing_returns_404(self, client: TestClient) -> None:
+    async def test_missing_returns_404(self, client: TestClient) -> None:
         resp = client.get(f"/api/analytics/plug-blocks/{'z' * 64}")
         assert resp.status_code == 404
 
@@ -297,7 +299,7 @@ class TestPlugBlockDetail:
 class TestPlugBlockVersions:
     """GET /api/analytics/plug-blocks/{hash}/versions."""
 
-    def test_single_version_no_source_path(self, client: TestClient) -> None:
+    async def test_single_version_no_source_path(self, client: TestClient) -> None:
         client.post(
             "/api/analytics/plug-blocks/batch",
             json={
@@ -313,7 +315,7 @@ class TestPlugBlockVersions:
         assert versions[0]["hash"] == _HASH_A
         assert versions[0]["unified_diff"] is None
 
-    def test_missing_returns_404(self, client: TestClient) -> None:
+    async def test_missing_returns_404(self, client: TestClient) -> None:
         resp = client.get(f"/api/analytics/plug-blocks/{'z' * 64}/versions")
         assert resp.status_code == 404
 
@@ -321,7 +323,7 @@ class TestPlugBlockVersions:
 class TestSessionPlugSummary:
     """GET /api/analytics/sessions/{id}/plug-summary."""
 
-    def test_empty_plug_returns_green(self, client: TestClient) -> None:
+    async def test_empty_plug_returns_green(self, client: TestClient) -> None:
         resp = client.get(f"/api/analytics/sessions/{_SESS_ID}/plug-summary")
         assert resp.status_code == 200
         body = resp.json()
@@ -329,7 +331,7 @@ class TestSessionPlugSummary:
         assert body["status"] == "green"
         assert body["blocks"] == []
 
-    def test_missing_session_404(self, client: TestClient) -> None:
+    async def test_missing_session_404(self, client: TestClient) -> None:
         resp = client.get("/api/analytics/sessions/ses_does_not_exist/plug-summary")
         assert resp.status_code == 404
 
@@ -352,7 +354,7 @@ class TestPromoteToTagMemory:
             },
         )
 
-    def test_happy_path(self, client: TestClient) -> None:
+    async def test_happy_path(self, client: TestClient) -> None:
         self._seed_block(client)
         resp = client.post(
             f"/api/analytics/plug-blocks/{_HASH_A}/promote-to-tag-memory",
@@ -363,14 +365,14 @@ class TestPromoteToTagMemory:
         assert body["tag"] == "infra"
         assert isinstance(body["memory_id"], int)
 
-    def test_bad_hash_404(self, client: TestClient) -> None:
+    async def test_bad_hash_404(self, client: TestClient) -> None:
         resp = client.post(
             f"/api/analytics/plug-blocks/{'z' * 64}/promote-to-tag-memory",
             json={"tag": "infra", "memory_content": "x"},
         )
         assert resp.status_code == 404
 
-    def test_bad_tag_404(self, client: TestClient) -> None:
+    async def test_bad_tag_404(self, client: TestClient) -> None:
         self._seed_block(client)
         resp = client.post(
             f"/api/analytics/plug-blocks/{_HASH_A}/promote-to-tag-memory",
@@ -378,7 +380,7 @@ class TestPromoteToTagMemory:
         )
         assert resp.status_code == 404
 
-    def test_idempotent_double_promote(self, client: TestClient) -> None:
+    async def test_idempotent_double_promote(self, client: TestClient) -> None:
         """Re-promoting the same block to the same tag returns the same memory id."""
         self._seed_block(client)
         payload = {"tag": "infra", "memory_content": "Remember this."}
@@ -406,7 +408,7 @@ class TestPromoteToOnOpen:
             },
         )
 
-    def test_happy_path(self, client: TestClient, tmp_path: Path) -> None:
+    async def test_happy_path(self, client: TestClient, tmp_path: Path) -> None:
         self._seed_block(client)
         work_dir = tmp_path / "myproject"
         work_dir.mkdir()
@@ -417,17 +419,17 @@ class TestPromoteToOnOpen:
         assert resp.status_code == 200
         body = resp.json()
         on_open = Path(body["on_open_sh_path"])
-        assert on_open.exists()
-        assert "echo hello" in on_open.read_text()
+        assert on_open.exists()  # noqa: ASYNC240
+        assert "echo hello" in on_open.read_text()  # noqa: ASYNC240
 
-    def test_bad_hash_404(self, client: TestClient, tmp_path: Path) -> None:
+    async def test_bad_hash_404(self, client: TestClient, tmp_path: Path) -> None:
         resp = client.post(
             f"/api/analytics/plug-blocks/{'z' * 64}/promote-to-on-open",
             json={"working_directory": str(tmp_path), "snippet": "x"},
         )
         assert resp.status_code == 404
 
-    def test_nonexistent_dir_422(self, client: TestClient) -> None:
+    async def test_nonexistent_dir_422(self, client: TestClient) -> None:
         self._seed_block(client)
         resp = client.post(
             f"/api/analytics/plug-blocks/{_HASH_A}/promote-to-on-open",
@@ -435,7 +437,7 @@ class TestPromoteToOnOpen:
         )
         assert resp.status_code == 422
 
-    def test_idempotent_double_promote(self, client: TestClient, tmp_path: Path) -> None:
+    async def test_idempotent_double_promote(self, client: TestClient, tmp_path: Path) -> None:
         """Re-promoting the same snippet must not duplicate the content."""
         self._seed_block(client)
         work_dir = tmp_path / "myproject"
@@ -451,7 +453,7 @@ class TestPromoteToOnOpen:
 class TestDraftNewSession:
     """POST /api/analytics/draft-new-session."""
 
-    def test_happy_path(self, client: TestClient) -> None:
+    async def test_happy_path(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/draft-new-session",
             json={"source_session_id": _SESS_ID, "carry_tags": ["infra"]},
@@ -463,7 +465,7 @@ class TestDraftNewSession:
         assert isinstance(body["estimated_tokens"], int)
         assert "input" in body["draft_cost_tokens"]
 
-    def test_missing_source_404(self, client: TestClient) -> None:
+    async def test_missing_source_404(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/draft-new-session",
             json={"source_session_id": "ses_does_not_exist"},
@@ -474,7 +476,7 @@ class TestDraftNewSession:
 class TestSessionFromDraft:
     """POST /api/analytics/sessions/from-draft."""
 
-    def test_happy_path_201(self, client: TestClient) -> None:
+    async def test_happy_path_201(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/sessions/from-draft",
             json={
@@ -487,7 +489,7 @@ class TestSessionFromDraft:
         body = resp.json()
         assert body["session_id"].startswith("ses_")
 
-    def test_with_valid_tag(self, client: TestClient) -> None:
+    async def test_with_valid_tag(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/sessions/from-draft",
             json={
@@ -498,7 +500,7 @@ class TestSessionFromDraft:
         )
         assert resp.status_code == 201
 
-    def test_unknown_tag_404(self, client: TestClient) -> None:
+    async def test_unknown_tag_404(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/sessions/from-draft",
             json={
@@ -524,7 +526,7 @@ class TestSuppressWarning:
             },
         )
 
-    def test_happy_path(self, client: TestClient) -> None:
+    async def test_happy_path(self, client: TestClient) -> None:
         self._seed_block(client)
         resp = client.post(
             "/api/analytics/warnings/suppress",
@@ -533,7 +535,7 @@ class TestSuppressWarning:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
-    def test_idempotent_double_suppress(self, client: TestClient) -> None:
+    async def test_idempotent_double_suppress(self, client: TestClient) -> None:
         self._seed_block(client)
         payload = {"block_hash": _HASH_A, "warning_type": "red_length"}
         r1 = client.post("/api/analytics/warnings/suppress", json=payload)
@@ -541,7 +543,7 @@ class TestSuppressWarning:
         assert r1.status_code == 200
         assert r2.status_code == 200
 
-    def test_bad_warning_type_422(self, client: TestClient) -> None:
+    async def test_bad_warning_type_422(self, client: TestClient) -> None:
         resp = client.post(
             "/api/analytics/warnings/suppress",
             json={"block_hash": _HASH_A, "warning_type": "not_a_type"},

@@ -76,8 +76,8 @@ class _FakeClient:
 
     async def receive_response(self) -> AsyncIterator[Message]:
         # Empty async generator — no messages, no result.
-        if False:  # pragma: no cover
-            yield  # type: ignore[misc]
+        return
+        yield  # pragma: no cover
 
 
 def _decision() -> RoutingDecision:

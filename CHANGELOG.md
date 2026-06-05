@@ -7,6 +7,101 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-06-04
+
+### Added
+
+- **feat(web): reply_actions, artifacts, ui-config, history-export routes (Exec-2A):**
+  Four new REST surfaces:
+  `POST /api/sessions/{id}/reply-actions` (apply transformation to assistant message);
+  `GET /api/sessions/{id}/artifacts` (list agent-written file artifacts);
+  `GET/PATCH /api/ui-config` (per-session UI layout preferences);
+  `GET /api/sessions/{id}/history/export` (JSONL transcript export).
+  Pydantic models, DB queries, and OpenAPI surface complete for all four.
+
+- **feat(agent,web): SDK 401-retry on token rotation + spawn_classify (Exec-2B):**
+  The SDK loop now detects "Invalid authentication credentials" errors (mid-session
+  token rotation) via `_reload_sdk_credentials()`, rebuilds the client, and retries
+  once before surfacing a fatal `ErrorEvent`. A second consecutive 401 marks the
+  session `ERROR`.  New `spawn_classify` helper automatically tags freshly created
+  sessions using a lightweight LLM call; integrated into the session-creation path.
+  Gate: `uv run mypy src tests` now clean (was previously only `src`).
+
+- **feat(frontend): inspector Files/Changes tabs, severity seeding, billing display,
+  error pip (Exec-3):**
+  Inspector panel gains two new tabs — *Files* (lists paths touched by the session)
+  and *Changes* (unified-diff view of working-tree mutations).  Billing display shows
+  estimated token cost in the status bar.  Error pip on session rows signals sessions
+  with `error_pending=true`.  Severity seeding pre-populates the tag severity classes
+  used by the prioritisation API.
+
+- **feat(frontend): title-suggest, reply-actions UI, change-model menu, classified
+  card, bulk-title modal (Exec-5):**
+  *Title-suggest*: one-click LLM-generated title preview in the session editor.
+  *Reply-actions UI*: context-menu and toolbar actions to apply reply transformations
+  (summarise, continue, rephrase) directly from the conversation pane.
+  *Change-model menu*: drop-down in the session header to switch the executor model
+  mid-session (calls `PATCH /api/sessions/{id}/model`).
+  *Classified card*: session list cards now display the spawn-classify label badge.
+  *Bulk-title modal*: multi-select sessions and batch-apply title suggestions in one
+  dialog.
+
+### Fixed
+
+- **fix(reliability): runner crash visibility + error_pending DB persistence (Exec-1):**
+  Unhandled exceptions in the SDK loop that previously silently killed the supervisor
+  now surface as `ErrorEvent` entries in the ring buffer and persist
+  `error_pending = 1` in the `sessions` DB row.  The `GET /api/sessions/{id}` response
+  includes `error_pending` so the frontend can render the error pip.
+
+- **fix: default new sessions to expanded (bypassPermissions) permission profile
+  (Exec-1):**
+  New sessions created via `POST /api/sessions` default to
+  `permission_mode = "bypassPermissions"` so the agent starts with full tool access
+  rather than requiring an interactive approval on the first tool call.
+
+### Changed
+
+- **refactor(web,db,agent): split oversized modules under 400-line cap (Exec-1):**
+  `sessions.py`, `sdk_loop.py`, and the agent runner were each exceeding the 400-line
+  file-size gate.  Refactored into focused sub-modules:
+  `sessions_read.py`, `sessions_write.py`, `sessions_update.py`, `sessions_messages.py`
+  (DB layer); `sdk_loop_core.py`, `sdk_loop_session.py` (agent layer); thin
+  `sessions.py` and `sdk_loop.py` shims preserve all public imports.
+
+- **chore(standards): rename HTTP_422 const, migrate to lifespan, fix a11y warning
+  (Exec-1):**
+  `HTTP_422_UNPROCESSABLE_ENTITY` constant renamed to `HTTP_422_UNPROCESSABLE_CONTENT`
+  throughout (matches Starlette 1.x enum value).  App startup/shutdown migrated from
+  deprecated `@app.on_event` to the `lifespan` async-context-manager pattern.
+  Spurious Svelte a11y warning in `SessionList.svelte` corrected.
+
+- **chore(docs): bake background-gate prohibition and dirty-tree guard into CLAUDE.md
+  (Exec-1):**
+  Hard-won reliability invariants from the pipeline (never run gates in background
+  mode; always check for a dirty working tree before starting work) documented
+  directly in the project CLAUDE.md so future executors read the constraint before
+  starting rather than discovering it through failure.
+
+### Tests
+
+- **test: fix analytics_routes fixture — async pattern to prevent multi-query hangs
+  (Exec-6):**
+  `tests/test_analytics_routes.py` `client` fixture converted from sync
+  `asyncio.get_event_loop().run_until_complete()` to `async def` with
+  `AsyncIterator[TestClient]` (matching the established pattern in
+  `tests/test_sessions_api.py`).  All 37 test methods converted to `async def`.
+  Fixes spurious hangs on multi-query route handlers (`get_redundancy`,
+  `get_session_plug_summary`) caused by the aiosqlite connection being created in a
+  temporary event loop that conflicts with TestClient's anyio portal.
+
+- **test: fix mypy gate — auth-retry test unreachable yield (Exec-6):**
+  `tests/test_sdk_loop_auth_retry.py` `_FakeClient.receive_response` used
+  `if False: yield  # type: ignore[misc]` to make the method an async generator;
+  mypy raised `[unreachable]` + `[unused-ignore]`.  Fixed by replacing the unreachable
+  yield with `return; yield  # pragma: no cover` (the `return` before `yield` makes
+  the function an async generator without triggering either error).
+
 ## [1.1.0] — 2026-06-04
 
 ### Added
