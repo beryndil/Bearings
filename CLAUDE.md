@@ -52,6 +52,32 @@ prompt-endpoint, bearings-cli).
 Full decomposition (class boundaries, import graph, key interfaces,
 divergences from v0.17.x): `docs/architecture-v1.md`.
 
+## Autonomous executor rules (pipeline-critical — read before starting work)
+
+**Never run any verification gate in background mode.** `uv run pytest`,
+`uv run mypy`, `uv run ruff check`, `npm run check` — all must be foreground,
+timeout-wrapped. A background gate stalls the pipeline when the runner's turn
+ends before the process finishes: the task file stays 0 bytes and no completion
+notification arrives. Confirmed stall: orchestrator hung 20+ min on
+`be3b7jp70` (2026-06-04). The only correct pattern:
+
+```bash
+timeout 600 uv run pytest -q   # blocks; timeout prevents infinite hang
+```
+
+**Check working tree is clean before starting any work.** Predecessor runners
+can crash mid-turn and leave uncommitted changes. Guard:
+
+```bash
+if [ -n "$(git status --porcelain)" ]; then
+  git stash
+  echo "WARNING: stashed dirty tree from prior runner"
+fi
+```
+
+**Always use foreground `git commit` (never background).** Commit must
+complete before the callback POST. Never push — Exec-6 does the single push.
+
 ## Repo invariants
 
 * Branch: `v1-rebuild` (orphan history). Pre-commit `branch-verifier`
