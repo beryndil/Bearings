@@ -3702,6 +3702,49 @@
         }
       }
     },
+    "/api/sessions/{session_id}/spawn_classify": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Spawn Classify",
+        "description": "Analyze session messages for sensitive data and persist the classified flag (T2-07).\n\nScans the full message history for credentials (API keys, bearer tokens,\nprivate keys, AWS keys) and PII (email addresses, credit card numbers).\nSets ``classified = True`` on the session row when any pattern matches,\n``False`` on a clean scan.  Returns the verdict together with the updated\nsession snapshot so callers can update their local state without a second\nGET.\n\nThe endpoint is idempotent \u2014 repeated calls re-run the scan and overwrite\nthe flag with the latest result.  Returns 404 when the session does not exist.",
+        "operationId": "spawn-classify-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpawnClassifyOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/bulk": {
       "post": {
         "tags": [
@@ -11214,6 +11257,11 @@
             ],
             "title": "Template Id"
           },
+          "classified": {
+            "type": "boolean",
+            "title": "Classified",
+            "default": false
+          },
           "tags": {
             "items": {
               "$ref": "#/components/schemas/TagOut"
@@ -11491,6 +11539,38 @@
         ],
         "title": "ShellExecOut",
         "description": "Response body for ``POST /api/shell/exec``."
+      },
+      "SpawnClassifyOut": {
+        "properties": {
+          "classified": {
+            "type": "boolean",
+            "title": "Classified"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "patterns_found": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Patterns Found"
+          },
+          "session": {
+            "$ref": "#/components/schemas/SessionOut"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "classified",
+          "reason",
+          "patterns_found",
+          "session"
+        ],
+        "title": "SpawnClassifyOut",
+        "description": "Response shape for ``POST /api/sessions/{id}/spawn_classify`` (T2-07).\n\nThe ``classified`` flag mirrors the value now persisted on the session\nrow so callers can update their local state without a second GET.\n``patterns_found`` lists the category names (e.g. ``\"api_key\"``,\n``\"pii_email\"``) that triggered the classification; empty on a clean\nsession.  ``reason`` is a human-readable summary.\n\nThe session snapshot (``session``) reflects the state AFTER the\nclassified flag has been written so callers see the persisted truth."
       },
       "SpawnPairedChatIn": {
         "properties": {

@@ -112,6 +112,10 @@ class SessionOut(BaseModel):
     # Template back-pointer (item 622). The templates row this session was
     # instantiated from, or null when not created from a template.
     template_id: int | None = None
+    # T2-07: classification flag. Set to True by POST …/spawn_classify when
+    # the session contains sensitive data (credentials, PII). Consumed by
+    # Exec-5 (SpawnClassifiedCard). Field name must stay "classified".
+    classified: bool = False
     # Embedded tag list (PERF-NET-01). Populated by GET /api/sessions via a
     # single batch JOIN; empty list for sessions with no tags. Callers should
     # treat an absent field the same as an empty list for back-compat; the
@@ -570,6 +574,7 @@ __all__ = [
     "SessionTodosOut",
     "SessionUpdate",
     "SessionsPage",
+    "SpawnClassifyOut",
     "SuggestTitleOut",
     "SystemPromptLayerOut",
     "SystemPromptLayersOut",
@@ -635,3 +640,24 @@ class WorkEvidenceOut(BaseModel):
     total_work_tool_calls: int
     git_diff_stat: str | None
     git_diff_available: bool
+
+
+class SpawnClassifyOut(BaseModel):
+    """Response shape for ``POST /api/sessions/{id}/spawn_classify`` (T2-07).
+
+    The ``classified`` flag mirrors the value now persisted on the session
+    row so callers can update their local state without a second GET.
+    ``patterns_found`` lists the category names (e.g. ``"api_key"``,
+    ``"pii_email"``) that triggered the classification; empty on a clean
+    session.  ``reason`` is a human-readable summary.
+
+    The session snapshot (``session``) reflects the state AFTER the
+    classified flag has been written so callers see the persisted truth.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    classified: bool
+    reason: str
+    patterns_found: list[str]
+    session: SessionOut

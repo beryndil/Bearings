@@ -42,7 +42,9 @@ from bearings.agent.runner import (
 )
 from bearings.agent.sdk_loop_errors import (
     _enter_error_state,
+    _is_auth_error,
     _make_todo_update,
+    _reload_sdk_credentials,
     _to_sdk_options,
 )
 from bearings.agent.sdk_session_id import bearings_to_sdk_uuid
@@ -65,6 +67,30 @@ import asyncio as _asyncio_mod  # noqa: E402
 _CancelledLike: tuple[type[BaseException], ...] = (_asyncio_mod.CancelledError,)
 
 
+async def _run_sdk_client_body(
+    factory: Any,
+    sdk_options: Any,
+    runner: SessionRunner,
+    session: AgentSession,
+    translator: SDKEventTranslator,
+    persist_fn: MessagePersistence,
+) -> None:
+    """Open one SDK client context and drain the prompt queue until cancelled.
+
+    Extracted so :func:`run_session_loop` can call it twice — once on the
+    first attempt and once on the 401-credential-reload retry — without
+    duplicating the attach / detach bookkeeping.
+    """
+    async with factory(options=sdk_options) as client:
+        session.attach_sdk_client(client)
+        try:
+            if session.state is SessionState.INITIALIZING:
+                await session.start()
+            await _drain_prompt_queue(runner, session, client, translator, persist_fn)
+        finally:
+            session.detach_sdk_client()
+
+
 async def run_session_loop(
     runner: SessionRunner,
     session: AgentSession,
@@ -74,6 +100,12 @@ async def run_session_loop(
     client_factory: Any = None,
 ) -> None:
     """Run the SDK worker loop until the supervisor cancels.
+
+    On a first ``"Invalid authentication credentials"`` (401) error the loop
+    triggers a credential reload — closing the current SDK subprocess and
+    spawning a fresh one that reads the updated ``~/.claude/.credentials.json``
+    — then retries once.  A second consecutive 401 surfaces as a terminal
+    error (``_enter_error_state``).
 
     Args:
         runner: Per-session :class:`SessionRunner` (prompt queue + ring buffer).
@@ -95,19 +127,24 @@ async def run_session_loop(
     decision = session.config.decision
     translator = SDKEventTranslator(session.config.session_id, decision)
     try:
-        async with factory(options=sdk_options) as client:
-            session.attach_sdk_client(client)
-            try:
-                if session.state is SessionState.INITIALIZING:
-                    await session.start()
-                await _drain_prompt_queue(runner, session, client, translator, persist_fn)
-            finally:
-                session.detach_sdk_client()
+        await _run_sdk_client_body(factory, sdk_options, runner, session, translator, persist_fn)
     except _CancelledLike:
         raise
-    except Exception as exc:  # pragma: no cover — exercised by integration tests
-        await _enter_error_state(runner, session, exc)
-        return
+    except Exception as exc:
+        if not _is_auth_error(exc):
+            await _enter_error_state(runner, session, exc)
+            return
+        # First 401 — reload credentials, recreate the SDK subprocess, retry once.
+        _reload_sdk_credentials()
+        try:
+            await _run_sdk_client_body(
+                factory, sdk_options, runner, session, translator, persist_fn
+            )
+        except _CancelledLike:
+            raise
+        except Exception as retry_exc:
+            await _enter_error_state(runner, session, retry_exc)
+            return
 
 
 async def _drain_prompt_queue(

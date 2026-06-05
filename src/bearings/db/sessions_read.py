@@ -29,7 +29,7 @@ _SELECT_SESSION_COLUMNS = (
     "checklist_item_id, created_at, updated_at, last_viewed_at, last_completed_at, "
     "closed_at, closing_summary, "
     "routing_advisor_model, routing_advisor_max_uses, routing_effort_level, "
-    "pivot_message_id, parent_session_id, template_id "
+    "pivot_message_id, parent_session_id, template_id, classified "
     "FROM sessions"
 )
 
@@ -45,7 +45,7 @@ _SELECT_SESSION_COLUMNS_DISTINCT = (
     "sessions.routing_advisor_model, sessions.routing_advisor_max_uses, "
     "sessions.routing_effort_level, "
     "sessions.pivot_message_id, sessions.parent_session_id, "
-    "sessions.template_id FROM sessions"
+    "sessions.template_id, sessions.classified FROM sessions"
 )
 
 
@@ -101,6 +101,7 @@ def _row_to_session(row: aiosqlite.Row | tuple[object, ...]) -> Session:
         pivot_message_id=_opt_str(row[26]),
         parent_session_id=_opt_str(row[27]),
         template_id=_opt_int(row[28]),
+        classified=bool(int(str(row[29] if row[29] is not None else 0))),
     )
 
 

@@ -2,6 +2,7 @@
 
 These endpoints deal with session data in bulk (snapshot export, restore
 from export blob) or with derived evidence (git diff + tool-call summary).
+Sensitive-data classification lives in ``sessions_classify``.
 """
 
 from __future__ import annotations

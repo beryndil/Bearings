@@ -7,6 +7,7 @@ The session route implementation has been split across:
 * ``sessions_prompts``   — prompt, stop, recover, regenerate, suggest-title
 * ``sessions_assembly``  — viewed, paired-chat, tool_calls, todos, system_prompt, tokens
 * ``sessions_io``        — export, import, work_evidence
+* ``sessions_classify``  — spawn_classify (T2-07 sensitive-data classification)
 
 This file assembles a single :data:`router` from those sub-routers so
 ``from bearings.web.routes.sessions import router`` continues to work
@@ -23,6 +24,7 @@ from bearings.web.routes._sessions_helpers import (
     _to_out,
 )
 from bearings.web.routes.sessions_assembly import router as _router_assembly
+from bearings.web.routes.sessions_classify import router as _router_classify
 from bearings.web.routes.sessions_core import router as _router_core
 from bearings.web.routes.sessions_io import router as _router_io
 from bearings.web.routes.sessions_model import router as _router_model
@@ -37,6 +39,7 @@ router.include_router(_router_model)
 router.include_router(_router_prompts)
 router.include_router(_router_assembly)
 router.include_router(_router_io)
+router.include_router(_router_classify)
 
 # Re-export private helpers imported by other modules.
 # sessions_bulk.py: from bearings.web.routes.sessions import _sessions_broadcaster, _to_out

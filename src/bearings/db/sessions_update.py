@@ -190,6 +190,30 @@ async def update_permission_mode(
     return await get(connection, session_id)
 
 
+async def set_classified(
+    connection: aiosqlite.Connection,
+    session_id: str,
+    *,
+    classified: bool,
+) -> Session | None:
+    """Persist the classification flag for a session (T2-07).
+
+    Backs ``POST /api/sessions/{id}/spawn_classify``.  Sets
+    ``classified = 1`` (or ``0``) and bumps ``updated_at``.  Returns the
+    refreshed :class:`Session` row, or ``None`` when no row matches.
+    """
+    existing = await get(connection, session_id)
+    if existing is None:
+        return None
+    timestamp = now_iso()
+    await connection.execute(
+        "UPDATE sessions SET classified = ?, updated_at = ? WHERE id = ?",
+        (1 if classified else 0, timestamp, session_id),
+    )
+    await connection.commit()
+    return await get(connection, session_id)
+
+
 async def close_with_summary(
     connection: aiosqlite.Connection,
     session_id: str,

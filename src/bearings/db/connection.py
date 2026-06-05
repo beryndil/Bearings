@@ -155,6 +155,11 @@ _ADDED_COLUMNS: Final[tuple[tuple[str, str, str], ...]] = (
     # carries the REFERENCES templates(id) ON DELETE SET NULL clause for
     # fresh DBs. Existing rows get NULL (no template recoverable).
     ("sessions", "template_id", "INTEGER"),
+    # T2-07: classified flag — set by POST /api/sessions/{id}/spawn_classify
+    # when the session is found to contain sensitive data (credentials, PII).
+    # Consumed by Exec-5 (SpawnClassifiedCard) via SessionOut.classified.
+    # Existing rows default to 0 (not classified).
+    ("sessions", "classified", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 

@@ -6,8 +6,12 @@
 :class:`ClaudeAgentOptions` object from the composed :class:`OptionsKwargs`.
 ``_make_todo_update`` extracts the todos list from a ``TodoWrite`` event.
 
-Exec-2B will add 401-retry logic to this module (retry on
-``Invalid authentication credentials`` with token refresh).
+401-retry helpers (item 625):
+    ``_is_auth_error`` — classifies "Invalid authentication credentials" as
+    TRANSIENT so the caller can trigger a single credential-reload + retry.
+    ``_reload_sdk_credentials`` — reads ``~/.claude/.credentials.json`` to
+    verify the rotated bearer is present and logs the event; the actual
+    pick-up happens when the SDK spawns a fresh subprocess on re-entry.
 """
 
 from __future__ import annotations
@@ -15,7 +19,8 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-from typing import Any
+from pathlib import Path
+from typing import Any, Final
 
 import aiosqlite
 from claude_agent_sdk import ClaudeAgentOptions
@@ -27,6 +32,56 @@ from bearings.agent.session import AgentSession, SessionStateError
 from bearings.db import sessions as sessions_db
 
 _log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# 401 auth-retry helpers (item 625 — token-rotation fix)
+# ---------------------------------------------------------------------------
+
+# The exact string the Claude SDK embeds when the bearer token is rejected.
+_AUTH_ERROR_MARKER: Final[str] = "Invalid authentication credentials"
+
+# Path to the Claude Max OAuth credentials file.
+_CREDENTIALS_PATH: Final[Path] = Path.home() / ".claude" / ".credentials.json"
+
+
+def _is_auth_error(exc: BaseException) -> bool:
+    """Return ``True`` when *exc* carries the 401 auth-credentials marker.
+
+    The marker is ``"Invalid authentication credentials"`` — the exact
+    string the Claude SDK inserts into the exception message when it
+    receives an HTTP 401 from the API.  Matching by substring is
+    intentionally broad to survive minor SDK wording changes.
+    """
+    return _AUTH_ERROR_MARKER in str(exc)
+
+
+def _reload_sdk_credentials() -> None:
+    """Log a 401 credential-reload event and verify the credentials file.
+
+    The SDK subprocess reads ``~/.claude/.credentials.json`` on startup.
+    Closing the current client context and re-opening it (which spawns a
+    new subprocess) picks up the rotated bearer automatically.  This
+    function verifies the file is readable, logs whether an
+    ``accessToken`` is present, and records the event for diagnostics.
+    Failures to read the file are logged as warnings — the retry
+    proceeds regardless so the next subprocess attempt can surface a
+    clearer error.
+    """
+    try:
+        data = json.loads(_CREDENTIALS_PATH.read_text(encoding="utf-8"))
+        has_token = bool(data.get("claudeAiOauth", {}).get("accessToken"))
+        _log.info(
+            "401 auth error: credential reload from %s "
+            "(accessToken present=%s) — recreating SDK subprocess",
+            _CREDENTIALS_PATH,
+            has_token,
+        )
+    except Exception as read_exc:
+        _log.warning(
+            "401 auth error: failed to read credentials at %s: %s — retrying SDK subprocess anyway",
+            _CREDENTIALS_PATH,
+            read_exc,
+        )
 
 
 async def _enter_error_state(

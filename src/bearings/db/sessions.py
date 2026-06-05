@@ -31,6 +31,7 @@ from bearings.db.sessions_read import (
 )
 from bearings.db.sessions_update import (
     close_with_summary,
+    set_classified,
     update_fields,
     update_model,
     update_permission_mode,
@@ -67,6 +68,7 @@ __all__ = [
     "list_paged",
     "mark_viewed",
     "reopen",
+    "set_classified",
     "set_error_pending",
     "update_fields",
     "update_model",

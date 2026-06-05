@@ -188,6 +188,8 @@ class Session:
     pivot_message_id: str | None
     parent_session_id: str | None
     template_id: int | None
+    # T2-07: classification flag — set by spawn_classify route.
+    classified: bool
 
     def __post_init__(self) -> None:
         _validate_session_required(self.id, self.title, self.working_dir, self.model)

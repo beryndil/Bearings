@@ -144,6 +144,7 @@ def _to_out(
         pivot_message_id=session.pivot_message_id,
         parent_session_id=session.parent_session_id,
         template_id=session.template_id,
+        classified=session.classified,
         tags=tags if tags is not None else [],
     )
 

@@ -74,6 +74,7 @@ async def create(
         pivot_message_id=pivot_message_id,
         parent_session_id=parent_session_id,
         template_id=template_id,
+        classified=False,
     )
     await connection.execute(
         "INSERT INTO sessions "
@@ -173,6 +174,7 @@ async def import_session(
         pivot_message_id=None,
         parent_session_id=None,
         template_id=None,
+        classified=False,
     )
     await connection.execute(
         "INSERT INTO sessions "
