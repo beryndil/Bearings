@@ -1772,14 +1772,10 @@ export const INSPECTOR_STRINGS = {
   contextAssembledPlaceholder:
     "System prompt, tag-default overlays, and vault attachments surface here once the assembled-context API lands (items 1.4 / 1.5 / 1.7).",
   // Instructions subsection — system-prompt layer breakdown
-  // (gap-cycle-13-004).  Each layer kind renders as a collapsible row
-  // with kind label + source_path + token count.  Absent kinds show an
-  // empty-state row.  The ``session_instructions`` layer keeps the
-  // ``Edit…`` button that opens ``SessionEdit``.
+  // (gap-cycle-13-004).  Each layer kind renders as a clickable card.
+  // Clicking opens a dedicated editor or read-only viewer modal for that
+  // layer.  Absent kinds show an empty-state row.
   instructionsHeading: "Instructions",
-  instructionsBodyLabel: "Session instructions",
-  instructionsEmpty: "No per-session instructions set.",
-  instructionsEditButton: "Edit…",
   instructionsLoadingLayers: "Loading system-prompt layers…",
   instructionsLayersError: "Couldn't load system-prompt layers.",
   instructionsLayerKindLabels: {
@@ -1798,11 +1794,8 @@ export const INSPECTOR_STRINGS = {
     template_baseline: "No template baseline.",
   } as const,
   instructionsLayerSourceLabel: "Source:",
-  instructionsLayerEditButton: "Edit…",
   instructionsCopyPathButton: "Copy path",
   instructionsCopyPathDone: "Copied!",
-  instructionsLayerExpand: "Expand",
-  instructionsLayerCollapse: "Collapse",
   // Files subsection (gap-cycle-09-003) — derives rows from
   // conversationStore.turns via path-key extraction on each
   // ToolCallView. The three path keys (file_path, notebook_path,
@@ -2036,9 +2029,41 @@ export const SESSION_EDIT_MODAL_STRINGS = {
 // ---- CLAUDE.md file-edit modal string table --------------------------------
 
 /**
+ * UI strings for the session-instructions focused editor modal
+ * (``SessionInstructionsModal``). Opened when the user clicks a
+ * ``session_instructions`` layer card in the Instructions inspector.
+ */
+export const SESSION_INSTRUCTIONS_EDIT_STRINGS = {
+  title: "Session Instructions",
+  ariaLabel: "Edit session instructions modal",
+  contentLabel: "Instructions",
+  contentPlaceholder: "Per-session instructions injected into every prompt (optional)",
+  saveButton: "Save",
+  savingButton: "Saving…",
+  cancelButton: "Cancel",
+  errorPrefix: "Save failed:",
+  clearButton: "Clear",
+} as const;
+
+/**
+ * UI strings for the read-only layer content viewer modal
+ * (``LayerViewModal``). Opened when the user clicks a non-editable
+ * instruction layer card (``baseline``, ``tag_memory``,
+ * ``template_baseline``) in the Instructions inspector.
+ */
+export const LAYER_VIEW_MODAL_STRINGS = {
+  ariaLabel: "View instruction layer content",
+  contentLabel: "Content",
+  closeButton: "Close",
+  readOnlyNote: "This layer is assembled by the backend and cannot be edited here.",
+  tagMemoryNote: "Tag memories are managed in the Memories section.",
+  templateBaselineNote: "Template content is set when the session template is created.",
+} as const;
+
+/**
  * UI strings for the CLAUDE.md file-edit modal opened from the
- * Instructions inspector panel when the user clicks "Edit…" on a
- * ``project_claude_md`` layer.
+ * Instructions inspector panel when the user clicks a
+ * ``project_claude_md`` layer card.
  */
 export const CLAUDEMD_EDIT_STRINGS = {
   title: "Edit CLAUDE.md",

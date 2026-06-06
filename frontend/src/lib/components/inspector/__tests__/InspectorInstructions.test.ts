@@ -1,6 +1,6 @@
 /**
  * InspectorInstructions tests — layer-breakdown render, empty-state per
- * section, and collapse/expand toggles (gap-cycle-13-004).
+ * section, and click-to-open editor/viewer modals.
  *
  * The component fetches ``GET /api/sessions/{id}/system_prompt`` on
  * mount; the tests mock ``getSessionSystemPrompt`` to avoid real network
@@ -119,22 +119,20 @@ describe("layer rows render in correct order", () => {
     }
   });
 
-  it("renders a layer row with its body (short body = expanded by default)", async () => {
+  it("renders a clickable layer card for a present layer", async () => {
     vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
       fakeLayersOut([
         {
           kind: "baseline",
-          body: "close session instruction body",
-          token_count: 7,
+          body: "some baseline body",
+          token_count: 4,
           source_path: null,
         },
       ]),
     );
     render(InspectorInstructions, { props: { session: fakeSession() } });
     await waitFor(() => {
-      expect(screen.getByTestId("instructions-layer-body-baseline-0")).toHaveTextContent(
-        "close session instruction body",
-      );
+      expect(screen.getByTestId("instructions-layer-baseline-0")).toBeInTheDocument();
     });
   });
 
@@ -151,12 +149,12 @@ describe("layer rows render in correct order", () => {
     );
     render(InspectorInstructions, { props: { session: fakeSession() } });
     await waitFor(() => {
-      const toggle = screen.getByTestId("instructions-layer-toggle-project_claude_md-0");
-      expect(toggle.textContent).toContain("/home/user/project/CLAUDE.md");
+      const card = screen.getByTestId("instructions-layer-project_claude_md-0");
+      expect(card.textContent).toContain("/home/user/project/CLAUDE.md");
     });
   });
 
-  it("renders token count on each layer row", async () => {
+  it("renders token count on each layer card", async () => {
     vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
       fakeLayersOut([
         { kind: "baseline", body: "x".repeat(40), token_count: 10, source_path: null },
@@ -164,8 +162,8 @@ describe("layer rows render in correct order", () => {
     );
     render(InspectorInstructions, { props: { session: fakeSession() } });
     await waitFor(() => {
-      const toggle = screen.getByTestId("instructions-layer-toggle-baseline-0");
-      expect(toggle.textContent).toContain(INSPECTOR_STRINGS.instructionsLayerTokensLabel(10));
+      const card = screen.getByTestId("instructions-layer-baseline-0");
+      expect(card.textContent).toContain(INSPECTOR_STRINGS.instructionsLayerTokensLabel(10));
     });
   });
 });
@@ -221,72 +219,22 @@ describe("empty-state copy on missing layers", () => {
       expect(screen.getByTestId("instructions-layer-baseline-0")).toBeInTheDocument();
     });
   });
-});
 
-// ---------------------------------------------------------------------------
-// Collapse / expand toggles
-// ---------------------------------------------------------------------------
-
-describe("collapse/expand toggles", () => {
-  it("shows Collapse label for short layers (≤500 chars) expanded by default", async () => {
-    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
-      fakeLayersOut([{ kind: "baseline", body: "short body", token_count: 2, source_path: null }]),
-    );
+  it("session_instructions empty state is a clickable button", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(fakeLayersOut([]));
     render(InspectorInstructions, { props: { session: fakeSession() } });
     await waitFor(() => {
-      const toggle = screen.getByTestId("instructions-layer-toggle-baseline-0");
-      expect(toggle.textContent).toContain(INSPECTOR_STRINGS.instructionsLayerCollapse);
-      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      const emptyBtn = screen.getByTestId("instructions-empty-session_instructions");
+      expect(emptyBtn.tagName.toLowerCase()).toBe("button");
     });
-  });
-
-  it("shows Expand label for long layers (>500 chars) collapsed by default", async () => {
-    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
-      fakeLayersOut([
-        { kind: "baseline", body: "x".repeat(501), token_count: 125, source_path: null },
-      ]),
-    );
-    render(InspectorInstructions, { props: { session: fakeSession() } });
-    await waitFor(() => {
-      const toggle = screen.getByTestId("instructions-layer-toggle-baseline-0");
-      expect(toggle.textContent).toContain(INSPECTOR_STRINGS.instructionsLayerExpand);
-      expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    });
-  });
-
-  it("clicking toggle expands a collapsed layer and shows the body", async () => {
-    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
-      fakeLayersOut([
-        { kind: "baseline", body: "x".repeat(501), token_count: 125, source_path: null },
-      ]),
-    );
-    render(InspectorInstructions, { props: { session: fakeSession() } });
-    await waitFor(() => {
-      expect(screen.getByTestId("instructions-layer-toggle-baseline-0")).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("instructions-layer-body-baseline-0")).toBeNull();
-    await fireEvent.click(screen.getByTestId("instructions-layer-toggle-baseline-0"));
-    expect(screen.getByTestId("instructions-layer-body-baseline-0")).toBeInTheDocument();
-  });
-
-  it("clicking toggle collapses an expanded layer and hides the body", async () => {
-    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
-      fakeLayersOut([{ kind: "baseline", body: "short", token_count: 1, source_path: null }]),
-    );
-    render(InspectorInstructions, { props: { session: fakeSession() } });
-    await waitFor(() => {
-      expect(screen.getByTestId("instructions-layer-body-baseline-0")).toBeInTheDocument();
-    });
-    await fireEvent.click(screen.getByTestId("instructions-layer-toggle-baseline-0"));
-    expect(screen.queryByTestId("instructions-layer-body-baseline-0")).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// Edit button
+// Click-to-open modal behavior
 // ---------------------------------------------------------------------------
 
-describe("Edit button", () => {
+describe("click-to-open modal behavior", () => {
   it("renders the heading from the string table", async () => {
     vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(fakeLayersOut([]));
     render(InspectorInstructions, { props: { session: fakeSession() } });
@@ -296,14 +244,84 @@ describe("Edit button", () => {
     expect(screen.getByText(INSPECTOR_STRINGS.instructionsHeading)).toBeInTheDocument();
   });
 
-  it("Edit… button is present in the session_instructions section", async () => {
+  it("clicking a session_instructions layer card opens the session instructions editor", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([
+        { kind: "session_instructions", body: "do xyz", token_count: 2, source_path: null },
+      ]),
+    );
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      expect(screen.getByTestId("instructions-layer-session_instructions-0")).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId("instructions-layer-session_instructions-0"));
+    expect(screen.getByTestId("session-instr-edit-modal")).toBeInTheDocument();
+  });
+
+  it("clicking a source_path layer card opens the CLAUDE.md file editor", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([
+        {
+          kind: "project_claude_md",
+          body: "project md content",
+          token_count: 4,
+          source_path: "/home/user/project/CLAUDE.md",
+        },
+      ]),
+    );
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      expect(screen.getByTestId("instructions-layer-project_claude_md-0")).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId("instructions-layer-project_claude_md-0"));
+    expect(screen.getByTestId("claudemd-edit-modal")).toBeInTheDocument();
+  });
+
+  it("clicking a baseline layer card opens the read-only layer viewer", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([
+        { kind: "baseline", body: "baseline body text", token_count: 3, source_path: null },
+      ]),
+    );
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      expect(screen.getByTestId("instructions-layer-baseline-0")).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId("instructions-layer-baseline-0"));
+    expect(screen.getByTestId("layer-view-modal")).toBeInTheDocument();
+  });
+
+  it("clicking the session_instructions empty-state button opens the editor", async () => {
     vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(fakeLayersOut([]));
     render(InspectorInstructions, { props: { session: fakeSession() } });
     await waitFor(() => {
       expect(screen.queryByTestId("inspector-instructions-loading")).toBeNull();
     });
-    expect(screen.getByTestId("inspector-instructions-edit-btn")).toHaveTextContent(
-      INSPECTOR_STRINGS.instructionsEditButton,
+    await fireEvent.click(screen.getByTestId("instructions-empty-session_instructions"));
+    expect(screen.getByTestId("session-instr-edit-modal")).toBeInTheDocument();
+  });
+
+  it("copy-path button does not open the editor", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([
+        {
+          kind: "project_claude_md",
+          body: "proj",
+          token_count: 1,
+          source_path: "/p/CLAUDE.md",
+        },
+      ]),
     );
+    // Stub clipboard to avoid jsdom errors.
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      expect(screen.getByTestId("instructions-layer-copy-project_claude_md-0")).toBeInTheDocument();
+    });
+    await fireEvent.click(screen.getByTestId("instructions-layer-copy-project_claude_md-0"));
+    // Modal should NOT have opened.
+    expect(screen.queryByTestId("claudemd-edit-modal")).toBeNull();
   });
 });

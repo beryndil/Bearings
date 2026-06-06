@@ -15,6 +15,7 @@
    * - On save success: calls ``onSave()`` so the parent re-fetches layers.
    * - Cancel / Esc / backdrop click: calls ``onCancel()`` with no write.
    */
+  import { untrack } from "svelte";
   import { CLAUDEMD_EDIT_STRINGS } from "../../config";
   import { putSessionLayerContent } from "../../api/sessions";
 
@@ -32,10 +33,10 @@
 
   const { sessionId, path, initialContent, onSave, onCancel }: Props = $props();
 
-  let contentValue = $state(initialContent);
+  let contentValue = $state(untrack(() => initialContent));
   let saving = $state(false);
   let errorMsg = $state<string | null>(null);
-  let copyLabel = $state(CLAUDEMD_EDIT_STRINGS.copyPathButton);
+  let copyLabel = $state<string>(CLAUDEMD_EDIT_STRINGS.copyPathButton);
 
   // ---- copy path ----------------------------------------------------------
 
