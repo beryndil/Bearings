@@ -8,11 +8,12 @@ Bearings session ids are ``ses_<32hex>`` (32 hex chars from
 schema column, no UUID generation, no migration.
 
 The mapping is bijective: the same Bearings session id always yields the
-same SDK UUID, and the SDK UUID can be inverted back to the Bearings id
-when the SDK calls back into Bearings (the
-:class:`bearings.agent.session_store.BearingsSessionStore` adapter does
-this on ``append()`` to look up the originating session row for the DB
-write).
+same SDK UUID, and the SDK UUID can be inverted back to the Bearings id.
+The ``BearingsSessionStore`` no longer uses ``sdk_uuid_to_bearings()`` for
+the ``append()`` path — the adapter uses the Bearings id baked in at
+construction instead (see :mod:`bearings.agent.session_store`). The
+inverse function is retained for ``resume`` session lookup and for
+the session-bootstrap's ``prior_entry_count`` probe.
 
 Why deterministic mapping over a stored ``sdk_session_uuid`` column:
 

@@ -4,15 +4,17 @@
 The adapter bridges the SDK's :class:`SessionStore` Protocol to the
 Bearings DB-backed mirror table. Tests verify:
 
-* ``append`` translates the SDK's UUID-form ``key.session_id`` back to
-  the Bearings ``ses_<hex>`` id and writes via :func:`bearings.db.sdk_entries.append`.
+* ``append`` writes entries to the DB under the Bearings session id
+  baked into the store at construction — NOT the UUID carried in the
+  SDK ``key``. This is critical for Claude Code 2.1.161+ which generates
+  its own UUID for the local JSONL file and does not honour ``--session-id``.
 * ``load`` returns ``None`` when the session has no entries (SDK
   contract: ``None`` == "never written").
 * ``load`` returns the parsed entry list when the session has entries.
 * Subagent batches (``key`` carries ``subpath``) are dropped silently
   per the v1 deferral.
 * End-to-end round trip — append-then-load via the adapter yields the
-  original entries.
+  original entries regardless of the UUID in the key.
 """
 
 from __future__ import annotations
@@ -24,11 +26,15 @@ from typing import Any
 import aiosqlite
 import pytest
 
-from bearings.agent.sdk_session_id import bearings_to_sdk_uuid
 from bearings.agent.session_store import BearingsSessionStore
 from bearings.db import sdk_entries as sdk_entries_db
 from bearings.db import sessions as sessions_db
 from bearings.db.connection import load_schema
+
+# A deliberately different UUID (simulates CLI-generated UUID that does NOT
+# match the Bearings session) used as the key's session_id in append/load
+# calls. The store must write/read under self._session_id, not this value.
+_FOREIGN_UUID = "deadbeef-dead-beef-dead-beefdeadbeef"
 
 
 @pytest.fixture
@@ -51,24 +57,30 @@ async def _make_session(conn: aiosqlite.Connection) -> str:
     return row.id
 
 
-def _make_store(conn: aiosqlite.Connection) -> BearingsSessionStore:
-    """Build a store closure-capturing a single connection."""
+def _make_store(conn: aiosqlite.Connection, session_id: str) -> BearingsSessionStore:
+    """Build a store bound to ``session_id`` and a single connection closure."""
 
     async def db_factory() -> aiosqlite.Connection:
         return conn
 
-    return BearingsSessionStore(db_factory=db_factory)
+    return BearingsSessionStore(session_id=session_id, db_factory=db_factory)
 
 
-async def test_append_writes_via_dbf(conn: aiosqlite.Connection) -> None:
-    """``store.append`` writes entries to the DB under the Bearings session id."""
+async def test_append_writes_under_constructor_session_id(
+    conn: aiosqlite.Connection,
+) -> None:
+    """``store.append`` writes under the id baked in at construction.
+
+    The UUID in the key (``_FOREIGN_UUID``) is ignored — the store always
+    writes to the Bearings session id it was constructed with.
+    """
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
-    store = _make_store(conn)
+    store = _make_store(conn, sid)
     batch: list[dict[str, Any]] = [
         {"type": "user", "uuid": "u-1", "content": "hi"},
     ]
-    await store.append({"project_key": "/tmp/wd", "session_id": sdk_uuid}, batch)
+    # Key carries a foreign UUID — store must use sid, not the key.
+    await store.append({"project_key": "/tmp/wd", "session_id": _FOREIGN_UUID}, batch)
     loaded = await sdk_entries_db.load(conn, session_id=sid)
     assert loaded == batch
 
@@ -76,23 +88,21 @@ async def test_append_writes_via_dbf(conn: aiosqlite.Connection) -> None:
 async def test_load_returns_none_when_empty(conn: aiosqlite.Connection) -> None:
     """SDK contract: ``None`` (not ``[]``) signals 'never written'."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
-    store = _make_store(conn)
-    result = await store.load({"project_key": "/tmp/wd", "session_id": sdk_uuid})
+    store = _make_store(conn, sid)
+    result = await store.load({"project_key": "/tmp/wd", "session_id": _FOREIGN_UUID})
     assert result is None
 
 
 async def test_load_returns_entries_when_present(conn: aiosqlite.Connection) -> None:
     """When entries exist, ``load`` returns them in write order."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
     batch: list[dict[str, Any]] = [
         {"type": "a", "uuid": "u-a"},
         {"type": "b", "uuid": "u-b"},
     ]
     await sdk_entries_db.append(conn, session_id=sid, entries=batch)
-    store = _make_store(conn)
-    result = await store.load({"project_key": "/tmp/wd", "session_id": sdk_uuid})
+    store = _make_store(conn, sid)
+    result = await store.load({"project_key": "/tmp/wd", "session_id": _FOREIGN_UUID})
     assert result == batch
 
 
@@ -101,13 +111,12 @@ async def test_subagent_batch_dropped_on_append(
 ) -> None:
     """Batches with ``subpath`` set are silently dropped (v1 deferral)."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
-    store = _make_store(conn)
+    store = _make_store(conn, sid)
     batch: list[dict[str, Any]] = [{"type": "user", "uuid": "u-sub"}]
     await store.append(
         {
             "project_key": "/tmp/wd",
-            "session_id": sdk_uuid,
+            "session_id": _FOREIGN_UUID,
             "subpath": "subagents/agent-x",
         },
         batch,
@@ -119,14 +128,13 @@ async def test_subagent_batch_dropped_on_append(
 async def test_subagent_load_returns_none(conn: aiosqlite.Connection) -> None:
     """Subagent ``load`` calls also short-circuit to ``None``."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
     # Even with main-transcript entries present, a subagent key returns None.
     await sdk_entries_db.append(conn, session_id=sid, entries=[{"type": "main"}])
-    store = _make_store(conn)
+    store = _make_store(conn, sid)
     result = await store.load(
         {
             "project_key": "/tmp/wd",
-            "session_id": sdk_uuid,
+            "session_id": _FOREIGN_UUID,
             "subpath": "subagents/agent-x",
         }
     )
@@ -134,14 +142,13 @@ async def test_subagent_load_returns_none(conn: aiosqlite.Connection) -> None:
 
 
 async def test_round_trip_via_adapter(conn: aiosqlite.Connection) -> None:
-    """``append`` then ``load`` via the adapter yields the original entries."""
+    """``append`` then ``load`` yields the original entries regardless of key UUID."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
-    store = _make_store(conn)
+    store = _make_store(conn, sid)
     batch: list[dict[str, Any]] = [
         {"type": "user", "uuid": f"u-{i}", "content": f"msg-{i}"} for i in range(5)
     ]
-    key = {"project_key": "/tmp/wd", "session_id": sdk_uuid}
+    key = {"project_key": "/tmp/wd", "session_id": _FOREIGN_UUID}
     await store.append(key, batch)
     result = await store.load(key)
     assert result == batch
@@ -150,8 +157,8 @@ async def test_round_trip_via_adapter(conn: aiosqlite.Connection) -> None:
 async def test_empty_batch_append_is_safe(conn: aiosqlite.Connection) -> None:
     """An empty append batch is a no-op; subsequent load still returns None."""
     sid = await _make_session(conn)
-    sdk_uuid = bearings_to_sdk_uuid(sid)
-    store = _make_store(conn)
-    await store.append({"project_key": "/tmp/wd", "session_id": sdk_uuid}, [])
-    result = await store.load({"project_key": "/tmp/wd", "session_id": sdk_uuid})
+    store = _make_store(conn, sid)
+    key = {"project_key": "/tmp/wd", "session_id": _FOREIGN_UUID}
+    await store.append(key, [])
+    result = await store.load(key)
     assert result is None

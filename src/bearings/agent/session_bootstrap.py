@@ -209,7 +209,7 @@ def build_session_setup(
         # first spawn (no mirror rows yet) ``sdk_session_id=<uuid>`` pins
         # the CLI's session UUID to ours so subsequent ``append`` calls
         # are routable back to this Bearings session id.
-        store = BearingsSessionStore(db_factory=db_factory)
+        store = BearingsSessionStore(session_id=session_id, db_factory=db_factory)
         sdk_uuid = bearings_to_sdk_uuid(session_id)
         prior_entry_count = await sdk_entries_db.count_for_session(
             db_connection, session_id=session_id

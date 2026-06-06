@@ -18,12 +18,15 @@ on 2026-05-05.
 
 Design notes:
 
-* **Per-session identity translation.** The SDK keys every operation by
-  ``SessionKey({"project_key": …, "session_id": <uuid>})``. Bearings
-  stores entries under the Bearings session id (``ses_<32hex>``), so
-  the adapter's first job on every callback is to translate the
-  incoming UUID back to the Bearings id via
-  :func:`bearings.agent.sdk_session_id.sdk_uuid_to_bearings`.
+* **Per-session identity.** The adapter is constructed with the Bearings
+  session id (``ses_<32hex>``) baked in. All ``append`` calls write
+  under that id regardless of what UUID the CLI subprocess chose for its
+  local JSONL file. This is intentional: in Claude Code 2.1.161+
+  (bundled with SDK 0.2.88) the CLI generates its own session UUID for
+  the transcript file rather than honouring the ``--session-id`` pin we
+  pass, so deriving the Bearings id from ``key["session_id"]`` no longer
+  works. Fixing this at the store constructor is the narrowest change —
+  the adapter was always per-session, so the id was already known.
 * **Subagent transcripts deferred.** The SDK reserves ``key["subpath"]``
   for subagent JSONL files (e.g. ``"subagents/agent-{id}"``). v1 stores
   only the main transcript and silently drops subagent batches; the
@@ -48,7 +51,6 @@ References:
 * SDK :class:`claude_agent_sdk.types.SessionStore` Protocol +
   :class:`SessionKey` / :class:`SessionStoreEntry` shapes.
 * :mod:`bearings.db.sdk_entries` — the storage queries.
-* :mod:`bearings.agent.sdk_session_id` — id translation.
 """
 # mypy: disable-error-code=explicit-any
 
@@ -60,7 +62,6 @@ from typing import Any
 
 import aiosqlite
 
-from bearings.agent.sdk_session_id import sdk_uuid_to_bearings
 from bearings.db import sdk_entries as sdk_entries_db
 
 _log = logging.getLogger(__name__)
@@ -85,16 +86,22 @@ class BearingsSessionStore:
     subclass ``SessionStore``").
     """
 
-    def __init__(self, *, db_factory: DbConnectionFactory) -> None:
-        """Construct the adapter bound to ``db_factory``.
+    def __init__(self, *, session_id: str, db_factory: DbConnectionFactory) -> None:
+        """Construct the adapter bound to ``session_id`` and ``db_factory``.
 
         Args:
+            session_id: Bearings session id (``ses_<32hex>``) this adapter
+                belongs to. All ``append`` calls write under this id
+                regardless of what UUID the CLI chose for its local JSONL
+                file — necessary because Claude Code 2.1.161+ generates
+                its own transcript UUID instead of honouring ``--session-id``.
             db_factory: A no-argument async callable returning the
                 shared :class:`aiosqlite.Connection`. Bearings v1 runs
                 a single long-lived connection on
                 ``app.state.db_connection``; the bootstrap closes over
                 that connection and passes it through here.
         """
+        self._session_id = session_id
         self._db_factory = db_factory
 
     async def append(
@@ -109,6 +116,12 @@ class BearingsSessionStore:
         transcript still resumes correctly because the SDK's
         ``list_subkeys`` is optional (absent → resume only materialises
         the main transcript per the SDK contract).
+
+        The Bearings session id comes from ``self._session_id`` (baked in
+        at construction), not from ``key["session_id"]``. Claude Code
+        2.1.161+ generates its own UUID for the local JSONL file rather
+        than honouring the ``--session-id`` pin, so deriving the id from
+        the key no longer works reliably.
         """
         if key.get("subpath"):
             _log.debug(
@@ -120,11 +133,10 @@ class BearingsSessionStore:
             return
         if not entries:
             return
-        bearings_session_id = sdk_uuid_to_bearings(str(key["session_id"]))
         connection = await self._db_factory()
         await sdk_entries_db.append(
             connection,
-            session_id=bearings_session_id,
+            session_id=self._session_id,
             entries=entries,
         )
 
@@ -142,17 +154,16 @@ class BearingsSessionStore:
         if key.get("subpath"):
             # Subagent transcripts not persisted in v1.
             return None
-        bearings_session_id = sdk_uuid_to_bearings(str(key["session_id"]))
         connection = await self._db_factory()
         count = await sdk_entries_db.count_for_session(
             connection,
-            session_id=bearings_session_id,
+            session_id=self._session_id,
         )
         if count == 0:
             return None
         return await sdk_entries_db.load(
             connection,
-            session_id=bearings_session_id,
+            session_id=self._session_id,
         )
 
 
