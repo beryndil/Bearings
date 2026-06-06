@@ -281,19 +281,33 @@ class InProcessRunnerRegistry:
 
     async def _reap_idle_sessions(self) -> None:
         """Cancel + reap every supervisor whose runner has been
-        idle past the threshold."""
+        idle past the threshold, then evict the runner itself.
+
+        Two cases:
+        * Runner has a live supervisor → cancel it via ``_reap_one``,
+          then remove the runner so its ring buffer is freed.
+        * Runner has no supervisor (already reaped in a prior cycle) →
+          the prior ``continue`` guard skipped it forever; sweep it here
+          so orphaned runners don't accumulate indefinitely.
+        """
         now_ns = time.monotonic_ns()
         threshold_ns = int(self._idle_reap_threshold_s * 1_000_000_000)
         to_reap: list[str] = []
+        to_evict: list[str] = []
         for session_id, runner in self._runners.items():
-            if session_id not in self._supervisors:
-                continue
             if runner.subscriber_count > 0 or runner.prompt_queue_depth > 0:
                 continue
-            if now_ns - runner.last_active_ns >= threshold_ns:
+            if now_ns - runner.last_active_ns < threshold_ns:
+                continue
+            if session_id in self._supervisors:
                 to_reap.append(session_id)
+            else:
+                to_evict.append(session_id)
         for session_id in to_reap:
             await self._reap_one(session_id)
+            self._runners.pop(session_id, None)
+        for session_id in to_evict:
+            self._runners.pop(session_id, None)
 
     async def _reap_one(self, session_id: str) -> None:
         """Cancel + await one supervisor + cancel its broker."""
