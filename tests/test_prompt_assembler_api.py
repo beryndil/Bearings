@@ -29,7 +29,7 @@ from bearings.agent.prompt_assembler import (
     LAYER_KIND_TAG_MEMORY,
     assemble_system_prompt_layers,
 )
-from bearings.config.constants import SESSION_KIND_CHAT
+from bearings.config.constants import DEFAULT_BASELINE_PATH, SESSION_KIND_CHAT
 from bearings.db import memories as memories_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
@@ -70,7 +70,13 @@ async def app_and_db(
 
 
 async def test_baseline_always_present(db: aiosqlite.Connection) -> None:
-    """The ``baseline`` layer is always present regardless of other fields."""
+    """The ``baseline`` layer is always present regardless of other fields.
+
+    When ``DEFAULT_BASELINE_PATH`` does not exist (the common case in CI /
+    fresh installs), the layer body falls back to ``CLOSE_SESSION_INSTRUCTION``
+    and ``source_path`` is set to ``DEFAULT_BASELINE_PATH`` so the Inspector
+    can write the file via the layer-write endpoint.
+    """
     session = await sessions_db.create(
         db,
         kind=SESSION_KIND_CHAT,
@@ -83,9 +89,12 @@ async def test_baseline_always_present(db: aiosqlite.Connection) -> None:
     kinds = [layer.kind for layer in result.layers]
     assert LAYER_KIND_BASELINE in kinds
     baseline = next(layer for layer in result.layers if layer.kind == LAYER_KIND_BASELINE)
-    assert baseline.body == CLOSE_SESSION_INSTRUCTION
-    assert baseline.token_count == len(CLOSE_SESSION_INSTRUCTION) // 4
-    assert baseline.source_path is None
+    # Body is the hardcoded fallback when the user file does not exist.
+    if not DEFAULT_BASELINE_PATH.exists():
+        assert baseline.body == CLOSE_SESSION_INSTRUCTION
+        assert baseline.token_count == len(CLOSE_SESSION_INSTRUCTION) // 4
+    # source_path is always the file path regardless of whether the file exists.
+    assert baseline.source_path == str(DEFAULT_BASELINE_PATH)
 
 
 async def test_none_for_unknown_session(db: aiosqlite.Connection) -> None:

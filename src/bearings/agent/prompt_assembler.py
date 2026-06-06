@@ -11,9 +11,14 @@ Layer order
 1. **``session_instructions``** — per-session steering from the session
    row's ``session_instructions`` column.  Omitted when ``None`` or
    empty-after-strip.
-2. **``baseline``** — Bearings core surface
-   (:data:`bearings.agent.bearings_mcp.CLOSE_SESSION_INSTRUCTION`).
-   Always present.
+2. **``baseline``** — Bearings core surface.  Content is read from
+   :data:`bearings.config.constants.DEFAULT_BASELINE_PATH` when the file
+   exists; falls back to the hard-coded
+   :data:`bearings.agent.bearings_mcp.CLOSE_SESSION_INSTRUCTION` otherwise.
+   ``source_path`` is always set to ``DEFAULT_BASELINE_PATH`` so the
+   Inspector can write the file via the layer-write endpoint.  On the first
+   write the endpoint creates the file; subsequent reads use the written
+   content.  Always present.
 3. **``project_claude_md``** — one layer per ``CLAUDE.md`` found walking
    up from the session's ``working_dir`` to the filesystem root.
    Each file yields its own row so the inspector can attribute the
@@ -56,6 +61,7 @@ from dataclasses import dataclass, field
 import aiosqlite
 
 from bearings.agent.bearings_mcp import CLOSE_SESSION_INSTRUCTION
+from bearings.config.constants import DEFAULT_BASELINE_PATH
 from bearings.db import memories as memories_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
@@ -106,7 +112,7 @@ class SystemPromptLayer:
         token_count: Approximate token count (``len(body) // 4``).
         source_path: Human-readable absolute path provenance for
             layers with a filesystem source (``project_claude_md``,
-            ``tag_claude_md``).  ``None`` for ``baseline``,
+            ``tag_claude_md``, ``baseline``).  ``None`` for
             ``session_instructions``, ``tag_memory``, and
             ``template_baseline``.
     """
@@ -316,13 +322,19 @@ async def assemble_system_prompt_layers(
 
     # Layer 1: session_instructions
     _append_session_instructions_layer(row, layers)
-    # Layer 2: baseline (always present)
+    # Layer 2: baseline — user-editable file or hardcoded fallback.
+    # source_path is always set so the Inspector layer-write endpoint can
+    # create / overwrite the file on first edit (Path.write_text creates
+    # the file when it does not yet exist, as long as the parent dir exists).
+    _baseline_body = CLOSE_SESSION_INSTRUCTION
+    with contextlib.suppress(OSError):
+        _baseline_body = DEFAULT_BASELINE_PATH.read_text(encoding="utf-8")
     layers.append(
         SystemPromptLayer(
             kind=LAYER_KIND_BASELINE,
-            body=CLOSE_SESSION_INSTRUCTION,
-            token_count=_approx_tokens(CLOSE_SESSION_INSTRUCTION),
-            source_path=None,
+            body=_baseline_body,
+            token_count=_approx_tokens(_baseline_body),
+            source_path=str(DEFAULT_BASELINE_PATH),
         )
     )
     # Layer 3: project CLAUDE.md walk-up chain

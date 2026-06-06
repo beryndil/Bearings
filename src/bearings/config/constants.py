@@ -52,6 +52,13 @@ DEFAULT_HOST: Final[str] = "127.0.0.1"
 # downstream code never has to think about it.
 DEFAULT_DB_PATH: Final[Path] = Path("~/.local/share/bearings-v1/sessions.db").expanduser()
 
+# User-editable baseline instruction file.  When present its content replaces
+# the hard-coded :data:`bearings.agent.bearings_mcp.CLOSE_SESSION_INSTRUCTION`
+# as layer 2 (``baseline``) in the assembled system prompt.  The file is
+# seeded with the default text on the first write from the Inspector so the
+# user starts from the working default rather than an empty editor.
+DEFAULT_BASELINE_PATH: Final[Path] = Path("~/.local/share/bearings-v1/baseline.md").expanduser()
+
 # Billing mode default — mirrors v0.17.x BillingCfg semantics so the shared
 # config file at ``~/.config/bearings/config.toml`` round-trips cleanly
 # during the dogfood cutover (2026-05-01). "payg" preserves the legacy
@@ -1667,6 +1674,7 @@ __all__ = [
     "DEFAULT_ADVISOR_MAX_USES_SONNET",
     "DEFAULT_ALLOWED_SHELL_COMMANDS",
     "DEFAULT_AVATARS_STORAGE_ROOT",
+    "DEFAULT_BASELINE_PATH",
     "DEFAULT_BASH_TOOL_ALLOWED_COMMANDS",
     "DEFAULT_BILLING_MODE",
     "DEFAULT_BILLING_PLAN",
