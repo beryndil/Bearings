@@ -334,10 +334,11 @@
   <div class="relative flex-1 overflow-hidden">
     <div
       bind:this={bodyEl}
-      class="conversation__body h-full overflow-y-auto"
+      class="conversation__body flex h-full flex-col overflow-y-auto"
       data-testid="conversation-body"
       onscroll={handleScroll}
     >
+      <div class="flex-1" aria-hidden="true"></div>
       {#if conversationStore.hasMore}
         <div class="flex justify-center py-2">
           <button
