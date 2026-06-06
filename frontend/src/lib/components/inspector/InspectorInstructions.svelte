@@ -158,19 +158,7 @@
     openSessionInstrModal("");
   }
 
-  // ---- copy path ----------------------------------------------------------
 
-  let copiedPath = $state<string | null>(null);
-
-  function copyPath(event: MouseEvent, path: string): void {
-    event.stopPropagation();
-    void navigator.clipboard.writeText(path).then(() => {
-      copiedPath = path;
-      setTimeout(() => {
-        copiedPath = null;
-      }, 1500);
-    });
-  }
 </script>
 
 {#if showSessionInstrModal}
@@ -254,61 +242,30 @@
           {/if}
         {:else}
           {#each kindLayers as layer, i (i)}
-            <!-- role="button" avoids nested <button> (copy btn is a real <button> inside) -->
-            <div
-              role="button"
-              tabindex="0"
+            <button
+              type="button"
               class="instructions-layer-card"
               data-testid={`instructions-layer-${kind}-${i}`}
               onclick={() => handleLayerClick(kind, layer)}
-              onkeydown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleLayerClick(kind, layer);
-                }
-              }}
             >
-              <!-- Path / kind identifier row -->
-              <div class="flex items-start gap-1.5">
-                <span
-                  class="min-w-0 flex-1 break-all text-left font-mono text-xs text-fg"
-                  title={layer.source_path ?? undefined}
-                  data-testid={`instructions-layer-path-${kind}-${i}`}
-                >
-                  {#if layer.source_path}
-                    <span class="text-fg-muted"
-                      >{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
-                    >
-                    {layer.source_path}
-                  {:else}
-                    <span class="text-fg-muted">{kindLabel}</span>
-                  {/if}
-                </span>
-              </div>
-
-              <!-- Token count + actions row -->
-              <div class="flex items-center gap-1.5">
-                <span class="shrink-0 text-xs text-fg-muted">
-                  {INSPECTOR_STRINGS.instructionsLayerTokensLabel(layer.token_count)}
-                </span>
-                <span class="flex-1"></span>
+              <span
+                class="min-w-0 break-all text-left font-mono text-xs text-fg"
+                title={layer.source_path ?? undefined}
+                data-testid={`instructions-layer-path-${kind}-${i}`}
+              >
                 {#if layer.source_path}
-                  <button
-                    type="button"
-                    class="instructions-layer-card__action-btn"
-                    data-testid={`instructions-layer-copy-${kind}-${i}`}
-                    onclick={(e) => copyPath(e, layer.source_path!)}
+                  <span class="text-fg-muted"
+                    >{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
                   >
-                    {copiedPath === layer.source_path
-                      ? INSPECTOR_STRINGS.instructionsCopyPathDone
-                      : INSPECTOR_STRINGS.instructionsCopyPathButton}
-                  </button>
+                  {layer.source_path}
+                {:else}
+                  <span class="text-fg-muted">{kindLabel}</span>
                 {/if}
-                <span class="instructions-layer-card__hint">
-                  {layer.source_path || kind === "session_instructions" ? "Edit →" : "View →"}
-                </span>
-              </div>
-            </div>
+              </span>
+              <span class="text-xs text-fg-muted">
+                {INSPECTOR_STRINGS.instructionsLayerTokensLabel(layer.token_count)}
+              </span>
+            </button>
           {/each}
         {/if}
       </div>
@@ -320,7 +277,7 @@
   .instructions-layer-card {
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.25rem;
     border-radius: 0.25rem;
     border: 1px solid rgb(var(--bearings-border));
     background: rgb(var(--bearings-surface-2));
@@ -339,36 +296,5 @@
   .instructions-layer-card--empty {
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-
-  .instructions-layer-card__hint {
-    flex-shrink: 0;
-    font-size: 0.6875rem;
-    color: rgb(var(--bearings-fg-muted));
-    opacity: 0;
-    transition: opacity 0.1s ease;
-  }
-
-  .instructions-layer-card:hover .instructions-layer-card__hint {
-    opacity: 1;
-    color: rgb(var(--bearings-accent));
-  }
-
-  .instructions-layer-card__action-btn {
-    padding: 0.125rem 0.4rem;
-    border-radius: 0.2rem;
-    font-size: 0.6875rem;
-    cursor: pointer;
-    border: 1px solid rgb(var(--bearings-border));
-    background: rgb(var(--bearings-surface-2));
-    color: rgb(var(--bearings-fg-muted));
-    flex-shrink: 0;
-  }
-
-  .instructions-layer-card__action-btn:hover {
-    background: rgb(var(--bearings-surface-1));
-    color: rgb(var(--bearings-fg));
   }
 </style>

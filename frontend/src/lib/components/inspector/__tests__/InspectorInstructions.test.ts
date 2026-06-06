@@ -301,27 +301,4 @@ describe("click-to-open modal behavior", () => {
     expect(screen.getByTestId("session-instr-edit-modal")).toBeInTheDocument();
   });
 
-  it("copy-path button does not open the editor", async () => {
-    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
-      fakeLayersOut([
-        {
-          kind: "project_claude_md",
-          body: "proj",
-          token_count: 1,
-          source_path: "/p/CLAUDE.md",
-        },
-      ]),
-    );
-    // Stub clipboard to avoid jsdom errors.
-    Object.assign(navigator, {
-      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
-    });
-    render(InspectorInstructions, { props: { session: fakeSession() } });
-    await waitFor(() => {
-      expect(screen.getByTestId("instructions-layer-copy-project_claude_md-0")).toBeInTheDocument();
-    });
-    await fireEvent.click(screen.getByTestId("instructions-layer-copy-project_claude_md-0"));
-    // Modal should NOT have opened.
-    expect(screen.queryByTestId("claudemd-edit-modal")).toBeNull();
-  });
 });

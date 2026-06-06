@@ -1794,8 +1794,6 @@ export const INSPECTOR_STRINGS = {
     template_baseline: "No template baseline.",
   } as const,
   instructionsLayerSourceLabel: "Source:",
-  instructionsCopyPathButton: "Copy path",
-  instructionsCopyPathDone: "Copied!",
   // Files subsection (gap-cycle-09-003) — derives rows from
   // conversationStore.turns via path-key extraction on each
   // ToolCallView. The three path keys (file_path, notebook_path,
