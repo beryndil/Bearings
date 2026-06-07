@@ -20,7 +20,7 @@
    * new-session dialog) and tracked through :func:`bindHandler`.
    */
   import type { Snippet } from "svelte";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import {
     KEYBINDING_ACTION_ESC_CASCADE,
@@ -121,10 +121,10 @@
       dispatchKeyEvent(event);
     }
     function onFocusIn(event: FocusEvent): void {
-      setComposerFocused(isInputElement(event.target));
+      untrack(() => setComposerFocused(isInputElement(event.target)));
     }
     function onFocusOut(): void {
-      setComposerFocused(false);
+      untrack(() => setComposerFocused(false));
     }
 
     window.addEventListener("keydown", onKeyDown);

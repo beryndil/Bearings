@@ -28,6 +28,7 @@
  * dependency graph one-way (components depend on stores; stores never
  * depend on each other).
  */
+import { untrack } from "svelte";
 import { listSessions, type SessionOut } from "../api/sessions";
 import type { TagOut } from "../api/tags";
 import { connectSessionsBroadcast } from "../api/wsSessions";
@@ -172,61 +173,69 @@ function _applyDelete(sessionId: string): void {
 // can reactively reflect the connection state without a second socket.
 connectSessionsBroadcast(
   (event) => {
-    if (event.type === "session_upsert") {
-      _applyUpsert(event.session);
-    } else if (event.type === "session_delete") {
-      _applyDelete(event.session_id);
-    } else if (event.type === "runner_state") {
-      const { session_id, is_running, is_awaiting_user, is_error } = event;
+    untrack(() => {
+      if (event.type === "session_upsert") {
+        _applyUpsert(event.session);
+      } else if (event.type === "session_delete") {
+        _applyDelete(event.session_id);
+      } else if (event.type === "runner_state") {
+        const { session_id, is_running, is_awaiting_user, is_error } = event;
 
-      // Maintain running set — reassign so Svelte's proxy detects the change.
-      const nextRunning = new Set(state.running);
-      if (is_running) {
-        nextRunning.add(session_id);
-      } else {
-        nextRunning.delete(session_id);
-      }
-      state.running = nextRunning;
-
-      // Maintain awaiting set — same reassignment pattern.
-      const nextAwaiting = new Set(state.awaiting);
-      if (is_awaiting_user) {
-        nextAwaiting.add(session_id);
-      } else {
-        nextAwaiting.delete(session_id);
-      }
-      state.awaiting = nextAwaiting;
-
-      // Agent loop entered ERROR state — set error_pending locally so
-      // the sidebar pip flashes without waiting for a page reload.
-      // The session_upsert from the recover route will clear it.
-      if (is_error) {
-        const idx = state.sessions.findIndex((s) => s.id === session_id);
-        if (idx !== -1) {
-          state.sessions[idx] = { ...state.sessions[idx], error_pending: true };
+        // Maintain running set — reassign so Svelte's proxy detects the change.
+        const nextRunning = new Set(state.running);
+        if (is_running) {
+          nextRunning.add(session_id);
+        } else {
+          nextRunning.delete(session_id);
         }
+        state.running = nextRunning;
+
+        // Maintain awaiting set — same reassignment pattern.
+        const nextAwaiting = new Set(state.awaiting);
+        if (is_awaiting_user) {
+          nextAwaiting.add(session_id);
+        } else {
+          nextAwaiting.delete(session_id);
+        }
+        state.awaiting = nextAwaiting;
+
+        // Agent loop entered ERROR state — set error_pending locally so
+        // the sidebar pip flashes without waiting for a page reload.
+        // The session_upsert from the recover route will clear it.
+        if (is_error) {
+          const idx = state.sessions.findIndex((s) => s.id === session_id);
+          if (idx !== -1) {
+            state.sessions[idx] = { ...state.sessions[idx], error_pending: true };
+          }
+        }
+      } else if (event.type === "tag_upsert") {
+        // Forward tag change events to the tags store so filter panels in
+        // all open tabs refresh without a full GET /api/tags round-trip
+        // (feature-5-004 / CCW-3). The single /ws/sessions connection is
+        // shared — no second WebSocket needed.
+        _applyTagUpsert(event.tag);
+      } else if (event.type === "tag_delete") {
+        _applyTagDelete(event.tag_id);
       }
-    } else if (event.type === "tag_upsert") {
-      // Forward tag change events to the tags store so filter panels in
-      // all open tabs refresh without a full GET /api/tags round-trip
-      // (feature-5-004 / CCW-3). The single /ws/sessions connection is
-      // shared — no second WebSocket needed.
-      _applyTagUpsert(event.tag);
-    } else if (event.type === "tag_delete") {
-      _applyTagDelete(event.tag_id);
-    }
+    });
   },
   {
     onOpen() {
-      wsStatus.state = "open";
-      wsStatus.lastCloseCode = null;
+      untrack(() => {
+        wsStatus.state = "open";
+        wsStatus.lastCloseCode = null;
+      });
     },
     onClose(code: number) {
-      wsStatus.state = "closed";
-      wsStatus.lastCloseCode = code;
+      untrack(() => {
+        wsStatus.state = "closed";
+        wsStatus.lastCloseCode = code;
+      });
     },
     onError() {
-      wsStatus.state = "error";
+      untrack(() => {
+        wsStatus.state = "error";
+      });
     },
   },
 );

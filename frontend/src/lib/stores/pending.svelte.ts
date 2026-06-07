@@ -17,6 +17,7 @@
  * - ``loading`` — ``true`` while a fetch is in flight.
  * - ``error`` — last fetch error; cleared on success.
  */
+import { untrack } from "svelte";
 import { fetchPendingOps, type PendingOp } from "../api/pendingOps";
 
 export type { PendingOp };
@@ -88,14 +89,20 @@ export async function refreshOps(workingDir: string | null): Promise<void> {
   try {
     const ops = await fetchPendingOps(workingDir, { signal: controller.signal });
     if (controller.signal.aborted) return;
-    state.ops = ops;
-    state.error = null;
+    untrack(() => {
+      state.ops = ops;
+      state.error = null;
+    });
   } catch (err) {
     if (controller.signal.aborted || isAbortError(err)) return;
-    state.error = err instanceof Error ? err : new Error(String(err));
+    untrack(() => {
+      state.error = err instanceof Error ? err : new Error(String(err));
+    });
   } finally {
     if (!controller.signal.aborted) {
-      state.loading = false;
+      untrack(() => {
+        state.loading = false;
+      });
     }
   }
 }
