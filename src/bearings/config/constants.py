@@ -152,6 +152,16 @@ EXECUTOR_FALLBACK_MODEL: Final[dict[str, str]] = {
 # Internal-runtime defaults (docs/architecture-v1.md §1.1.2)
 # ---------------------------------------------------------------------------
 
+# SDK initialize-handshake retry policy.  The SDK raises
+# "Control request timeout: initialize" when the CLI subprocess does not
+# complete the streaming-mode handshake within 60 s.  This is a transient
+# startup condition (system load, MCP server warmup).  The loop retries up
+# to INIT_TIMEOUT_MAX_RETRIES times with exponential backoff starting at
+# INIT_TIMEOUT_RETRY_BASE_DELAY_S before entering error state.
+# Delays: 2 s, 4 s, 8 s — total extra wait ≤ 14 s before giving up.
+INIT_TIMEOUT_MAX_RETRIES: Final[int] = 3
+INIT_TIMEOUT_RETRY_BASE_DELAY_S: Final[float] = 2.0
+
 # Per-runner WS event ring buffer cap (arch §1.1.2 — "RING_BUFFER_MAX =
 # 5000"). Bounds replay buffer growth on long-lived sessions.
 RING_BUFFER_MAX: Final[int] = 5000
@@ -926,6 +936,11 @@ DEFAULT_BASH_TOOL_ALLOWED_COMMANDS: Final[frozenset[str]] = frozenset(
         "pkill",
         "systemctl",
         "journalctl",
+        # Package management
+        "pacman",
+        "sudo",
+        "paru",
+        "yay",
         # Desktop integration
         "xdg-open",
     }

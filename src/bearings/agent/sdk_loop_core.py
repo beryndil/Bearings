@@ -56,7 +56,11 @@ from bearings.agent.session import (
     SessionStateError,
 )
 from bearings.agent.translate import SDKEventTranslator
-from bearings.config.constants import FORCE_ADVISOR_INSTRUCTION
+from bearings.config.constants import (
+    FORCE_ADVISOR_INSTRUCTION,
+    INIT_TIMEOUT_MAX_RETRIES,
+    INIT_TIMEOUT_RETRY_BASE_DELAY_S,
+)
 from bearings.db import tool_calls as tool_calls_db
 from bearings.db.tool_calls import ToolCallRecord
 
@@ -159,21 +163,34 @@ async def run_session_loop(
             return
         if _is_init_timeout_error(exc):
             # Subprocess startup timed out on the streaming-mode initialize
-            # handshake — transient under load.  Close the subprocess and retry
-            # once after a brief pause; a second timeout is surfaced as fatal.
-            _log.warning(
-                "session %s: SDK initialize handshake timed out — retrying subprocess once",
-                session_id,
-            )
-            await asyncio.sleep(2.0)
-            try:
-                await _run_sdk_client_body(
-                    factory, sdk_options, runner, session, translator, persist_fn
+            # handshake — transient under load (system stress, MCP warmup).
+            # Retry up to INIT_TIMEOUT_MAX_RETRIES times with exponential
+            # backoff; a non-timeout error or exhausted retries surfaces fatal.
+            for attempt in range(1, INIT_TIMEOUT_MAX_RETRIES + 1):
+                delay = INIT_TIMEOUT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+                _log.warning(
+                    "session %s: SDK initialize handshake timed out "
+                    "(attempt %d/%d) — retrying after %.0f s",
+                    session_id,
+                    attempt,
+                    INIT_TIMEOUT_MAX_RETRIES,
+                    delay,
                 )
-            except _CancelledLike:
-                raise
-            except Exception as retry_exc:
-                await _enter_error_state(runner, session, retry_exc)
+                await asyncio.sleep(delay)
+                try:
+                    await _run_sdk_client_body(
+                        factory, sdk_options, runner, session, translator, persist_fn
+                    )
+                    return  # retry succeeded
+                except _CancelledLike:
+                    raise
+                except Exception as retry_exc:
+                    if not _is_init_timeout_error(retry_exc):
+                        await _enter_error_state(runner, session, retry_exc)
+                        return
+                    if attempt == INIT_TIMEOUT_MAX_RETRIES:
+                        await _enter_error_state(runner, session, retry_exc)
+                        return
             return
         await _enter_error_state(runner, session, exc)
 
