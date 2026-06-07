@@ -99,6 +99,9 @@ function openSocket(sessionId: string): void {
       maybeFireTurnNotification();
     }
   });
+  socket.addEventListener("open", () => {
+    setError(null);
+  });
   socket.addEventListener("close", () => {
     if (conn.closed) {
       return;
