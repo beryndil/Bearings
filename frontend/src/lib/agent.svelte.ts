@@ -27,6 +27,10 @@ import { maybeFireTurnNotification } from "./utils/notify";
 
 const INITIAL_RECONNECT_DELAY_MS = 250;
 const MAX_RECONNECT_DELAY_MS = 4_000;
+// How long to wait after a WS error before surfacing the banner.  Set just
+// above the initial reconnect delay so a single fast reconnect (250 ms) fires
+// its ``open`` event before this expires and the user never sees a flash.
+const RECONNECT_ERROR_GRACE_MS = 400;
 
 interface ActiveConnection {
   sessionId: string;
@@ -37,6 +41,10 @@ interface ActiveConnection {
 }
 
 let active: ActiveConnection | null = null;
+// Module-level timer: show the error banner only after the grace period
+// elapses without a successful reconnect.  Cancelled by every ``open`` event
+// and by each new ``openSocket`` call so fast self-heals are invisible.
+let pendingErrorHandle: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Open (or replace) the WebSocket subscription for ``sessionId``.
@@ -62,6 +70,10 @@ export function disconnectSession(): void {
   if (active.retryHandle !== null) {
     clearTimeout(active.retryHandle);
   }
+  if (pendingErrorHandle !== null) {
+    clearTimeout(pendingErrorHandle);
+    pendingErrorHandle = null;
+  }
   try {
     active.socket.close();
   } catch {
@@ -73,6 +85,12 @@ export function disconnectSession(): void {
 }
 
 function openSocket(sessionId: string): void {
+  // Cancel any pending error banner from the previous socket: we are starting
+  // a new attempt so the grace period resets.
+  if (pendingErrorHandle !== null) {
+    clearTimeout(pendingErrorHandle);
+    pendingErrorHandle = null;
+  }
   const url = buildWsUrl(sessionId, conversationStore.lastSeq);
   const socket = new WebSocket(url);
   const conn: ActiveConnection = {
@@ -100,6 +118,10 @@ function openSocket(sessionId: string): void {
     }
   });
   socket.addEventListener("open", () => {
+    if (pendingErrorHandle !== null) {
+      clearTimeout(pendingErrorHandle);
+      pendingErrorHandle = null;
+    }
     setError(null);
   });
   socket.addEventListener("close", () => {
@@ -110,10 +132,14 @@ function openSocket(sessionId: string): void {
   });
   socket.addEventListener("error", () => {
     // The browser's WS layer fires ``error`` then ``close``; we react
-    // on close. The error event itself is opaque (no detail) — record
-    // it on the store so the conversation pane can render the
-    // "Backend unreachable" banner per chat.md §"Error states".
-    setError(new Error("WebSocket transport error"));
+    // on close. The error event itself is opaque (no detail).
+    // Delay surfacing the banner so a fast reconnect (initial backoff is
+    // INITIAL_RECONNECT_DELAY_MS) cancels the timer before it fires and
+    // the user never sees a flash for self-healing drops.
+    pendingErrorHandle = setTimeout(() => {
+      pendingErrorHandle = null;
+      setError(new Error("WebSocket transport error"));
+    }, RECONNECT_ERROR_GRACE_MS);
   });
 }
 
