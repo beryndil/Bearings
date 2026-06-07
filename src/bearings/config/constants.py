@@ -158,8 +158,11 @@ EXECUTOR_FALLBACK_MODEL: Final[dict[str, str]] = {
 # startup condition (system load, MCP server warmup).  The loop retries up
 # to INIT_TIMEOUT_MAX_RETRIES times with exponential backoff starting at
 # INIT_TIMEOUT_RETRY_BASE_DELAY_S before entering error state.
-# Delays: 2 s, 4 s, 8 s — total extra wait ≤ 14 s before giving up.
-INIT_TIMEOUT_MAX_RETRIES: Final[int] = 3
+# Delay on the single retry: 2 s — total extra wait ≤ 2 s before giving up.
+# One retry covers transient startup blips (e.g. simultaneous cold-start
+# resource contention); more retries only compound the resource pressure
+# that caused the first timeout and balloon the user-visible wait.
+INIT_TIMEOUT_MAX_RETRIES: Final[int] = 1
 INIT_TIMEOUT_RETRY_BASE_DELAY_S: Final[float] = 2.0
 
 # Per-runner WS event ring buffer cap (arch §1.1.2 — "RING_BUFFER_MAX =

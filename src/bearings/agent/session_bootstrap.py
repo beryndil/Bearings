@@ -106,6 +106,15 @@ def build_session_setup(
         row = await sessions_db.get(db_connection, session_id)
         if row is None:
             return None
+        # Sessions in error state must not auto-respawn — user must trigger
+        # recovery explicitly via POST /api/sessions/{id}/recover (which
+        # clears error_pending before calling factory(session_id)).  Without
+        # this guard the supervisor respawns immediately after every fatal
+        # error, hits the same init-timeout, enters error state again, and
+        # loops indefinitely — consuming resources and showing a non-stop
+        # spinner.  The recover endpoint is the intentional re-entry point.
+        if row.error_pending:
+            return None
         # Reconstruct the routing decision from the persisted routing
         # columns on the session row. The executor/advisor/effort shape
         # is stored at session-create time (``POST /api/sessions``) and
