@@ -2877,6 +2877,42 @@
         }
       }
     },
+    "/api/sessions/{session_id}/sdk-entries": {
+      "delete": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Delete Session Sdk Entries",
+        "description": "Admin action \u2014 deletes the SDK transcript mirror. Destructive and irreversible; for debug/test use only.\n\nReturns 204 on success (including when the session exists but has no\nSDK entries). Returns 404 if no session row matches ``session_id``.\nThe schema's ``ON DELETE CASCADE`` already drops mirror rows when the\nsession row is deleted; this endpoint is for the \"reset SDK\nconversation but keep the Bearings session alive\" path.",
+        "operationId": "delete-session-sdk-entries",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}/model": {
       "patch": {
         "tags": [

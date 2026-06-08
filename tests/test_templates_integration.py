@@ -1,9 +1,8 @@
 """Integration tests for ``bearings.db.templates`` + ``bearings.agent.templates``.
 
-Round-trips Template CRUD against a fresh SQLite and exercises
-:func:`bearings.agent.templates.build_session_config_from_template`
-end-to-end so the new-session-from-template flow at item 1.10 has a
-verified data path.
+Round-trips Template CRUD against a fresh SQLite. The
+``build_session_config_from_template`` bridge is superseded by
+:mod:`bearings.agent.session_assembly`; those tests have been removed.
 
 References:
 
@@ -21,11 +20,6 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from bearings.agent.session import PermissionProfile
-from bearings.agent.templates import (
-    TemplateNotFoundError,
-    build_session_config_from_template,
-)
 from bearings.db import get_connection_factory, load_schema
 from bearings.db.templates import (
     create,
@@ -143,84 +137,3 @@ async def test_delete_returns_true_on_existing_row(
     assert await delete(connection, template.id) is True
     assert await get(connection, template.id) is None
     assert await delete(connection, template.id) is False
-
-
-async def test_build_session_config_from_template_applies_routing(
-    connection: aiosqlite.Connection,
-) -> None:
-    """Bridge helper produces a SessionConfig matching the template values."""
-    template = await create(
-        connection,
-        name="ArchitectPreset",
-        model="opus",
-        advisor_model=None,
-        advisor_max_uses=0,
-        effort_level="xhigh",
-        permission_profile="restricted",
-        working_dir_default="/home/user/arch",
-        tag_names=("bearings/architect",),
-    )
-    config = await build_session_config_from_template(
-        connection,
-        template.id,
-        session_id="session_new",
-    )
-    assert config.session_id == "session_new"
-    assert config.working_dir == "/home/user/arch"
-    assert config.decision.executor_model == "opus"
-    assert config.decision.advisor_model is None
-    assert config.decision.advisor_max_uses == 0
-    assert config.decision.effort_level == "xhigh"
-    assert config.decision.source == "manual"
-    assert config.decision.reason == "template: ArchitectPreset"
-    assert config.permission_profile == PermissionProfile.RESTRICTED
-
-
-async def test_build_session_config_explicit_working_dir_overrides_template(
-    connection: aiosqlite.Connection,
-) -> None:
-    """User-supplied working_dir wins over the template's default."""
-    template = await create(
-        connection,
-        name="WithDefault",
-        model="sonnet",
-        working_dir_default="/template/default",
-    )
-    config = await build_session_config_from_template(
-        connection,
-        template.id,
-        session_id="session_user",
-        working_dir="/user/explicit",
-    )
-    assert config.working_dir == "/user/explicit"
-
-
-async def test_build_session_config_requires_working_dir(
-    connection: aiosqlite.Connection,
-) -> None:
-    """Template w/ no default + no user override raises ValueError."""
-    template = await create(
-        connection,
-        name="NoDefault",
-        model="sonnet",
-        working_dir_default=None,
-    )
-    with pytest.raises(ValueError, match="working_dir"):
-        await build_session_config_from_template(
-            connection,
-            template.id,
-            session_id="session_no_dir",
-        )
-
-
-async def test_build_session_config_raises_for_unknown_template(
-    connection: aiosqlite.Connection,
-) -> None:
-    """Unknown template id raises TemplateNotFoundError, not LookupError opaquely."""
-    with pytest.raises(TemplateNotFoundError):
-        await build_session_config_from_template(
-            connection,
-            template_id=9999,
-            session_id="session_none",
-            working_dir="/tmp",
-        )

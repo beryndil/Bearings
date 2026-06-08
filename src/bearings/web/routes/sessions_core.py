@@ -21,6 +21,7 @@ from bearings.config.constants import (
     SESSIONS_MAX_PAGE_SIZE,
 )
 from bearings.db import checklists as checklists_db
+from bearings.db import sdk_entries as sdk_entries_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
 from bearings.web.models.sessions import (
@@ -304,3 +305,29 @@ async def reopen_session(session_id: str, request: Request) -> SessionOut:
     if broadcaster is not None:
         broadcaster.publish_upsert(out)
     return out
+
+
+@router.delete(
+    "/api/sessions/{session_id}/sdk-entries",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="delete-session-sdk-entries",
+)
+async def delete_session_sdk_entries(session_id: str, request: Request) -> None:
+    """Admin action — deletes the SDK transcript mirror.
+
+    Destructive and irreversible; for debug/test use only.
+
+    Returns 204 on success (including when the session exists but has no
+    SDK entries). Returns 404 if no session row matches ``session_id``.
+    The schema's ``ON DELETE CASCADE`` already drops mirror rows when the
+    session row is deleted; this endpoint is for the "reset SDK
+    conversation but keep the Bearings session alive" path.
+    """
+    db = _db(request)
+    existing_kind = await sessions_db.get_kind(db, session_id)
+    if existing_kind is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"no session matches {session_id!r}",
+        )
+    await sdk_entries_db.delete_for_session(db, session_id=session_id)
