@@ -223,7 +223,18 @@ def build_session_setup(
         prior_entry_count = await sdk_entries_db.count_for_session(
             db_connection, session_id=session_id
         )
-        if prior_entry_count > 0:
+        # Also check whether the JSONL file already exists on disk.  If it
+        # does, --session-id triggers "Session ID already in use" from the CLI
+        # because it treats a pre-existing JSONL as proof that another process
+        # owns the session.  Using --resume instead reads the file cleanly.
+        _jsonl_path = (
+            Path.home()
+            / ".claude"
+            / "projects"
+            / sdk_cwd.replace("/", "-")
+            / f"{sdk_uuid}.jsonl"
+        )
+        if prior_entry_count > 0 or _jsonl_path.exists():
             sdk_session_id_arg: str | None = None
             resume_arg: str | None = sdk_uuid
         else:
