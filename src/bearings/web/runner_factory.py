@@ -215,7 +215,18 @@ class InProcessRunnerRegistry:
         """Materialise the per-session :class:`SessionSetup` and
         spawn the worker task. Silently no-ops if the setup callable
         returns ``None`` (session row missing)."""
-        setup = await self._session_setup(session_id, runner) if self._session_setup else None
+        try:
+            setup = await self._session_setup(session_id, runner) if self._session_setup else None
+        except Exception as exc:
+            _log.error(
+                "session %s: bootstrap failed (%s: %s) — runner left unstarted; "
+                "next prompt will re-attempt",
+                session_id,
+                type(exc).__name__,
+                exc,
+                exc_info=exc,
+            )
+            return
         if setup is None:
             return
         if setup.approval_broker is not None:

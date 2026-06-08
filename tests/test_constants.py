@@ -70,11 +70,12 @@ def test_effort_level_to_sdk_table() -> None:
 
 
 def test_executor_fallback_model_table() -> None:
-    """Arch §5 #5 — sonnet→haiku, opus→sonnet, haiku→haiku."""
+    """Arch §5 #5 — sonnet→haiku, opus→sonnet, haiku→haiku, opusplan→sonnet."""
     assert constants.EXECUTOR_FALLBACK_MODEL == {
         "sonnet": "haiku",
         "opus": "sonnet",
         "haiku": "haiku",
+        "opusplan": "sonnet",
     }
 
 

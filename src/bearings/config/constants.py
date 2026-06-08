@@ -146,6 +146,7 @@ EXECUTOR_FALLBACK_MODEL: Final[dict[str, str]] = {
     "sonnet": "haiku",
     "opus": "sonnet",
     "haiku": "haiku",
+    "opusplan": "sonnet",
 }
 
 # ---------------------------------------------------------------------------
