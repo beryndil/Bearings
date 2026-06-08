@@ -37,9 +37,7 @@ from bearings.db.analytics import (
     insert_turn,
     is_warning_suppressed,
     list_session_plug_blocks,
-    list_turns_for_session,
     record_session_plug_blocks,
-    search_plug_blocks_fts,
     suppress_warning,
     upsert_plug_block,
 )
@@ -137,25 +135,6 @@ async def test_turns_round_trip(database_path: Path) -> None:
         assert turn.cache_read_tokens == 50
         assert turn.cache_creation_tokens == 10
         assert turn.timestamp == 1_700_000_000_000
-    finally:
-        await conn.close()
-
-
-async def test_turns_list_for_session(database_path: Path) -> None:
-    """list_turns_for_session returns all turns in turn_index order."""
-    conn = await _bootstrapped(database_path)
-    try:
-        for idx in (2, 0, 1):
-            await insert_turn(
-                conn,
-                session_id=_SESS_ID,
-                turn_index=idx,
-                model=_MODEL,
-                input_tokens=idx * 100,
-                output_tokens=idx * 10,
-            )
-        turns = await list_turns_for_session(conn, _SESS_ID)
-        assert [t.turn_index for t in turns] == [0, 1, 2]
     finally:
         await conn.close()
 
@@ -277,7 +256,7 @@ async def test_plug_blocks_get_returns_none_for_missing(database_path: Path) -> 
 
 
 async def test_plug_blocks_fts_search(database_path: Path) -> None:
-    """FTS5 search via search_plug_blocks_fts finds blocks by content keyword."""
+    """FTS5 virtual table finds blocks by content keyword (raw SQL, spec §4.2)."""
     conn = await _bootstrapped(database_path)
     try:
         await upsert_plug_block(
@@ -296,18 +275,32 @@ async def test_plug_blocks_fts_search(database_path: Path) -> None:
             token_count=8,
             token_count_model=_MODEL,
         )
-        hits = await search_plug_blocks_fts(conn, "aiosqlite")
+        hits = list(
+            await conn.execute_fetchall(
+                "SELECT pb.hash FROM plug_blocks_fts fts "
+                "JOIN plug_blocks pb ON pb.rowid = fts.rowid "
+                "WHERE plug_blocks_fts MATCH ? ORDER BY rank",
+                ("aiosqlite",),
+            )
+        )
         assert len(hits) == 1
-        assert hits[0].hash == _HASH_A
+        assert str(hits[0][0]) == _HASH_A
 
-        no_hits = await search_plug_blocks_fts(conn, "nonexistent_keyword_xyz")
+        no_hits = list(
+            await conn.execute_fetchall(
+                "SELECT pb.hash FROM plug_blocks_fts fts "
+                "JOIN plug_blocks pb ON pb.rowid = fts.rowid "
+                "WHERE plug_blocks_fts MATCH ? ORDER BY rank",
+                ("nonexistent_keyword_xyz",),
+            )
+        )
         assert no_hits == []
     finally:
         await conn.close()
 
 
 async def test_plug_blocks_fts_update_sync(database_path: Path) -> None:
-    """FTS index stays current after an UPDATE via the sync trigger."""
+    """FTS index stays current after an UPDATE via the sync trigger (spec §4.2)."""
     conn = await _bootstrapped(database_path)
     try:
         await upsert_plug_block(
@@ -325,8 +318,22 @@ async def test_plug_blocks_fts_update_sync(database_path: Path) -> None:
         )
         await conn.commit()
 
-        hits_before = await search_plug_blocks_fts(conn, "BEFORE")
-        hits_after = await search_plug_blocks_fts(conn, "AFTER")
+        hits_before = list(
+            await conn.execute_fetchall(
+                "SELECT pb.hash FROM plug_blocks_fts fts "
+                "JOIN plug_blocks pb ON pb.rowid = fts.rowid "
+                "WHERE plug_blocks_fts MATCH ? ORDER BY rank",
+                ("BEFORE",),
+            )
+        )
+        hits_after = list(
+            await conn.execute_fetchall(
+                "SELECT pb.hash FROM plug_blocks_fts fts "
+                "JOIN plug_blocks pb ON pb.rowid = fts.rowid "
+                "WHERE plug_blocks_fts MATCH ? ORDER BY rank",
+                ("AFTER",),
+            )
+        )
         assert hits_before == []
         assert len(hits_after) == 1
     finally:

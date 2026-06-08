@@ -237,33 +237,6 @@ async def insert_turn(
     )
 
 
-async def list_turns_for_session(
-    connection: aiosqlite.Connection,
-    session_id: str,
-) -> list[Turn]:
-    """Return all turns for ``session_id``, ordered by turn_index ascending."""
-    rows = await connection.execute_fetchall(
-        "SELECT id, session_id, turn_index, timestamp, model, "
-        "input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens "
-        "FROM turns WHERE session_id = ? ORDER BY turn_index ASC",
-        (session_id,),
-    )
-    return [
-        Turn(
-            id=int(r[0]),
-            session_id=str(r[1]),
-            turn_index=int(r[2]),
-            timestamp=int(r[3]),
-            model=str(r[4]),
-            input_tokens=int(r[5]),
-            output_tokens=int(r[6]),
-            cache_read_tokens=int(r[7]),
-            cache_creation_tokens=int(r[8]),
-        )
-        for r in rows
-    ]
-
-
 async def list_turns(
     connection: aiosqlite.Connection,
     *,
@@ -395,42 +368,6 @@ async def get_plug_block(
         last_seen=int(row[7]),
         source_path=str(row[8]) if row[8] is not None else None,
     )
-
-
-async def search_plug_blocks_fts(
-    connection: aiosqlite.Connection,
-    query: str,
-    limit: int = 20,
-) -> list[PlugBlock]:
-    """Return plug blocks whose content matches the FTS5 ``query`` string.
-
-    Uses the ``plug_blocks_fts`` virtual table (spec §4.2).  Results are
-    ranked by FTS5's default BM25 relevance.
-    """
-    rows = await connection.execute_fetchall(
-        "SELECT pb.id, pb.hash, pb.block_type, pb.content, pb.token_count, "
-        "pb.token_count_model, pb.first_seen, pb.last_seen, pb.source_path "
-        "FROM plug_blocks_fts fts "
-        "JOIN plug_blocks pb ON pb.rowid = fts.rowid "
-        "WHERE plug_blocks_fts MATCH ? "
-        "ORDER BY rank "
-        "LIMIT ?",
-        (query, limit),
-    )
-    return [
-        PlugBlock(
-            id=int(r[0]),
-            hash=str(r[1]),
-            block_type=str(r[2]),
-            content=str(r[3]),
-            token_count=int(r[4]),
-            token_count_model=str(r[5]),
-            first_seen=int(r[6]),
-            last_seen=int(r[7]),
-            source_path=str(r[8]) if r[8] is not None else None,
-        )
-        for r in rows
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -865,10 +802,8 @@ __all__ = [
     "list_redundant_plug_blocks",
     "list_session_plug_blocks",
     "list_turns",
-    "list_turns_for_session",
     "list_versions_for_block",
     "record_session_plug_blocks",
-    "search_plug_blocks_fts",
     "suppress_warning",
     "upsert_plug_block",
 ]

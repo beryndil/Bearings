@@ -390,6 +390,28 @@ Four tests were already failing before the 4-8 model-update commit:
 
 **Status check 2026-06-03**: all four confirmed pre-existing.
 
+## analytics.list_turns_for_session — removed dead code (2026-06-08)
+
+`db/analytics.list_turns_for_session` was removed in the Item 3 gap-closure
+sweep because `BEARINGS_ANALYTICS_v1.md` §9 does not list a
+`GET /api/analytics/sessions/{id}/turns` endpoint. The function had no web-route
+caller; tests that used it were updated to call `list_turns(cutoff_ms=0,
+session_id=...)` instead.
+
+If a `/turns` endpoint is ever added to the analytics spec, re-introduce the
+function (or inline the query) in the same commit that lands the route.
+
+## analytics.search_plug_blocks_fts — removed dead code (2026-06-08)
+
+`db/analytics.search_plug_blocks_fts` was removed in the Item 3 gap-closure
+sweep because `BEARINGS_ANALYTICS_v1.md` §9 does not list a
+`GET /api/analytics/plug-blocks/search?q=...` endpoint. The function had no
+web-route caller; FTS5 schema tests were rewritten to use raw SQL so the
+`plug_blocks_fts` virtual table (spec §4.2) remains exercised.
+
+If a plug-block FTS search endpoint is ever added to the analytics spec,
+re-introduce the function in the same commit that lands the route.
+
 ## Push backlog — SSH proxy config permissions (2026-05-04)
 
 `git push` from the tag-class feature work (commit `a911687` and

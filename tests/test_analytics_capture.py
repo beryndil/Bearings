@@ -39,7 +39,7 @@ from bearings.agent.analytics_capture import (
     normalize_block_content,
 )
 from bearings.db import get_connection_factory, load_schema
-from bearings.db.analytics import list_session_plug_blocks, list_turns_for_session
+from bearings.db.analytics import list_session_plug_blocks, list_turns
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -433,7 +433,7 @@ async def test_capture_turn_inserts_row(database_path: Path) -> None:
             cache_read_tokens=50,
             cache_creation_tokens=10,
         )
-        turns = await list_turns_for_session(conn, _SESS_ID)
+        turns = await list_turns(conn, cutoff_ms=0, session_id=_SESS_ID)
         assert len(turns) == 1
         t = turns[0]
         assert t.session_id == _SESS_ID
@@ -453,7 +453,7 @@ async def test_capture_turn_sequential_index(database_path: Path) -> None:
     try:
         for _ in range(3):
             await capture_turn(conn, _SESS_ID, _MODEL, input_tokens=100, output_tokens=20)
-        turns = await list_turns_for_session(conn, _SESS_ID)
+        turns = await list_turns(conn, cutoff_ms=0, session_id=_SESS_ID)
         assert [t.turn_index for t in turns] == [0, 1, 2]
     finally:
         await conn.close()
@@ -464,7 +464,7 @@ async def test_capture_turn_zero_tokens(database_path: Path) -> None:
     conn = await _bootstrapped(database_path)
     try:
         await capture_turn(conn, _SESS_ID, _MODEL, input_tokens=0, output_tokens=0)
-        turns = await list_turns_for_session(conn, _SESS_ID)
+        turns = await list_turns(conn, cutoff_ms=0, session_id=_SESS_ID)
         assert len(turns) == 1
         assert turns[0].input_tokens == 0
     finally:
@@ -476,7 +476,7 @@ async def test_capture_turn_default_cache_tokens(database_path: Path) -> None:
     conn = await _bootstrapped(database_path)
     try:
         await capture_turn(conn, _SESS_ID, _MODEL, input_tokens=500, output_tokens=100)
-        turns = await list_turns_for_session(conn, _SESS_ID)
+        turns = await list_turns(conn, cutoff_ms=0, session_id=_SESS_ID)
         assert turns[0].cache_read_tokens == 0
         assert turns[0].cache_creation_tokens == 0
     finally:
