@@ -282,9 +282,7 @@ async def test_401_expired_token_no_retry_subprocess(conn: aiosqlite.Connection)
         )
 
     with patch("bearings.agent.sdk_loop_core._reload_sdk_credentials", _raise_token_expired):
-        await run_session_loop(
-            runner, agent, _options(server), client_factory=_first_401_factory
-        )
+        await run_session_loop(runner, agent, _options(server), client_factory=_first_401_factory)
 
     # Session must be in ERROR state.
     assert agent.state is SessionState.ERROR

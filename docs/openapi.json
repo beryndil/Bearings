@@ -1942,6 +1942,53 @@
         }
       }
     },
+    "/api/checklists/{checklist_id}/runs": {
+      "get": {
+        "tags": [
+          "checklists"
+        ],
+        "summary": "List Runs",
+        "description": "Every run for ``checklist_id``, newest-first.\n\nReturns an empty list when no runs exist (unknown checklist or no\nhistory yet). Per behavior/checklists.md the run history is surfaced\non the checklist pane so the user can review past driver outcomes\nwithout an active run being present.",
+        "operationId": "list-checklist-runs",
+        "parameters": [
+          {
+            "name": "checklist_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checklist Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AutoDriverRunOut"
+                  },
+                  "title": "Response List-Checklist-Runs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/checkpoints": {
       "post": {
         "tags": [
@@ -3504,6 +3551,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SystemPromptLayersOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{session_id}/system_prompt/layer": {
+      "put": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Put Session Layer Content",
+        "description": "Overwrite a filesystem-sourced system-prompt layer file.\n\nValidates ``body.path`` against the session's current assembled layer\n``source_path`` values \u2014 only files already present as layers can be\nwritten.  This prevents arbitrary filesystem writes; only\n``project_claude_md`` and ``tag_claude_md`` layers have a\n``source_path``.  404 when the session is absent or the path does not\nmatch any current layer.",
+        "operationId": "put-session-layer-content",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPromptLayerWriteIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemPromptLayerWriteOut"
                 }
               }
             }
@@ -11728,6 +11828,46 @@
         ],
         "title": "SystemPromptLayerOut",
         "description": "One layer of the assembled system prompt.\n\nPer ``docs/behavior/chat.md`` \u00a7\"System-prompt layers contract\"\n(gap-cycle-13-004).  Each layer carries its ``kind``, the text\n``body``, an approximate ``token_count`` (``len(body) // 4``), and\nan optional ``source_path`` for filesystem-sourced layers\n(``project_claude_md``, ``tag_claude_md``).  ``tag_memory`` layers\nare DB-resident and always have ``source_path: null``."
+      },
+      "SystemPromptLayerWriteIn": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "SystemPromptLayerWriteIn",
+        "description": "Request body for ``PUT /api/sessions/{id}/system_prompt/layer``.\n\n``path`` must match a ``source_path`` already present in the session's\nassembled layers so arbitrary file writes are prevented.  Only\nfilesystem-sourced layers (``project_claude_md``, ``tag_claude_md``)\ncarry a ``source_path``; attempting to write any other path returns 404."
+      },
+      "SystemPromptLayerWriteOut": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "SystemPromptLayerWriteOut",
+        "description": "Response shape for ``PUT /api/sessions/{id}/system_prompt/layer``."
       },
       "SystemPromptLayersOut": {
         "properties": {

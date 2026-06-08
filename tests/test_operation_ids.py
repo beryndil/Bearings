@@ -62,7 +62,7 @@ def test_operation_ids_are_unique(openapi_spec: dict) -> None:  # type: ignore[t
 
 
 def test_operation_id_count(openapi_spec: dict) -> None:  # type: ignore[type-arg]
-    """Sanity-check: the spec must contain exactly 160 HTTP operations.
+    """Sanity-check: the spec must contain exactly 162 HTTP operations.
 
     Count history:
       134 — baseline (feature-13-005, 133 routes + 1 added in feature-3)
@@ -80,6 +80,7 @@ def test_operation_id_count(openapi_spec: dict) -> None:  # type: ignore[type-ar
       160 — Exec-2B: spawn_classify (T2-07)
       161 — Instructions panel: PUT /api/sessions/{id}/system_prompt/layer
              (put-session-layer-content) for in-place CLAUDE.md editing
+      162 — Item 1: GET /api/checklists/{id}/runs (list-checklist-runs)
     """
     operations = _iter_operations(openapi_spec)
-    assert len(operations) == 161, f"Expected 161 operations in OpenAPI spec, got {len(operations)}"
+    assert len(operations) == 162, f"Expected 162 operations in OpenAPI spec, got {len(operations)}"

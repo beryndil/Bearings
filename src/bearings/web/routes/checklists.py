@@ -38,6 +38,7 @@ Run-control:
 * ``POST   /api/checklists/{id}/run/resume``     — re-Start from first unchecked
 * ``POST   /api/checklists/{id}/run/skip-current`` — mark current skipped + advance
 * ``GET    /api/checklists/{id}/run/status``     — read active-run row
+* ``GET    /api/checklists/{id}/runs``           — run history, newest-first
 
 Handler bodies stay thin per arch §1.1.5: argument parsing, single
 domain call, response formatting.
@@ -828,6 +829,24 @@ async def run_status(checklist_id: str, request: Request) -> AutoDriverRunOut:
             detail=f"checklist {checklist_id} has no active run",
         )
     return _to_run_out(active)
+
+
+@router.get(
+    "/api/checklists/{checklist_id}/runs",
+    response_model=list[AutoDriverRunOut],
+    operation_id="list-checklist-runs",
+)
+async def list_runs(checklist_id: str, request: Request) -> list[AutoDriverRunOut]:
+    """Every run for ``checklist_id``, newest-first.
+
+    Returns an empty list when no runs exist (unknown checklist or no
+    history yet). Per behavior/checklists.md the run history is surfaced
+    on the checklist pane so the user can review past driver outcomes
+    without an active run being present.
+    """
+    db = _db(request)
+    all_runs = await runs_db.list_for_checklist(db, checklist_id)
+    return [_to_run_out(run) for run in all_runs]
 
 
 # Suppress "imported but unused" for the constants the route handlers

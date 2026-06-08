@@ -515,3 +515,34 @@ def test_run_start_404_for_missing_checklist(app_client: TestClient) -> None:
         json={"failure_policy": AUTO_DRIVER_FAILURE_POLICY_HALT},
     )
     assert response.status_code == 404, response.text
+
+
+# ---- GET /api/checklists/{id}/runs ----------------------------------------
+
+
+def test_list_runs_empty_for_unknown_checklist(app_client: TestClient) -> None:
+    """Returns [] (not 404) when checklist_id has no runs."""
+    response = app_client.get("/api/checklists/ses_does_not_exist/runs")
+    assert response.status_code == 200, response.text
+    assert response.json() == []
+
+
+def test_list_runs_returns_run_after_start(app_client: TestClient) -> None:
+    """After a successful /run/start the run appears in the history list."""
+    from bearings.config.constants import AUTO_DRIVER_FAILURE_POLICY_HALT
+
+    start_resp = app_client.post(
+        f"/api/checklists/{_CHECKLIST_ID}/run/start",
+        json={"failure_policy": AUTO_DRIVER_FAILURE_POLICY_HALT},
+    )
+    assert start_resp.status_code == 201, start_resp.text
+    run_id = start_resp.json()["id"]
+
+    list_resp = app_client.get(f"/api/checklists/{_CHECKLIST_ID}/runs")
+    assert list_resp.status_code == 200, list_resp.text
+    runs = list_resp.json()
+    assert len(runs) >= 1
+    ids = [r["id"] for r in runs]
+    assert run_id in ids
+    # All returned rows must belong to the requested checklist.
+    assert all(r["checklist_id"] == _CHECKLIST_ID for r in runs)

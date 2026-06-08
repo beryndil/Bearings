@@ -69,6 +69,7 @@ def _is_init_timeout_error(exc: BaseException) -> bool:
     """
     return _INIT_TIMEOUT_MARKER in str(exc)
 
+
 # Path to the Claude Max OAuth credentials file.
 _CREDENTIALS_PATH: Final[Path] = Path.home() / ".claude" / ".credentials.json"
 
