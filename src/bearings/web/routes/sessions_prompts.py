@@ -129,6 +129,12 @@ async def resume_session(session_id: str, request: Request) -> object:
         )
     factory = getattr(request.app.state, "runner_factory", None)
     if isinstance(factory, InProcessRunnerRegistry):
+        # Reset the attempt counter so this manual recovery grants a fresh
+        # auto-recover budget (distinct from the auto-recover path, which
+        # must NOT reset so the session-level cap is enforced globally).
+        existing_runner = factory.get(session_id)
+        if existing_runner is not None:
+            existing_runner.reset_auto_recover_attempts()
         await factory(session_id)
     tags = await _fetch_tags_out(db, session_id)
     out = _to_out(row, tags=tags)

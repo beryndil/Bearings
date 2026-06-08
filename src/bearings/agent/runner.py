@@ -228,10 +228,11 @@ class SessionRunner:
         # Auto-recover support: wired by the runner-factory after each
         # _spawn_supervisor so init-timeout errors can self-heal.
         # _auto_recover_fn is a coroutine that clears error_pending then
-        # respawns the supervisor.  _auto_recover_attempts counts
-        # how many times auto-recover has fired for this runner's
-        # lifetime; wire_auto_recover resets it so manual /recover
-        # grants another 3 auto-tries.
+        # respawns the supervisor.  _auto_recover_attempts accumulates
+        # across all supervisor lifetimes; it is only reset explicitly via
+        # reset_auto_recover_attempts() (called by the manual /recover
+        # endpoint) so the per-session cap is enforced globally, not just
+        # per-supervisor.
         self._auto_recover_fn: Callable[[], Awaitable[None]] | None = None
         self._auto_recover_attempts: int = 0
         # Strong references to in-flight auto-recover tasks so the GC
@@ -380,18 +381,26 @@ class SessionRunner:
     # -- mutation ----------------------------------------------------
 
     def wire_auto_recover(self, fn: Callable[[], Awaitable[None]]) -> None:
-        """Register the auto-recover coroutine and reset the attempt counter.
+        """Register the auto-recover coroutine.
 
-        Called by the runner-factory after each :meth:`_spawn_supervisor`
-        so a fresh supervisor life gets a full 3-try budget.  The
-        ``fn`` should clear ``error_pending`` in the DB then call
-        ``factory(session_id)`` to respawn.
+        Called by the runner-factory after each :meth:`_spawn_supervisor`.
+        Updates ``_auto_recover_fn`` but does NOT reset ``_auto_recover_attempts``
+        — the attempt counter accumulates across all supervisor lifetimes so the
+        session-level cap in :meth:`schedule_auto_recover` is respected globally.
 
-        Resetting ``_auto_recover_attempts`` here is intentional: a
-        manual ``/recover`` triggers a new :meth:`_spawn_supervisor`
-        call, which re-wires this fn, granting another 3 auto-tries.
+        To grant a fresh attempt budget after a manual recovery, call
+        :meth:`reset_auto_recover_attempts` explicitly before spawning.
         """
         self._auto_recover_fn = fn
+
+    def reset_auto_recover_attempts(self) -> None:
+        """Reset the auto-recover attempt counter to zero.
+
+        Called by the manual ``POST /api/sessions/{id}/recover`` endpoint
+        so a user-initiated recovery grants another full auto-recover budget.
+        Auto-recover spawns do NOT call this — the counter must persist across
+        automatic respawns to enforce the session-level cap.
+        """
         self._auto_recover_attempts = 0
 
     def schedule_auto_recover(self, max_attempts: int) -> bool:

@@ -29,7 +29,7 @@ from bearings.agent.options import (
     compose_session_options,
 )
 from bearings.agent.routing import RoutingDecision
-from bearings.agent.runner import SessionSetup
+from bearings.agent.runner import SessionRunner, SessionSetup
 from bearings.agent.session import AgentSession, SessionConfig
 from bearings.config.constants import SESSION_KIND_CHAT
 from bearings.db import sessions as sessions_db
@@ -462,6 +462,92 @@ async def test_build_in_process_factory_threads_setup_through() -> None:
     factory = build_in_process_factory(session_setup=setup)
     await factory("ses_z")
     assert sentinel_calls == ["ses_z"]
+
+
+# ---------------------------------------------------------------------------
+# Auto-recover counter discipline
+# ---------------------------------------------------------------------------
+
+
+async def test_wire_auto_recover_does_not_reset_attempt_counter() -> None:
+    """``wire_auto_recover`` must NOT reset ``_auto_recover_attempts``.
+
+    The counter accumulates across all supervisor lifetimes so the
+    session-level cap is enforced globally.  If it were reset on every
+    ``_spawn_supervisor`` call, an auto-recover itself would reset the
+    counter, bypass the cap, and loop forever (the death-spiral bug
+    fixed 2026-06-08).
+    """
+    runner = SessionRunner("ses_counter")
+
+    async def _noop() -> None:  # pragma: no cover
+        pass
+
+    runner.wire_auto_recover(_noop)
+    assert runner._auto_recover_attempts == 0  # starts at zero
+
+    # Simulate one auto-recover scheduling the task (increments counter).
+    scheduled = runner.schedule_auto_recover(max_attempts=3)
+    assert scheduled is True
+    assert runner._auto_recover_attempts == 1
+
+    # Re-wiring (as _spawn_supervisor does after an auto-recover respawn)
+    # must NOT reset the counter back to zero.
+    runner.wire_auto_recover(_noop)
+    assert runner._auto_recover_attempts == 1
+
+
+async def test_reset_auto_recover_attempts_resets_to_zero() -> None:
+    """``reset_auto_recover_attempts()`` brings the counter back to zero.
+
+    This is the ONLY reset path — called by the manual /recover endpoint
+    so a user-initiated recovery grants a fresh auto-recover budget.
+    """
+    runner = SessionRunner("ses_reset")
+
+    async def _noop() -> None:  # pragma: no cover
+        pass
+
+    runner.wire_auto_recover(_noop)
+    runner.schedule_auto_recover(max_attempts=3)
+    runner.schedule_auto_recover(max_attempts=3)
+    assert runner._auto_recover_attempts == 2
+
+    runner.reset_auto_recover_attempts()
+    assert runner._auto_recover_attempts == 0
+
+    # Counter starts fresh: can schedule up to max again.
+    scheduled = runner.schedule_auto_recover(max_attempts=3)
+    assert scheduled is True
+    assert runner._auto_recover_attempts == 1
+
+
+async def test_auto_recover_cap_persists_across_wire_calls() -> None:
+    """The session-level cap (max_attempts=3) is enforced across multiple
+    ``wire_auto_recover`` calls (i.e. across supervisor respawns).
+
+    Regression guard for the death-spiral where the counter was reset
+    on every respawn, allowing infinite cycling.
+    """
+    runner = SessionRunner("ses_cap")
+
+    async def _noop() -> None:  # pragma: no cover
+        pass
+
+    runner.wire_auto_recover(_noop)
+
+    # Simulate 3 auto-recover scheduling calls across 3 supervisor lifetimes,
+    # each life re-wiring the fn (as _spawn_supervisor does) but NOT resetting.
+    for _ in range(3):
+        runner.schedule_auto_recover(max_attempts=3)
+        runner.wire_auto_recover(_noop)  # re-wire without reset
+
+    assert runner._auto_recover_attempts == 3
+
+    # Fourth attempt must be rejected — cap reached.
+    scheduled = runner.schedule_auto_recover(max_attempts=3)
+    assert scheduled is False
+    assert runner._auto_recover_attempts == 3  # unchanged
 
 
 def _unused_factory() -> Callable[[], Awaitable[aiosqlite.Connection]]:
