@@ -164,6 +164,14 @@ EXECUTOR_FALLBACK_MODEL: Final[dict[str, str]] = {
 # that caused the first timeout and balloon the user-visible wait.
 INIT_TIMEOUT_MAX_RETRIES: Final[int] = 1
 INIT_TIMEOUT_RETRY_BASE_DELAY_S: Final[float] = 2.0
+# After exhausting in-loop retries the session enters error state.  The
+# auto-recover mechanism clears error_pending and respawns the supervisor
+# automatically after INIT_TIMEOUT_AUTO_RECOVER_DELAY_S seconds, up to
+# INIT_TIMEOUT_AUTO_RECOVER_MAX times per runner lifetime before requiring
+# a manual /recover call.  The delay prevents the rapid-cycling death
+# spiral that the original error_pending guard was designed to stop.
+INIT_TIMEOUT_AUTO_RECOVER_MAX: Final[int] = 3
+INIT_TIMEOUT_AUTO_RECOVER_DELAY_S: Final[float] = 30.0
 
 # Per-runner WS event ring buffer cap (arch §1.1.2 — "RING_BUFFER_MAX =
 # 5000"). Bounds replay buffer growth on long-lived sessions.

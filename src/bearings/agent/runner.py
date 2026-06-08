@@ -65,6 +65,7 @@ References:
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
@@ -85,6 +86,8 @@ from bearings.config.constants import (
     STREAM_MAX_TOOL_OUTPUT_CHARS,
     STREAM_TRUNCATION_MARKER_TEMPLATE,
 )
+
+_log = logging.getLogger(__name__)
 
 
 def _monotonic_ns() -> int:
@@ -222,6 +225,19 @@ class SessionRunner:
         # ``set_status`` stays synchronous — the factory wraps any
         # async side-effect in ``asyncio.get_event_loop().call_soon``.
         self._status_hook: Callable[[RunnerStatus], None] | None = None
+        # Auto-recover support: wired by the runner-factory after each
+        # _spawn_supervisor so init-timeout errors can self-heal.
+        # _auto_recover_fn is a coroutine that clears error_pending then
+        # respawns the supervisor.  _auto_recover_attempts counts
+        # how many times auto-recover has fired for this runner's
+        # lifetime; wire_auto_recover resets it so manual /recover
+        # grants another 3 auto-tries.
+        self._auto_recover_fn: Callable[[], Awaitable[None]] | None = None
+        self._auto_recover_attempts: int = 0
+        # Strong references to in-flight auto-recover tasks so the GC
+        # doesn't collect them before they complete (asyncio keeps only
+        # a weak reference to background tasks).
+        self._auto_recover_tasks: set[asyncio.Task[None]] = set()
 
     # -- properties --------------------------------------------------
 
@@ -362,6 +378,58 @@ class SessionRunner:
         return self._prompt_queue[0]
 
     # -- mutation ----------------------------------------------------
+
+    def wire_auto_recover(self, fn: Callable[[], Awaitable[None]]) -> None:
+        """Register the auto-recover coroutine and reset the attempt counter.
+
+        Called by the runner-factory after each :meth:`_spawn_supervisor`
+        so a fresh supervisor life gets a full 3-try budget.  The
+        ``fn`` should clear ``error_pending`` in the DB then call
+        ``factory(session_id)`` to respawn.
+
+        Resetting ``_auto_recover_attempts`` here is intentional: a
+        manual ``/recover`` triggers a new :meth:`_spawn_supervisor`
+        call, which re-wires this fn, granting another 3 auto-tries.
+        """
+        self._auto_recover_fn = fn
+        self._auto_recover_attempts = 0
+
+    def schedule_auto_recover(self, max_attempts: int) -> bool:
+        """Schedule a deferred auto-recover task if under the attempt cap.
+
+        Returns ``True`` when a task was scheduled, ``False`` when the
+        cap is reached (session stays in permanent error state until a
+        manual ``/recover`` call).
+
+        The background task sleeps for the configured delay then calls
+        ``_auto_recover_fn`` which clears ``error_pending`` and respawns
+        the supervisor.  ``CancelledError`` is suppressed so app
+        shutdown doesn't log a spurious traceback.
+        """
+        if self._auto_recover_fn is None or self._auto_recover_attempts >= max_attempts:
+            return False
+        self._auto_recover_attempts += 1
+        fn = self._auto_recover_fn
+        attempt = self._auto_recover_attempts
+
+        async def _run() -> None:
+            try:
+                await fn()
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                _log.warning(
+                    "session %s: auto-recover attempt %d raised an exception — "
+                    "session stays in error state until manual /recover",
+                    self.session_id,
+                    attempt,
+                    exc_info=True,
+                )
+
+        task = asyncio.create_task(_run(), name=f"auto_recover:{self.session_id}:{attempt}")
+        self._auto_recover_tasks.add(task)
+        task.add_done_callback(self._auto_recover_tasks.discard)
+        return True
 
     def wire_status_hook(self, hook: Callable[[RunnerStatus], None]) -> None:
         """Register a synchronous callback invoked on every :meth:`set_status`
@@ -631,6 +699,12 @@ class SessionSetup:
     session: Any
     options: Any
     approval_broker: Any = None
+    # Optional coroutine that clears ``error_pending`` in the DB for this
+    # session.  Populated by :func:`bearings.agent.session_bootstrap` (which
+    # holds the DB connection); used by the runner-factory's auto-recover
+    # mechanism to clear the flag without crossing the web↔agent layer
+    # boundary.  ``None`` in test contexts that don't wire a real DB.
+    recover_fn: Callable[[], Awaitable[None]] | None = None
 
 
 # Async callable: takes a session id + the freshly-materialised

@@ -258,10 +258,14 @@ def build_session_setup(
             row.session_instructions,
         )
         await capture_session_plug(db_connection, session_id, row.model, _plug_blocks)
+        async def _clear_error_pending() -> None:
+            await sessions_db.set_error_pending(db_connection, session_id, False)
+
         return SessionSetup(
             session=agent_session,
             options=options,
             approval_broker=broker,
+            recover_fn=_clear_error_pending,
         )
 
     return setup

@@ -39,7 +39,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from bearings.agent.runner import (
     RunnerFactory,
@@ -52,6 +52,7 @@ from bearings.agent.sdk_loop import run_session_loop
 from bearings.config.constants import (
     IDLE_REAP_POLL_INTERVAL_S,
     IDLE_REAP_THRESHOLD_S,
+    INIT_TIMEOUT_AUTO_RECOVER_DELAY_S,
 )
 from bearings.web.routes.ws_sessions import SessionsBroadcaster
 
@@ -219,6 +220,23 @@ class InProcessRunnerRegistry:
             return
         if setup.approval_broker is not None:
             self._approval_brokers[session_id] = setup.approval_broker
+        if setup.recover_fn is not None:
+            _clear_fn = setup.recover_fn
+            _factory_ref: RunnerFactory = self
+
+            def _make_auto_recover(
+                clear: Callable[[], Awaitable[None]],
+                sid: str,
+                factory: RunnerFactory,
+            ) -> Callable[[], Awaitable[None]]:
+                async def _fn() -> None:
+                    await asyncio.sleep(INIT_TIMEOUT_AUTO_RECOVER_DELAY_S)
+                    await clear()
+                    await factory(sid)
+
+                return _fn
+
+            runner.wire_auto_recover(_make_auto_recover(_clear_fn, session_id, _factory_ref))
         task = asyncio.create_task(
             run_session_loop(runner, setup.session, setup.options),
             name=f"sdk_loop:{session_id}",

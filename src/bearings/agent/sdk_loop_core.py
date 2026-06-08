@@ -58,6 +58,7 @@ from bearings.agent.session import (
 from bearings.agent.translate import SDKEventTranslator
 from bearings.config.constants import (
     FORCE_ADVISOR_INSTRUCTION,
+    INIT_TIMEOUT_AUTO_RECOVER_MAX,
     INIT_TIMEOUT_MAX_RETRIES,
     INIT_TIMEOUT_RETRY_BASE_DELAY_S,
 )
@@ -190,6 +191,15 @@ async def run_session_loop(
                         return
                     if attempt == INIT_TIMEOUT_MAX_RETRIES:
                         await _enter_error_state(runner, session, retry_exc)
+                        scheduled = runner.schedule_auto_recover(INIT_TIMEOUT_AUTO_RECOVER_MAX)
+                        if not scheduled:
+                            _log.warning(
+                                "session %s: init-timeout auto-recover cap reached "
+                                "(%d/%d) — manual /recover required",
+                                session_id,
+                                runner._auto_recover_attempts,
+                                INIT_TIMEOUT_AUTO_RECOVER_MAX,
+                            )
                         return
             return
         await _enter_error_state(runner, session, exc)

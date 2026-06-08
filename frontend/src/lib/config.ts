@@ -687,6 +687,7 @@ export const CONVERSATION_STRINGS = {
   // Phase 4 error recovery
   recoverLabel: "Recover",
   recoveringLabel: "Recovering…",
+  errorPendingHint: "Agent stopped with an error. Click Recover to restart.",
 } as const;
 
 /**

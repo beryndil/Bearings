@@ -359,17 +359,21 @@
         <p class="px-4 py-3 text-sm text-fg-muted" data-testid="conversation-loading">
           {CONVERSATION_STRINGS.loadingTranscript}
         </p>
-      {:else if conversationStore.error !== null}
+      {:else if conversationStore.error !== null || (sessionsStore.sessions.find((s) => s.id === sessionId)?.error_pending ?? false)}
         <div
           class="flex flex-col gap-2 border-l-4 border-error bg-error/10 px-4 py-3 text-sm text-error"
           data-testid="conversation-error"
           role="alert"
         >
           <p class="font-medium">{CONVERSATION_STRINGS.errorBubbleLabel}</p>
-          <p class="text-xs">{conversationStore.error.message}</p>
-          <p class="text-xs text-error/80">
-            {CONVERSATION_STRINGS.errorHintLabel}
-          </p>
+          {#if conversationStore.error !== null}
+            <p class="text-xs">{conversationStore.error.message}</p>
+            <p class="text-xs text-error/80">
+              {CONVERSATION_STRINGS.errorHintLabel}
+            </p>
+          {:else}
+            <p class="text-xs">{CONVERSATION_STRINGS.errorPendingHint}</p>
+          {/if}
           {#if sessionId !== null}
             <button
               type="button"
