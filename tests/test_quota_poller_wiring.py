@@ -210,3 +210,80 @@ def test_quota_snapshots_written_after_poll(
     finally:
         loop.close()
     assert count >= 1
+
+
+# ---------------------------------------------------------------------------
+# Bucket snapshot write after successful poll
+# ---------------------------------------------------------------------------
+
+
+async def test_refresh_inserts_bucket_snapshot(tmp_path: Path) -> None:
+    """After refresh(), bucket_snapshots contains a row with token counts from raw_payload."""
+    db_path = tmp_path / "bucket_snapshot_test.db"
+    factory = get_connection_factory(db_path)
+    conn = await factory()
+    await load_schema(conn)
+
+    raw_payload = (
+        '{"five_hour": {"used": 142000, "limit": 200000},'
+        ' "weekly": {"used": 1840000, "limit": 5000000}}'
+    )
+    snapshot = QuotaSnapshot(
+        captured_at=int(time.time()),
+        overall_used_pct=0.71,
+        sonnet_used_pct=0.37,
+        overall_resets_at=None,
+        sonnet_resets_at=None,
+        raw_payload=raw_payload,
+    )
+    poller = QuotaPoller(conn, make_static_fetcher(snapshot))
+    result = await poller.refresh()
+
+    assert result is not None, "refresh() should return the snapshot"
+
+    async with conn.execute(
+        "SELECT five_hour_used, five_hour_limit, weekly_used, weekly_limit "
+        "FROM bucket_snapshots ORDER BY timestamp DESC LIMIT 1"
+    ) as cursor:
+        row = await cursor.fetchone()
+
+    assert row is not None, "bucket_snapshots must have a row after refresh()"
+    assert int(row[0]) == 142000
+    assert int(row[1]) == 200000
+    assert int(row[2]) == 1840000
+    assert int(row[3]) == 5000000
+
+    await conn.close()
+
+
+async def test_refresh_bucket_snapshot_null_when_payload_missing_keys(tmp_path: Path) -> None:
+    """When raw_payload lacks five_hour/weekly keys, bucket_snapshots row has NULLs."""
+    db_path = tmp_path / "bucket_null_test.db"
+    factory = get_connection_factory(db_path)
+    conn = await factory()
+    await load_schema(conn)
+
+    snapshot = QuotaSnapshot(
+        captured_at=int(time.time()),
+        overall_used_pct=None,
+        sonnet_used_pct=None,
+        overall_resets_at=None,
+        sonnet_resets_at=None,
+        raw_payload='{"empty": true}',
+    )
+    poller = QuotaPoller(conn, make_static_fetcher(snapshot))
+    await poller.refresh()
+
+    async with conn.execute(
+        "SELECT five_hour_used, five_hour_limit, weekly_used, weekly_limit "
+        "FROM bucket_snapshots ORDER BY timestamp DESC LIMIT 1"
+    ) as cursor:
+        row = await cursor.fetchone()
+
+    assert row is not None, "bucket_snapshots must still have a row (with NULLs)"
+    assert row[0] is None
+    assert row[1] is None
+    assert row[2] is None
+    assert row[3] is None
+
+    await conn.close()

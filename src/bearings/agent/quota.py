@@ -44,6 +44,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
@@ -57,6 +58,9 @@ from bearings.config.constants import (
     QUOTA_THRESHOLD_PCT,
     USAGE_POLL_INTERVAL_S,
 )
+from bearings.db.analytics import insert_bucket_snapshot
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,29 @@ class QuotaSnapshot:
             "overall_used_pct": self.overall_used_pct if self.overall_used_pct is not None else 0.0,
             "sonnet_used_pct": self.sonnet_used_pct if self.sonnet_used_pct is not None else 0.0,
         }
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_bucket_int(payload: dict[str, object], window_key: str, field_key: str) -> int | None:
+    """Extract an integer from ``payload[window_key][field_key]``, or ``None``.
+
+    Used to pull ``five_hour`` / ``weekly`` token counts out of the raw
+    ``/usage`` JSON before inserting into ``bucket_snapshots``.  Returns
+    ``None`` when the key is absent or the value is not numeric — the
+    table columns are all nullable so the caller can pass ``None``
+    without special-casing.
+    """
+    window = payload.get(window_key)
+    if not isinstance(window, dict):
+        return None
+    val = window.get(field_key)
+    if not isinstance(val, (int, float)):
+        return None
+    return int(val)
 
 
 # ---------------------------------------------------------------------------
@@ -432,10 +459,26 @@ class QuotaPoller:
                 # restricts what it raises; we don't catch
                 # ``BaseException`` because that would mask
                 # ``KeyboardInterrupt`` / ``SystemExit``.
-                print(f"quota refresh failed: {exc}")
+                _log.warning("quota refresh failed: %s", exc)
                 return None
             await record_snapshot(self._connection, snapshot)
             self._latest = snapshot
+            try:
+                raw: dict[str, object] = json.loads(snapshot.raw_payload)
+                await insert_bucket_snapshot(
+                    self._connection,
+                    five_hour_used=_extract_bucket_int(raw, "five_hour", "used"),
+                    five_hour_limit=_extract_bucket_int(raw, "five_hour", "limit"),
+                    weekly_used=_extract_bucket_int(raw, "weekly", "used"),
+                    weekly_limit=_extract_bucket_int(raw, "weekly", "limit"),
+                    raw_response=snapshot.raw_payload,
+                )
+            except Exception:
+                _log.warning(
+                    "quota_poller: insert_bucket_snapshot failed captured_at=%d",
+                    snapshot.captured_at,
+                    exc_info=True,
+                )
             return snapshot
 
     async def _loop(self) -> None:
