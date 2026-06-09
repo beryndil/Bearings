@@ -350,45 +350,24 @@ shape; the per-module test patterns in
 (gap-cycle-01-014). Entry removed per feature-6-009 closeout;
 resolving commit `404c1818`.~~
 
-## Pre-existing frontend build failure (surfaced 2026-06-03)
+~~## Pre-existing frontend build failure (surfaced 2026-06-03)~~
 
-`npm run build` fails with:
-```
-[MISSING_EXPORT] "getWorkEvidence" is not exported by "src/lib/api/sessions.ts"
-```
-Caused by `frontend/src/lib/components/inspector/InspectorAgent.svelte`
-importing `getWorkEvidence` and `WorkEvidenceOut` from `../../api/sessions`.
-Neither export exists. Fix: either add the export to `api/sessions.ts` or
-remove the import from `InspectorAgent.svelte` if the feature is deferred.
+~~`npm run build` fails with `[MISSING_EXPORT] "getWorkEvidence"...`~~
+~~`CheckpointGutter.svelte` had two unused imports causing svelte-check errors.~~
 
-Also pre-existing: `CheckpointGutter.svelte` has two unused imports
-(`compareCheckpoint`, `CheckpointCompareResult`) that cause svelte-check errors.
+~~Resolved: both were fixed in subsequent commits before this entry was
+swept. `npm run build` exits 0; `svelte-check` exits 0 with 0 errors.
+Verified 2026-06-09.~~
 
-## Pre-existing test failures (surfaced 2026-06-03)
+~~## Pre-existing test failures (surfaced 2026-06-03)~~
 
-Four tests were already failing before the 4-8 model-update commit:
+~~Four tests failing: `test_mutation_routes_have_publish_calls`,
+`test_operation_id_count`, `test_run_probe_diverge_path`,
+`test_consistency_lint`.~~
 
-- `test_broadcaster_ccw3.py::test_mutation_routes_have_publish_calls` —
-  `suggest_session_title (POST)` route is missing a `publish_*` call.
-  Fix: add a broadcaster publish call to the suggest-title handler in
-  `src/bearings/web/routes/sessions.py`.
-
-- `test_operation_ids.py::test_operation_id_count` — expected 148
-  operations, actual is 152. Four routes were added after the test
-  was last updated. Fix: update the count comment + assertion in
-  `tests/test_operation_ids.py` to 152 and document which 4 routes
-  were added.
-
-- `test_diff_probe.py::test_run_probe_diverge_path` — assertion failure
-  in the end-to-end diverge-path probe test. Independent of model versions.
-  Likely a test scaffolding issue post-refactor.
-
-- `test_consistency_lint.py::test_live_repo_is_clean` and
-  `test_main_returns_zero_on_clean_repo` — these pass on a clean working
-  tree and fail with uncommitted changes; they will auto-pass after the
-  next commit.
-
-**Status check 2026-06-03**: all four confirmed pre-existing.
+~~Resolved: all four pass as of 2026-06-09 (verified via direct pytest
+run). Count test updated to 163, broadcaster contract satisfied,
+diverge-path assertion fixed. Resolving commit: `6766b82f`.~~
 
 ## analytics.list_turns_for_session — removed dead code (2026-06-08)
 
