@@ -553,7 +553,11 @@ def test_authentication_failed_error_sets_turn_auth_error() -> None:
     events = list(
         t.feed(
             AssistantMessage(
-                content=[TextBlock(text="Failed to authenticate. API Error: 401 Invalid authentication credentials")],
+                content=[
+                    TextBlock(
+                        text="Failed to authenticate. API Error: 401 Invalid authentication credentials"
+                    )
+                ],
                 model="claude-sonnet",
                 message_id="msg_auth",
                 parent_tool_use_id=None,
@@ -570,7 +574,8 @@ def test_authentication_failed_error_sets_turn_auth_error() -> None:
     # No body content accumulated — error text must not be persisted.
     assert t.final_body() == ""
     # Flag is set so the loop caller knows to raise.
-    assert t.turn_auth_error == "Failed to authenticate. API Error: 401 Invalid authentication credentials"
+    _expected_auth_err = "Failed to authenticate. API Error: 401 Invalid authentication credentials"
+    assert t.turn_auth_error == _expected_auth_err
 
 
 def test_begin_turn_resets_turn_auth_error() -> None:

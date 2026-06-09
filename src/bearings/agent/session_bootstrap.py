@@ -228,11 +228,7 @@ def build_session_setup(
         # because it treats a pre-existing JSONL as proof that another process
         # owns the session.  Using --resume instead reads the file cleanly.
         _jsonl_path = (
-            Path.home()
-            / ".claude"
-            / "projects"
-            / sdk_cwd.replace("/", "-")
-            / f"{sdk_uuid}.jsonl"
+            Path.home() / ".claude" / "projects" / sdk_cwd.replace("/", "-") / f"{sdk_uuid}.jsonl"
         )
         if prior_entry_count > 0 or _jsonl_path.exists():
             sdk_session_id_arg: str | None = None

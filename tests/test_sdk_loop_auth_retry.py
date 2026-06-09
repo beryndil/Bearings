@@ -135,7 +135,6 @@ class _FakeClientWithAuthContent:
             )
         else:
             return
-        yield  # pragma: no cover — satisfies type-checker
 
 
 def _decision() -> RoutingDecision:
@@ -403,7 +402,9 @@ async def test_401_content_path_triggers_retry(conn: aiosqlite.Connection) -> No
             await task
 
     # Loop must NOT be in ERROR — it recovered via the content-path retry.
-    assert agent.state is not SessionState.ERROR, "loop should not be in ERROR after content-path 401 retry"
+    assert agent.state is not SessionState.ERROR, (
+        "loop should not be in ERROR after content-path 401 retry"
+    )
     # Credential reload was triggered exactly once.
     assert reload_calls == ["reload"], "expected exactly one credential reload"
     # Two client instances were created.
