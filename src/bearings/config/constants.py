@@ -1055,6 +1055,20 @@ BEARINGS_TODO_WALK_MAX_DEPTH: Final[int] = 8
 # ``docs/behavior/vault.md``).
 # ---------------------------------------------------------------------------
 
+# Claude Code global config directory (``~/.claude/``). Resolved at
+# import time so downstream code never re-expands ``~``.
+GLOBAL_CLAUDE_CODE_DIR: Final[Path] = Path("~/.claude").expanduser()
+
+# Global user-level CLAUDE.md loaded by Claude Code for every session,
+# regardless of working directory (``~/.claude/CLAUDE.md``). Surfaced
+# as a ``user_claude_md`` layer in the Inspector Instructions tab.
+GLOBAL_CLAUDE_MD_PATH: Final[Path] = GLOBAL_CLAUDE_CODE_DIR / "CLAUDE.md"
+
+# Directory containing Claude Code user-level rule anchor files
+# (``~/.claude/rules/``). Each ``*.md`` file is surfaced as a
+# ``user_rules_md`` layer in the Inspector Instructions tab.
+GLOBAL_CLAUDE_RULES_DIR: Final[Path] = GLOBAL_CLAUDE_CODE_DIR / "rules"
+
 # Default plan-root directory. Per ``docs/behavior/vault.md`` §"Vault
 # entry types" — "Plans — `.md` files directly under any configured
 # plan root (e.g. `~/.claude/plans/`)". Resolved at import time so

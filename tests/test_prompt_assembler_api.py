@@ -27,9 +27,16 @@ from bearings.agent.prompt_assembler import (
     LAYER_KIND_SESSION_INSTRUCTIONS,
     LAYER_KIND_TAG_CLAUDE_MD,
     LAYER_KIND_TAG_MEMORY,
+    LAYER_KIND_USER_CLAUDE_MD,
+    LAYER_KIND_USER_RULES_MD,
     assemble_system_prompt_layers,
 )
-from bearings.config.constants import DEFAULT_BASELINE_PATH, SESSION_KIND_CHAT
+from bearings.config.constants import (
+    DEFAULT_BASELINE_PATH,
+    GLOBAL_CLAUDE_MD_PATH,
+    GLOBAL_CLAUDE_RULES_DIR,
+    SESSION_KIND_CHAT,
+)
 from bearings.db import memories as memories_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
@@ -525,3 +532,213 @@ async def test_deleted_memory_absent_on_next_assemble_call(
         layer for layer in result_after.layers if layer.kind == LAYER_KIND_TAG_MEMORY
     ]
     assert mem_layers_after == []
+
+
+# ---------------------------------------------------------------------------
+# Global Claude Code instruction layers (user_claude_md / user_rules_md)
+# ---------------------------------------------------------------------------
+
+
+async def test_user_claude_md_layer_when_file_exists(
+    db: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``user_claude_md`` layer appears when ``~/.claude/CLAUDE.md`` exists."""
+    fake_claude_md = tmp_path / "CLAUDE.md"
+    fake_claude_md.write_text("Global user instructions.", encoding="utf-8")
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_MD_PATH",
+        fake_claude_md,
+    )
+    # Patch GLOBAL_CLAUDE_RULES_DIR to an empty dir so no rule layers appear.
+    empty_rules = tmp_path / "rules"
+    empty_rules.mkdir()
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_RULES_DIR",
+        empty_rules,
+    )
+
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir="/nonexistent",
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+
+    user_layers = [layer for layer in result.layers if layer.kind == LAYER_KIND_USER_CLAUDE_MD]
+    assert len(user_layers) == 1
+    assert user_layers[0].body == "Global user instructions."
+    assert user_layers[0].source_path == str(fake_claude_md)
+    assert user_layers[0].token_count == len("Global user instructions.") // 4
+
+
+async def test_user_claude_md_layer_absent_when_file_missing(
+    db: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No ``user_claude_md`` layer when ``~/.claude/CLAUDE.md`` does not exist."""
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_MD_PATH",
+        tmp_path / "nonexistent_CLAUDE.md",
+    )
+    empty_rules = tmp_path / "rules"
+    empty_rules.mkdir()
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_RULES_DIR",
+        empty_rules,
+    )
+
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir="/nonexistent",
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+    user_layers = [layer for layer in result.layers if layer.kind == LAYER_KIND_USER_CLAUDE_MD]
+    assert user_layers == []
+
+
+async def test_user_rules_md_layers_one_per_file(
+    db: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One ``user_rules_md`` layer per ``*.md`` file in ``~/.claude/rules/``,
+    sorted by filename."""
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "completeness.md").write_text("Always be complete.", encoding="utf-8")
+    (rules_dir / "decision.md").write_text("Decide and move on.", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_MD_PATH",
+        tmp_path / "nonexistent",
+    )
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_RULES_DIR",
+        rules_dir,
+    )
+
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir="/nonexistent",
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+
+    rule_layers = [layer for layer in result.layers if layer.kind == LAYER_KIND_USER_RULES_MD]
+    assert len(rule_layers) == 2
+    # Sorted by filename: completeness.md before decision.md
+    assert rule_layers[0].body == "Always be complete."
+    assert rule_layers[1].body == "Decide and move on."
+    # Each has source_path set to its file
+    assert rule_layers[0].source_path == str(rules_dir / "completeness.md")
+    assert rule_layers[1].source_path == str(rules_dir / "decision.md")
+
+
+async def test_user_rules_md_absent_when_rules_dir_missing(
+    db: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No ``user_rules_md`` layers when ``~/.claude/rules/`` does not exist."""
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_MD_PATH",
+        tmp_path / "nonexistent",
+    )
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_RULES_DIR",
+        tmp_path / "no_such_dir",
+    )
+
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir="/nonexistent",
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+    rule_layers = [layer for layer in result.layers if layer.kind == LAYER_KIND_USER_RULES_MD]
+    assert rule_layers == []
+
+
+async def test_global_layers_appear_after_project_claude_md(
+    db: aiosqlite.Connection,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``user_claude_md`` layers appear after all ``project_claude_md`` layers
+    in the assembled list (global context is less specific than project)."""
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / "CLAUDE.md").write_text("Project context.", encoding="utf-8")
+
+    fake_user_md = tmp_path / "user_CLAUDE.md"
+    fake_user_md.write_text("User global context.", encoding="utf-8")
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_MD_PATH",
+        fake_user_md,
+    )
+    empty_rules = tmp_path / "rules"
+    empty_rules.mkdir()
+    monkeypatch.setattr(
+        "bearings.agent.prompt_assembler.GLOBAL_CLAUDE_RULES_DIR",
+        empty_rules,
+    )
+
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir=str(project_dir),
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+
+    kinds = [layer.kind for layer in result.layers]
+    last_project_idx = max(i for i, k in enumerate(kinds) if k == LAYER_KIND_PROJECT_CLAUDE_MD)
+    first_user_idx = next(i for i, k in enumerate(kinds) if k == LAYER_KIND_USER_CLAUDE_MD)
+    assert first_user_idx > last_project_idx
+
+
+async def test_global_layers_constants_match_filesystem(
+    db: aiosqlite.Connection,
+) -> None:
+    """Smoke-test: the assembled layers reflect the actual filesystem state of
+    ``GLOBAL_CLAUDE_MD_PATH`` and ``GLOBAL_CLAUDE_RULES_DIR`` without patching.
+
+    This test does NOT assert the layer counts (the files may or may not
+    exist in the test environment) but verifies that the source_path of any
+    ``user_claude_md`` layer equals ``str(GLOBAL_CLAUDE_MD_PATH)`` and that
+    ``user_rules_md`` source_paths are all under ``GLOBAL_CLAUDE_RULES_DIR``.
+    """
+    session = await sessions_db.create(
+        db,
+        kind=SESSION_KIND_CHAT,
+        title="t",
+        working_dir="/nonexistent",
+        model="sonnet",
+    )
+    result = await assemble_system_prompt_layers(db, session.id)
+    assert result is not None
+
+    for layer in result.layers:
+        if layer.kind == LAYER_KIND_USER_CLAUDE_MD:
+            assert layer.source_path == str(GLOBAL_CLAUDE_MD_PATH)
+        if layer.kind == LAYER_KIND_USER_RULES_MD:
+            assert layer.source_path is not None
+            assert layer.source_path.startswith(str(GLOBAL_CLAUDE_RULES_DIR))

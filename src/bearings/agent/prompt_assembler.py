@@ -23,6 +23,17 @@ Layer order
    up from the session's ``working_dir`` to the filesystem root.
    Each file yields its own row so the inspector can attribute the
    content to the exact path.
+3a. **``user_claude_md``** — the global user-level ``CLAUDE.md`` at
+    :data:`bearings.config.constants.GLOBAL_CLAUDE_MD_PATH`
+    (``~/.claude/CLAUDE.md``).  Claude Code loads this file for every
+    session regardless of working directory.  Omitted when the file does
+    not exist or is unreadable.
+3b. **``user_rules_md``** — one layer per ``*.md`` file found under
+    :data:`bearings.config.constants.GLOBAL_CLAUDE_RULES_DIR`
+    (``~/.claude/rules/``), sorted by filename.  Each rule anchor file
+    is surfaced as its own row so the inspector can attribute its content
+    to the exact path.  Omitted entirely when the directory does not
+    exist or contains no readable ``*.md`` files.
 4a. **``tag_claude_md``** — one layer per tag whose ``working_dir`` yields
     a readable ``CLAUDE.md``.  Tag order mirrors the precedence order in
     :func:`bearings.db.tags.list_for_session_ordered` (project class
@@ -61,7 +72,11 @@ from dataclasses import dataclass, field
 import aiosqlite
 
 from bearings.agent.bearings_mcp import CLOSE_SESSION_INSTRUCTION
-from bearings.config.constants import DEFAULT_BASELINE_PATH
+from bearings.config.constants import (
+    DEFAULT_BASELINE_PATH,
+    GLOBAL_CLAUDE_MD_PATH,
+    GLOBAL_CLAUDE_RULES_DIR,
+)
 from bearings.db import memories as memories_db
 from bearings.db import sessions as sessions_db
 from bearings.db import tags as tags_db
@@ -75,6 +90,8 @@ from bearings.db.tags import Tag
 
 LAYER_KIND_BASELINE: str = "baseline"
 LAYER_KIND_PROJECT_CLAUDE_MD: str = "project_claude_md"
+LAYER_KIND_USER_CLAUDE_MD: str = "user_claude_md"
+LAYER_KIND_USER_RULES_MD: str = "user_rules_md"
 LAYER_KIND_TAG_CLAUDE_MD: str = "tag_claude_md"
 LAYER_KIND_TAG_MEMORY: str = "tag_memory"
 LAYER_KIND_SESSION_INSTRUCTIONS: str = "session_instructions"
@@ -84,6 +101,8 @@ KNOWN_LAYER_KINDS: frozenset[str] = frozenset(
     {
         LAYER_KIND_BASELINE,
         LAYER_KIND_PROJECT_CLAUDE_MD,
+        LAYER_KIND_USER_CLAUDE_MD,
+        LAYER_KIND_USER_RULES_MD,
         LAYER_KIND_TAG_CLAUDE_MD,
         LAYER_KIND_TAG_MEMORY,
         LAYER_KIND_SESSION_INSTRUCTIONS,
@@ -189,6 +208,47 @@ def _walk_up_claude_md(working_dir: str) -> list[tuple[str, str]]:
             break
         current = parent
     return results
+
+
+def _collect_global_claude_layers() -> list[SystemPromptLayer]:
+    """Collect the global Claude Code instruction layers from ``~/.claude/``.
+
+    Returns a list containing:
+
+    * One ``user_claude_md`` layer for ``~/.claude/CLAUDE.md`` (when the
+      file exists and is readable).
+    * One ``user_rules_md`` layer per ``*.md`` file found under
+      ``~/.claude/rules/``, sorted by filename (when the directory exists
+      and contains at least one readable file).
+
+    Missing files and read errors are silently skipped.
+    """
+    layers: list[SystemPromptLayer] = []
+    # Layer 3a: global CLAUDE.md (~/.claude/CLAUDE.md)
+    body = _read_file_body(str(GLOBAL_CLAUDE_MD_PATH))
+    if body is not None:
+        layers.append(
+            SystemPromptLayer(
+                kind=LAYER_KIND_USER_CLAUDE_MD,
+                body=body,
+                token_count=_approx_tokens(body),
+                source_path=str(GLOBAL_CLAUDE_MD_PATH),
+            )
+        )
+    # Layer 3b: rule anchor files (~/.claude/rules/*.md), sorted by name.
+    if GLOBAL_CLAUDE_RULES_DIR.is_dir():
+        for rule_path in sorted(GLOBAL_CLAUDE_RULES_DIR.glob("*.md")):
+            rule_body = _read_file_body(str(rule_path))
+            if rule_body is not None:
+                layers.append(
+                    SystemPromptLayer(
+                        kind=LAYER_KIND_USER_RULES_MD,
+                        body=rule_body,
+                        token_count=_approx_tokens(rule_body),
+                        source_path=str(rule_path),
+                    )
+                )
+    return layers
 
 
 def _tag_claude_md_layer(working_dir: str) -> SystemPromptLayer | None:
@@ -348,6 +408,11 @@ async def assemble_system_prompt_layers(
                     source_path=path,
                 )
             )
+    # Layers 3a + 3b: global user-level Claude Code instructions
+    # (~/.claude/CLAUDE.md and ~/.claude/rules/*.md).  These files are
+    # loaded by Claude Code for every session regardless of working_dir
+    # and must be visible in the Inspector alongside the walk-up chain.
+    layers.extend(_collect_global_claude_layers())
     # Layers 4a + 4b: per-tag CLAUDE.md fragments + tag DB memories
     ordered_tags = await tags_db.list_for_session_ordered(connection, session_id)
     await _append_tag_layers(connection, ordered_tags, layers)
@@ -368,6 +433,8 @@ __all__ = [
     "LAYER_KIND_TAG_CLAUDE_MD",
     "LAYER_KIND_TAG_MEMORY",
     "LAYER_KIND_TEMPLATE_BASELINE",
+    "LAYER_KIND_USER_CLAUDE_MD",
+    "LAYER_KIND_USER_RULES_MD",
     "SystemPromptLayer",
     "SystemPromptLayers",
     "assemble_system_prompt_layers",

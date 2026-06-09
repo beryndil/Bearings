@@ -39,6 +39,8 @@
     | "session_instructions"
     | "baseline"
     | "project_claude_md"
+    | "user_claude_md"
+    | "user_rules_md"
     | "tag_memory"
     | "template_baseline";
 
@@ -46,6 +48,8 @@
     "session_instructions",
     "baseline",
     "project_claude_md",
+    "user_claude_md",
+    "user_rules_md",
     "tag_memory",
     "template_baseline",
   ] as const;

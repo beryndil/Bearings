@@ -1782,6 +1782,8 @@ export const INSPECTOR_STRINGS = {
   instructionsLayerKindLabels: {
     baseline: "Bearings baseline",
     project_claude_md: "Project CLAUDE.md",
+    user_claude_md: "User CLAUDE.md",
+    user_rules_md: "User rules",
     tag_memory: "Tag memory",
     session_instructions: "Session instructions",
     template_baseline: "Template baseline",
@@ -1790,6 +1792,8 @@ export const INSPECTOR_STRINGS = {
   instructionsLayerEmptyState: {
     baseline: "No baseline loaded.",
     project_claude_md: "No project CLAUDE.md found in working directory walk-up.",
+    user_claude_md: "No ~/.claude/CLAUDE.md found.",
+    user_rules_md: "No ~/.claude/rules/*.md files found.",
     tag_memory: "No tag memories attached.",
     session_instructions: "No per-session instructions set.",
     template_baseline: "No template baseline.",
