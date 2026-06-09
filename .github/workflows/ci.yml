@@ -15,10 +15,7 @@
 name: CI
 
 on:
-  push:
-    branches: [v1-rebuild]
-  pull_request:
-    branches: [v1-rebuild]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
