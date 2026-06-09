@@ -83,6 +83,21 @@ class TokenExpiredError(RuntimeError):
     """
 
 
+def is_auth_result(result: Any) -> bool:
+    """Return ``True`` when a :class:`~claude_agent_sdk.ResultMessage` signals a 401.
+
+    The CLI can surface auth failures as a ``ResultMessage`` with ``is_error=True``
+    and ``api_error_status=401``, bypassing the exception path entirely.  Checking
+    both the status code and the result text (for older CLI builds that predate
+    ``api_error_status``) covers both cases.
+    """
+    if not getattr(result, "is_error", False):
+        return False
+    if getattr(result, "api_error_status", None) == 401:
+        return True
+    return _AUTH_ERROR_MARKER in str(getattr(result, "result", "") or "")
+
+
 def _is_auth_error(exc: BaseException) -> bool:
     """Return ``True`` when *exc* carries the 401 auth-credentials marker.
 

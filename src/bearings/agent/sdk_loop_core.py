@@ -48,6 +48,7 @@ from bearings.agent.sdk_loop_errors import (
     _make_todo_update,
     _reload_sdk_credentials,
     _to_sdk_options,
+    is_auth_result,
 )
 from bearings.agent.sdk_session_id import bearings_to_sdk_uuid
 from bearings.agent.session import (
@@ -409,6 +410,15 @@ async def _do_run_one_turn(
     last_result, pending_starts, pending_ends = await _collect_turn_events(
         runner, client, translator
     )
+    # Auth errors sometimes arrive as message content (AssistantMessage.error ==
+    # "authentication_failed") rather than as Python exceptions.  Detect both
+    # paths here and raise so run_session_loop's credential-reload retry fires
+    # instead of persisting the error text as a regular chat message.
+    auth_error_text = translator.turn_auth_error
+    if auth_error_text is None and last_result is not None and is_auth_result(last_result):
+        auth_error_text = last_result.result or "Invalid authentication credentials"
+    if auth_error_text is not None:
+        raise RuntimeError(f"Invalid authentication credentials: {auth_error_text}")
     was_stopped = runner.stop_event.is_set()
     await _finish_turn(
         runner,

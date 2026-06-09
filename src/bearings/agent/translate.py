@@ -119,6 +119,7 @@ class SDKEventTranslator:
         self._body_parts: list[str] = []
         self._tool_call_started_ns: dict[str, int] = {}
         self._message_start_emitted = False
+        self._turn_auth_error: str | None = None
 
     # -- per-turn lifecycle ----------------------------------------------
 
@@ -128,6 +129,19 @@ class SDKEventTranslator:
         self._body_parts = []
         self._tool_call_started_ns = {}
         self._message_start_emitted = False
+        self._turn_auth_error = None
+
+    @property
+    def turn_auth_error(self) -> str | None:
+        """Non-None when the SDK signalled an auth error via AssistantMessage.error.
+
+        Set by :meth:`_feed_assistant` when ``message.error == "authentication_failed"``.
+        The caller (``sdk_loop_core._do_run_one_turn``) checks this after collecting
+        all turn events and raises an exception so the auth-retry path in
+        ``run_session_loop`` fires — rather than persisting the error text as a
+        regular chat message.
+        """
+        return self._turn_auth_error
 
     def final_body(self) -> str:
         """Canonical assistant body after :meth:`feed` has consumed every
@@ -270,6 +284,13 @@ class SDKEventTranslator:
         :class:`ToolCallStart` for any tool uses the assistant
         invoked. We also emit :class:`MessageStart` if it wasn't
         already (covers the no-partials path).
+
+        When ``message.error == "authentication_failed"`` the content is NOT
+        accumulated — it carries the raw "Failed to authenticate" error string
+        from the API, not a real assistant response.  The flag
+        ``_turn_auth_error`` is set so ``_do_run_one_turn`` can raise an
+        exception after the turn events are collected, triggering the
+        credential-reload retry path in ``run_session_loop``.
         """
         if message.message_id and self._message_id is None:
             self._message_id = message.message_id
@@ -288,6 +309,13 @@ class SDKEventTranslator:
                 session_id=self._session_id,
                 message_id=message_id,
             )
+        if message.error == "authentication_failed":
+            # Flag for the loop to raise — do not accumulate this as body content.
+            error_text = "".join(
+                block.text for block in message.content if isinstance(block, TextBlock)
+            )
+            self._turn_auth_error = error_text or "authentication_failed"
+            return
         for block in message.content:
             if isinstance(block, TextBlock):
                 self._body_parts.append(block.text)

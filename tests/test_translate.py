@@ -532,3 +532,95 @@ def test_init_rejects_empty_session_id() -> None:
 
     with pytest.raises(ValueError, match="session_id must be non-empty"):
         SDKEventTranslator(session_id="", decision=_decision())
+
+
+# ---------------------------------------------------------------------------
+# Authentication-failure content path (item 625 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def test_authentication_failed_error_sets_turn_auth_error() -> None:
+    """AssistantMessage.error == 'authentication_failed' sets turn_auth_error
+    and does NOT add content to body_parts.
+
+    This is the content-path 401 fix: the CLI emits an AssistantMessage with
+    the raw API error text and error='authentication_failed'.  The translator
+    must flag it so the loop can raise and trigger the credential-reload retry,
+    rather than persisting the error string as a regular chat message.
+    """
+    t = _translator()
+    t.begin_turn()
+    events = list(
+        t.feed(
+            AssistantMessage(
+                content=[TextBlock(text="Failed to authenticate. API Error: 401 Invalid authentication credentials")],
+                model="claude-sonnet",
+                message_id="msg_auth",
+                parent_tool_use_id=None,
+                error="authentication_failed",
+                usage=None,
+                stop_reason=None,
+                session_id="ses_t",
+                uuid="u-auth",
+            )
+        )
+    )
+    # MessageStart IS still emitted (message_id tracking needed for upstream).
+    assert any(isinstance(e, MessageStart) for e in events)
+    # No body content accumulated — error text must not be persisted.
+    assert t.final_body() == ""
+    # Flag is set so the loop caller knows to raise.
+    assert t.turn_auth_error == "Failed to authenticate. API Error: 401 Invalid authentication credentials"
+
+
+def test_begin_turn_resets_turn_auth_error() -> None:
+    """begin_turn() clears the turn_auth_error flag from the previous turn."""
+    t = _translator()
+    t.begin_turn()
+    list(
+        t.feed(
+            AssistantMessage(
+                content=[TextBlock(text="some auth error")],
+                model="claude-sonnet",
+                message_id="msg_x",
+                parent_tool_use_id=None,
+                error="authentication_failed",
+                usage=None,
+                stop_reason=None,
+                session_id="ses_t",
+                uuid="u-x",
+            )
+        )
+    )
+    assert t.turn_auth_error is not None
+    t.begin_turn()
+    assert t.turn_auth_error is None
+
+
+def test_non_auth_error_flag_does_not_suppress_body() -> None:
+    """AssistantMessage.error set to a non-auth value still accumulates body normally.
+
+    Only 'authentication_failed' triggers the special no-accumulate path.
+    Other error values (billing_error, rate_limit, etc.) are uncommon but should
+    not silently eat assistant content.
+    """
+    t = _translator()
+    t.begin_turn()
+    list(
+        t.feed(
+            AssistantMessage(
+                content=[TextBlock(text="I hit a billing limit.")],
+                model="claude-sonnet",
+                message_id="msg_bill",
+                parent_tool_use_id=None,
+                error="billing_error",
+                usage=None,
+                stop_reason=None,
+                session_id="ses_t",
+                uuid="u-bill",
+            )
+        )
+    )
+    # billing_error is NOT the auth path — body should still accumulate.
+    assert t.final_body() == "I hit a billing limit."
+    assert t.turn_auth_error is None
