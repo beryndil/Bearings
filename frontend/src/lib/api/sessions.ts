@@ -899,7 +899,7 @@ export async function getSessionSystemPrompt(
  *
  * Mirrors :class:`bearings.web.models.sessions.SystemPromptLayerWriteOut`.
  */
-export interface SystemPromptLayerWriteOut {
+interface SystemPromptLayerWriteOut {
   path: string;
   content: string;
 }

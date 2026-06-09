@@ -67,6 +67,46 @@ describe("MessageTurn — user role", () => {
     expect(html).toContain('href="https://example.com"');
     expect(html).toContain("noopener");
   });
+
+  it("renders [File N] token as an inline chip span", () => {
+    const { getByTestId } = render(MessageTurn, {
+      props: {
+        turn: turn({ id: "u1", role: "user", body: "check [File 1] please", complete: true }),
+      },
+    });
+    const html = getByTestId("message-turn-user-body").innerHTML;
+    expect(html).toContain("bg-surface-1");
+    expect(html).toContain("[File 1]");
+    expect(html).not.toContain("&lt;span");
+  });
+
+  it("renders [File-N] hyphenated token as a chip span", () => {
+    const { getByTestId } = render(MessageTurn, {
+      props: {
+        turn: turn({ id: "u2", role: "user", body: "[File-2] data.csv", complete: true }),
+      },
+    });
+    const html = getByTestId("message-turn-user-body").innerHTML;
+    expect(html).toContain("bg-surface-1");
+    expect(html).toContain("[File-2] data.csv");
+  });
+
+  it("preserves non-token text around [File N] chips", () => {
+    const { getByTestId } = render(MessageTurn, {
+      props: {
+        turn: turn({
+          id: "u3",
+          role: "user",
+          body: "before [File 1] after",
+          complete: true,
+        }),
+      },
+    });
+    const el = getByTestId("message-turn-user-body");
+    expect(el.textContent).toContain("before");
+    expect(el.textContent).toContain("[File 1]");
+    expect(el.textContent).toContain("after");
+  });
 });
 
 describe("MessageTurn — assistant role", () => {

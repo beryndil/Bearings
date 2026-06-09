@@ -507,6 +507,63 @@
     toolWorkEl.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
   }
 
+  // ---- [File N] attachment-token chip rendering -------------------------
+
+  /**
+   * Matches ``[File N]`` and ``[File-N]`` attachment reference tokens
+   * that appear in stored user message bodies, with an optional trailing
+   * single-word filename segment (e.g. ``[File 1] foo.log``).
+   *
+   * Both the space-separated form used by ``SentAttachment.label`` and
+   * the hyphenated form that may appear in legacy bodies are handled.
+   * Per ``docs/behavior/chat.md`` §"What a message turn looks like" —
+   * user bubble body should render these as styled chips, not bare text
+   * (gap-cycle-01-015).
+   */
+  const ATTACHMENT_TOKEN_RE = /\[File[ -]\d+\](?:[ \t]+\S+)?/gu;
+
+  /** CSS classes matching the SentAttachmentChips chip visual style. */
+  const ATTACHMENT_CHIP_CLASSES =
+    "inline-flex items-center rounded border border-border bg-surface-1 px-2 py-0.5 text-xs text-fg-muted cursor-default";
+
+  function _escapeHtml(text: string): string {
+    return text
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;");
+  }
+
+  /**
+   * Render a user message body as HTML. ``[File N]``-style attachment
+   * reference tokens are converted to inline chip spans that visually
+   * match :component:`SentAttachmentChips`; remaining text runs pass
+   * through :func:`linkifyToHtml` for URL and path linkification.
+   *
+   * The output is intended to be passed through :func:`sanitizeHtml`
+   * before ``{@html}`` insertion — this function handles only the
+   * pre-sanitization HTML construction.
+   */
+  function renderUserBodyHtml(body: string): string {
+    const parts: string[] = [];
+    let cursor = 0;
+    for (const match of body.matchAll(ATTACHMENT_TOKEN_RE)) {
+      const start = match.index ?? 0;
+      const token = match[0];
+      if (start > cursor) {
+        parts.push(linkifyToHtml(body.slice(cursor, start)));
+      }
+      parts.push(
+        `<span class="${ATTACHMENT_CHIP_CLASSES}">${_escapeHtml(token)}</span>`,
+      );
+      cursor = start + token.length;
+    }
+    if (cursor < body.length) {
+      parts.push(linkifyToHtml(body.slice(cursor)));
+    }
+    return parts.join("");
+  }
+
   // Body rendering pipeline — marked → DOMPurify. The pipeline runs
   // asynchronously because :func:`renderMarkdown` returns a promise;
   // we cache the resolved HTML on the turn view via a derived
@@ -631,15 +688,17 @@
           class="user-bubble self-end rounded px-3 py-2 text-sm text-fg-strong"
           data-testid="message-turn-user-body"
         >
-          <!-- User bubbles get linkifier-anchored URLs / paths but no
-               Markdown reflow (chat.md notes user bubbles render as
-               Markdown — applying the same renderMarkdown pipeline as
-               assistant bubbles is a TODO once the linkifier integrates
-               with the marked tokeniser). The HTML output of
-               ``linkifyToHtml`` is escaped per-segment; we still pass it
-               through ``sanitizeHtml`` for defense in depth. -->
+          <!-- User bubbles: ``[File N]``-style attachment reference tokens
+               are rendered as inline chip spans (matching
+               SentAttachmentChips); remaining text runs pass through
+               ``linkifyToHtml`` for URL/path linkification.  Full
+               Markdown reflow is deferred until the linkifier integrates
+               with the marked tokeniser.  All output passes through
+               ``sanitizeHtml`` for defense in depth.
+               Per ``docs/behavior/chat.md`` §"What a message turn looks
+               like" (gap-cycle-01-015). -->
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-          {@html sanitizeHtml(linkifyToHtml(turn.body))}
+          {@html sanitizeHtml(renderUserBodyHtml(turn.body))}
           <!-- Attachment chips at the bottom of the user bubble —
                gap-cycle-01-015 / docs/behavior/chat.md §"What a message
                turn looks like". Renders nothing when the array is empty. -->
