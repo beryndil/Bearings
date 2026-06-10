@@ -555,7 +555,10 @@ def test_authentication_failed_error_sets_turn_auth_error() -> None:
             AssistantMessage(
                 content=[
                     TextBlock(
-                        text="Failed to authenticate. API Error: 401 Invalid authentication credentials"
+                        text=(
+                            "Failed to authenticate. "
+                            "API Error: 401 Invalid authentication credentials"
+                        )
                     )
                 ],
                 model="claude-sonnet",

@@ -33,6 +33,7 @@ from bearings import __version__
 from bearings.cli import gc as gc_cli
 from bearings.cli import init as init_cli
 from bearings.cli import migrate as migrate_cli
+from bearings.cli import pending as pending_cli
 from bearings.cli import serve as serve_cli
 from bearings.cli import todo as todo_cli
 from bearings.config.constants import (
@@ -47,8 +48,9 @@ from bearings.config.constants import (
 # its real subcommand surface). When a real subcommand is supplied the
 # notice is not printed; the subcommand handles its own output.
 _BOOTSTRAP_MESSAGE: str = (
-    "bearings v{version} (v1 rebuild — todo + serve + gc + init + migrate subcommands wired; "
-    "window / send / here / pending land in subsequent items)\n"
+    "bearings v{version} (v1 rebuild — "
+    "todo + serve + gc + init + migrate + pending subcommands wired; "
+    "window / send / here land in subsequent items)\n"
 )
 
 
@@ -81,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     gc_cli.build_subparser(sub)
     init_cli.build_subparser(sub)
     migrate_cli.build_subparser(sub)
+    pending_cli.build_subparser(sub)
     return parser
 
 
