@@ -21,6 +21,7 @@ import argparse
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
 from bearings.bearings_dir import pending as bdir_pending
 from bearings.config.constants import (
     CLI_EXIT_OK,

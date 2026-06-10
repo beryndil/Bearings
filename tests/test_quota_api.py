@@ -1,7 +1,8 @@
 """Integration tests for ``bearings.web.routes.quota`` (spec §9 quota).
 
-Covers all 3 quota endpoints: ``GET /api/quota/current``,
-``POST /api/quota/refresh``, ``GET /api/quota/history``.
+Covers all 4 quota endpoints: ``GET /api/quota/current``,
+``POST /api/quota/refresh``, ``GET /api/quota/history``, and the
+legacy-probe alias ``GET /api/usage/headroom``.
 """
 
 from __future__ import annotations
@@ -208,3 +209,54 @@ def test_get_history_rejects_zero_days(
     """``days <= 0`` rejected via Query validation (422)."""
     response = app_client_no_poller.get("/api/quota/history?days=0")
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /api/usage/headroom — legacy-probe alias
+# ---------------------------------------------------------------------------
+
+
+def test_get_usage_headroom_returns_404_when_empty(
+    app_client_no_poller: TestClient,
+) -> None:
+    """Headroom alias forwards to get_current; 404 before first snapshot."""
+    response = app_client_no_poller.get("/api/usage/headroom")
+    assert response.status_code == 404
+
+
+def test_get_usage_headroom_returns_same_body_as_current(
+    tmp_path: Path,
+) -> None:
+    """Headroom alias returns the identical JSON body as /api/quota/current."""
+    db_path = tmp_path / "headroom.db"
+
+    async def _open() -> aiosqlite.Connection:
+        factory = get_connection_factory(db_path)
+        conn = await factory()
+        await load_schema(conn)
+        await record_snapshot(
+            conn,
+            QuotaSnapshot(
+                captured_at=int(time.time()),
+                overall_used_pct=0.65,
+                sonnet_used_pct=0.10,
+                overall_resets_at=None,
+                sonnet_resets_at=None,
+                raw_payload='{"via": "headroom_alias"}',
+            ),
+        )
+        return conn
+
+    loop = asyncio.new_event_loop()
+    try:
+        conn = loop.run_until_complete(_open())
+        app = create_app(heartbeat_interval_s=_HEARTBEAT_S, db_connection=conn)
+        with TestClient(app) as client:
+            headroom = client.get("/api/usage/headroom")
+            current = client.get("/api/quota/current")
+            assert headroom.status_code == 200
+            assert current.status_code == 200
+            assert headroom.json() == current.json()
+    finally:
+        loop.run_until_complete(conn.close())
+        loop.close()

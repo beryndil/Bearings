@@ -6,6 +6,13 @@ Endpoints (spec §9 verbatim):
 * ``POST /api/quota/refresh``  — force-refresh from ``/usage``.
 * ``GET  /api/quota/history?days=30`` — for the headroom chart.
 
+Legacy-probe alias:
+
+* ``GET  /api/usage/headroom`` — thin alias for ``GET /api/quota/current``.
+  Added in gap-closure pipeline 2026-06-10 for spec compliance; the daily
+  probe originally targeted this path and was rerouted to ``/api/quota/*``
+  when v1 omitted it.
+
 Per arch §1.1.5 the route handlers stay thin; the quota domain code
 (:class:`bearings.agent.quota.QuotaPoller`,
 :func:`bearings.agent.quota.load_latest` /
@@ -113,6 +120,24 @@ async def get_history(
     db = _db(request)
     rows = await load_history(db, days=days)
     return [_to_out(r) for r in rows]
+
+
+@router.get(
+    "/api/usage/headroom",
+    response_model=QuotaSnapshotOut,
+    responses={404: {"model": DetailError, "description": "No quota snapshot recorded yet."}},
+    operation_id="get-usage-headroom",
+)
+async def get_usage_headroom(request: Request) -> QuotaSnapshotOut:
+    """Legacy-probe alias for ``GET /api/quota/current``.
+
+    Returns the same :class:`~bearings.web.models.quota.QuotaSnapshotOut`
+    payload as the canonical endpoint.  Exists so tooling that probes
+    ``/api/usage/headroom`` (the path named in spec §9 before it was
+    rationalised to ``/api/quota/*``) continues to work without config
+    changes.
+    """
+    return await get_current(request)
 
 
 __all__ = ["router"]

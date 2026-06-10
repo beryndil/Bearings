@@ -22,18 +22,13 @@ The done-when criteria for master item B.1 names five endpoints:
 * ``/openapi.json``              — schema exporter
 * ``/metrics``                   — Prometheus exposition
 
-``/api/usage/headroom`` does not exist in v1's route surface (verified
-against the OpenAPI export at the time of writing). The closest
-semantic equivalent is ``/api/quota/current`` (the "current quota
-state" surface that the inspector's Usage subsection drives the 7-day
-headroom chart from, alongside ``/api/quota/history``). We probe both
-``/api/quota/current`` and ``/api/quota/history`` to cover the
-headroom *intent* without inventing a new endpoint. ``/api/quota/current``
-returns 404 when no quota snapshot has ever been recorded — that's
-the documented "never polled" branch (per ``docs/behavior/routing.md``
-§"Quota guard"), so we accept ``{200, 404}`` as PASS for that probe.
-``TODO.md`` carries the entry to revisit if a literal ``headroom``
-endpoint ever lands.
+``/api/usage/headroom`` is a thin alias for ``/api/quota/current``,
+added in the gap-closure pipeline (2026-06-10) for spec compliance.
+We probe it directly alongside ``/api/quota/current`` and
+``/api/quota/history``. Like the canonical endpoint, it returns 404
+when no quota snapshot has ever been recorded — the documented
+"never polled" branch (per ``docs/behavior/routing.md`` §"Quota
+guard") — so we accept ``{200, 404}`` as PASS.
 
 Implementation choices
 ----------------------
@@ -118,11 +113,11 @@ class Probe:
 PROBES: Final[tuple[Probe, ...]] = (
     Probe("health", "/api/health", frozenset({200})),
     Probe("sessions_limit_5", "/api/sessions?limit=5", frozenset({200})),
-    # /api/usage/headroom does not exist; /api/quota/current +
-    # /api/quota/history together cover the headroom-conceptual
-    # surface (the inspector's 7-day headroom chart reads from
-    # /api/quota/history). See module docstring "Probe surface" for
-    # the swap rationale.
+    # /api/usage/headroom is the legacy-probe alias for /api/quota/current
+    # (added gap-closure 2026-06-10).  Both return 404 before the first
+    # snapshot is recorded, so we accept {200, 404} as PASS for each.
+    # /api/quota/history covers the 7-day headroom chart surface.
+    Probe("usage_headroom", "/api/usage/headroom", frozenset({200, 404})),
     Probe("quota_current", "/api/quota/current", frozenset({200, 404})),
     Probe("quota_history", "/api/quota/history", frozenset({200})),
     Probe("openapi", "/openapi.json", frozenset({200})),

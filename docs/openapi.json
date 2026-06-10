@@ -2883,7 +2883,7 @@
           "sessions"
         ],
         "summary": "Delete Session Sdk Entries",
-        "description": "Admin action \u2014 deletes the SDK transcript mirror. Destructive and irreversible; for debug/test use only.\n\nReturns 204 on success (including when the session exists but has no\nSDK entries). Returns 404 if no session row matches ``session_id``.\nThe schema's ``ON DELETE CASCADE`` already drops mirror rows when the\nsession row is deleted; this endpoint is for the \"reset SDK\nconversation but keep the Bearings session alive\" path.",
+        "description": "Admin action \u2014 deletes the SDK transcript mirror.\n\nDestructive and irreversible; for debug/test use only.\n\nReturns 204 on success (including when the session exists but has no\nSDK entries). Returns 404 if no session row matches ``session_id``.\nThe schema's ``ON DELETE CASCADE`` already drops mirror rows when the\nsession row is deleted; this endpoint is for the \"reset SDK\nconversation but keep the Bearings session alive\" path.",
         "operationId": "delete-session-sdk-entries",
         "parameters": [
           {
@@ -4984,6 +4984,38 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage/headroom": {
+      "get": {
+        "tags": [
+          "quota"
+        ],
+        "summary": "Get Usage Headroom",
+        "description": "Legacy-probe alias for ``GET /api/quota/current``.\n\nReturns the same :class:`~bearings.web.models.quota.QuotaSnapshotOut`\npayload as the canonical endpoint.  Exists so tooling that probes\n``/api/usage/headroom`` (the path named in spec \u00a79 before it was\nrationalised to ``/api/quota/*``) continues to work without config\nchanges.",
+        "operationId": "get-usage-headroom",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaSnapshotOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No quota snapshot recorded yet.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetailError"
                 }
               }
             }
