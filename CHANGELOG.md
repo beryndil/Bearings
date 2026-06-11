@@ -7,6 +7,42 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-06-10
+
+### Added
+
+- **feat(cli): `bearings pending` add/resolve/list subcommands (1361f23f):**
+  Implements `bearings.cli.pending` with three sub-subcommands backed by
+  `bearings.bearings_dir.pending` I/O helpers.  Wires the subparser in `app.py`,
+  updates the bootstrap notice to drop `pending` from the deferred list, and adds
+  full test coverage in `tests/test_cli_pending.py`.
+
+- **fix(api): `GET /api/usage/headroom` alias route (f7fb38cb):**
+  Thin alias in `routes/quota.py` that delegates to `get_current`; returns
+  `QuotaSnapshotOut`; accepts `{200, 404}` per spec.  `docs/openapi.json`
+  regenerated.  `scripts/daily_probe.py` updated to include a `usage_headroom`
+  probe row.  Two integration tests added in `test_quota_api.py`.
+
+### Fixed
+
+- **fix(frontend): render stored File-N attachment tokens as chips (3a89d4a5):**
+  `MessageTurn.svelte` gains `renderUserBodyHtml()` which detects `[File N]` /
+  `[File-N]` tokens in stored user message bodies and wraps them in styled chip
+  spans matching `SentAttachmentChips` visual style.  Non-token segments still
+  pass through `linkifyToHtml`; all output sanitised.  Three unit tests added.
+  Frontend dist bundle rebuilt.
+
+- **fix(tests): update `test_operation_id_count` to 164 after headroom alias:**
+  The `GET /api/usage/headroom` route added in `f7fb38cb` raised the OpenAPI
+  operation count from 163 to 164; test count history updated accordingly.
+
+### Chores
+
+- **chore(release): remove accidentally committed junk file:**
+  `git rm` of `"import sys,json; d=json.load(sys.stdin); print([k for k in d.keys()])"`.
+
+- **chore(docs): v1.3.0 release close-out** — gap-analysis §5 updated with commit hashes.
+
 ## [1.2.0] — 2026-06-04
 
 ### Added
