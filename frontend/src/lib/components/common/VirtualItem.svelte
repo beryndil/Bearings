@@ -23,10 +23,22 @@
    *   height. This handles rows whose height changes between mount cycles
    *   (e.g. tool-output streaming adds content).
    *
+   * ``alwaysVisible``:
+   *
+   * When ``true`` the IntersectionObserver is not wired and ``visible``
+   * is held permanently ``true``. Use this for rows that must stay
+   * mounted regardless of scroll position — specifically the in-flight
+   * streaming assistant turn, which would otherwise be virtualized away
+   * the moment its parent scroll container's ``scrollHeight`` grows past
+   * the current ``scrollTop``. When ``alwaysVisible`` transitions from
+   * ``true`` to ``false`` (e.g. after ``message_complete``), the
+   * ``$effect`` re-runs and wires the observer at the element's current
+   * intersection state so the row is immediately eligible for
+   * virtualisation if it has scrolled out of view.
+   *
    * Behaviour anchor: ``docs/behavior/chat.md`` (conversation turn list),
    * ``docs/behavior/`` §"SessionList" (sidebar rows).
    */
-  import { onMount } from "svelte";
   import type { Snippet } from "svelte";
   import { VIRTUAL_ITEM_ROOT_MARGIN } from "../../config";
 
@@ -40,9 +52,24 @@
     rootMargin?: string;
     /** Slot content to mount / unmount as the row crosses the viewport. */
     children?: Snippet;
+    /**
+     * When ``true``, the IntersectionObserver is bypassed and the content
+     * is always rendered regardless of scroll position. Transitions to
+     * ``false`` are handled reactively: the ``$effect`` re-runs and wires
+     * the observer at the element's current intersection state.
+     *
+     * Set this for the active streaming assistant turn so tokens render
+     * live even when the scroll container is slightly past true-bottom
+     * (see ``CONVERSATION_AT_BOTTOM_THRESHOLD_PX`` rationale).
+     */
+    alwaysVisible?: boolean;
   }
 
-  const { rootMargin = VIRTUAL_ITEM_ROOT_MARGIN, children }: Props = $props();
+  const {
+    rootMargin = VIRTUAL_ITEM_ROOT_MARGIN,
+    children,
+    alwaysVisible = false,
+  }: Props = $props();
 
   /** Reference to the outer wrapper element. Used by the observer. */
   let wrapperEl = $state<HTMLDivElement | null>(null);
@@ -60,7 +87,28 @@
    */
   let reservedHeight = $state<number | null>(null);
 
-  onMount(() => {
+  /**
+   * Wire (or bypass) the IntersectionObserver whenever ``alwaysVisible``
+   * or ``wrapperEl`` changes.
+   *
+   * - When ``alwaysVisible = true``: set ``visible = true`` immediately
+   *   and skip observer creation. The cleanup is a no-op (the observer
+   *   was never created).
+   * - When ``alwaysVisible = false``: create the IntersectionObserver as
+   *   before. If ``alwaysVisible`` just transitioned from ``true``, the
+   *   observer fires with the element's current intersection state so
+   *   the row is immediately eligible for virtualisation.
+   *
+   * Using ``$effect`` instead of ``onMount`` lets Svelte re-run this
+   * logic reactively when ``alwaysVisible`` changes (e.g. after
+   * ``message_complete`` flips the streaming turn's ``complete`` flag).
+   */
+  $effect(() => {
+    if (alwaysVisible) {
+      visible = true;
+      return;
+    }
+
     const el = wrapperEl;
     if (el === null) return;
 

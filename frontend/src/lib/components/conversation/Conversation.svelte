@@ -26,7 +26,11 @@
   import { connectSession, disconnectSession } from "../../agent.svelte";
   import { listMessages, listToolCalls } from "../../api/messages";
   import { getSessionTodos, getSessionTokens } from "../../api/sessions";
-  import { CONVERSATION_STRINGS, MESSAGE_PAGE_SIZE } from "../../config";
+  import {
+    CONVERSATION_AT_BOTTOM_THRESHOLD_PX,
+    CONVERSATION_STRINGS,
+    MESSAGE_PAGE_SIZE,
+  } from "../../config";
   import {
     conversationStore,
     hydrateTodos,
@@ -289,9 +293,12 @@
   function handleScroll(): void {
     if (bodyEl === null) return;
     const dist = bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight;
-    // ~16px slack so a fractional-pixel scroll position still counts
-    // as "at the bottom" (catches Hyprland HiDPI rounding).
-    atBottom = dist < 16;
+    // ``CONVERSATION_AT_BOTTOM_THRESHOLD_PX`` (200 px) absorbs the
+    // scroll-height growth that VirtualItem causes when newly-added turns
+    // expand below the current scroll position. The old 16 px guard was
+    // sufficient for HiDPI rounding but too tight once virtualisation
+    // was added — see the constant's doc comment for the full rationale.
+    atBottom = dist < CONVERSATION_AT_BOTTOM_THRESHOLD_PX;
     showJumpAffordance = !atBottom;
   }
 
@@ -394,7 +401,7 @@
         </p>
       {:else}
         {#each conversationStore.turns as turn, turnIdx (turn.id)}
-          <VirtualItem>
+          <VirtualItem alwaysVisible={!turn.complete}>
             <MessageTurn
               {turn}
               {sessionId}

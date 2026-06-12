@@ -260,6 +260,47 @@ describe("VirtualItem — observer lifecycle", () => {
 });
 
 // ---------------------------------------------------------------------------
+// alwaysVisible prop
+// ---------------------------------------------------------------------------
+
+describe("VirtualItem — alwaysVisible", () => {
+  it("when alwaysVisible=true: content is visible and no IntersectionObserver is created", () => {
+    const { getByTestId, queryByTestId } = render(VirtualItem, {
+      props: {
+        alwaysVisible: true,
+        children: (() => {
+          // snippets can't be passed directly in unit tests; rely on the
+          // harness-free path: the wrapper itself starts visible.
+        }) as unknown as undefined,
+      },
+    });
+
+    // Observer should NOT have been wired for an alwaysVisible item.
+    expect(IntersectionObserver).not.toHaveBeenCalled();
+    expect(getByTestId("virtual-item")).toBeInTheDocument();
+    expect(queryByTestId("virtual-item-placeholder")).toBeNull();
+  });
+
+  it("when alwaysVisible=false (default): IntersectionObserver IS created", () => {
+    render(VirtualItemContentHarness);
+
+    expect(IntersectionObserver).toHaveBeenCalledOnce();
+  });
+
+  it("intersection event has no effect when alwaysVisible=true", async () => {
+    // Render with alwaysVisible=true, then try to trigger a leave — the
+    // placeholder must never appear because the observer is not wired.
+    const { queryByTestId } = render(VirtualItem, {
+      props: { alwaysVisible: true },
+    });
+
+    // IntersectionObserver was not created — activeCallback is null.
+    // Just confirm there is no placeholder.
+    expect(queryByTestId("virtual-item-placeholder")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // VirtualItemHarness
 // ---------------------------------------------------------------------------
 

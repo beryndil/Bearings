@@ -27,7 +27,7 @@ import {
   ingestFrame,
   resetConversation,
 } from "../../../stores/conversation.svelte";
-import { WS_FRAME_KIND_EVENT } from "../../../config";
+import { CONVERSATION_AT_BOTTOM_THRESHOLD_PX, WS_FRAME_KIND_EVENT } from "../../../config";
 
 const fetchMock = vi.fn();
 
@@ -275,6 +275,56 @@ describe("Conversation — streaming auto-scroll (gap-cycle-16-001)", () => {
     expect(getScrollTop()).toBe(1000);
   });
 
+  it("(b2) threshold — dist < CONVERSATION_AT_BOTTOM_THRESHOLD_PX counts as at-bottom (VirtualItem expansion tolerance)", async () => {
+    // Reproduces the gap-cycle-17-001 scenario: VirtualItem expansion grows
+    // scrollHeight after programmatic scroll-to-bottom, leaving dist = ~50px.
+    // With the old 16px guard that would have flipped atBottom=false; with
+    // the 200px guard we should still auto-scroll.
+    setMessagesResponse("ses_sc_th", {
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ items: [], has_more: false }),
+    });
+    const { getByTestId } = render(Conversation, { props: { sessionId: "ses_sc_th" } });
+    await waitFor(() => expect(getByTestId("conversation-body")).toBeTruthy());
+    const bodyEl = getByTestId("conversation-body");
+
+    // Set up: scrollHeight=1000, clientHeight=0, scrollTop=850
+    // → dist = 1000 - 850 - 0 = 150 (just inside 200px threshold → atBottom=true).
+    let scrollTopValue = 850;
+    Object.defineProperty(bodyEl, "scrollHeight", { get: () => 1000, configurable: true });
+    Object.defineProperty(bodyEl, "scrollTop", {
+      get: () => scrollTopValue,
+      set: (v: number) => {
+        scrollTopValue = v;
+      },
+      configurable: true,
+    });
+
+    // Simulate a non-user scroll position shift (VirtualItem expansion) at dist=150.
+    // In real use this is caused by the scroll container NOT firing a scroll event
+    // when scrollHeight grows; we fire one here to drive handleScroll.
+    fireEvent.scroll(bodyEl);
+    flushSync();
+
+    resetConversation("ses_sc_th");
+    ingestFrame({
+      kind: WS_FRAME_KIND_EVENT,
+      seq: 1,
+      event: { session_id: "ses_sc_th", type: "message_start", message_id: "a_th" },
+    });
+    ingestFrame({
+      kind: WS_FRAME_KIND_EVENT,
+      seq: 2,
+      event: { session_id: "ses_sc_th", type: "token", message_id: "a_th", delta: "hi" },
+    });
+    await flushAll();
+
+    // dist=150 < CONVERSATION_AT_BOTTOM_THRESHOLD_PX → atBottom=true → scroll fired.
+    expect(scrollTopValue).toBe(1000);
+    expect(CONVERSATION_AT_BOTTOM_THRESHOLD_PX).toBeGreaterThan(150);
+  });
+
   it("(c) token event does NOT write scrollTop when user has scrolled up (atBottom=false)", async () => {
     setMessagesResponse("ses_sc3", {
       status: 200,
@@ -287,7 +337,7 @@ describe("Conversation — streaming auto-scroll (gap-cycle-16-001)", () => {
     const { getScrollTop } = mockScrollProps(bodyEl);
 
     // Simulate user scrolling up: scrollHeight=1000, scrollTop=0, clientHeight=0
-    // → dist = 1000 >= 16 → atBottom=false.
+    // → dist = 1000 >= CONVERSATION_AT_BOTTOM_THRESHOLD_PX (200) → atBottom=false.
     fireEvent.scroll(bodyEl);
     flushSync();
 

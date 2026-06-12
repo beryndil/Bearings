@@ -3439,6 +3439,30 @@ export const DATA_VIEW_STRINGS = {
 export const VIRTUAL_ITEM_ROOT_MARGIN = "200px 0px" as const;
 
 /**
+ * Distance from the scroll container's true bottom (in px) within which the
+ * conversation pane considers the user to be "at the bottom" and auto-scroll
+ * fires.
+ *
+ * The tight 16 px HiDPI-rounding guard used before v1.3.0 was insufficient
+ * once :component:`VirtualItem` virtualisation was added: newly-added turns
+ * (user message + streaming assistant turn) expand the ``scrollHeight`` of
+ * the container AFTER the programmatic scroll-to-bottom runs. That expansion
+ * is not a user scroll, so it doesn't fire ``onscroll``, leaving ``atBottom``
+ * stale at ``true`` while ``dist`` silently climbs to 20–80 px. On the next
+ * tick the ``$effect`` re-reads ``atBottom = true`` and re-scrolls — but if
+ * the expansion triggered before that re-fire, ``dist`` would already exceed
+ * 16 px on the very first check and ``atBottom`` was (correctly) flipped to
+ * ``false`` by an intermediate scroll event, preventing all further
+ * auto-scroll. 200 px comfortably absorbs any single-turn expansion while
+ * still requiring a deliberate, visible scroll to disengage.
+ *
+ * Behaviour anchor: ``docs/behavior/tool-output-streaming.md``
+ * §"Scroll-anchor behavior" — the user must deliberately scroll up to
+ * disengage; a minor layout shift must not count as "scrolled away".
+ */
+export const CONVERSATION_AT_BOTTOM_THRESHOLD_PX = 200;
+
+/**
  * UI strings for the :component:`TagEdit` modal (gap-cycle-01-016).
  *
  * Behavior anchor: ``docs/behavior/context-menus.md`` §Tag —
