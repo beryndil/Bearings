@@ -25,6 +25,26 @@ API routes registered before the static mount take precedence —
 ``/openapi.json``, every ``/api/*`` and ``/ws/*`` route resolves
 normally. Only paths that fall through to the static mount go through
 the SPA fallback.
+
+Cache-control strategy
+----------------------
+SvelteKit's Vite build writes **content-hashed** filenames for every JS
+/ CSS / font asset under ``_app/immutable/``.  These files are
+effectively immutable — a changed file always gets a new name — so they
+can be cached indefinitely (``max-age=31536000, immutable``).
+
+``index.html`` is the single non-hashed entry point.  The browser must
+**always** revalidate it so that a newly deployed bundle (with updated
+chunk hashes) reaches users without requiring a hard-refresh.
+``Cache-Control: no-cache`` achieves this: the browser sends a
+conditional request (``If-None-Match`` / ``If-Modified-Since``) and
+the server returns 304 on a cache hit, keeping the round-trip cheap
+while guaranteeing freshness.
+
+Without these headers browsers apply heuristic caching based on
+``Last-Modified``, which can serve stale ``index.html`` referencing
+deleted chunk filenames for up to ~10 % of the file's age — meaning
+users silently run old JavaScript until they force-refresh.
 """
 
 from __future__ import annotations
@@ -35,6 +55,19 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
+
+# ``_app/immutable/`` contains only content-hashed assets — the filename
+# changes whenever the file changes so these can be cached indefinitely.
+_IMMUTABLE_PREFIX: str = "_app/immutable/"
+
+# Applied to ``index.html`` and all other non-immutable files.  Forces
+# browsers to revalidate on every load (conditional GET).  Essential so
+# users pick up new bundle hashes after a deployment without a hard-refresh.
+_CACHE_NO_CACHE: str = "no-cache"
+
+# Applied to ``_app/immutable/**``.  One year max-age with the
+# ``immutable`` directive skips the conditional-request round-trip.
+_CACHE_IMMUTABLE: str = "public, max-age=31536000, immutable"
 
 # Directory the SvelteKit static adapter writes to (configured in
 # ``frontend/svelte.config.js``). Resolved relative to *this* file so
@@ -49,7 +82,8 @@ _FALLBACK_HTML: str = "index.html"
 
 
 class _BundleStaticFiles(StaticFiles):
-    """``StaticFiles`` subclass that falls back to the SPA shell.
+    """``StaticFiles`` subclass that falls back to the SPA shell and
+    applies correct ``Cache-Control`` headers per asset type.
 
     Behavior:
 
@@ -62,11 +96,19 @@ class _BundleStaticFiles(StaticFiles):
     * All other misses (POST to a non-existent path, an asset reference
       with no ``Accept: text/html``) return a real 404 instead of an
       HTML body the caller cannot consume.
+
+    Cache-Control headers are injected based on path:
+
+    * ``_app/immutable/**`` — ``public, max-age=31536000, immutable``
+      (content-hashed filenames, safe to cache forever).
+    * Everything else (``index.html``, favicons, …) — ``no-cache``
+      (always revalidate so stale entry-point HTML never silently
+      serves old chunk hashes after a deployment).
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except Exception as exc:
             from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -89,7 +131,9 @@ class _BundleStaticFiles(StaticFiles):
             fallback = self._resolve_fallback()
             if fallback is None:
                 raise
-            return FileResponse(fallback)
+            response = FileResponse(fallback)
+        _apply_cache_header(response, path)
+        return response
 
     def _resolve_fallback(self) -> Path | None:
         # ``self.directory`` is set by ``StaticFiles.__init__``. Wrap
@@ -100,6 +144,28 @@ class _BundleStaticFiles(StaticFiles):
             return None
         candidate = Path(self.directory) / _FALLBACK_HTML
         return candidate if candidate.is_file() else None
+
+
+def _apply_cache_header(response: Response, path: str) -> None:
+    """Inject the appropriate ``Cache-Control`` header into ``response``.
+
+    ``path`` is the asset path relative to the bundle root (as received
+    by :meth:`_BundleStaticFiles.get_response`).
+
+    * Paths under ``_app/immutable/`` receive
+      ``public, max-age=31536000, immutable`` — the filenames are
+      content-hashed by Vite so the files never change.
+    * All other paths (``index.html``, favicons, …) receive
+      ``no-cache`` — browsers must revalidate before using a cached
+      copy so a freshly deployed ``index.html`` (with updated chunk
+      hashes) is picked up immediately without a hard-refresh.
+    """
+    # Starlette already populated ETag / Last-Modified; only add the
+    # Cache-Control directive that Starlette omits by default.
+    if path.startswith(_IMMUTABLE_PREFIX) or path.lstrip("/").startswith(_IMMUTABLE_PREFIX):
+        response.headers["Cache-Control"] = _CACHE_IMMUTABLE
+    else:
+        response.headers["Cache-Control"] = _CACHE_NO_CACHE
 
 
 # Prefixes and exact paths that must never be swallowed by the SPA
@@ -162,7 +228,9 @@ async def spa_fallback_handler(request: Request) -> Response:
     index = bundle_dir() / _FALLBACK_HTML
     if not index.is_file():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return FileResponse(str(index), media_type="text/html")
+    response = FileResponse(str(index), media_type="text/html")
+    response.headers["Cache-Control"] = _CACHE_NO_CACHE
+    return response
 
 
 def bundle_dir() -> Path:

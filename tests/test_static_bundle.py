@@ -157,3 +157,90 @@ def test_factory_tolerates_missing_bundle(monkeypatch: pytest.MonkeyPatch, tmp_p
         # comes from FastAPI, not our SPA fallback.
         root = test_client.get("/", headers={"Accept": "text/html"})
         assert root.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Cache-Control header tests (BUG: missing headers caused heuristic caching
+# of index.html, serving stale JS to users and breaking real-time rendering
+# until a hard-refresh).
+# ---------------------------------------------------------------------------
+
+
+def test_apply_cache_header_no_cache_for_index() -> None:
+    """Non-immutable paths (index.html) receive Cache-Control: no-cache."""
+    from starlette.responses import Response
+
+    from bearings.web.static import _apply_cache_header
+
+    resp = Response(content="", status_code=200)
+    _apply_cache_header(resp, "index.html")
+    assert resp.headers["Cache-Control"] == "no-cache"
+
+
+def test_apply_cache_header_immutable_for_hashed_asset() -> None:
+    """Content-hashed assets receive long-lived Cache-Control: immutable."""
+    from starlette.responses import Response
+
+    from bearings.web.static import _apply_cache_header
+
+    resp = Response(content="", status_code=200)
+    _apply_cache_header(resp, "_app/immutable/entry/app.DQ8YJbEi.js")
+    assert resp.headers["Cache-Control"] == "public, max-age=31536000, immutable"
+
+
+def test_apply_cache_header_no_cache_for_favicon() -> None:
+    """favicon.png and other non-hashed assets also receive no-cache."""
+    from starlette.responses import Response
+
+    from bearings.web.static import _apply_cache_header
+
+    resp = Response(content="", status_code=200)
+    _apply_cache_header(resp, "favicon.png")
+    assert resp.headers["Cache-Control"] == "no-cache"
+
+
+@pytest.mark.skipif(
+    not _INDEX_HTML.is_file(),
+    reason="bundle not built — run `npm run build` in frontend/ first",
+)
+def test_index_html_cache_control_no_cache(client: TestClient) -> None:
+    """GET / must return Cache-Control: no-cache so browsers always revalidate.
+
+    Without this header browsers apply heuristic caching (≈ Last-Modified
+    age / 10) and serve a stale index.html after deployments, which
+    causes the old JS bundle (referencing deleted chunk filenames) to run
+    silently until the user force-refreshes.
+    """
+    response = client.get("/", headers={"Accept": "text/html"})
+    assert response.status_code == 200
+    assert response.headers.get("Cache-Control") == "no-cache"
+
+
+@pytest.mark.skipif(
+    not _INDEX_HTML.is_file(),
+    reason="bundle not built — run `npm run build` in frontend/ first",
+)
+def test_immutable_chunk_cache_control(client: TestClient) -> None:
+    """Content-hashed JS chunk must carry the long-lived immutable directive."""
+    # Pick the first .js file under _app/immutable/entry/ that exists on disk.
+    entry_dir = _BUNDLE_DIR / "_app" / "immutable" / "entry"
+    js_files = list(entry_dir.glob("*.js")) if entry_dir.is_dir() else []
+    if not js_files:
+        pytest.skip("no entry JS chunks found in bundle")
+    js_path = f"/_app/immutable/entry/{js_files[0].name}"
+    response = client.get(js_path)
+    assert response.status_code == 200
+    cc = response.headers.get("Cache-Control", "")
+    assert "immutable" in cc, f"Expected immutable in Cache-Control, got: {cc!r}"
+    assert "max-age=31536000" in cc
+
+
+@pytest.mark.skipif(
+    not _INDEX_HTML.is_file(),
+    reason="bundle not built — run `npm run build` in frontend/ first",
+)
+def test_spa_fallback_cache_control_no_cache(client: TestClient) -> None:
+    """SPA fallback (deep-link to unknown path) also gets Cache-Control: no-cache."""
+    response = client.get("/sessions/some-id", headers={"Accept": "text/html"})
+    assert response.status_code == 200
+    assert response.headers.get("Cache-Control") == "no-cache"
