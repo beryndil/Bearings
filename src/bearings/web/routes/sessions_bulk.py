@@ -63,6 +63,7 @@ from bearings.web.models.sessions import (
 )
 from bearings.web.routes.sessions import _sessions_broadcaster, _to_out
 from bearings.web.routes.ws_sessions import SessionsBroadcaster
+from bearings.web.runner_factory import InProcessRunnerRegistry
 
 _LOG = logging.getLogger(__name__)
 
@@ -320,6 +321,7 @@ async def _handle_bulk_close_delete(
     broadcaster: SessionsBroadcaster | None,
     payload: BulkSessionsIn,
     session_ids: list[str],
+    factory: InProcessRunnerRegistry | None = None,
 ) -> list[BulkResultItem]:
     """Handle close / delete ops; broadcast upserts / deletes as appropriate."""
     if payload.op == BULK_OP_CLOSE:
@@ -329,6 +331,10 @@ async def _handle_bulk_close_delete(
             for r, closed_session in close_pairs:
                 if r.ok and closed_session is not None:
                     broadcaster.publish_upsert(_to_out(closed_session))
+        if factory is not None:
+            for r, _ in close_pairs:
+                if r.ok:
+                    await factory.recycle(r.session_id)
         return results
     # payload.op == BULK_OP_DELETE (KNOWN_BULK_OPS guard rejects others)
     results = await _bulk_delete(db, session_ids)
@@ -336,6 +342,10 @@ async def _handle_bulk_close_delete(
         for r in results:
             if r.ok:
                 broadcaster.publish_delete(r.session_id)
+    if factory is not None:
+        for r in results:
+            if r.ok:
+                await factory.recycle(r.session_id)
     return results
 
 
@@ -382,7 +392,11 @@ async def run_sessions_bulk(payload: BulkSessionsIn, request: Request) -> Respon
     if payload.op in (BULK_OP_TAG, BULK_OP_UNTAG):
         return await _handle_bulk_tag(db, payload, session_ids)
 
-    results = await _handle_bulk_close_delete(db, broadcaster, payload, session_ids)
+    _factory = getattr(request.app.state, "runner_factory", None)
+    factory: InProcessRunnerRegistry | None = (
+        _factory if isinstance(_factory, InProcessRunnerRegistry) else None
+    )
+    results = await _handle_bulk_close_delete(db, broadcaster, payload, session_ids, factory)
     out = BulkSessionsOut(op=payload.op, results=results)
     return Response(content=out.model_dump_json(), media_type="application/json")
 

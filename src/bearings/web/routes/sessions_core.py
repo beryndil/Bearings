@@ -39,6 +39,7 @@ from bearings.web.routes._sessions_helpers import (
     _validate_session_tag_ids,
 )
 from bearings.web.routes.tags import _validate_tag_cardinality
+from bearings.web.runner_factory import InProcessRunnerRegistry
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
@@ -240,6 +241,9 @@ async def delete_session(session_id: str, request: Request) -> None:
             detail=f"no session matches {session_id!r}",
         )
     await checklists_db.clear_orphaned_chat_session_id(db, session_id)
+    factory = getattr(request.app.state, "runner_factory", None)
+    if isinstance(factory, InProcessRunnerRegistry):
+        await factory.recycle(session_id)
     broadcaster = _sessions_broadcaster(request)
     if broadcaster is not None:
         broadcaster.publish_delete(session_id)
@@ -277,6 +281,9 @@ async def close_session(session_id: str, request: Request) -> SessionOut:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no session matches {session_id!r}",
         )
+    factory = getattr(request.app.state, "runner_factory", None)
+    if isinstance(factory, InProcessRunnerRegistry):
+        await factory.recycle(session_id)
     tags = await _fetch_tags_out(db, session_id)
     out = _to_out(row, tags=tags)
     broadcaster = _sessions_broadcaster(request)
