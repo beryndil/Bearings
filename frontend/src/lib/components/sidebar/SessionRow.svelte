@@ -40,7 +40,12 @@
   } from "../../api/sessions";
   import type { SessionOut } from "../../api/sessions";
   import SessionEdit from "../modals/SessionEdit.svelte";
-  import { attachTagToSession, detachTagFromSession, listTags, TAG_CLASS_SEVERITY } from "../../api/tags";
+  import {
+    attachTagToSession,
+    detachTagFromSession,
+    listTags,
+    TAG_CLASS_SEVERITY,
+  } from "../../api/tags";
   import type { TagOut } from "../../api/tags";
   import SeverityShield from "../icons/SeverityShield.svelte";
   import { fetchBillingMode, type BillingMode } from "../../utils/appInfo";

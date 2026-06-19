@@ -72,7 +72,9 @@
     results = new Map(
       items.map((item) => [
         item.id,
-        item.chat_session_id !== null ? { status: "pending" as const } : { status: "skipped" as const },
+        item.chat_session_id !== null
+          ? { status: "pending" as const }
+          : { status: "skipped" as const },
       ]),
     );
 
@@ -157,7 +159,9 @@
             {:else if res.status === "skipped"}
               <span class="text-fg-muted">{BULK_TITLE_SUGGEST_STRINGS.statusSkipped}</span>
             {:else if res.status === "running"}
-              <span class="text-accent animate-pulse">{BULK_TITLE_SUGGEST_STRINGS.statusRunning}</span>
+              <span class="text-accent animate-pulse"
+                >{BULK_TITLE_SUGGEST_STRINGS.statusRunning}</span
+              >
             {:else if res.status === "suggested"}
               <span class="text-emerald-400" title={res.suggested}>
                 ✓ {res.suggested}
@@ -187,9 +191,7 @@
         data-testid="bulk-title-cancel"
         onclick={finished ? onDone : onCancel}
       >
-        {finished
-          ? BULK_TITLE_SUGGEST_STRINGS.doneButton
-          : BULK_TITLE_SUGGEST_STRINGS.cancelButton}
+        {finished ? BULK_TITLE_SUGGEST_STRINGS.doneButton : BULK_TITLE_SUGGEST_STRINGS.cancelButton}
       </button>
       {#if !finished}
         <button

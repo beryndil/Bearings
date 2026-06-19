@@ -68,7 +68,11 @@
    */
   import { onMount } from "svelte";
 
-  import { CHECKLIST_STRINGS, AUTO_DRIVER_STATE_RUNNING, BULK_TITLE_SUGGEST_STRINGS } from "../../config";
+  import {
+    CHECKLIST_STRINGS,
+    AUTO_DRIVER_STATE_RUNNING,
+    BULK_TITLE_SUGGEST_STRINGS,
+  } from "../../config";
   import BulkTitleSuggestModal from "../modals/BulkTitleSuggestModal.svelte";
   import {
     checkChecklistItem as checkItemDefault,

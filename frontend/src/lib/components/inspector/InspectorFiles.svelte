@@ -302,10 +302,7 @@
     {:else}
       <ul class="flex flex-col gap-1.5" data-testid="inspector-uploads-list">
         {#each uploads as upload (upload.id)}
-          <li
-            class="flex min-w-0 items-center gap-2 text-xs"
-            data-testid="inspector-uploads-row"
-          >
+          <li class="flex min-w-0 items-center gap-2 text-xs" data-testid="inspector-uploads-row">
             <span
               class="min-w-0 flex-1 truncate font-mono text-fg"
               title={upload.filename}

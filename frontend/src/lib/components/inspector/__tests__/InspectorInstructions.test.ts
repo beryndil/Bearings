@@ -300,5 +300,4 @@ describe("click-to-open modal behavior", () => {
     await fireEvent.click(screen.getByTestId("instructions-empty-session_instructions"));
     expect(screen.getByTestId("session-instr-edit-modal")).toBeInTheDocument();
   });
-
 });

@@ -161,8 +161,6 @@
   function handleSessionInstrEmptyClick(): void {
     openSessionInstrModal("");
   }
-
-
 </script>
 
 {#if showSessionInstrModal}
@@ -258,8 +256,7 @@
                 data-testid={`instructions-layer-path-${kind}-${i}`}
               >
                 {#if layer.source_path}
-                  <span class="text-fg-muted"
-                    >{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
+                  <span class="text-fg-muted">{INSPECTOR_STRINGS.instructionsLayerSourceLabel}</span
                   >
                   {layer.source_path}
                 {:else}

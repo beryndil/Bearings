@@ -101,11 +101,9 @@
         {CLAUDEMD_EDIT_STRINGS.pathLabel}
       </span>
       <div class="claudemd-edit-modal__path-row">
-        <span
-          class="claudemd-edit-modal__path"
-          title={path}
-          data-testid="claudemd-edit-path"
-        >{path}</span>
+        <span class="claudemd-edit-modal__path" title={path} data-testid="claudemd-edit-path"
+          >{path}</span
+        >
         <button
           type="button"
           class="claudemd-edit-modal__btn claudemd-edit-modal__btn--copy"

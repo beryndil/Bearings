@@ -143,7 +143,9 @@
     border: 1px solid rgb(var(--bearings-border));
     background: rgb(var(--bearings-surface-2));
     color: rgb(var(--bearings-fg-muted));
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background 0.1s,
+      color 0.1s;
   }
 
   .reply-action-strip__btn:hover:not(:disabled) {

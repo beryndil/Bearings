@@ -18,7 +18,12 @@
  */
 import { type ThemeId } from "../config";
 import { applyThemeToDom } from "./dom";
-import { loadStoredTheme, resolveBootTheme, saveStoredTheme, syncThemeToServer } from "./persistence";
+import {
+  loadStoredTheme,
+  resolveBootTheme,
+  saveStoredTheme,
+  syncThemeToServer,
+} from "./persistence";
 
 interface ThemeState {
   /**

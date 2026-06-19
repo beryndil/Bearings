@@ -553,9 +553,7 @@
       if (start > cursor) {
         parts.push(linkifyToHtml(body.slice(cursor, start)));
       }
-      parts.push(
-        `<span class="${ATTACHMENT_CHIP_CLASSES}">${_escapeHtml(token)}</span>`,
-      );
+      parts.push(`<span class="${ATTACHMENT_CHIP_CLASSES}">${_escapeHtml(token)}</span>`);
       cursor = start + token.length;
     }
     if (cursor < body.length) {
@@ -626,7 +624,7 @@
   tabindex="0"
   onclick={handleClick}
   onkeydown={(e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       toggleMessageId(turn.id);
     }

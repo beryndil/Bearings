@@ -275,10 +275,7 @@
     {:else}
       <ul class="flex flex-col gap-2" data-testid="inspector-changes-list">
         {#each changeRows as row (row.id)}
-          <li
-            class="flex min-w-0 flex-col gap-0.5 text-xs"
-            data-testid="inspector-changes-row"
-          >
+          <li class="flex min-w-0 flex-col gap-0.5 text-xs" data-testid="inspector-changes-row">
             <div class="flex min-w-0 items-baseline gap-2">
               <span
                 class="min-w-0 flex-1 truncate font-mono text-fg"
@@ -301,10 +298,7 @@
               </span>
             </div>
             {#if row.excerpt.length > 0}
-              <p
-                class="truncate font-mono text-fg-muted"
-                data-testid="inspector-changes-excerpt"
-              >
+              <p class="truncate font-mono text-fg-muted" data-testid="inspector-changes-excerpt">
                 {row.excerpt}
               </p>
             {/if}
@@ -346,10 +340,7 @@
     {:else}
       <ul class="flex flex-col gap-2" data-testid="inspector-reorg-list">
         {#each reorgAudits as audit (audit.id)}
-          <li
-            class="flex min-w-0 flex-col gap-0.5 text-xs"
-            data-testid="inspector-reorg-row"
-          >
+          <li class="flex min-w-0 flex-col gap-0.5 text-xs" data-testid="inspector-reorg-row">
             <div class="flex min-w-0 items-baseline gap-2">
               <span
                 class="shrink-0 rounded bg-surface-2 px-1.5 py-0.5 font-medium text-fg"
@@ -364,10 +355,7 @@
               >
                 {audit.src_title}
               </span>
-              <span
-                class="shrink-0 tabular-nums text-fg-muted"
-                data-testid="inspector-reorg-time"
-              >
+              <span class="shrink-0 tabular-nums text-fg-muted" data-testid="inspector-reorg-time">
                 {formatAbsolute(new Date(audit.merged_at).getTime())}
               </span>
             </div>
