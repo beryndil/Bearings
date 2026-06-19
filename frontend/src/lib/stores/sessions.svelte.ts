@@ -31,7 +31,7 @@
 import { untrack } from "svelte";
 import { listSessions, type SessionOut } from "../api/sessions";
 import type { TagOut } from "../api/tags";
-import { connectSessionsBroadcast } from "../api/wsSessions";
+import { connectSessionsBroadcast, type WorkflowRunState } from "../api/wsSessions";
 import { _applyTagDelete, _applyTagUpsert } from "./tags.svelte";
 
 interface SessionsState {
@@ -84,6 +84,18 @@ interface SessionsState {
    * without checking for null.
    */
   hasMore: boolean;
+  /**
+   * Per-session map of active background workflow runs.
+   *
+   * Keyed by ``WorkflowRunState.run_id``, grouped under ``session_id``.
+   * A ``workflow_progress`` event with a terminal ``status`` (completed,
+   * killed, error) keeps the run in the map for 8 seconds so the UI can
+   * briefly show the final state before the row indicator clears.
+   *
+   * Components derive the ``hasBackgroundWork`` indicator from this map:
+   * ``(activeWorkflows.get(sessionId) ?? []).some(r => r.status === 'running')``
+   */
+  activeWorkflows: Map<string, Map<string, WorkflowRunState>>;
 }
 
 const state: SessionsState = $state({
@@ -96,6 +108,7 @@ const state: SessionsState = $state({
   total: 0,
   nextOffset: null,
   hasMore: false,
+  activeWorkflows: new Map<string, Map<string, WorkflowRunState>>(),
 });
 
 export const sessionsStore = state;
@@ -164,6 +177,54 @@ function _applyDelete(sessionId: string): void {
   state.sessions = state.sessions.filter((s) => s.id !== sessionId);
 }
 
+/**
+ * Linger duration (ms) after a workflow reaches a terminal status before
+ * it is evicted from ``activeWorkflows``. Gives the sidebar indicator
+ * time to show the final state (killed / completed) before it clears.
+ */
+const _WORKFLOW_TERMINAL_LINGER_MS = 8_000;
+
+/**
+ * Apply a ``workflow_progress`` message from the sessions broadcaster.
+ *
+ * Inserts or updates the run entry in ``activeWorkflows`` under the
+ * workflow's ``session_id`` key.  When the status is terminal
+ * (``"completed" | "killed" | "error"``), schedules a removal after
+ * :data:`_WORKFLOW_TERMINAL_LINGER_MS` so the indicator briefly shows
+ * the final state before the session row goes back to idle.
+ *
+ * Map reassignment (``state.activeWorkflows = new Map(...)`` pattern)
+ * is required so Svelte's proxy detects the outer Map change and
+ * triggers a re-render on the session rows that read it.
+ */
+function _applyWorkflowProgress(run: WorkflowRunState): void {
+  const { session_id, run_id, status } = run;
+  const next = new Map(state.activeWorkflows);
+  const sessionRuns = new Map(next.get(session_id) ?? []);
+  sessionRuns.set(run_id, run);
+  next.set(session_id, sessionRuns);
+  state.activeWorkflows = next;
+
+  // Schedule removal of terminal runs after a brief linger so the indicator
+  // shows the completed/killed badge for a moment before clearing.
+  if (status === "completed" || status === "killed" || status === "error") {
+    setTimeout(() => {
+      const cur = new Map(state.activeWorkflows);
+      const sessionMap = cur.get(session_id);
+      if (sessionMap) {
+        const updated = new Map(sessionMap);
+        updated.delete(run_id);
+        if (updated.size === 0) {
+          cur.delete(session_id);
+        } else {
+          cur.set(session_id, updated);
+        }
+        state.activeWorkflows = cur;
+      }
+    }, _WORKFLOW_TERMINAL_LINGER_MS);
+  }
+}
+
 // Start the broadcast subscription immediately when the module loads.
 // ``connectSessionsBroadcast`` auto-reconnects so the subscription
 // survives server restarts.  The returned ``Unsubscribe`` is not
@@ -216,6 +277,8 @@ connectSessionsBroadcast(
         _applyTagUpsert(event.tag);
       } else if (event.type === "tag_delete") {
         _applyTagDelete(event.tag_id);
+      } else if (event.type === "workflow_progress") {
+        _applyWorkflowProgress(event);
       }
     });
   },
@@ -445,35 +508,65 @@ function isAbortError(error: unknown): boolean {
 // ---- Activity indicator (gap-cycle-08-001) ---------------------------------
 
 /**
- * The four visible states of the per-row activity indicator pip.
- * Priority order: ``"red"`` > ``"orange"`` > ``"green"`` > ``null``.
+ * The five visible states of the per-row activity indicator pip.
+ * Priority order: ``"red"`` > ``"orange"`` > ``"amber"`` > ``"green"`` > ``null``.
+ *
+ * ``"amber"`` is new in this release — it signals that the session has
+ * one or more background workflows in flight but the agent itself is
+ * between turns (idle runner). It sits below ``"orange"`` (active turn)
+ * and above ``"green"`` (unviewed output) in priority so it does not
+ * suppress error / active-turn signals.
  */
-export type IndicatorState = "red" | "orange" | "green" | null;
+export type IndicatorState = "red" | "orange" | "amber" | "green" | null;
 
 /**
- * Pure helper: resolve the activity indicator state from the four
+ * Pure helper: resolve the activity indicator state from the five
  * boolean inputs that drive the sidebar pip.
  *
  * Priority rules (first match wins):
- * 1. ``"red"``    — agent awaiting user input OR ``error_pending`` latched.
+ * 1. ``"red"``   — agent awaiting user input OR ``error_pending`` latched.
  * 2. ``"orange"`` — agent turn is running (not parked on a question).
- * 3. ``"green"``  — unviewed output (``last_completed_at > last_viewed_at``
+ * 3. ``"amber"``  — background workflow in flight (runner between turns).
+ * 4. ``"green"``  — unviewed output (``last_completed_at > last_viewed_at``
  *                   and the row is not the currently-selected session).
- * 4. ``null``     — idle and caught up.
+ * 5. ``null``     — idle and caught up.
  *
  * The function is exported for direct unit-test coverage; the
  * ``SessionRow`` component derives its state by calling it with values
- * read from ``sessionsStore.running``, ``sessionsStore.awaiting``, and
- * the session row's own fields.
+ * read from ``sessionsStore.running``, ``sessionsStore.awaiting``,
+ * ``sessionsStore.activeWorkflows``, and the session row's own fields.
  */
 export function indicatorState(params: {
   errorPending: boolean;
   awaiting: boolean;
   running: boolean;
+  backgroundWork: boolean;
   unviewed: boolean;
 }): IndicatorState {
   if (params.errorPending || params.awaiting) return "red";
   if (params.running) return "orange";
+  if (params.backgroundWork) return "amber";
   if (params.unviewed) return "green";
   return null;
+}
+
+/**
+ * Derive the ``backgroundWork`` flag for ``indicatorState`` from the
+ * ``activeWorkflows`` map for a given session id.
+ *
+ * Returns ``true`` when the session has at least one workflow run whose
+ * ``status`` is ``"running"``.  Terminal runs (completed / killed /
+ * error) that are still in the map during their linger window are
+ * excluded so the amber pip only shows while work is genuinely in flight.
+ */
+export function hasActiveWorkflows(
+  activeWorkflows: Map<string, Map<string, WorkflowRunState>>,
+  sessionId: string,
+): boolean {
+  const runs = activeWorkflows.get(sessionId);
+  if (!runs || runs.size === 0) return false;
+  for (const run of runs.values()) {
+    if (run.status === "running") return true;
+  }
+  return false;
 }

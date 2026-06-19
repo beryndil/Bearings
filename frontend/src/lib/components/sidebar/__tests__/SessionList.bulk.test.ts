@@ -60,6 +60,7 @@ const fakeStores = (sessions: readonly SessionOut[]) => ({
     total: sessions.length,
     nextOffset: null as number | null,
     hasMore: false,
+    activeWorkflows: new Map(),
   },
   tagsStore: {
     all: [] as never[],

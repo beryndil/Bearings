@@ -1016,6 +1016,7 @@ export const SIDEBAR_STRINGS = {
   /** Activity pip — per-row state descriptions (gap-cycle-08-001). */
   activityPipRedAriaLabel: "Awaiting your input",
   activityPipOrangeAriaLabel: "Agent running",
+  activityPipAmberAriaLabel: "Background workflow in progress",
   activityPipGreenAriaLabel: "New output — unviewed",
   closedGroupLabel: "Closed",
   closedToggleExpandLabel: (count: number) => `Closed (${count})`,

@@ -27,6 +27,8 @@ References:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import re
 import time
@@ -44,6 +46,7 @@ from bearings.agent.quota import QuotaPoller
 from bearings.agent.runner import RunnerFactory
 from bearings.agent.session_bootstrap import build_session_setup
 from bearings.agent.turn_driver import build_turn_driver
+from bearings.agent.workflow_watcher import WorkflowWatcher
 from bearings.config.constants import (
     DEFAULT_BILLING_MODE,
     OPENAPI_DESCRIPTION,
@@ -378,8 +381,19 @@ def create_app(
             quota_poller.start()
         if isinstance(factory, InProcessRunnerRegistry):
             factory.start_reaper()
+        # Background workflow file watcher — fans workflow_progress events
+        # to all /ws/sessions subscribers so the sidebar indicator and
+        # in-session progress panel stay current while workflows run.
+        watcher = WorkflowWatcher(sessions_broadcaster)
+        watcher_task = asyncio.create_task(
+            watcher.run(),
+            name="workflow-watcher",
+        )
         yield
         # Shutdown
+        watcher_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await watcher_task
         if quota_poller is not None:
             await quota_poller.stop()
         if isinstance(factory, InProcessRunnerRegistry):

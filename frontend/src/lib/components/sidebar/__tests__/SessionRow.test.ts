@@ -653,49 +653,121 @@ describe("indicatorState helper", () => {
 
   it("returns null when all inputs are false (idle and caught up)", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: false, running: false, unviewed: false }),
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: false,
+        backgroundWork: false,
+        unviewed: false,
+      }),
     ).toBe(null);
   });
 
   it("returns green when only unviewed is true", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: false, running: false, unviewed: true }),
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: false,
+        backgroundWork: false,
+        unviewed: true,
+      }),
     ).toBe("green");
+  });
+
+  it("returns amber when only backgroundWork is true", () => {
+    expect(
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: false,
+        backgroundWork: true,
+        unviewed: false,
+      }),
+    ).toBe("amber");
+  });
+
+  it("returns amber (backgroundWork) even when unviewed is also true — backgroundWork wins", () => {
+    expect(
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: false,
+        backgroundWork: true,
+        unviewed: true,
+      }),
+    ).toBe("amber");
   });
 
   it("returns orange when only running is true", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: false, running: true, unviewed: false }),
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: true,
+        backgroundWork: false,
+        unviewed: false,
+      }),
     ).toBe("orange");
   });
 
-  it("returns orange (running) even when unviewed is also true — running wins", () => {
+  it("returns orange (running) even when backgroundWork and unviewed are also true — running wins", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: false, running: true, unviewed: true }),
+      indicatorState({
+        errorPending: false,
+        awaiting: false,
+        running: true,
+        backgroundWork: true,
+        unviewed: true,
+      }),
     ).toBe("orange");
   });
 
   it("returns red when awaiting is true", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: true, running: false, unviewed: false }),
+      indicatorState({
+        errorPending: false,
+        awaiting: true,
+        running: false,
+        backgroundWork: false,
+        unviewed: false,
+      }),
     ).toBe("red");
   });
 
   it("returns red when errorPending is true", () => {
     expect(
-      indicatorState({ errorPending: true, awaiting: false, running: false, unviewed: false }),
+      indicatorState({
+        errorPending: true,
+        awaiting: false,
+        running: false,
+        backgroundWork: false,
+        unviewed: false,
+      }),
     ).toBe("red");
   });
 
   it("returns red (awaiting) even when running is also true — awaiting wins", () => {
     expect(
-      indicatorState({ errorPending: false, awaiting: true, running: true, unviewed: false }),
+      indicatorState({
+        errorPending: false,
+        awaiting: true,
+        running: true,
+        backgroundWork: false,
+        unviewed: false,
+      }),
     ).toBe("red");
   });
 
   it("returns red (errorPending) even when all other inputs are also true — red wins all", () => {
     expect(
-      indicatorState({ errorPending: true, awaiting: true, running: true, unviewed: true }),
+      indicatorState({
+        errorPending: true,
+        awaiting: true,
+        running: true,
+        backgroundWork: true,
+        unviewed: true,
+      }),
     ).toBe("red");
   });
 });

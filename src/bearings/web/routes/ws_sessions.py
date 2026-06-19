@@ -69,6 +69,7 @@ from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
 from bearings.agent.runner import RunnerStatus
+from bearings.agent.workflow_watcher import WorkflowState
 from bearings.config.constants import SESSIONS_BROADCAST_QUEUE_MAX, STREAM_HEARTBEAT_INTERVAL_S
 from bearings.web.models.sessions import SessionOut
 from bearings.web.models.tags import TagOut
@@ -84,6 +85,7 @@ _MSG_SESSION_DELETE: Final[str] = "session_delete"
 _MSG_RUNNER_STATE: Final[str] = "runner_state"
 _MSG_TAG_UPSERT: Final[str] = "tag_upsert"
 _MSG_TAG_DELETE: Final[str] = "tag_delete"
+_MSG_WORKFLOW_PROGRESS: Final[str] = "workflow_progress"
 
 # WS close code used when a subscriber queue overflows (4000 = application-
 # defined; means "dropped for slow consumption").
@@ -208,6 +210,36 @@ class SessionsBroadcaster:
         """
         frame = json.dumps(
             {"type": _MSG_TAG_DELETE, "tag_id": tag_id},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        self._fan_out(frame)
+
+    def publish_workflow_progress(self, state: WorkflowState) -> None:
+        """Fan out a ``workflow_progress`` frame for a background workflow run.
+
+        Called by the :class:`bearings.agent.workflow_watcher.WorkflowWatcher`
+        polling task when it detects a new or updated workflow journal.
+        Carries enough information for the sidebar indicator (is the
+        session busy?) and the in-session progress panel (phase, counts).
+
+        The ``session_id`` in the frame is the Bearings session id
+        (``ses_<32hex>``) derived from the SDK UUID encoded in the
+        workflow journal's filesystem path.
+        """
+        frame = json.dumps(
+            {
+                "type": _MSG_WORKFLOW_PROGRESS,
+                "session_id": state.session_id,
+                "run_id": state.run_id,
+                "workflow_name": state.workflow_name,
+                "status": state.status,
+                "current_phase": state.current_phase,
+                "agents_running": state.agents_running,
+                "agents_done": state.agents_done,
+                "agents_queued": state.agents_queued,
+                "started_at": state.started_at,
+            },
             ensure_ascii=False,
             separators=(",", ":"),
         )

@@ -19,8 +19,37 @@ import { WS_SESSIONS_PATH } from "../config";
 import type { TagOut } from "./tags";
 import type { SessionOut } from "./sessions";
 
+/**
+ * Live snapshot of one background workflow run.
+ *
+ * Emitted by the server's ``workflow_watcher`` polling task every
+ * :data:`WORKFLOW_POLL_INTERVAL_S` seconds while the workflow journal
+ * file exists and changes. The final event carries ``status`` set to
+ * ``"completed"``, ``"killed"``, or ``"error"``.
+ */
+export interface WorkflowRunState {
+  /** Bearings session id that owns this workflow run. */
+  session_id: string;
+  /** Harness run id — e.g. ``"wf_99657639-dbc"``. */
+  run_id: string;
+  /** Human-readable workflow name from the script's ``meta.name``. */
+  workflow_name: string;
+  /** Current lifecycle status: ``"running" | "completed" | "killed" | "error"``. */
+  status: string;
+  /** Title of the most recently started phase, or ``null`` before the first phase. */
+  current_phase: string | null;
+  /** Number of agents currently executing. */
+  agents_running: number;
+  /** Number of agents that have finished. */
+  agents_done: number;
+  /** Number of agents waiting to start. */
+  agents_queued: number;
+  /** Unix epoch in milliseconds when the workflow started. */
+  started_at: number;
+}
+
 /** Union of all message types the sessions-broadcast channel emits. */
-type SessionsBroadcastEvent =
+export type SessionsBroadcastEvent =
   | { type: "session_upsert"; session: SessionOut }
   | { type: "session_delete"; session_id: string }
   | {
@@ -31,7 +60,8 @@ type SessionsBroadcastEvent =
       is_error: boolean;
     }
   | { type: "tag_upsert"; tag: TagOut }
-  | { type: "tag_delete"; tag_id: number };
+  | { type: "tag_delete"; tag_id: number }
+  | ({ type: "workflow_progress" } & WorkflowRunState);
 
 type SessionsBroadcastHandler = (event: SessionsBroadcastEvent) => void;
 
@@ -205,6 +235,37 @@ function _parseFrame(text: string): SessionsBroadcastEvent | null {
       return null;
     }
     return { type: "tag_delete", tag_id };
+  }
+  if (type === "workflow_progress") {
+    const session_id = obj.session_id;
+    const run_id = obj.run_id;
+    const workflow_name = obj.workflow_name;
+    const status = obj.status;
+    if (
+      typeof session_id !== "string" ||
+      typeof run_id !== "string" ||
+      typeof workflow_name !== "string" ||
+      typeof status !== "string"
+    ) {
+      return null;
+    }
+    const current_phase = typeof obj.current_phase === "string" ? obj.current_phase : null;
+    const agents_running = typeof obj.agents_running === "number" ? obj.agents_running : 0;
+    const agents_done = typeof obj.agents_done === "number" ? obj.agents_done : 0;
+    const agents_queued = typeof obj.agents_queued === "number" ? obj.agents_queued : 0;
+    const started_at = typeof obj.started_at === "number" ? obj.started_at : 0;
+    return {
+      type: "workflow_progress",
+      session_id,
+      run_id,
+      workflow_name,
+      status,
+      current_phase,
+      agents_running,
+      agents_done,
+      agents_queued,
+      started_at,
+    };
   }
   return null;
 }

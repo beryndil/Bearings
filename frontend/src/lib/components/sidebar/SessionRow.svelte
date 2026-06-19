@@ -87,6 +87,7 @@
   import { shellOpenInTerminal } from "../../api/shell";
   import { showShellOpError } from "../../stores/shellOpNotification.svelte";
   import {
+    hasActiveWorkflows,
     indicatorState,
     refreshSessions,
     sessionsStore,
@@ -245,6 +246,7 @@
       errorPending: session.error_pending,
       awaiting: sessionsStore.awaiting.has(session.id),
       running: sessionsStore.running.has(session.id),
+      backgroundWork: hasActiveWorkflows(sessionsStore.activeWorkflows, session.id),
       unviewed:
         !isSelected &&
         session.last_completed_at !== null &&
@@ -717,11 +719,12 @@
         data-testid="session-kind-indicator"
       ></span>
       <!--
-        Activity pip (gap-cycle-08-001): unified four-state indicator
+        Activity pip (gap-cycle-08-001): unified five-state indicator
         rendered to the left of the title. Red and orange states animate
-        with a ping to draw the eye; green is solid. The pip is absent
-        when the row is idle and caught up (activityIndicator === null).
-        Priority: red > orange > green > null.
+        with a ping to draw the eye; amber (background workflow) pulses
+        slowly; green is solid. The pip is absent when the row is idle
+        and caught up (activityIndicator === null).
+        Priority: red > orange > amber > green > null.
       -->
       {#if activityIndicator === "red"}
         <span
@@ -746,6 +749,26 @@
             class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"
           ></span>
           <span class="relative inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
+        </span>
+      {:else if activityIndicator === "amber"}
+        <!--
+          Slow-pulse yellow dot: background workflow in flight. The
+          ``animate-pulse`` class uses a 2-second ease-in-out cycle (vs
+          ``animate-ping``'s fast radial expand) so it reads as "busy
+          but not urgent" — distinct from the agent-running ping. Clears
+          automatically when all running workflow runs reach a terminal
+          state and linger out of the ``activeWorkflows`` map.
+        -->
+        <span
+          class="relative flex h-2.5 w-2.5 flex-shrink-0 items-center justify-center"
+          aria-label={SIDEBAR_STRINGS.activityPipAmberAriaLabel}
+          data-testid="session-activity-pip"
+          data-pip-state="amber"
+        >
+          <span
+            class="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-60"
+          ></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-yellow-500"></span>
         </span>
       {:else if activityIndicator === "green"}
         <!--

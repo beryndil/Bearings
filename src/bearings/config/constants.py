@@ -816,6 +816,14 @@ IDLE_REAP_THRESHOLD_S: Final[int] = 600
 # value via the constants-module monkey-patch fixture.
 IDLE_REAP_POLL_INTERVAL_S: Final[int] = 60
 
+# Poll cadence for the background workflow file watcher. Every
+# ``WORKFLOW_POLL_INTERVAL_S`` seconds the watcher scans
+# ``~/.claude/projects/*/*/workflows/wf_*.json`` for new or modified
+# workflow journals and fans progress events to the sessions broadcaster
+# so the sidebar indicator and in-session view stay current.
+# 2.0 s gives sub-4-second latency (two ticks) for kill/complete events.
+WORKFLOW_POLL_INTERVAL_S: Final[float] = 2.0
+
 # ---------------------------------------------------------------------------
 
 # Server name on ``ClaudeAgentOptions.mcp_servers``. Agents reference
@@ -1930,6 +1938,7 @@ __all__ = [
     "VAULT_SEARCH_MAX_LINES_PER_DOC",
     "VAULT_SEARCH_RESULT_CAP",
     "VAULT_SEARCH_SNIPPET_MAX_CHARS",
+    "WORKFLOW_POLL_INTERVAL_S",
     "WS_CLOSE_INVALID_SESSION_ID",
     "WS_IDLE_PING_INTERVAL",
     "WS_IDLE_PING_INTERVAL_S",
