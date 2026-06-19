@@ -828,7 +828,7 @@ for current option-shape and method names.
 | 15 | **`task_budget={"total": N}`** | Not used. v0.17.x has `max_budget_usd`. | Kept: `max_budget_usd` is the user-facing cap (dollars on PAYG, cosmetic on subscription). `task_budget` is a token-count cap; on subscription auth it's not what the user thinks about (they think in quota %, which the quota-guard handles per spec §4). Out of v0.18.0 scope. | n/a |
 | 16 | **`extra_args={...}` CLI passthrough** | Not used. | Out of v0.18.0 scope. | n/a |
 
-The rebuild runs against the SDK pin in CLAUDE.md (`claude-agent-sdk~=0.1.69`,
+The rebuild runs against the SDK pin in CLAUDE.md (`claude-agent-sdk~=0.2.88`,
 compatible-release). When the SDK ships a new minor that adds an
 explicit `auto` effort literal or moves the advisor beta to GA-without-
 header, this audit gets re-walked and `config/constants.py` absorbs the
@@ -898,7 +898,7 @@ not lazy ones.
 
 | Kept | Why |
 |---|---|
-| `claude-agent-sdk~=0.1.69` compatible-release pin | Already chosen by CLAUDE.md; SDK currency audit confirms the surface used is current. |
+| `claude-agent-sdk~=0.2.88` compatible-release pin | Already chosen by CLAUDE.md; SDK currency audit confirms the surface used is current. |
 | Pydantic for wire shapes | Stable, mypy-strict friendly, integrates with FastAPI. |
 | `aiosqlite` for the DB | Single-writer SQLite + WAL is the right choice for a localhost tool. |
 | `RunnerRegistry` keyed by session id with idle-reap | Decouples session lifecycle from WS lifecycle. The pattern is correct; only the constructor's `RunnerFactory` injection is new. |

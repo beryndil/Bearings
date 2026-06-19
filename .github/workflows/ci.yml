@@ -15,6 +15,10 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - v1-rebuild
+  pull_request:
   workflow_dispatch:
 
 concurrency:

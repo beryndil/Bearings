@@ -112,7 +112,7 @@ The doc set has a single front door — start there:
 
 * Branch: `v1-rebuild` (orphan history). Pre-commit `branch-verifier`
   hook rejects commits to any other branch.
-* SDK pin: `claude-agent-sdk~=0.1.69` (compatible-release).
+* SDK pin: `claude-agent-sdk~=0.2.88` (compatible-release).
 * Python: ≥ 3.12. Type-checking: `mypy --strict`, no `Any`.
 * Versioning: SemVer 2.0.0; `1.0.0` reserved for stability commitment
   after dogfood.

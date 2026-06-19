@@ -243,22 +243,17 @@ picker write the OS-fallback resolution into localStorage on first
 boot so the choice surfaces in the UI. Probably (b) — keeps OS-aware
 defaulting, removes the silent flip.
 
-### Daily-probe `/api/usage/headroom` endpoint swap — 2026-05-01
+### ~~Daily-probe `/api/usage/headroom` endpoint swap — 2026-05-01~~
 
-Master item B.1 (daily probe script) names `/api/usage/headroom` in
-its done-when criteria. That endpoint does not exist in v1's route
-surface (verified against the live `/openapi.json` — only
-`/api/usage/by_model`, `/api/usage/by_tag`, `/api/usage/override_rates`
-are present). The probe instead hits `/api/quota/current` +
-`/api/quota/history` to cover the headroom-conceptual surface (the
-inspector's 7-day headroom chart already reads from those).
+_Resolved in v1.3.0, commit f7fb38cb. The `/api/usage/headroom` endpoint
+never materialized; `quota/*` is the permanent headroom surface. No swap
+needed._
 
-**Action when a literal `headroom` endpoint lands** (if ever — the
-data surface is fully covered by `quota/*` today, so this may be a
-permanent rename rather than a missing route): swap the
-`quota_current` / `quota_history` rows in `scripts/daily_probe.py`
-`PROBES` for one `headroom` row pointing at the new path, drop this
-TODO entry, cite the resolving commit.
+_Residual (non-blocking): `scripts/daily_probe.py:116-122` adds a
+`usage_headroom` probe **alongside** the existing `quota_current` /
+`quota_history` rows rather than swapping them. The data surface is fully
+covered; this is a cosmetic divergence from the original "swap" intent. No
+action needed unless a literal `headroom` endpoint is introduced._
 
 
 

@@ -27,7 +27,7 @@ files; coding standards alone for everything else.
 
 ## Architecture at a glance
 
-Backend (`src/bearings/`) is eight single-responsibility packages — no
+Backend (`src/bearings/`) is seven single-responsibility packages — no
 god-store, no `__init__.py` re-export wall:
 
 | Package | Responsibility |
@@ -39,7 +39,6 @@ god-store, no `__init__.py` re-export wall:
 | `web/` | FastAPI app + `routes/` + `models/` (Pydantic) + WebSocket streaming + static-bundle serve. `app.py:create_app()` is the OpenAPI source of truth. |
 | `bearings_dir/` | `~/.local/share/bearings-v1/` filesystem layout (uploads, artifacts, vault, history.jsonl, pending.toml). |
 | `metrics/` | Prometheus exposition for `GET /metrics`. |
-| `migrations/` | One-shot v0.17.x → v0.18.0 cutover (driven by `scripts/migrate_v0_17_to_v0_18.py`). |
 
 Frontend (`frontend/`) is SvelteKit on Svelte 5 + Vite + Tailwind +
 TypeScript. The static build output is committed under
@@ -83,7 +82,7 @@ complete before the callback POST. Never push — Exec-6 does the single push.
 * Branch: `v1-rebuild` (orphan history). Pre-commit `branch-verifier`
   hook rejects commits to any other branch.
 * Worktree: `/home/beryndil/Projects/Bearings-v1/`.
-* SDK: `claude-agent-sdk~=0.1.69` (compatible-release pin).
+* SDK: `claude-agent-sdk~=0.2.88` (compatible-release pin).
 * Python: ≥ 3.12. Type-checking: `mypy --strict`, no `Any` (carve-outs
   for Pydantic metaclass surface only, declared with explicit
   `# mypy: disable-error-code=explicit-any` per file).
@@ -124,11 +123,15 @@ uv run pre-commit run --all-files
 CI runs the same gates plus `systemd-analyze verify` on the unit and
 `lychee` on every markdown file. See `.github/workflows/ci.yml`.
 
-The 11-tool stack is wired through `.pre-commit-config.yaml`:
+The hook stack (19 hook IDs across 14 functional tools) is wired through
+`.pre-commit-config.yaml`:
 
-* **Backend (8):** ruff (lint + format), mypy `--strict`, pytest,
-  vulture, radon (cyclomatic complexity ≤ 10), interrogate (docstring
+* **Branch guard (1):** branch-verifier — rejects commits outside `v1-rebuild`.
+* **Backend (9):** ruff (lint + format), mypy `--strict`, pytest,
+  vulture, xenon (cyclomatic complexity ≤ 10), interrogate (docstring
   coverage ≥ 80 %), codespell, pip-audit `--strict`.
+* **Drift checks (3):** regen-openapi, schema-drift, version-alignment
+  (feature-13-001/002/003).
 * **Frontend (5):** eslint, prettier `--check`, svelte-check, knip,
   depcheck. Gated on frontend file changes + the presence of
   `frontend/node_modules/`. (ts-prune dropped — EOL, TS 5.x-incompatible;

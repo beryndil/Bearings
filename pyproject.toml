@@ -11,7 +11,7 @@ dependencies = [
     # Pinned to compatible-release of the SDK current as of 2026-06-03.
     # Compatible-release allows 0.2.x patch updates but not 0.3+ surface changes.
     "claude-agent-sdk~=0.2.88",
-    # Web framework + ASGI server for the localhost UI backend (port 8788).
+    # Web framework + ASGI server for the localhost UI backend (port 8787).
     "fastapi~=0.115",
     "uvicorn[standard]~=0.32",
     # Async SQLite driver for the consolidated DB (item 0.4 will define schema).

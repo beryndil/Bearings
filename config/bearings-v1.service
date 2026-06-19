@@ -7,10 +7,8 @@
 #     systemctl --user daemon-reload
 #     systemctl --user enable --now bearings-v1.service
 #
-# Concurrent run with v0.17.x:
-#   * v0.17.x lives at /home/beryndil/Projects/Bearings, port 8787,
-#     DB ~/.local/share/bearings/, unit `bearings.service`.
-#   * v1 (this unit) lives at /home/beryndil/Projects/Bearings-v1, port 8788,
+# v0.17.x retired 2026-06-02. v1 is the sole primary instance:
+#   * v1 (this unit) lives at /home/beryndil/Projects/active/bearings, port 8787,
 #     DB ~/.local/share/bearings-v1/, unit `bearings-v1.service`.
 #
 # 2026-05-04 — G1 gap-fill: ExecStart now calls `bearings serve` via the
@@ -33,11 +31,11 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/beryndil/Projects/Bearings-v1
+WorkingDirectory=/home/beryndil/Projects/active/bearings
 # Bind explicitly to localhost — Bearings is single-user / localhost only
 # per the project CLAUDE.md. Uses the project venv directly (faster
 # restart than `uv run`) since deps are already resolved.
-ExecStart=/home/beryndil/Projects/Bearings-v1/.venv/bin/bearings serve --host 127.0.0.1 --port 8788
+ExecStart=/home/beryndil/Projects/active/bearings/.venv/bin/bearings serve --host 127.0.0.1 --port 8787
 Restart=on-failure
 RestartSec=2s
 
