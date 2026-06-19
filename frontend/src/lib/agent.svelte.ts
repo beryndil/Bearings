@@ -102,6 +102,7 @@ function openSocket(sessionId: string): void {
   };
   active = conn;
   socket.addEventListener("message", (event) => {
+    if (active !== conn) return;
     if (typeof event.data !== "string") {
       return;
     }
@@ -118,6 +119,7 @@ function openSocket(sessionId: string): void {
     }
   });
   socket.addEventListener("open", () => {
+    if (active !== conn) return;
     if (pendingErrorHandle !== null) {
       clearTimeout(pendingErrorHandle);
       pendingErrorHandle = null;
