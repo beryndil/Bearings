@@ -644,7 +644,7 @@
     Two pill buttons: "Last action" (default) and "Grouped".
   -->
   <div
-    class="session-list__sort-bar"
+    class="session-list__sort-bar shrink-0"
     role="group"
     aria-label={SIDEBAR_STRINGS.sortControlAriaLabel}
     data-testid="session-list-sort-bar"
@@ -705,7 +705,7 @@
   {/if}
 
   <nav
-    class="flex-1 overflow-y-auto"
+    class="flex-1 min-h-[100px] overflow-y-auto"
     aria-label={SIDEBAR_STRINGS.sessionsLabel}
     data-testid="session-list-body"
   >

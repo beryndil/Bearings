@@ -170,7 +170,7 @@
 {/if}
 
 <section
-  class="tag-filter border-b border-border px-3 py-2"
+  class="tag-filter border-b border-border px-3 py-2 min-h-0 overflow-y-auto"
   data-testid="tag-filter-panel"
   aria-label={SIDEBAR_STRINGS.tagFilterLabel}
 >
