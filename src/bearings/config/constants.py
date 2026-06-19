@@ -1067,6 +1067,12 @@ BEARINGS_TODO_WALK_MAX_DEPTH: Final[int] = 8
 # import time so downstream code never re-expands ``~``.
 GLOBAL_CLAUDE_CODE_DIR: Final[Path] = Path("~/.claude").expanduser()
 
+# Claude Code CLI binary installed by the user (``~/.local/bin/claude``).
+# Used by the quota fetcher to run ``claude -p /usage --output-format json``
+# as a subprocess.  Resolved at import time so downstream code never
+# re-expands ``~``.
+CLAUDE_CODE_BINARY: Final[Path] = Path("~/.local/bin/claude").expanduser()
+
 # Global user-level CLAUDE.md loaded by Claude Code for every session,
 # regardless of working directory (``~/.claude/CLAUDE.md``). Surfaced
 # as a ``user_claude_md`` layer in the Inspector Instructions tab.
@@ -1714,6 +1720,7 @@ __all__ = [
     "CHECKLIST_ITEM_NOTES_MAX_LENGTH",
     "CHECKLIST_SORT_ORDER_STEP",
     "CHECKPOINT_LABEL_MAX_LENGTH",
+    "CLAUDE_CODE_BINARY",
     "CLI_EXIT_OK",
     "CLI_EXIT_OPERATION_FAILURE",
     "CLI_EXIT_USAGE_ERROR",

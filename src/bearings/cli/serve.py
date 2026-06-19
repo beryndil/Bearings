@@ -16,16 +16,21 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import logging
 from pathlib import Path
 
 import aiosqlite
 import uvicorn
 
-from bearings.agent.quota import QuotaPoller, build_noop_fetcher
-from bearings.config.constants import CLI_EXIT_OK, DEFAULT_AVATARS_STORAGE_ROOT
+import bearings.web.routes.reply_actions as _reply_actions_mod
+from bearings.agent.quota import QuotaPoller, build_noop_fetcher, build_real_fetcher
+from bearings.agent.reply_transform import build_run_transform
+from bearings.config.constants import CLAUDE_CODE_BINARY, CLI_EXIT_OK, DEFAULT_AVATARS_STORAGE_ROOT
 from bearings.config.settings import Settings
 from bearings.db.connection import ensure_severity_tags, load_schema
 from bearings.web.app import create_app
+
+_LOG = logging.getLogger(__name__)
 
 
 def build_subparser(parent: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -75,13 +80,33 @@ def _run(args: argparse.Namespace) -> int:
     """
     settings = Settings()
     db = asyncio.run(_connect_db(settings.db_path))
-    # Instantiate the quota poller with the noop fetcher (spec §4).
-    # The poller's start() is called in the FastAPI startup event wired
-    # inside create_app(); stop() runs on shutdown. The noop fetcher
-    # returns empty snapshots (both bucket pcts None) so the guard
-    # fails open per spec §4 — correct behaviour until a real
-    # upstream /usage endpoint is wired in a future item.
-    poller = QuotaPoller(connection=db, fetcher=build_noop_fetcher())
+
+    # Wire the real quota fetcher when the Claude Code binary is present;
+    # fall back to the noop fetcher (fail-open, both bucket pcts None) when
+    # the binary is absent so the server still boots on machines where
+    # Claude Code is not installed.  The noop fetcher is the explicit,
+    # named fallback per spec §4 — NOT the default.
+    if CLAUDE_CODE_BINARY.exists():
+        fetcher = build_real_fetcher()
+        _LOG.info("serve: quota poller using real fetcher (claude binary: %s)", CLAUDE_CODE_BINARY)
+    else:
+        fetcher = build_noop_fetcher()
+        _LOG.warning(
+            "serve: claude binary not found at %s; quota poller using noop fetcher "
+            "(guard will fail-open — no downgrade decisions)",
+            CLAUDE_CODE_BINARY,
+        )
+
+    # Wire the real LLM advisor callable for reply-action transformations.
+    # The module-level ``run_transform`` in reply_actions defaults to
+    # _stub_run_transform (raises NotImplementedError); we replace it here
+    # at startup so production POST /api/sessions/{id}/reply_actions calls
+    # the real Claude API.  Tests monkeypatch the module attribute directly
+    # and are unaffected by this assignment.
+    _reply_actions_mod.run_transform = build_run_transform()
+    _LOG.info("serve: reply_actions.run_transform wired to real LLM callable")
+
+    poller = QuotaPoller(connection=db, fetcher=fetcher)
     app = create_app(
         db_connection=db,
         quota_poller=poller,

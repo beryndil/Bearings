@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from bearings.config.constants import REPLY_ACTION_ID_MAX_LENGTH
+from bearings.db import messages as messages_db
 from bearings.db import sessions as sessions_db
 from bearings.web.routes._deps import _db
 
@@ -218,12 +219,21 @@ async def run_reply_action(
             detail=f"Advisor call failed: {exc}",
         ) from exc
 
-    # Optional follow-up insertion (future: insert via messages_db).
-    # Marked as decided-and-documented: insertion is a no-op in v1 because
-    # the messages table requires a session runner context to stay consistent
-    # with the WS broadcast.  The ``inserted`` flag is returned for
-    # API-surface stability; Exec-2B may wire the real insertion.
+    # Optional follow-up insertion: insert the transformed content as a
+    # system-role message on the session so it appears in the transcript.
+    # The WS event stream for connected clients refreshes on next
+    # reconnect; this is acceptable for an explicit user-triggered action.
     inserted = False
+    if body.insert_follow_up:
+        try:
+            await messages_db.insert_system(db, session_id=session_id, content=result)
+            inserted = True
+        except Exception as exc:
+            _LOG.warning(
+                "reply_action insert_follow_up failed session=%s: %s",
+                session_id,
+                exc,
+            )
 
     return ApplyActionOut(
         content=result,

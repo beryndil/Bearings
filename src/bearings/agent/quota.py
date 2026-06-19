@@ -514,6 +514,111 @@ def build_noop_fetcher() -> QuotaFetcher:
     return _fetch
 
 
+def build_real_fetcher() -> QuotaFetcher:
+    """Production fetcher: queries ``claude /usage`` and parses the result.
+
+    Invokes the Claude Code CLI binary at
+    :data:`bearings.config.constants.CLAUDE_CODE_BINARY` with the
+    ``/usage`` slash command and ``--output-format json``, then parses
+    the text ``result`` field to extract the two quota-bucket
+    percentages the spec §4 guard needs.
+
+    Parsed fields (spec §4 "The two buckets"):
+
+    * ``overall_used_pct`` — from "Current session: X% used" (the
+      5-hour cross-model bucket, the one that throttles first).
+    * ``sonnet_used_pct`` — from "Current week (Sonnet only): X% used"
+      (the 7-day Sonnet-only bucket).
+
+    Both values are stored as fractions (0.0-1.0).  When a line is
+    absent or unparseable the corresponding field is ``None`` — the
+    guard treats ``None`` as "no information" and fails open (spec §4).
+
+    The ``raw_payload`` carries a JSON dict with keys:
+
+    * ``source``: ``"claude_usage"``
+    * ``text``: the full ``/usage`` result string for forward
+      compatibility (future parsers can re-parse without re-polling).
+
+    Errors (timeout, binary not found, JSON decode failure) are raised
+    as :class:`ConnectionError`, :class:`TimeoutError`, or
+    :class:`RuntimeError` so :meth:`QuotaPoller.refresh` catches them
+    and logs a warning rather than crashing the server.
+
+    Call :func:`build_noop_fetcher` explicitly when the binary is known
+    to be absent — see :func:`bearings.cli.serve._run` for the startup
+    fallback.
+    """
+    import asyncio as _asyncio
+    import re as _re
+
+    from bearings.config.constants import CLAUDE_CODE_BINARY
+
+    _TIMEOUT_S: float = 30.0
+    # "Current session: 27% used · resets ..."
+    _OVERALL_RE: _re.Pattern[str] = _re.compile(r"Current session:\s+(\d+)%\s+used", _re.IGNORECASE)
+    # "Current week (Sonnet only): 8% used · resets ..."
+    _SONNET_RE: _re.Pattern[str] = _re.compile(
+        r"Current week \(Sonnet only\):\s+(\d+)%\s+used", _re.IGNORECASE
+    )
+
+    async def _fetch() -> QuotaSnapshot:
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                str(CLAUDE_CODE_BINARY),
+                "-p",
+                "/usage",
+                "--output-format",
+                "json",
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise ConnectionError(
+                f"quota fetcher: claude binary not found at {CLAUDE_CODE_BINARY}"
+            ) from exc
+        except OSError as exc:
+            raise ConnectionError(f"quota fetcher: failed to launch claude binary: {exc}") from exc
+
+        try:
+            stdout, _ = await _asyncio.wait_for(proc.communicate(), timeout=_TIMEOUT_S)
+        except TimeoutError as exc:
+            proc.kill()
+            raise TimeoutError(
+                f"quota fetcher: claude /usage timed out after {_TIMEOUT_S}s"
+            ) from exc
+
+        try:
+            data: dict[str, object] = json.loads(stdout.decode("utf-8", errors="replace"))
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"quota fetcher: JSON decode error from claude /usage: {exc}"
+            ) from exc
+
+        result_text: str = str(data.get("result", ""))
+        overall_pct: float | None = None
+        m = _OVERALL_RE.search(result_text)
+        if m:
+            overall_pct = int(m.group(1)) / 100.0
+
+        sonnet_pct: float | None = None
+        m = _SONNET_RE.search(result_text)
+        if m:
+            sonnet_pct = int(m.group(1)) / 100.0
+
+        raw = json.dumps({"source": "claude_usage", "text": result_text})
+        return QuotaSnapshot(
+            captured_at=int(time.time()),
+            overall_used_pct=overall_pct,
+            sonnet_used_pct=sonnet_pct,
+            overall_resets_at=None,
+            sonnet_resets_at=None,
+            raw_payload=raw,
+        )
+
+    return _fetch
+
+
 def make_static_fetcher(snapshot: QuotaSnapshot) -> QuotaFetcher:
     """Test helper: a fetcher that always returns the supplied snapshot.
 
@@ -557,6 +662,7 @@ __all__ = [
     "QuotaSnapshot",
     "apply_quota_guard",
     "build_noop_fetcher",
+    "build_real_fetcher",
     "empty_snapshot",
     "load_history",
     "load_latest",
