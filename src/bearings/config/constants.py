@@ -1454,6 +1454,7 @@ ROUTE_TAG_ANALYTICS: Final[str] = "analytics"
 ROUTE_TAG_REPLY_ACTIONS: Final[str] = "reply-actions"
 ROUTE_TAG_ARTIFACTS: Final[str] = "artifacts"
 ROUTE_TAG_UI_CONFIG: Final[str] = "ui-config"
+ROUTE_TAG_VERSION: Final[str] = "version"
 
 # Artifact row id prefix — ``art_<32-hex>``.  Mirrors the ``ses_``/``msg_``
 # convention so a stray id in a log line is self-describing.
@@ -1880,6 +1881,7 @@ __all__ = [
     "ROUTE_TAG_UPLOADS",
     "ROUTE_TAG_USAGE",
     "ROUTE_TAG_VAULT",
+    "ROUTE_TAG_VERSION",
     "ROUTE_TAG_WS_SESSIONS",
     "ROUTING_PREVIEW_DEBOUNCE",
     "ROUTING_PREVIEW_DEBOUNCE_MS",

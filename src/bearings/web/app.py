@@ -82,6 +82,7 @@ from bearings.config.constants import (
     ROUTE_TAG_UPLOADS,
     ROUTE_TAG_USAGE,
     ROUTE_TAG_VAULT,
+    ROUTE_TAG_VERSION,
     ROUTE_TAG_WS_SESSIONS,
     SESSION_ID_PREFIX,
     STREAM_HEARTBEAT_INTERVAL_S,
@@ -125,6 +126,7 @@ from bearings.web.routes.templates import router as templates_router
 from bearings.web.routes.uploads import router as uploads_router
 from bearings.web.routes.usage import router as usage_router
 from bearings.web.routes.vault import router as vault_router
+from bearings.web.routes.version import router as version_router
 from bearings.web.routes.ws_sessions import SessionsBroadcaster
 from bearings.web.routes.ws_sessions import router as ws_sessions_router
 from bearings.web.runner_factory import (
@@ -527,6 +529,8 @@ def create_app(
     app.include_router(reply_actions_router, tags=[ROUTE_TAG_REPLY_ACTIONS])
     app.include_router(artifacts_router, tags=[ROUTE_TAG_ARTIFACTS])
     app.include_router(config_router, tags=[ROUTE_TAG_UI_CONFIG])
+    # Exec-3 N-14 — bundle mtime for frontend version watcher.
+    app.include_router(version_router, tags=[ROUTE_TAG_VERSION])
     # E2E harness extension seam (item 3.1) — extra routers mount
     # *between* the production routers and the static bundle so debug
     # endpoints take precedence over the SPA fallback. Production

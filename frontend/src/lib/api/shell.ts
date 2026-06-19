@@ -1,44 +1,24 @@
 /**
- * Typed client for ``POST /api/shell/exec`` — the shell-open surface
- * used by context-menu "Open in editor", "Reveal in file explorer",
- * and "Open in terminal" actions.
+ * Typed client for shell-open context-menu actions (M-12/R-4).
  *
- * All openers dispatch ``xdg-open`` (the only command in the default
- * allowlist defined in ``src/bearings/config/constants.py``
- * §"DEFAULT_ALLOWED_SHELL_COMMANDS").  The opener type determines
- * which path is passed:
+ * GUI-targeting openers (editor, file explorer, terminal) use
+ * ``POST /api/shell/open`` — fire-and-forget semantics (204 response)
+ * so the HTTP response returns immediately without waiting for the
+ * child process to exit.
  *
- * - ``editor``        — ``xdg-open <file_path>`` opens the file in
- *   the user's registered handler (typically a code editor or text
- *   editor).
- * - ``file_explorer`` — ``xdg-open <parent_dir>`` opens the file's
- *   parent directory in the default file manager.
- * - ``terminal``      — ``xdg-open <dir>`` opens the directory; the
- *   user's desktop environment determines whether this launches a
- *   terminal or a file manager depending on their XDG MIME
- *   configuration.
- *
- * Each function throws :class:`ApiError` on a non-2xx response so
- * callers can surface an error toast.
+ * The blocking ``POST /api/shell/exec`` endpoint is kept in config.ts
+ * for callers that genuinely need stdout/stderr/exit-code.
  *
  * Behavior anchor:
  * ``docs/behavior/context-menus.md`` §"Shell-open integration".
  */
-import { API_SHELL_EXEC_ENDPOINT } from "../config";
-import { postJson } from "./client";
+import { API_SHELL_OPEN_ENDPOINT } from "../config";
+import { ApiError } from "./client";
 
 // ---- Wire shapes ------------------------------------------------------------
 
-interface ShellExecIn {
+interface ShellOpenIn {
   readonly argv: readonly string[];
-}
-
-interface ShellExecOut {
-  readonly exit_code: number;
-  readonly reason: string;
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly duration_s: number;
 }
 
 // ---- Helpers ----------------------------------------------------------------
@@ -52,41 +32,65 @@ function parentDir(path: string): string {
   return idx > 0 ? path.slice(0, idx) : "/";
 }
 
+/**
+ * Dispatch a fire-and-forget shell open via ``POST /api/shell/open``.
+ * Returns when the server confirms the spawn (204). Throws
+ * :class:`ApiError` on non-2xx.
+ */
+async function _open(argv: readonly string[]): Promise<void> {
+  const response = await fetch(API_SHELL_OPEN_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ argv } satisfies ShellOpenIn),
+  });
+  if (response.status >= 200 && response.status < 300) return;
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    try {
+      body = await response.text();
+    } catch {
+      // ignore
+    }
+  }
+  throw new ApiError(
+    response.status,
+    body,
+    `POST ${API_SHELL_OPEN_ENDPOINT} → ${response.status} ${response.statusText}`,
+  );
+}
+
 // ---- Public API -------------------------------------------------------------
 
 /**
- * Open ``path`` in the user's default editor via ``xdg-open``.
+ * Open ``path`` in the user's default editor via ``xdg-open``
+ * (fire-and-forget — returns 204 immediately).
  *
  * Throws :class:`ApiError` on a non-2xx response.
  */
 export async function shellOpenInEditor(path: string): Promise<void> {
-  await postJson<ShellExecOut>(API_SHELL_EXEC_ENDPOINT, {
-    argv: ["xdg-open", path],
-  } satisfies ShellExecIn);
+  await _open(["xdg-open", path]);
 }
 
 /**
  * Open the parent directory of ``path`` in the file manager via
- * ``xdg-open``.
+ * ``xdg-open`` (fire-and-forget — returns 204 immediately).
  *
  * Throws :class:`ApiError` on a non-2xx response.
  */
 export async function shellRevealInExplorer(path: string): Promise<void> {
-  await postJson<ShellExecOut>(API_SHELL_EXEC_ENDPOINT, {
-    argv: ["xdg-open", parentDir(path)],
-  } satisfies ShellExecIn);
+  await _open(["xdg-open", parentDir(path)]);
 }
 
 /**
- * Open ``dir`` via ``xdg-open``.  On most desktop environments this
- * opens a file manager; users who have associated directories with a
- * terminal emulator in their XDG MIME database will get a terminal
- * window instead.
+ * Open ``dir`` via ``xdg-open`` (fire-and-forget — returns 204
+ * immediately).  On most desktop environments this opens a file
+ * manager; users who have associated directories with a terminal
+ * emulator in their XDG MIME database will get a terminal window.
  *
  * Throws :class:`ApiError` on a non-2xx response.
  */
 export async function shellOpenInTerminal(dir: string): Promise<void> {
-  await postJson<ShellExecOut>(API_SHELL_EXEC_ENDPOINT, {
-    argv: ["xdg-open", dir],
-  } satisfies ShellExecIn);
+  await _open(["xdg-open", dir]);
 }

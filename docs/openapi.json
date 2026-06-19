@@ -2663,6 +2663,58 @@
         }
       }
     },
+    "/api/sessions/running": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Session ids with a turn in flight",
+        "description": "Return session ids whose runner currently has a turn in flight.\n\nUsed as a REST poll fallback by the sidebar when ``/ws/sessions``\nis down (e.g. on WS reconnect).  Returns an empty list when no\nrunner registry is wired (test or static-only mode).",
+        "operationId": "list-running-sessions",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List-Running-Sessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/awaiting": {
+      "get": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Session ids parked on a permission decision",
+        "description": "Return session ids whose runner is awaiting a user response.\n\nA session appears here when the agent loop is blocked on a\npermission prompt or a checklist ``blocked_at`` barrier.  Used as\na REST poll fallback alongside ``/api/sessions/running`` on\nWS reconnect.  Returns an empty list when no runner registry is\nwired.",
+        "operationId": "list-awaiting-sessions",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response List-Awaiting-Sessions"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sessions/{session_id}": {
       "get": {
         "tags": [
@@ -5302,6 +5354,112 @@
         }
       }
     },
+    "/api/sessions/{session_id}/reorg/analyze": {
+      "post": {
+        "tags": [
+          "reorg"
+        ],
+        "summary": "Heuristic + optional LLM-backed split/extract suggestion",
+        "description": "Analyse ``session_id`` and propose split boundaries.\n\nHeuristic rules (applied in order per message position):\n\n1. A time gap of \u2265 30 min between consecutive turns suggests a new\n   topic \u2192 propose a boundary at the later message.\n2. Every ``chunk_size`` turns (default 10) a natural chunk boundary\n   is proposed.\n\nReturns 404 when the session does not exist.  Returns an empty\n``proposals`` list when the session has fewer than 2 messages.\n\nLLM-backed suggestions are not implemented in this release; the\n``source`` field is always ``\"heuristic\"``.  The advisor pattern\nis wired into the framework for a future iteration.",
+        "operationId": "reorg-analyze-session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "chunk_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 2,
+              "description": "Propose a boundary every N turns (chunk heuristic).",
+              "default": 10,
+              "title": "Chunk Size"
+            },
+            "description": "Propose a boundary every N turns (chunk heuristic)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorgAnalyzeOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pending": {
+      "get": {
+        "tags": [
+          "pending"
+        ],
+        "summary": "List pending operations for a project",
+        "description": "Returns all pending operations from ``.bearings/pending.toml`` in the given project directory, sorted oldest-first by ``started_at``. Returns an empty list when the file does not exist (directory not yet onboarded, or no ops recorded).",
+        "operationId": "list-pending-ops",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Absolute path to the project root.",
+              "title": "Directory"
+            },
+            "description": "Absolute path to the project root."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PendingOpOut"
+                  },
+                  "title": "Response List-Pending-Ops"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/pending/{name}/resolve": {
       "post": {
         "tags": [
@@ -6390,6 +6548,41 @@
         }
       }
     },
+    "/api/shell/open": {
+      "post": {
+        "tags": [
+          "shell"
+        ],
+        "summary": "Fire-and-forget GUI spawn",
+        "description": "Spawn ``argv`` detached from the server process (``start_new_session=True``) and return 204 immediately. Designed for GUI targets (editors, file managers) that must not block the HTTP response. Returns 400 when the allowlist is empty (shell not configured), 422 when the argv is invalid.",
+        "operationId": "shell-open",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShellExecIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/diag/server": {
       "get": {
         "tags": [
@@ -7449,6 +7642,28 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UiConfigOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/version": {
+      "get": {
+        "tags": [
+          "version"
+        ],
+        "summary": "Get the build mtime of the static UI bundle",
+        "description": "Returns the Unix timestamp (float seconds) of the newest file in the ``web/dist/`` bundle directory. The frontend polls this endpoint to detect hot-deployed bundle updates and auto-reload on idle or ``visibilitychange`` when the server mtime is newer than the mtime captured at page load.",
+        "operationId": "get-version",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionOut"
                 }
               }
             }
@@ -9728,6 +9943,52 @@
         "title": "PairedChatLegOut",
         "description": "Response shape for one leg row."
       },
+      "PendingOpOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dir"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "started_at"
+        ],
+        "title": "PendingOpOut",
+        "description": "One row from ``.bearings/pending.toml`` as returned by the API."
+      },
       "PlugBlockIn": {
         "properties": {
           "hash": {
@@ -10454,6 +10715,28 @@
         "title": "RedundancySessionRef",
         "description": "Session reference inside a :class:`RedundancyBlockOut` row."
       },
+      "ReorgAnalyzeOut": {
+        "properties": {
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/ReorgProposal"
+            },
+            "type": "array",
+            "title": "Proposals"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "proposals",
+          "source"
+        ],
+        "title": "ReorgAnalyzeOut",
+        "description": "Response shape for ``POST /api/sessions/{id}/reorg/analyze``."
+      },
       "ReorgAuditListOut": {
         "properties": {
           "items": {
@@ -10523,6 +10806,25 @@
         ],
         "title": "ReorgAuditOut",
         "description": "Response body for one reorg-operation audit record.\n\n``kind`` is one of ``'merge'``, ``'split'``, or ``'move'``.  See\n:mod:`bearings.db.reorg` for the ``dst_session_id`` / ``src_session_id``\nsemantics across each kind."
+      },
+      "ReorgProposal": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "reason"
+        ],
+        "title": "ReorgProposal",
+        "description": "One proposed split boundary from ``POST /api/sessions/{id}/reorg/analyze``."
       },
       "ReorgSplitOut": {
         "properties": {
@@ -13476,6 +13778,20 @@
         ],
         "title": "VaultListOut",
         "description": "Response shape for ``GET /api/vault`` \u2014 bucketed list.\n\nPer vault.md \u00a7\"When the user opens the vault\" the user sees a\nPlans section and a Todos section; the wire surfaces both\nbuckets as separate arrays so the client doesn't have to filter\non the wire-side ``kind`` discriminator. ``plan_roots`` /\n``todo_globs`` mirror the configured paths so the empty-state\nUI (\"No plans found under \u2026\") can name them per vault.md\n\u00a7\"When the user opens the vault\" \u2192 empty state."
+      },
+      "VersionOut": {
+        "properties": {
+          "bundle_mtime": {
+            "type": "number",
+            "title": "Bundle Mtime"
+          }
+        },
+        "type": "object",
+        "required": [
+          "bundle_mtime"
+        ],
+        "title": "VersionOut",
+        "description": "Response shape for ``GET /api/version``."
       },
       "WorkEvidenceOut": {
         "properties": {

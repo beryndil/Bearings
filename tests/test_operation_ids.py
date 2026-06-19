@@ -84,6 +84,13 @@ def test_operation_id_count(openapi_spec: dict) -> None:  # type: ignore[type-ar
       163 — SDK entries admin: DELETE /api/sessions/{id}/sdk-entries
              (delete-session-sdk-entries)
       164 — v1.3.0: GET /api/usage/headroom alias (get-usage-headroom)
+      170 — Exec-3 parity-restore: 6 new endpoints
+             (GET /api/sessions/running list-running-sessions,
+             GET /api/sessions/awaiting list-awaiting-sessions,
+             GET /api/pending list-pending-ops,
+             POST /api/sessions/{id}/reorg/analyze reorg-analyze-session,
+             POST /api/shell/open shell-open,
+             GET /api/version get-version)
     """
     operations = _iter_operations(openapi_spec)
-    assert len(operations) == 164, f"Expected 164 operations in OpenAPI spec, got {len(operations)}"
+    assert len(operations) == 170, f"Expected 170 operations in OpenAPI spec, got {len(operations)}"

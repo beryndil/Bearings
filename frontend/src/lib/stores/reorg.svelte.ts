@@ -10,6 +10,8 @@
  */
 import { listMessages, moveMessage } from "../api/messages";
 import { deleteReorgAudit, listReorgAudits, moveMessageReorg, splitSession } from "../api/reorg";
+import { postJson } from "../api/client";
+import { sessionReorgAnalyzeEndpoint } from "../config";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -339,21 +341,34 @@ function _addAuditEntry(sourceSessionId: string, entry: ReorgAuditEntry): void {
 }
 
 // ---------------------------------------------------------------------------
-// analyzeReorg — heuristic proposal generator
+// analyzeReorg — server-side + heuristic fallback (N-11/R-2)
 // ---------------------------------------------------------------------------
+
+interface ReorgAnalyzeOut {
+  proposals: Array<{ message_id: string; reason: string }>;
+  source: string;
+}
 
 /**
  * Analyse a session's messages and propose split boundaries.
  *
- * Heuristic rules (no LLM call — runs entirely client-side):
- *   1. A time gap of ≥ 30 min between consecutive turns suggests a
- *      new topic.
- *   2. Every N turns (default 10) a natural chunk boundary is proposed.
+ * Calls ``POST /api/sessions/{id}/reorg/analyze`` first; falls back to
+ * a local heuristic when the server returns an error.
  *
  * Returns a list of proposals ordered by message position.  The
  * ReorgProposalEditor renders these for the user to accept or dismiss.
  */
 export async function analyzeReorg(sessionId: string, chunkSize = 10): Promise<ReorgProposal[]> {
+  // Try the server endpoint first (N-11/R-2).
+  try {
+    const url = `${sessionReorgAnalyzeEndpoint(sessionId)}?chunk_size=${chunkSize}`;
+    const out = await postJson<ReorgAnalyzeOut>(url, {});
+    return out.proposals.map((p) => ({ messageId: p.message_id, reason: p.reason }));
+  } catch {
+    // Server unavailable or returned error — fall back to local heuristic.
+  }
+
+  // Heuristic fallback (runs entirely client-side).
   const page = await listMessages(sessionId);
   const msgs = page.items;
   const proposals: ReorgProposal[] = [];

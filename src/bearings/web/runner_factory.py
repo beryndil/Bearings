@@ -359,6 +359,25 @@ class InProcessRunnerRegistry:
         worker handles directly."""
         return self._supervisors.get(session_id)
 
+    def list_running_ids(self) -> list[str]:
+        """Return session ids whose runner currently has a turn in flight.
+
+        ``is_running=True`` means the SDK loop is actively streaming an
+        agent response. Used by ``GET /api/sessions/running`` as a REST
+        poll fallback when the ``/ws/sessions`` WebSocket is down.
+        """
+        return [sid for sid, runner in self._runners.items() if runner.status.is_running]
+
+    def list_awaiting_ids(self) -> list[str]:
+        """Return session ids whose runner is parked on a user decision.
+
+        ``is_awaiting_user=True`` means the agent loop is blocked
+        waiting for the user to respond (e.g. a permission-request or
+        checklist-blocked barrier). Used by
+        ``GET /api/sessions/awaiting`` as a REST poll fallback.
+        """
+        return [sid for sid, runner in self._runners.items() if runner.status.is_awaiting_user]
+
     async def recycle(self, session_id: str) -> bool:
         """Tear down the live SDK supervisor for ``session_id``.
 

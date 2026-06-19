@@ -198,10 +198,39 @@ def run_argv(
     )
 
 
+def open_argv(
+    argv: list[str],
+    *,
+    allowed: Iterable[str],
+) -> None:
+    """Validate + fire-and-forget spawn ``argv``.
+
+    Runs the process detached (``start_new_session=True``, no I/O
+    capture) and returns immediately — the caller does not wait for the
+    child to exit.  Suitable for GUI launchers (editors, file managers)
+    that must not block the HTTP response.
+
+    Raises :class:`ShellValidationError` (422) on malformed / not-
+    allowlisted argv — same rules as :func:`run_argv`.  Raises
+    :exc:`OSError` when the process cannot be spawned; the route maps
+    this to 502.
+    """
+    cleaned = validate_argv(argv, allowed)
+    subprocess.Popen(
+        cleaned,
+        shell=False,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
 __all__ = [
     "ShellExitReason",
     "ShellResult",
     "ShellValidationError",
+    "open_argv",
     "run_argv",
     "validate_argv",
 ]

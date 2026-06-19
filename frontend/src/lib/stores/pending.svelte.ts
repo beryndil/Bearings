@@ -4,8 +4,8 @@
  *
  * Per arch §2.2 one canonical store per feature, one file. The card
  * reads the active session's ``working_dir`` from the sessions list,
- * fetches ``.bearings/pending.toml`` via ``GET /api/fs/read``, and
- * parses the TOML into :type:`PendingOp` rows. The store deliberately
+ * fetches the ops list via ``GET /api/pending`` (N-10/R-3), and
+ * exposes them as reactive :type:`PendingOp` rows. The store deliberately
  * does NOT subscribe to the inspector store — callers drive
  * :func:`refreshOps` when the active session changes.
  *

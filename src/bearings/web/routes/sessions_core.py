@@ -204,6 +204,54 @@ async def create_session(
     return out
 
 
+# ---- REST poll fallback — running / awaiting (M-11 / R-1) ------------------
+# IMPORTANT: these must be registered BEFORE GET /api/sessions/{session_id}
+# so FastAPI matches the static paths before the catch-all path parameter.
+
+
+@router.get(
+    "/api/sessions/running",
+    response_model=list[str],
+    operation_id="list-running-sessions",
+    summary="Session ids with a turn in flight",
+)
+async def list_running_sessions(request: Request) -> list[str]:
+    """Return session ids whose runner currently has a turn in flight.
+
+    Used as a REST poll fallback by the sidebar when ``/ws/sessions``
+    is down (e.g. on WS reconnect).  Returns an empty list when no
+    runner registry is wired (test or static-only mode).
+    """
+    factory = getattr(request.app.state, "runner_factory", None)
+    if isinstance(factory, InProcessRunnerRegistry):
+        return factory.list_running_ids()
+    return []
+
+
+@router.get(
+    "/api/sessions/awaiting",
+    response_model=list[str],
+    operation_id="list-awaiting-sessions",
+    summary="Session ids parked on a permission decision",
+)
+async def list_awaiting_sessions(request: Request) -> list[str]:
+    """Return session ids whose runner is awaiting a user response.
+
+    A session appears here when the agent loop is blocked on a
+    permission prompt or a checklist ``blocked_at`` barrier.  Used as
+    a REST poll fallback alongside ``/api/sessions/running`` on
+    WS reconnect.  Returns an empty list when no runner registry is
+    wired.
+    """
+    factory = getattr(request.app.state, "runner_factory", None)
+    if isinstance(factory, InProcessRunnerRegistry):
+        return factory.list_awaiting_ids()
+    return []
+
+
+# ---- single-session fetch / delete / close / reopen ------------------------
+
+
 @router.get("/api/sessions/{session_id}", response_model=SessionOut, operation_id="get-session")
 async def get_session(session_id: str, request: Request) -> SessionOut:
     """Fetch one session by id; 404 if absent."""

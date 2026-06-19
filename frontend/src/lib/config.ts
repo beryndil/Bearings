@@ -32,6 +32,21 @@ export const API_BASE = "/api";
 export const API_SESSIONS_ENDPOINT = `${API_BASE}/sessions`;
 
 /**
+ * ``GET /api/sessions/running`` — REST poll fallback when ``/ws/sessions``
+ * is down. Returns ``string[]`` of session ids whose runner has a turn in
+ * flight.  Used by the sidebar to restore running indicators on WS reconnect.
+ * (M-11/R-1)
+ */
+export const API_SESSIONS_RUNNING_ENDPOINT = `${API_BASE}/sessions/running`;
+
+/**
+ * ``GET /api/sessions/awaiting`` — REST poll fallback for sessions parked on
+ * a permission decision.  Returns ``string[]``.  Used alongside
+ * ``API_SESSIONS_RUNNING_ENDPOINT`` on WS reconnect.  (M-11/R-1)
+ */
+export const API_SESSIONS_AWAITING_ENDPOINT = `${API_BASE}/sessions/awaiting`;
+
+/**
  * ``POST /api/sessions/bulk`` — atomic multi-select batch operation.
  * Accepts ``{op, session_ids, tag_id?}``; returns per-ID results or an
  * export bundle depending on the op. Gap-cycle-13-001.
@@ -234,6 +249,14 @@ export const sessionReorgSplitEndpoint = (srcId: string, dstId: string, fromSeq:
  */
 export const sessionReorgMoveEndpoint = (srcId: string, dstId: string, messageId: string): string =>
   `${API_BASE}/sessions/${encodeURIComponent(srcId)}/reorg/move?target=${encodeURIComponent(dstId)}&message_id=${encodeURIComponent(messageId)}`;
+
+/**
+ * ``POST /api/sessions/{id}/reorg/analyze`` — heuristic + optional
+ * LLM-backed split/extract suggestion (N-11/R-2). Returns
+ * ``ReorgAnalyzeOut`` with a ``proposals`` list and a ``source`` field.
+ */
+export const sessionReorgAnalyzeEndpoint = (sessionId: string): string =>
+  `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/reorg/analyze`;
 
 /**
  * ``GET /api/sessions/{id}/tool_calls`` — persisted tool-call rows for
@@ -1113,11 +1136,32 @@ export const API_HEALTH_ENDPOINT = `${API_BASE}/health`;
 
 /**
  * ``POST /api/shell/exec`` — dispatch an argv via the backend shell
- * allowlist (``xdg-open`` et al.).  Used by context-menu shell-open
- * actions per ``docs/behavior/context-menus.md`` §"Shell-open
- * integration".
+ * allowlist (``xdg-open`` et al.), blocking until the process exits.
+ * Used only when the caller needs stdout/stderr/exit-code.
  */
 export const API_SHELL_EXEC_ENDPOINT = `${API_BASE}/shell/exec`;
+
+/**
+ * ``POST /api/shell/open`` — fire-and-forget GUI spawn (M-12/R-4).
+ * Returns 204 immediately; does not wait for the child to exit.
+ * Used for context-menu "Open in editor" / "Reveal in file explorer"
+ * actions so GUI apps do not block the HTTP response.
+ */
+export const API_SHELL_OPEN_ENDPOINT = `${API_BASE}/shell/open`;
+
+/**
+ * ``GET /api/pending?directory=<abs>`` — canonical list of pending
+ * operations for the active project (N-10/R-3). Returns
+ * ``PendingOpOut[]`` sorted oldest-first. Replaces the old
+ * ``GET /api/fs/read`` TOML-parse approach.
+ */
+export const API_PENDING_ENDPOINT = `${API_BASE}/pending`;
+
+/**
+ * ``GET /api/version`` — bundle mtime for the frontend version watcher
+ * (N-14). Returns ``{ bundle_mtime: number }`` (Unix float seconds).
+ */
+export const API_VERSION_ENDPOINT = `${API_BASE}/version`;
 
 /**
  * ``POST /api/pending/{name}/resolve?directory=<abs>`` — remove the

@@ -32,6 +32,8 @@ import { untrack } from "svelte";
 import { listSessions, type SessionOut } from "../api/sessions";
 import type { TagOut } from "../api/tags";
 import { connectSessionsBroadcast, type WorkflowRunState } from "../api/wsSessions";
+import { getJson } from "../api/client";
+import { API_SESSIONS_RUNNING_ENDPOINT, API_SESSIONS_AWAITING_ENDPOINT } from "../config";
 import { _applyTagDelete, _applyTagUpsert } from "./tags.svelte";
 
 interface SessionsState {
@@ -225,6 +227,33 @@ function _applyWorkflowProgress(run: WorkflowRunState): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// REST poll fallback — running / awaiting (M-11/R-1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Poll ``GET /api/sessions/running`` and ``GET /api/sessions/awaiting``
+ * and merge the results into the store's running/awaiting sets.
+ *
+ * Called on WS reconnect so runner-state indicators are restored after
+ * the WebSocket was down.  Errors are silently swallowed — a failed
+ * poll leaves the sets unchanged rather than crashing the sidebar.
+ */
+async function _pollRunningAwaiting(): Promise<void> {
+  try {
+    const [runningIds, awaitingIds] = await Promise.all([
+      getJson<string[]>(API_SESSIONS_RUNNING_ENDPOINT),
+      getJson<string[]>(API_SESSIONS_AWAITING_ENDPOINT),
+    ]);
+    untrack(() => {
+      state.running = new Set(runningIds);
+      state.awaiting = new Set(awaitingIds);
+    });
+  } catch {
+    // Silently ignore — WS will deliver live updates once stable.
+  }
+}
+
 // Start the broadcast subscription immediately when the module loads.
 // ``connectSessionsBroadcast`` auto-reconnects so the subscription
 // survives server restarts.  The returned ``Unsubscribe`` is not
@@ -288,6 +317,9 @@ connectSessionsBroadcast(
         wsStatus.state = "open";
         wsStatus.lastCloseCode = null;
       });
+      // REST poll fallback (M-11/R-1): restore running/awaiting sets on
+      // WS reconnect in case runner_state events were missed while down.
+      void _pollRunningAwaiting();
     },
     onClose(code: number) {
       untrack(() => {

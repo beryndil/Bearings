@@ -1,30 +1,19 @@
 /**
- * Typed client for reading ``.bearings/pending.toml`` via
- * ``GET /api/fs/read`` and for firing pending-operation actions
- * (resolve, dismiss) against the backend CLI subprocess surface.
+ * Typed client for ``GET /api/pending`` and for firing pending-operation
+ * actions (resolve, dismiss) against the REST endpoints.
  *
  * Pending operations are stored in the per-project
- * ``.bearings/pending.toml`` file; the backend exposes the raw file
- * text via ``GET /api/fs/read?path=<abs_path>`` under the FS allow-
- * roots. This module reads the TOML, parses it into typed objects, and
- * exposes the resolve / dismiss affordances by shelling out via
- * ``POST /api/shell/exec`` (the same surface used by the CLI surface).
+ * ``.bearings/pending.toml`` file; the backend exposes the canonical
+ * list via ``GET /api/pending?directory=<abs>`` (N-10/R-3). This
+ * module fetches the list, surfaces an error instead of silently
+ * returning empty on failure, and exposes the resolve / dismiss
+ * affordances.
  *
- * The parser handles the subset of TOML written by ``bearings pending
- * add``:
- *
- * ```toml
- * [ops.my-op-name]
- * description = "Short description"
- * started_at  = "2024-01-01T12:00:00Z"
- * command     = "optional shell command"   # optional
- * dir         = "/optional/path"           # optional
- * ```
- *
- * Keys outside that set are silently ignored; malformed value lines
- * are skipped.
+ * The TOML parser (``parsePendingToml``) is kept for backward-compat
+ * with any tests that import it directly. New callers should use
+ * ``fetchPendingOps`` which hits the API endpoint.
  */
-import { API_FS_READ_ENDPOINT, pendingDismissEndpoint, pendingResolveEndpoint } from "../config";
+import { API_PENDING_ENDPOINT, pendingDismissEndpoint, pendingResolveEndpoint } from "../config";
 import { ApiError, getJson } from "./client";
 
 // ---- Types ------------------------------------------------------------------
@@ -43,7 +32,7 @@ export interface PendingOp {
   readonly dir?: string;
 }
 
-// ---- TOML parsing -----------------------------------------------------------
+// ---- TOML parsing (kept for backward-compat) --------------------------------
 
 const STRING_VALUE_RE = /^([\w-]+)\s*=\s*"(.*)"$/;
 const OPS_SECTION_RE = /^\[ops\.(.*)\]$/;
@@ -55,6 +44,9 @@ const QUOTED_OPS_SECTION_RE = /^\[ops\."(.+)"\]$/;
  * Returns an array of :type:`PendingOp` sorted oldest-first (by
  * ``started_at`` lexicographically, which works for ISO 8601 strings).
  * Empty content or content with no ``[ops.*]`` sections returns ``[]``.
+ *
+ * @deprecated Use ``fetchPendingOps`` instead; this parser is kept only
+ * for tests that import it directly.
  */
 export function parsePendingToml(content: string): PendingOp[] {
   const ops: PendingOp[] = [];
@@ -108,42 +100,22 @@ export function parsePendingToml(content: string): PendingOp[] {
 
 // ---- API client -------------------------------------------------------------
 
-interface FsReadOut {
-  path: string;
-  content: string;
-  size: number;
-  truncated: boolean;
-}
-
 /**
- * Read ``.bearings/pending.toml`` for the given project root and
- * return the parsed ops list.
+ * Fetch the pending-ops list for ``workingDir`` from
+ * ``GET /api/pending?directory=<workingDir>``.
  *
- * - Returns ``[]`` when the file does not exist (404 from the FS
- *   route is treated as "no pending ops").
- * - Returns ``[]`` when ``allow-roots`` is empty and the backend
- *   returns 403 — a documented empty-state, not an access error.
- * - Propagates other :class:`ApiError` values to the caller.
+ * - Returns ``[]`` when the directory has no pending ops.
+ * - Surfaces an ``ApiError`` on non-2xx so callers can show an error
+ *   toast (N-10/R-3: no more silent empty on failure).
  */
 export async function fetchPendingOps(
   workingDir: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<PendingOp[]> {
-  const path = `${workingDir}/.bearings/pending.toml`;
-  let out: FsReadOut;
-  try {
-    out = await getJson<FsReadOut>(`${API_FS_READ_ENDPOINT}?path=${encodeURIComponent(path)}`, {
-      signal: options.signal,
-    });
-  } catch (err) {
-    if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
-      // 404 — file does not exist (no pending ops).
-      // 403 — allow-roots not configured; treat as empty pending list.
-      return [];
-    }
-    throw err;
-  }
-  return parsePendingToml(out.content);
+  return getJson<PendingOp[]>(
+    `${API_PENDING_ENDPOINT}?directory=${encodeURIComponent(workingDir)}`,
+    { signal: options.signal },
+  );
 }
 
 // ---- Mutation helpers -------------------------------------------------------

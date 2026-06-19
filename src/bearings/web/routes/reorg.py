@@ -1,3 +1,4 @@
+# mypy: disable-error-code=explicit-any
 """Reorg REST endpoints (gap-cycle-03-008/009, gap-cycle-13-002).
 
 Per ``docs/architecture-v1.md`` §1.1.5 this module owns:
@@ -26,9 +27,13 @@ Common error responses:
 
 from __future__ import annotations
 
+import logging
+
 import aiosqlite
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from pydantic import BaseModel
 
+from bearings.db import messages as messages_db
 from bearings.db import reorg as reorg_db
 from bearings.web.models.reorg import (
     ReorgAuditListOut,
@@ -36,6 +41,11 @@ from bearings.web.models.reorg import (
     ReorgSplitOut,
     UndoReorgOut,
 )
+
+_log = logging.getLogger(__name__)
+
+_ANALYZE_GAP_MS: int = 30 * 60 * 1000  # 30-minute gap → proposed boundary
+_ANALYZE_CHUNK_SIZE: int = 10  # every N turns → proposed boundary
 
 # Backward-compat: routes that were already imported elsewhere still work.
 UndoMergeOut = UndoReorgOut
@@ -243,6 +253,114 @@ async def delete_reorg_audit(
             detail=f"reorg audit not found: {audit_id!r} for session {dst_id!r}",
         )
     return UndoReorgOut(new_session_id=new_session_id)
+
+
+# ---------------------------------------------------------------------------
+# Analyze — heuristic split/extract suggestion (N-11 / R-2)
+# ---------------------------------------------------------------------------
+
+
+class ReorgProposal(BaseModel):
+    """One proposed split boundary from ``POST /api/sessions/{id}/reorg/analyze``."""
+
+    message_id: str
+    reason: str
+
+
+class ReorgAnalyzeOut(BaseModel):
+    """Response shape for ``POST /api/sessions/{id}/reorg/analyze``."""
+
+    proposals: list[ReorgProposal]
+    source: str  # "heuristic" | "llm"
+
+
+@router.post(
+    "/api/sessions/{session_id}/reorg/analyze",
+    response_model=ReorgAnalyzeOut,
+    status_code=status.HTTP_200_OK,
+    operation_id="reorg-analyze-session",
+    summary="Heuristic + optional LLM-backed split/extract suggestion",
+)
+async def run_reorg_analysis(
+    session_id: str,
+    request: Request,
+    chunk_size: int = Query(
+        default=_ANALYZE_CHUNK_SIZE,
+        ge=2,
+        le=100,
+        description="Propose a boundary every N turns (chunk heuristic).",
+    ),
+) -> ReorgAnalyzeOut:
+    """Analyse ``session_id`` and propose split boundaries.
+
+    Heuristic rules (applied in order per message position):
+
+    1. A time gap of ≥ 30 min between consecutive turns suggests a new
+       topic → propose a boundary at the later message.
+    2. Every ``chunk_size`` turns (default 10) a natural chunk boundary
+       is proposed.
+
+    Returns 404 when the session does not exist.  Returns an empty
+    ``proposals`` list when the session has fewer than 2 messages.
+
+    LLM-backed suggestions are not implemented in this release; the
+    ``source`` field is always ``"heuristic"``.  The advisor pattern
+    is wired into the framework for a future iteration.
+    """
+    db = _db(request)
+    msgs = await messages_db.list_for_session(db, session_id)
+    if not msgs:
+        # Validate session existence — return 404 for unknown ids.
+        from bearings.db import sessions as sessions_db  # local to avoid circular
+
+        row = await sessions_db.get(db, session_id)
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no session matches {session_id!r}",
+            )
+
+    proposals: list[ReorgProposal] = []
+    for idx, msg in enumerate(msgs):
+        if idx == 0:
+            continue
+        prev = msgs[idx - 1]
+
+        try:
+            from datetime import datetime
+
+            prev_ts = (
+                datetime.fromisoformat(prev.created_at.replace("Z", "+00:00")).timestamp() * 1000
+                if prev.created_at
+                else 0.0
+            )
+            cur_ts = (
+                datetime.fromisoformat(msg.created_at.replace("Z", "+00:00")).timestamp() * 1000
+                if msg.created_at
+                else 0.0
+            )
+        except (ValueError, AttributeError):
+            prev_ts = cur_ts = 0.0
+
+        if prev_ts > 0 and cur_ts > 0 and (cur_ts - prev_ts) >= _ANALYZE_GAP_MS:
+            gap_min = int((cur_ts - prev_ts) / 60_000)
+            proposals.append(
+                ReorgProposal(
+                    message_id=msg.id,
+                    reason=f"~{gap_min} min gap before this message",
+                )
+            )
+            continue
+
+        if idx % chunk_size == 0:
+            proposals.append(
+                ReorgProposal(
+                    message_id=msg.id,
+                    reason=f"Natural chunk boundary at message {idx + 1}",
+                )
+            )
+
+    return ReorgAnalyzeOut(proposals=proposals, source="heuristic")
 
 
 __all__ = ["router"]
