@@ -159,9 +159,9 @@ describe("InspectorRouting — current-decision card", () => {
       props: { session: fakeSession(), fetchMessages: fixtureFetcher(rows) },
     });
     expect(await findByTestId("inspector-routing-current-executor")).toHaveTextContent(
-      "Sonnet 4.6",
+      "Sonnet 4.8",
     );
-    expect(await findByTestId("inspector-routing-current-advisor")).toHaveTextContent("Opus 4.6");
+    expect(await findByTestId("inspector-routing-current-advisor")).toHaveTextContent("Opus 4.8");
     expect(await findByTestId("inspector-routing-current-effort")).toHaveTextContent("auto");
     const source = await findByTestId("inspector-routing-current-source");
     expect(source).toHaveTextContent(

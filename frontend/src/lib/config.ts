@@ -1159,25 +1159,11 @@ export const ROUTING_PREVIEW_DEBOUNCE_MS = 300;
 // ---- Pending operations (gap-cycle-01-004; keyboard-shortcuts §Help) --------
 
 /**
- * ``GET /api/fs/read`` — read a utf-8 file under an allow-root.
- * Used by the pending-ops store to load ``.bearings/pending.toml``
- * for the active session's working directory.
- */
-export const API_FS_READ_ENDPOINT = `${API_BASE}/fs/read`;
-
-/**
  * ``GET /api/health`` — server liveness + readiness snapshot. Used by
  * the Settings Privacy section to display the resolved data directory
  * path (gap-cycle-07-003).
  */
 export const API_HEALTH_ENDPOINT = `${API_BASE}/health`;
-
-/**
- * ``POST /api/shell/exec`` — dispatch an argv via the backend shell
- * allowlist (``xdg-open`` et al.), blocking until the process exits.
- * Used only when the caller needs stdout/stderr/exit-code.
- */
-export const API_SHELL_EXEC_ENDPOINT = `${API_BASE}/shell/exec`;
 
 /**
  * ``POST /api/shell/open`` — fire-and-forget GUI spawn (M-12/R-4).

@@ -49,7 +49,7 @@ export interface WorkflowRunState {
 }
 
 /** Union of all message types the sessions-broadcast channel emits. */
-export type SessionsBroadcastEvent =
+type SessionsBroadcastEvent =
   | { type: "session_upsert"; session: SessionOut }
   | { type: "session_delete"; session_id: string }
   | {

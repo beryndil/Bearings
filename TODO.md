@@ -280,32 +280,34 @@ action needed unless a literal `headroom` endpoint is introduced._
 
 
 
-### Item 2.9 — theme server-sync layer (deferred)
+~~### Item 2.9 — theme server-sync layer (deferred)~~
 
-`docs/behavior/themes.md` §"Persistence boundary" prescribes
+~~`docs/behavior/themes.md` §"Persistence boundary" prescribes
 **per-account, server-synced** theme persistence with a "couldn't save
 your theme" toast when the preferences PATCH fails. v1 ships
 **localStorage-only** persistence: the runtime store reads / writes
 ``localStorage["bearings-theme-v1"]`` and listens to the browser-native
-``storage`` event for cross-tab parity. Decision rationale:
+``storage`` event for cross-tab parity. Decision rationale:~~
 
-- Bearings v1 is a single-user localhost app — "per account" degenerates
+~~- Bearings v1 is a single-user localhost app — "per account" degenerates
   to "the only account on this device", which is what localStorage
-  already keys on.
-- ~~The arch §1.1.5 routes table lists ``web/routes/preferences.py``, but
+  already keys on.~~
+~~- ~~The arch §1.1.5 routes table lists ``web/routes/preferences.py``, but
   no preferences route, Pydantic models, or DB table exist yet.~~ **Update
   2026-06-02**: `preferences.py` now exists. Review whether the route surface
-  is sufficient for theme server-sync, or if DB/model work remains.
-- The store interface is forward-compatible: a future item adds
+  is sufficient for theme server-sync, or if DB/model work remains.~~
+~~- The store interface is forward-compatible: a future item adds
   ``persistThemeToServer(theme)`` behind the same
   :func:`saveTheme` / :func:`loadTheme` shape used by the localStorage
-  layer today, then re-points the toast copy at the network failure.
+  layer today, then re-points the toast copy at the network failure.~~
 
-**Action when the preferences route lands** (post-v1 work item to be
+~~**Action when the preferences route lands** (post-v1 work item to be
 scheduled separately): extend
 ``frontend/src/lib/themes/persistence.ts`` to call the API client,
 keeping localStorage as the synchronous boot-time read so the no-flash
-guarantee holds.
+guarantee holds.~~
+
+_Resolved by N-9 bundle commit (fix/feat: memories, theme-sync, bulk-export, stub-routes, knip cleanup); `syncThemeToServer` implemented in `frontend/src/lib/themes/persistence.ts` and wired through `store.svelte.ts:setTheme`. See `git log` for the resolving commit hash._
 
 ### Closing-sweep gap log — 2026-05-02
 
