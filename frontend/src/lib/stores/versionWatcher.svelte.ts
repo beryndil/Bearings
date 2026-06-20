@@ -44,8 +44,18 @@ interface BundleVersionOut {
 // Bundle mtime tracking (N-14)
 // ---------------------------------------------------------------------------
 
-/** Unix float seconds at page load (captured once on module init). */
-const _PAGE_LOAD_MTIME: number = Date.now() / 1000;
+/**
+ * Server bundle mtime the running page was loaded with. Captured on the
+ * FIRST successful ``/api/version`` poll — NOT the client wall-clock.
+ *
+ * The previous ``Date.now()`` baseline compared a browser clock against a
+ * server file mtime: two different quantities. Because the bundle is always
+ * built before the page loads, the client-clock baseline sat above the
+ * running bundle's real mtime, creating a dead zone where a genuinely newer
+ * bundle never triggered the auto-reload — the recurring "had to hard-refresh
+ * to see the change" bug. Comparing server-mtime to server-mtime removes it.
+ */
+let _loadedBundleMtime: number | null = null;
 
 let _serverBundleMtime: number | null = null;
 let _reloadPending = false;
@@ -61,7 +71,12 @@ function _maybeReload(): void {
   if (_reloadDebounce !== null) return; // already scheduled
   _reloadDebounce = setTimeout(() => {
     _reloadDebounce = null;
-    if (!_reloadPending && _serverBundleMtime !== null && _serverBundleMtime > _PAGE_LOAD_MTIME) {
+    if (
+      !_reloadPending &&
+      _serverBundleMtime !== null &&
+      _loadedBundleMtime !== null &&
+      _serverBundleMtime > _loadedBundleMtime
+    ) {
       _reloadPending = true;
       window.location.reload();
     }
@@ -72,6 +87,13 @@ function _maybeReload(): void {
 async function checkBundleMtime(): Promise<void> {
   try {
     const out = await getJson<BundleVersionOut>(API_VERSION_ENDPOINT);
+    // First successful poll establishes the baseline: the bundle this page
+    // is actually running. Subsequent polls reporting a strictly greater
+    // mtime mean a newer bundle shipped -> reload.
+    if (_loadedBundleMtime === null) {
+      _loadedBundleMtime = out.bundle_mtime;
+      return;
+    }
     _serverBundleMtime = out.bundle_mtime;
     _maybeReload();
   } catch {
@@ -157,6 +179,7 @@ export function _setVersionForTests(version: string): void {
  */
 export function _resetVersionWatcherForTests(): void {
   _store.version = STATUS_BAR_STRINGS.versionLoading;
+  _loadedBundleMtime = null;
   _serverBundleMtime = null;
   _reloadPending = false;
   if (_reloadDebounce !== null) {
@@ -178,4 +201,14 @@ export function _resetVersionWatcherForTests(): void {
 export function _startVersionPollForTests(): void {
   if (_pollInterval !== null) clearInterval(_pollInterval);
   _pollInterval = setInterval(() => void refreshVersion(), STATUS_BAR_VERSION_POLL_INTERVAL_MS);
+}
+
+/**
+ * Run a single bundle-mtime check synchronously (tests only) — drives the
+ * baseline-capture + reload decision without waiting on the poll interval.
+ *
+ * @internal
+ */
+export function _checkBundleMtimeForTests(): Promise<void> {
+  return checkBundleMtime();
 }
