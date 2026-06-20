@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  _applyUpsertForTests,
   _resetForTests,
   _simulateWsOpenForTests,
   loadMoreSessions,
@@ -302,6 +303,42 @@ describe("sessionsStore.loadMoreSessions", () => {
 });
 
 describe("WS upsert helpers", () => {
+  it("preserves a WS-upserted session when refreshSessions response predates the upsert", async () => {
+    // Reproduces the "first session shows no sidebar activity" race:
+    //
+    //   1. WS onOpen → wsOpenVersion++ → refreshSessions starts (snapshot = {})
+    //   2. User creates first session → session_upsert → _applyUpsert adds it
+    //   3. refreshSessions response arrives (DB snapshot predates the session)
+    //
+    // Without the snapshot-based merge, step 3 would wipe the upserted row.
+
+    // --- Step 1: start a refreshSessions that won't resolve yet -----------
+    let resolveRefresh!: (r: Response) => void;
+    const hangingFetch = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    vi.spyOn(globalThis, "fetch").mockReturnValueOnce(hangingFetch);
+    const refreshPromise = refreshSessions(emptyFilter()); // in-flight, not awaited
+
+    // --- Step 2: WS upsert of the brand-new session (during flight) -------
+    const newSession = makeSession("ses_new");
+    _applyUpsertForTests(newSession);
+    expect(sessionsStore.sessions.some((s) => s.id === "ses_new")).toBe(true);
+
+    // --- Step 3: refreshSessions resolves with a stale snapshot (no ses_new)
+    resolveRefresh(
+      new Response(JSON.stringify(page([])), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await refreshPromise;
+
+    // ses_new was NOT in the pre-fetch snapshot (added during flight) →
+    // must survive the refresh even though the server didn't return it yet.
+    expect(sessionsStore.sessions.some((s) => s.id === "ses_new")).toBe(true);
+  });
+
   it("_applyUpsert (via WS session_upsert) seeds tagsBySessionId from embedded tags", async () => {
     // Seed the store with a session that has tags via refreshSessions.
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(

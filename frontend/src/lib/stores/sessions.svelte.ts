@@ -437,6 +437,23 @@ export async function refreshSessions(filter: SessionFilter): Promise<void> {
   refreshController?.abort();
   const controller = new AbortController();
   refreshController = controller;
+  // Snapshot the IDs present at the START of this fetch.  Any session that
+  // appears in state.sessions when the response lands but was NOT in this
+  // snapshot was injected by a concurrent _applyUpsert (WS broadcast) during
+  // the in-flight window and must be preserved.  This eliminates the
+  // "first session shows no sidebar activity" race:
+  //
+  //   1. WS onOpen → wsOpenVersion++ → refreshSessions starts (snapshot = {})
+  //   2. User creates first session → session_upsert → _applyUpsert adds it
+  //   3. refreshSessions response arrives (DB snapshot predates the session)
+  //      → without the merge, state.sessions = [] wipes the upserted row
+  //      → with the merge, "ses_new" is preserved because it was not in
+  //        the snapshot and is not in the server result
+  //
+  // The snapshot approach keeps the "reset on every refresh" contract intact:
+  // sessions that WERE in the snapshot but absent from the server result are
+  // correctly dropped (they belong to a prior list, not to in-flight upserts).
+  const snapshotIds = new Set(state.sessions.map((s) => s.id));
   state.loading = true;
   try {
     const params = _filterToParams(filter);
@@ -445,8 +462,21 @@ export async function refreshSessions(filter: SessionFilter): Promise<void> {
     if (controller.signal.aborted) {
       return;
     }
-    state.sessions = page.sessions;
-    state.tagsBySessionId = _tagsMapFromSessions(page.sessions);
+    // Collect sessions added by _applyUpsert while the fetch was in flight:
+    // present in state.sessions NOW, absent from the server page, AND absent
+    // from the pre-fetch snapshot.
+    const pageIds = new Set(page.sessions.map((s) => s.id));
+    const upsertedDuringFlight = state.sessions.filter(
+      (s) => !pageIds.has(s.id) && !snapshotIds.has(s.id),
+    );
+    state.sessions =
+      upsertedDuringFlight.length > 0
+        ? [...upsertedDuringFlight, ...page.sessions]
+        : page.sessions;
+    state.tagsBySessionId = {
+      ..._tagsMapFromSessions(page.sessions),
+      ..._tagsMapFromSessions(upsertedDuringFlight),
+    };
     state.total = page.total;
     state.nextOffset = page.next_offset;
     state.hasMore = page.next_offset !== null;
@@ -570,6 +600,17 @@ export function _resetWsStatusForTests(): void {
  */
 export function _simulateWsOpenForTests(): void {
   _wsOpenVersion.n += 1;
+}
+
+/**
+ * Simulate a ``session_upsert`` WS broadcast event for unit tests.
+ *
+ * Exercises the ``_applyUpsert`` code path — specifically the race-condition
+ * guard in :func:`refreshSessions` that preserves sessions injected during
+ * an in-flight ``GET /api/sessions`` request.
+ */
+export function _applyUpsertForTests(session: SessionOut): void {
+  _applyUpsert(session);
 }
 
 function isAbortError(error: unknown): boolean {
