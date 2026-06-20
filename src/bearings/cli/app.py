@@ -16,11 +16,9 @@ v0.18.0.dev0 install ships with — this preserves the test contract
 and prints a one-line bootstrap notice") without rolling back the
 done-when of either item.
 
-Stubs for ``window`` / ``send`` / ``here`` / ``pending`` are deferred
-per arch §1.1.1 + behavior doc; each subsequent item adds its module
-under ``cli/`` and registers its subparser through
-:func:`build_subparser`.  ``gc``, ``init``, and ``migrate`` are now
-wired.
+Items M-3 + N-15 wire ``window`` / ``send`` / ``here`` per
+``docs/behavior/bearings-cli.md``; ``gc``, ``init``, ``migrate``,
+and ``pending`` were wired in earlier items.
 """
 
 from __future__ import annotations
@@ -31,11 +29,14 @@ from collections.abc import Sequence
 
 from bearings import __version__
 from bearings.cli import gc as gc_cli
+from bearings.cli import here as here_cli
 from bearings.cli import init as init_cli
 from bearings.cli import migrate as migrate_cli
 from bearings.cli import pending as pending_cli
+from bearings.cli import send as send_cli
 from bearings.cli import serve as serve_cli
 from bearings.cli import todo as todo_cli
+from bearings.cli import window as window_cli
 from bearings.config.constants import (
     CLI_EXIT_OK,
     CLI_EXIT_OPERATION_FAILURE,
@@ -49,8 +50,8 @@ from bearings.config.constants import (
 # notice is not printed; the subcommand handles its own output.
 _BOOTSTRAP_MESSAGE: str = (
     "bearings v{version} (v1 rebuild — "
-    "todo + serve + gc + init + migrate + pending subcommands wired; "
-    "window / send / here land in subsequent items)\n"
+    "todo + serve + gc + init + migrate + pending + "
+    "window + send + here subcommands wired)\n"
 )
 
 
@@ -84,6 +85,9 @@ def build_parser() -> argparse.ArgumentParser:
     init_cli.build_subparser(sub)
     migrate_cli.build_subparser(sub)
     pending_cli.build_subparser(sub)
+    window_cli.build_subparser(sub)
+    send_cli.build_subparser(sub)
+    here_cli.build_subparser(sub)
     return parser
 
 

@@ -289,6 +289,28 @@ def run_onboarding_ritual(directory: Path) -> str:
     )
 
 
+def probe_git_status(directory: Path) -> str:
+    """Return a one-line git status summary for *directory*.
+
+    Public facade over the private ``_git_status`` implementation so
+    ``bearings here check`` can call the same probe without importing a
+    private symbol.  Returns the same format as ``_git_status``:
+    ``"<clean|dirty>, branch <name>, <N> changed, <S> stashes"`` or
+    ``"not a git repo"``.
+    """
+    return _git_status(directory)
+
+
+def probe_env_status(directory: Path) -> str:
+    """Return a one-line lockfile-freshness summary for *directory*.
+
+    Public facade over the private ``_env_status`` implementation so
+    ``bearings here check`` can reuse the same environment probe without
+    importing a private symbol.
+    """
+    return _env_status(directory)
+
+
 def dir_init_body(directory: Path) -> None:
     """Write (or overwrite) ``.bearings/{manifest,state,pending}.toml``.
 
@@ -341,5 +363,7 @@ def dir_init_body(directory: Path) -> None:
 
 __all__ = [
     "dir_init_body",
+    "probe_env_status",
+    "probe_git_status",
     "run_onboarding_ritual",
 ]

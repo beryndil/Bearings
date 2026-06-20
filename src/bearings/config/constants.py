@@ -2012,3 +2012,70 @@ WORK_EVIDENCE_ALL_TOOL_NAMES: Final[frozenset[str]] = (
     WORK_EVIDENCE_BASH_TOOL_NAMES | WORK_EVIDENCE_WRITE_TOOL_NAMES | WORK_EVIDENCE_EDIT_TOOL_NAMES
 )
 GIT_DIFF_STAT_TIMEOUT_S: Final[float] = 10.0
+
+# ---------------------------------------------------------------------------
+# ``bearings window`` browser autodetect (behavior doc §"bearings window").
+#
+# Firefox-family browsers get Bearings' bundled SSB profile (userChrome.css)
+# plus ``--new-window``; Chromium-family browsers get ``--app=URL`` for their
+# native chromeless mode.  The candidates below are tried in order via
+# ``shutil.which``; first match wins.  The default Firefox profile directory
+# is created under the XDG data tree so it lives alongside other per-user
+# Bearings data.
+# ---------------------------------------------------------------------------
+
+WINDOW_AUTODETECT_FIREFOX_BROWSERS: Final[tuple[str, ...]] = (
+    "firefox",
+    "firefox-esr",
+)
+
+WINDOW_AUTODETECT_CHROMIUM_BROWSERS: Final[tuple[str, ...]] = (
+    "chromium",
+    "chromium-browser",
+    "google-chrome",
+    "google-chrome-stable",
+)
+
+# Default SSB profile directory for Firefox when ``--plain`` is not specified
+# and the user has not supplied ``--profile <dir>``.
+DEFAULT_WINDOW_FIREFOX_PROFILE_DIR: Final[Path] = Path(
+    "~/.local/share/bearings-v1/firefox-profile"
+).expanduser()
+
+# ---------------------------------------------------------------------------
+# ``bearings send`` streaming event types + format constants
+# (behavior doc §"bearings send").
+#
+# The WebSocket wire frame carries ``{"kind": "event", "seq": N, "event": {...}}``
+# where the nested ``event.type`` discriminates the event kind.  The three
+# types below are the terminal and printable kinds; other types (tool_start,
+# tool_output_delta, etc.) are printed in json mode but only some are
+# rendered in pretty mode.
+# ---------------------------------------------------------------------------
+
+# Terminal event types — determine the exit code.
+SEND_EVENT_TYPE_MESSAGE_COMPLETE: Final[str] = "message_complete"
+SEND_EVENT_TYPE_ERROR: Final[str] = "error"
+
+# Streaming token type — printed inline in pretty mode.
+SEND_EVENT_TYPE_TOKEN: Final[str] = "token"
+
+# Tool-call event types — rendered as ``↳ tool`` / ``← ok`` in pretty mode.
+SEND_EVENT_TYPE_TOOL_START: Final[str] = "tool_start"
+SEND_EVENT_TYPE_TOOL_RESULT: Final[str] = "tool_result"
+
+# Pretty-mode horizontal rule width (behavior doc §"bearings send" —
+# "40-character horizontal rule").
+SEND_PRETTY_RULE_WIDTH: Final[int] = 40
+
+# Default --format value (behavior doc §"bearings send" — "default --format json").
+SEND_DEFAULT_FORMAT: Final[str] = "json"
+
+# URL path templates for the prompt HTTP endpoint and the per-session
+# WebSocket stream endpoint.  Use ``str.format(session_id=...)`` to expand.
+SEND_PROMPT_PATH_TEMPLATE: Final[str] = "/api/sessions/{session_id}/prompt"
+SEND_WS_PATH_TEMPLATE: Final[str] = "/ws/sessions/{session_id}"
+
+# WebSocket frame ``kind`` discriminator values.
+SEND_WS_FRAME_KIND_EVENT: Final[str] = "event"
+SEND_WS_FRAME_KIND_HEARTBEAT: Final[str] = "heartbeat"
