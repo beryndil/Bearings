@@ -679,6 +679,14 @@ export const CONVERSATION_STRINGS = {
   // Behavior doc §"Very-long-output truncation rules" — wording mirrors
   // backend STREAM_TRUNCATION_MARKER_TEMPLATE for visual consistency.
   truncationLabel: "[truncated — more bytes elided]",
+  /**
+   * Inline fold banner shown between head and tail of a two-tier folded
+   * tool output (M-6 — middle-fold with interactive expander).
+   */
+  toolOutputFoldBanner: (chars: number): string =>
+    `… ${chars.toLocaleString()} chars hidden — `,
+  /** Button label embedded in the fold banner. */
+  toolOutputShowFull: "Show full output",
   routingBadgeTooltipFallback: "Routing reason unavailable",
   pairedChatBreadcrumbPrefix: "↳",
   pairedChatBreadcrumbDeleted: "(checklist deleted)",
@@ -794,8 +802,35 @@ export const LIVE_TODOS_STRINGS = {
  * past the persistence hard cap (1 MiB) is also past this display
  * cap, so the UI's truncation marker only renders when the persisted
  * body itself is truncated.
+ *
+ * Must equal ``CHAT_TOOL_OUTPUT_HEAD_CHARS + CHAT_TOOL_OUTPUT_TAIL_CHARS``
+ * so the two-tier fold uses the same total budget as the old tail-only cap.
  */
 export const CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS = 8000;
+
+/**
+ * Characters to keep from the **head** (beginning) of a tool-call
+ * body when the middle fold is active.
+ *
+ * Together with :data:`CHAT_TOOL_OUTPUT_TAIL_CHARS` this must equal
+ * :data:`CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS`.
+ *
+ * Behavior anchor: ``docs/behavior/tool-output-streaming.md``
+ * §"Very-long-output truncation rules" — two-tier middle-fold (M-6).
+ */
+export const CHAT_TOOL_OUTPUT_HEAD_CHARS = 3000;
+
+/**
+ * Characters to keep from the **tail** (end) of a tool-call body
+ * when the middle fold is active.
+ *
+ * Together with :data:`CHAT_TOOL_OUTPUT_HEAD_CHARS` this must equal
+ * :data:`CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS`.
+ *
+ * Behavior anchor: ``docs/behavior/tool-output-streaming.md``
+ * §"Very-long-output truncation rules" — two-tier middle-fold (M-6).
+ */
+export const CHAT_TOOL_OUTPUT_TAIL_CHARS = 5000;
 
 /**
  * Page size for cursor-based message pagination (item 1.3).

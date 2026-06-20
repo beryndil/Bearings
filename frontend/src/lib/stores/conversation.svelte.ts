@@ -26,7 +26,7 @@ import type { AgentEvent, RunnerStatusEvent } from "../api/events";
 import { listMessages, type MessageOut, type MessagePage, type ToolCallOut } from "../api/messages";
 import type { SessionTokenTotalsOut } from "../api/sessions";
 import type { StreamFrame } from "../api/streaming";
-import { CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, MESSAGE_PAGE_SIZE, WS_FRAME_KIND_EVENT } from "../config";
+import { CHAT_TOOL_OUTPUT_HEAD_CHARS, CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, CHAT_TOOL_OUTPUT_TAIL_CHARS, MESSAGE_PAGE_SIZE, WS_FRAME_KIND_EVENT } from "../config";
 
 /** A single tool-call drawer row inside an assistant turn. */
 export interface ToolCallView {
@@ -34,8 +34,29 @@ export interface ToolCallView {
   name: string;
   /** Raw ``tool_input_json`` from the start event, for context-menu copy. */
   inputJson: string;
-  /** Output streamed so far (capped at the soft display cap). */
+  /**
+   * Output visible to the user.  When :prop:`isFolded` is ``false`` this is
+   * the full text (up to the soft cap).  When ``isFolded`` is ``true`` this
+   * is the **tail** portion (last ``CHAT_TOOL_OUTPUT_TAIL_CHARS`` chars);
+   * the head is stored separately in :prop:`outputHead`.
+   *
+   * Behavior anchor: ``docs/behavior/tool-output-streaming.md``
+   * §"Very-long-output truncation rules" — two-tier middle-fold (M-6).
+   */
   output: string;
+  /**
+   * First :data:`CHAT_TOOL_OUTPUT_HEAD_CHARS` characters of the full output.
+   * Populated (non-empty) only when :prop:`isFolded` is ``true``; the
+   * component renders head + fold banner + tail to reconstruct the visible
+   * bookends without holding the full middle in memory.
+   */
+  outputHead: string;
+  /**
+   * ``true`` when the output exceeds :data:`CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS`
+   * and the middle section is folded.  The fold banner and "Show full output"
+   * expander button are rendered only when this is ``true``.
+   */
+  isFolded: boolean;
   /** ``output.length`` before truncation — surfaces the elided count. */
   rawLength: number;
   /** ``true`` once a ``tool_call_end`` arrives. */
@@ -369,15 +390,22 @@ export function hydrateToolCalls(toolCalls: ToolCallOut[]): void {
       ...turn,
       toolCalls: calls.map((tc) => {
         const rawLength = tc.output.length;
-        const output =
-          rawLength > CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS
-            ? tc.output.slice(rawLength - CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS)
-            : tc.output;
+        const isFolded = rawLength > CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS;
+        // Two-tier fold: head = first HEAD_CHARS, tail = last TAIL_CHARS.
+        // When not folded, output = full text, outputHead = "".
+        const outputHead = isFolded
+          ? tc.output.slice(0, CHAT_TOOL_OUTPUT_HEAD_CHARS)
+          : "";
+        const output = isFolded
+          ? tc.output.slice(rawLength - CHAT_TOOL_OUTPUT_TAIL_CHARS)
+          : tc.output;
         return {
           id: tc.id,
           name: tc.tool_name,
           inputJson: tc.input_json,
           output,
+          outputHead,
+          isFolded,
           rawLength,
           done: true,
           ok: tc.ok,
@@ -758,6 +786,8 @@ export function applyEvent(
               name: event.tool_name,
               inputJson: event.tool_input_json,
               output: "",
+              outputHead: "",
+              isFolded: false,
               rawLength: 0,
               done: false,
               ok: null,
@@ -776,16 +806,31 @@ export function applyEvent(
         // skipping prevents re-appending output onto the hydrated full text.
         if (call.done) return call;
         const nextRaw = call.rawLength + event.delta.length;
+        // ``call.output`` is the full text when not yet folded, or the
+        // tail portion once folded. In both cases appending the delta and
+        // then slicing the last TAIL_CHARS gives the correct next tail.
         const merged = call.output + event.delta;
-        const truncated =
-          merged.length > CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS
-            ? merged.slice(merged.length - CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS)
-            : merged;
-        return {
-          ...call,
-          output: truncated,
-          rawLength: nextRaw,
-        };
+        if (merged.length <= CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS) {
+          // Under the soft cap — no folding needed yet.
+          return { ...call, output: merged, rawLength: nextRaw };
+        }
+        if (!call.isFolded) {
+          // Just crossed the cap: fix the head now and start the tail slide.
+          // At this moment ``merged`` still contains the full text
+          // (``call.output`` was the pre-fold full text).
+          const head = merged.slice(0, CHAT_TOOL_OUTPUT_HEAD_CHARS);
+          const tail = merged.slice(merged.length - CHAT_TOOL_OUTPUT_TAIL_CHARS);
+          return {
+            ...call,
+            output: tail,
+            outputHead: head,
+            isFolded: true,
+            rawLength: nextRaw,
+          };
+        }
+        // Already folded — slide the tail forward; head is fixed.
+        const tail = merged.slice(merged.length - CHAT_TOOL_OUTPUT_TAIL_CHARS);
+        return { ...call, output: tail, rawLength: nextRaw };
       });
     case "tool_call_end":
       return mapToolCall(turns, event.tool_call_id, (call) => ({

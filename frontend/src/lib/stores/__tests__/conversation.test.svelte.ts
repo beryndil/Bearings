@@ -9,8 +9,8 @@
  *   grows in place.
  * - tool_call_start + tool_output_delta + tool_call_end → drawer
  *   row opens, body streams, status finalises.
- * - tool_output_delta past the soft cap truncates the visible body
- *   (tail-bookend) but ``rawLength`` keeps the full count.
+ * - tool_output_delta past the soft cap folds the middle (two-tier
+ *   M-6 head+tail bookend) but ``rawLength`` keeps the full count.
  * - error event attaches to the in-flight assistant turn.
  * - duplicate seq is ignored on ingest.
  */
@@ -28,7 +28,7 @@ import {
   resetConversation,
   type MessageTurnView,
 } from "../conversation.svelte";
-import { CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, WS_FRAME_KIND_EVENT } from "../../config";
+import { CHAT_TOOL_OUTPUT_HEAD_CHARS, CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, CHAT_TOOL_OUTPUT_TAIL_CHARS, WS_FRAME_KIND_EVENT } from "../../config";
 import type { ToolCallOut } from "../../api/messages";
 
 afterEach(() => {
@@ -182,8 +182,11 @@ describe("applyEvent — tool drawer", () => {
     expect(tc.durationMs).toBe(42);
   });
 
-  it("truncates display output past the soft cap (tail-bookend)", () => {
-    const big = "x".repeat(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS + 1000);
+  it("folds middle when output exceeds soft cap (two-tier M-6)", () => {
+    const head = "H".repeat(CHAT_TOOL_OUTPUT_HEAD_CHARS);
+    const middle = "M".repeat(2000);
+    const tail = "T".repeat(CHAT_TOOL_OUTPUT_TAIL_CHARS);
+    const big = head + middle + tail;
     let turns = applyEvent(withAssistantTurn(), {
       session_id: sid,
       type: "tool_call_start",
@@ -199,8 +202,76 @@ describe("applyEvent — tool drawer", () => {
       delta: big,
     });
     const tc = turns[0].toolCalls[0];
-    expect(tc.output).toHaveLength(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS);
+    // isFolded must be set
+    expect(tc.isFolded).toBe(true);
+    // head = first HEAD_CHARS
+    expect(tc.outputHead).toHaveLength(CHAT_TOOL_OUTPUT_HEAD_CHARS);
+    expect(tc.outputHead).toBe(head);
+    // output = last TAIL_CHARS (tail portion)
+    expect(tc.output).toHaveLength(CHAT_TOOL_OUTPUT_TAIL_CHARS);
+    expect(tc.output).toBe(tail);
+    // rawLength = full original length
     expect(tc.rawLength).toBe(big.length);
+  });
+
+  it("does not fold output under soft cap", () => {
+    const small = "x".repeat(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS - 1);
+    let turns = applyEvent(withAssistantTurn(), {
+      session_id: sid,
+      type: "tool_call_start",
+      message_id: "a1",
+      tool_call_id: "t1",
+      tool_name: "Bash",
+      tool_input_json: "{}",
+    });
+    turns = applyEvent(turns, {
+      session_id: sid,
+      type: "tool_output_delta",
+      tool_call_id: "t1",
+      delta: small,
+    });
+    const tc = turns[0].toolCalls[0];
+    expect(tc.isFolded).toBe(false);
+    expect(tc.outputHead).toBe("");
+    expect(tc.output).toBe(small);
+    expect(tc.rawLength).toBe(small.length);
+  });
+
+  it("slides the tail forward on subsequent deltas after fold", () => {
+    // Push to just over cap, then add more
+    const initial = "A".repeat(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS + 1);
+    const extra = "B".repeat(500);
+    let turns = applyEvent(withAssistantTurn(), {
+      session_id: sid,
+      type: "tool_call_start",
+      message_id: "a1",
+      tool_call_id: "t1",
+      tool_name: "Bash",
+      tool_input_json: "{}",
+    });
+    turns = applyEvent(turns, {
+      session_id: sid,
+      type: "tool_output_delta",
+      tool_call_id: "t1",
+      delta: initial,
+    });
+    // Confirm folded
+    expect(turns[0].toolCalls[0].isFolded).toBe(true);
+    const headBeforeExtra = turns[0].toolCalls[0].outputHead;
+    // Add more output
+    turns = applyEvent(turns, {
+      session_id: sid,
+      type: "tool_output_delta",
+      tool_call_id: "t1",
+      delta: extra,
+    });
+    const tc = turns[0].toolCalls[0];
+    // head must remain fixed
+    expect(tc.outputHead).toBe(headBeforeExtra);
+    // tail must end with the extra "B"s
+    expect(tc.output.endsWith(extra)).toBe(true);
+    // rawLength updated
+    expect(tc.rawLength).toBe(initial.length + extra.length);
   });
 
   it("attaches an error message to the in-flight assistant turn on error event", () => {
@@ -527,6 +598,8 @@ describe("hydrateToolCalls", () => {
       name: "Read",
       inputJson: "{}",
       output: "ws output",
+      outputHead: "",
+      isFolded: false,
       rawLength: 9,
       done: true,
       ok: true,
@@ -545,16 +618,37 @@ describe("hydrateToolCalls", () => {
     expect(turn?.toolCalls[0].id).toBe("toolu_ws");
   });
 
-  it("applies display cap to long output", () => {
-    const longOutput = "x".repeat(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS + 100);
+  it("applies two-tier fold to long hydrated output (M-6)", () => {
+    const headPart = "H".repeat(CHAT_TOOL_OUTPUT_HEAD_CHARS);
+    const middlePart = "M".repeat(500);
+    const tailPart = "T".repeat(CHAT_TOOL_OUTPUT_TAIL_CHARS);
+    const longOutput = headPart + middlePart + tailPart;
     hydrateTurns("ses_a", {
       items: [makeMsg("a1", "assistant")],
       has_more: false,
     });
     hydrateToolCalls([makeToolCallOut("toolu_long", "a1", { output: longOutput })]);
     const turn = conversationStore.turns.find((t) => t.id === "a1");
-    expect(turn?.toolCalls[0].output.length).toBe(CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS);
-    expect(turn?.toolCalls[0].rawLength).toBe(longOutput.length);
+    const tc = turn?.toolCalls[0];
+    expect(tc?.isFolded).toBe(true);
+    expect(tc?.outputHead).toBe(headPart);
+    expect(tc?.output).toBe(tailPart);
+    expect(tc?.rawLength).toBe(longOutput.length);
+  });
+
+  it("does not fold short hydrated output", () => {
+    const shortOutput = "x".repeat(100);
+    hydrateTurns("ses_a", {
+      items: [makeMsg("a1", "assistant")],
+      has_more: false,
+    });
+    hydrateToolCalls([makeToolCallOut("toolu_short", "a1", { output: shortOutput })]);
+    const turn = conversationStore.turns.find((t) => t.id === "a1");
+    const tc = turn?.toolCalls[0];
+    expect(tc?.isFolded).toBe(false);
+    expect(tc?.outputHead).toBe("");
+    expect(tc?.output).toBe(shortOutput);
+    expect(tc?.rawLength).toBe(shortOutput.length);
   });
 
   it("no-ops on empty tool_calls array", () => {

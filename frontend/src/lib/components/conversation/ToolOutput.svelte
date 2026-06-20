@@ -15,7 +15,10 @@
    *   middle is folded inside an inline expander; the head/tail
    *   bookends remain interactive. (The store applies the soft cap on
    *   ``output``; the row exposes ``rawLength`` so the user sees the
-   *   elided count.)
+   *   elided count.) M-6.
+   * - §"ANSI passthrough" — ANSI color escape sequences in Bash tool
+   *   output are converted to HTML color spans via ``ansi-to-html``
+   *   and sanitized with DOMPurify. M-5.
    * - §"Partial-output behavior on tool failure" — a failed call
    *   keeps the partial output visible and appends an error block.
    * - §"Long-tool keepalive" — keepalive ticks update
@@ -26,6 +29,8 @@
    *   copy-output / copy-id handlers (G5).
    */
   import {
+    CHAT_TOOL_OUTPUT_HEAD_CHARS,
+    CHAT_TOOL_OUTPUT_TAIL_CHARS,
     CONVERSATION_STRINGS,
     MENU_ACTION_TOOL_CALL_COPY_ID,
     MENU_ACTION_TOOL_CALL_COPY_INPUT,
@@ -38,6 +43,7 @@
   } from "../../config";
   import { contextMenu } from "../../actions/contextMenu";
   import { sendPrompt } from "../../api/prompt";
+  import { ansiToHtml } from "../../ansi";
   import { linkifyToHtml } from "../../linkify";
   import { sanitizeHtml } from "../../sanitize";
   import CollapsibleBody from "../common/CollapsibleBody.svelte";
@@ -75,6 +81,13 @@
   /** True when the inline edit-input textarea is open. */
   let editInputOpen = $state(false);
   let editInputDraft = $state("");
+
+  /**
+   * M-6: whether the middle fold is expanded by the user.  Starts
+   * ``false``; toggled by the "Show full output" button.  Resets to
+   * ``false`` when the tool call changes (reactive via ``$derived``).
+   */
+  let foldExpanded = $state(false);
 
   function openEditInput(): void {
     editInputDraft = prettyJson(call.inputJson);
@@ -117,10 +130,14 @@
      * Copy the streamed / truncated output text to the clipboard.
      * Disabled with tooltip while the tool is still running —
      * matches ``docs/behavior/context-menus.md`` §"Disabled entries".
+     *
+     * When the output is folded, copies head + tail (the full persisted
+     * portion); the hidden middle is not available in the store.
      */
     [MENU_ACTION_TOOL_CALL_COPY_OUTPUT]: call.done
       ? () => {
-          void navigator.clipboard.writeText(call.output);
+          const text = call.isFolded ? call.outputHead + call.output : call.output;
+          void navigator.clipboard.writeText(text);
         }
       : { disabledReason: "No output yet — the tool is still running" },
 
@@ -192,7 +209,38 @@
       : Math.max(nowMs - call.startedAt, call.liveElapsedMs),
   );
   const elapsedLabel = $derived(formatElapsed(elapsedMs));
-  const elidedCount = $derived(Math.max(0, call.rawLength - call.output.length));
+
+  /**
+   * Number of characters elided in the hard-cap truncation (past the
+   * persistence cap, not the soft-cap fold).  Zero for normal outputs.
+   * Rendered as a "[truncated — more bytes elided]" annotation.
+   *
+   * Note: when the middle fold is active, ``call.output`` is the tail
+   * portion only (``TAIL_CHARS``), so the visible count compares against
+   * HEAD + TAIL rather than just output.length.
+   */
+  const hardCapElidedCount = $derived(
+    call.isFolded
+      ? Math.max(
+          0,
+          call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS,
+        )
+      : Math.max(0, call.rawLength - call.output.length),
+  );
+
+  /**
+   * Characters hidden by the middle fold (between head and tail).
+   * Zero when not folded or when the user has expanded the fold.
+   */
+  const middleFoldCount = $derived(
+    call.isFolded && !foldExpanded
+      ? Math.max(
+          0,
+          call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS,
+        )
+      : 0,
+  );
+
   const statusLabel = $derived(
     call.done
       ? call.ok === false
@@ -241,6 +289,28 @@
    * acceptance criterion (2b).
    */
   const inputPretty = $derived(prettyJson(call.inputJson));
+
+  /**
+   * Render a raw tool-output text segment to safe HTML.
+   *
+   * M-5 pipeline: if the text contains ANSI color escape sequences,
+   * ``ansiToHtml`` converts them to ``<span style="color:…">`` elements
+   * (with ``escapeXML: true`` for XSS safety) and the result is passed
+   * to DOMPurify.  For text without ANSI sequences the existing
+   * ``linkifyToHtml → sanitizeHtml`` pipeline applies (clickable paths/URLs).
+   *
+   * The two pipelines are mutually exclusive in v1: ANSI-colored output
+   * does not receive path/URL linkification, and vice-versa.
+   */
+  function renderSegment(text: string): string {
+    const ansiHtml = ansiToHtml(text);
+    if (ansiHtml !== null) {
+      return sanitizeHtml(ansiHtml);
+    }
+    return sanitizeHtml(
+      linkifyToHtml(text, { workingDir: workingDir ?? undefined }),
+    );
+  }
 </script>
 
 <details
@@ -286,20 +356,60 @@
       <p class="mt-2 text-fg-muted" data-testid="tool-output-empty">
         {CONVERSATION_STRINGS.toolStatusRunning}…
       </p>
-    {:else}
+    {:else if call.isFolded && !foldExpanded}
+      <!--
+        M-6: two-tier middle-fold — head + fold banner + tail.
+        The head is rendered first, then the interactive fold banner,
+        then the tail.  Both bookends are individually wrapped in a
+        CollapsibleBody so very long heads/tails don't dominate the viewport.
+      -->
       <!-- eslint-disable svelte/no-at-html-tags -->
       <CollapsibleBody class="mt-2">
         <pre
           class="whitespace-pre-wrap break-words font-mono text-fg"
-          data-testid="tool-output-stream">{@html sanitizeHtml(
-            linkifyToHtml(call.output, { workingDir: workingDir ?? undefined }),
+          data-testid="tool-output-head">{@html renderSegment(call.outputHead)}</pre>
+      </CollapsibleBody>
+      <div
+        class="my-1 flex items-center gap-1 font-mono text-fg-muted"
+        data-testid="tool-output-fold-banner"
+        aria-label={CONVERSATION_STRINGS.toolOutputFoldBanner(middleFoldCount)}
+      >
+        <span class="italic"
+          >{CONVERSATION_STRINGS.toolOutputFoldBanner(middleFoldCount)}</span
+        ><button
+          type="button"
+          class="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-fg-strong hover:bg-surface-3 focus:outline-none focus:ring-1 focus:ring-accent/60"
+          onclick={() => {
+            foldExpanded = true;
+          }}
+          data-testid="tool-output-show-full">{CONVERSATION_STRINGS.toolOutputShowFull}</button
+        >
+      </div>
+      <CollapsibleBody>
+        <pre
+          class="whitespace-pre-wrap break-words font-mono text-fg"
+          data-testid="tool-output-tail">{@html renderSegment(call.output)}</pre>
+      </CollapsibleBody>
+      <!-- eslint-enable svelte/no-at-html-tags -->
+    {:else}
+      <!--
+        Normal path (not folded, or fold expanded).  When the fold has been
+        expanded, render head + tail concatenated so the full persisted
+        content is visible without the fold UI.
+      -->
+      <!-- eslint-disable svelte/no-at-html-tags -->
+      <CollapsibleBody class="mt-2">
+        <pre
+          class="whitespace-pre-wrap break-words font-mono text-fg"
+          data-testid="tool-output-stream">{@html renderSegment(
+            call.isFolded ? call.outputHead + call.output : call.output,
           )}</pre>
       </CollapsibleBody>
       <!-- eslint-enable svelte/no-at-html-tags -->
     {/if}
-    {#if elidedCount > 0}
+    {#if hardCapElidedCount > 0}
       <p class="mt-1 italic text-fg-muted" data-testid="tool-output-truncated">
-        {CONVERSATION_STRINGS.truncationLabel} ({elidedCount} chars elided)
+        {CONVERSATION_STRINGS.truncationLabel} ({hardCapElidedCount} chars elided)
       </p>
     {/if}
     {#if call.done && call.ok === false && call.errorMessage !== null}
@@ -320,7 +430,8 @@
         <pre class="whitespace-pre-wrap break-words text-fg">{call.inputJson}</pre>
         {#if call.done}
           <p class="mb-1 mt-2 text-fg-muted">Raw output:</p>
-          <pre class="whitespace-pre-wrap break-words text-fg">{call.output}</pre>
+          <pre class="whitespace-pre-wrap break-words text-fg"
+            >{call.isFolded ? call.outputHead + call.output : call.output}</pre>
         {/if}
       </div>
     {/if}

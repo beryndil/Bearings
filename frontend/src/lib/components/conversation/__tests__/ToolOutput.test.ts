@@ -12,6 +12,7 @@ import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ToolOutput from "../ToolOutput.svelte";
+import { CHAT_TOOL_OUTPUT_HEAD_CHARS, CHAT_TOOL_OUTPUT_TAIL_CHARS } from "../../../config";
 import type { ToolCallView } from "../../../stores/conversation.svelte";
 
 function tool(overrides: Partial<ToolCallView> = {}): ToolCallView {
@@ -20,6 +21,8 @@ function tool(overrides: Partial<ToolCallView> = {}): ToolCallView {
     name: "Bash",
     inputJson: "{}",
     output: "",
+    outputHead: "",
+    isFolded: false,
     rawLength: 0,
     done: false,
     ok: null,
@@ -70,16 +73,117 @@ describe("ToolOutput", () => {
     expect(getByTestId("tool-output-stream")).toHaveTextContent("partial");
   });
 
-  it("shows the truncation marker when output was elided", () => {
+  it("shows the truncation marker when output was hard-cap elided (not folded)", () => {
+    // rawLength >> output.length but isFolded=false simulates the hard-cap path
+    // (backend truncated before the soft-cap fold could apply).
     const { getByTestId } = render(ToolOutput, {
       props: {
         call: tool({
           output: "tail",
           rawLength: 10_000,
+          isFolded: false,
         }),
       },
     });
     expect(getByTestId("tool-output-truncated")).toHaveTextContent("9996");
+  });
+});
+
+/**
+ * M-6 two-tier middle-fold truncation (interactive expander).
+ *
+ * Behavior anchor: ``docs/behavior/tool-output-streaming.md``
+ * §"Very-long-output truncation rules" — soft cap folds the middle
+ * into an inline "Show full output" expander while keeping head/tail
+ * bookends visible.
+ */
+describe("ToolOutput — two-tier middle fold (M-6)", () => {
+  it("renders head + fold banner + tail when isFolded is true", () => {
+    const { getByTestId, queryByTestId } = render(ToolOutput, {
+      props: {
+        call: tool({
+          output: "...tail content...",
+          outputHead: "...head content...",
+          isFolded: true,
+          rawLength: CHAT_TOOL_OUTPUT_HEAD_CHARS + 2000 + CHAT_TOOL_OUTPUT_TAIL_CHARS,
+          done: true,
+          ok: true,
+          durationMs: 10,
+        }),
+      },
+    });
+    // Head is rendered
+    expect(getByTestId("tool-output-head")).toHaveTextContent("head content");
+    // Tail is rendered
+    expect(getByTestId("tool-output-tail")).toHaveTextContent("tail content");
+    // Fold banner present
+    expect(getByTestId("tool-output-fold-banner")).toBeInTheDocument();
+    // "Show full output" button present
+    expect(getByTestId("tool-output-show-full")).toBeInTheDocument();
+    // The non-folded stream element is NOT rendered
+    expect(queryByTestId("tool-output-stream")).toBeNull();
+  });
+
+  it("renders the fold banner with the correct hidden-char count", () => {
+    const hiddenChars = 2000;
+    const rawLength = CHAT_TOOL_OUTPUT_HEAD_CHARS + hiddenChars + CHAT_TOOL_OUTPUT_TAIL_CHARS;
+    const { getByTestId } = render(ToolOutput, {
+      props: {
+        call: tool({
+          output: "tail",
+          outputHead: "head",
+          isFolded: true,
+          rawLength,
+        }),
+      },
+    });
+    // The banner must mention the hidden count
+    const banner = getByTestId("tool-output-fold-banner");
+    expect(banner.textContent).toContain(hiddenChars.toLocaleString());
+  });
+
+  it("clicking Show full output expands to combined head+tail", async () => {
+    const { getByTestId, queryByTestId } = render(ToolOutput, {
+      props: {
+        call: tool({
+          output: "TAIL_PART",
+          outputHead: "HEAD_PART",
+          isFolded: true,
+          rawLength: CHAT_TOOL_OUTPUT_HEAD_CHARS + 500 + CHAT_TOOL_OUTPUT_TAIL_CHARS,
+          done: true,
+          ok: true,
+          durationMs: 10,
+        }),
+      },
+    });
+    // Click the expander button
+    getByTestId("tool-output-show-full").click();
+    flushSync();
+    // After expansion: stream shows combined content, fold elements gone
+    const stream = getByTestId("tool-output-stream");
+    expect(stream.textContent).toContain("HEAD_PART");
+    expect(stream.textContent).toContain("TAIL_PART");
+    expect(queryByTestId("tool-output-fold-banner")).toBeNull();
+    expect(queryByTestId("tool-output-show-full")).toBeNull();
+  });
+
+  it("non-folded output renders as a single stream block (no fold UI)", () => {
+    const { getByTestId, queryByTestId } = render(ToolOutput, {
+      props: {
+        call: tool({
+          output: "normal output",
+          outputHead: "",
+          isFolded: false,
+          rawLength: 13,
+          done: true,
+          ok: true,
+          durationMs: 10,
+        }),
+      },
+    });
+    expect(getByTestId("tool-output-stream")).toHaveTextContent("normal output");
+    expect(queryByTestId("tool-output-fold-banner")).toBeNull();
+    expect(queryByTestId("tool-output-show-full")).toBeNull();
   });
 });
 
