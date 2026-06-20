@@ -138,6 +138,9 @@
   import { onMount } from "svelte";
 
   import {
+    MENU_ACTION_VAULT_COPY_BODY,
+    MENU_ACTION_VAULT_COPY_LINK,
+    MENU_TARGET_VAULT,
     VAULT_KIND_PLAN,
     VAULT_KIND_TODO,
     VAULT_REDACTION_MASK_GLYPH,
@@ -146,6 +149,7 @@
     VAULT_SEARCH_SNIPPET_MAX_CHARS,
     VAULT_STRINGS,
   } from "../../config";
+  import { contextMenu } from "../../actions/contextMenu";
   import {
     clearVaultSelection as clearVaultSelectionDefault,
     refreshVault as refreshVaultDefault,
@@ -348,6 +352,30 @@
     showToast(VAULT_STRINGS.pasteToastBodyPasted);
   }
 
+  /**
+   * Context-menu handler map for a vault row (N-12).
+   *
+   * ``vault.copy_link`` — copy the entry's Markdown link to clipboard.
+   * ``vault.copy_body`` — load the doc (if not already selected) then copy its body.
+   */
+  function makeVaultRowHandlers(entry: VaultEntryOut) {
+    return {
+      [MENU_ACTION_VAULT_COPY_LINK]: () => {
+        void handleCopyMarkdownLink(entry);
+      },
+      [MENU_ACTION_VAULT_COPY_BODY]: () => {
+        void (async () => {
+          if (vaultStore.selected?.entry.id !== entry.id) {
+            await selectVaultDoc(entry.id);
+          }
+          if (vaultStore.selected !== null) {
+            await handleCopyBody(vaultStore.selected);
+          }
+        })();
+      },
+    };
+  }
+
   /** Pin the currently-active session to this vault reader (F7-RT-02). */
   function handleOpenAgainstSession(): void {
     if (activeSessionId !== null) {
@@ -490,6 +518,7 @@
                   data-testid="vault-panel-row"
                   data-vault-id={entry.id}
                   data-vault-kind={VAULT_KIND_PLAN}
+                  use:contextMenu={{ target: MENU_TARGET_VAULT, handlers: makeVaultRowHandlers(entry), data: { vaultId: entry.id } }}
                   onclick={() => handleSelectEntry(entry.id)}
                   ondragstart={(event) => handleDragStartVaultRow(entry, event)}
                 >
@@ -522,6 +551,7 @@
                   data-testid="vault-panel-row"
                   data-vault-id={entry.id}
                   data-vault-kind={VAULT_KIND_TODO}
+                  use:contextMenu={{ target: MENU_TARGET_VAULT, handlers: makeVaultRowHandlers(entry), data: { vaultId: entry.id } }}
                   onclick={() => handleSelectEntry(entry.id)}
                   ondragstart={(event) => handleDragStartVaultRow(entry, event)}
                 >

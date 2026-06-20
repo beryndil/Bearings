@@ -53,23 +53,53 @@
   import { isCoarsePointer } from "./touch";
   import { placeAtCursor } from "./positioning";
   import ConfirmDialog from "../components/sidebar/ConfirmDialog.svelte";
+  import { fetchMenusConfig } from "../utils/menuConfig";
 
   const open = $derived(contextMenuStore.open);
 
+  /** Pin/hide overrides from ``~/.config/bearings/menus.toml`` (N-13). */
+  let menusConfig = $state<{ pin: readonly string[]; hide: readonly string[] }>({
+    pin: [],
+    hide: [],
+  });
+
+  $effect(() => {
+    void fetchMenusConfig().then((cfg) => {
+      menusConfig = cfg;
+    });
+  });
+
   /**
-   * The actions to render — filtered by advanced visibility, grouped
-   * by section, ordered by :data:`MENU_SECTION_ORDER`. ``null`` when
-   * no menu is open.
+   * The actions to render — filtered by advanced visibility and menus.toml
+   * hide list, grouped by section, ordered by :data:`MENU_SECTION_ORDER`,
+   * with pinned actions floating to the top of their section bucket (N-13).
+   * ``null`` when no menu is open.
    */
   const grouped = $derived.by(() => {
     if (open === null) return null;
     const all = actionsForTarget(open.target);
-    const visible = all.filter((a) => a.advanced !== true || open.advancedRevealed);
+    const hiddenSet = new Set(menusConfig.hide);
+    const pinnedSet = new Set(menusConfig.pin);
+    const visible = all.filter((a) => {
+      if (hiddenSet.has(a.id)) return false;
+      return a.advanced !== true || open.advancedRevealed;
+    });
     const buckets = new Map<MenuSectionId, MenuActionDescriptor[]>();
     for (const action of visible) {
       const list = buckets.get(action.section) ?? [];
       list.push(action);
       buckets.set(action.section, list);
+    }
+    // Sort each bucket: pinned actions float to the top (stable otherwise).
+    for (const [section, list] of buckets) {
+      buckets.set(
+        section,
+        [...list].sort((a, b) => {
+          const ap = pinnedSet.has(a.id) ? 0 : 1;
+          const bp = pinnedSet.has(b.id) ? 0 : 1;
+          return ap - bp;
+        }),
+      );
     }
     return MENU_SECTION_ORDER.map((section) => ({
       section,

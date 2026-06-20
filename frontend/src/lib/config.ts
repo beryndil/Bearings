@@ -53,6 +53,9 @@ export const API_SESSIONS_AWAITING_ENDPOINT = `${API_BASE}/sessions/awaiting`;
  */
 export const API_SESSIONS_BULK_ENDPOINT = `${API_BASE}/sessions/bulk`;
 
+/** ``GET /api/ui-config`` — frontend feature-gate configuration (N-13). */
+export const API_UI_CONFIG_ENDPOINT = `${API_BASE}/ui-config`;
+
 /** ``GET /api/tags`` — tag list source per ``docs/behavior/chat.md`` §"creates a chat". */
 export const API_TAGS_ENDPOINT = `${API_BASE}/tags`;
 
@@ -2485,6 +2488,16 @@ export const VAULT_REDACTION_MASK_GLYPH = "••••••••";
  * UI strings for the vault pane. Pulled out of the component per
  * coding-standards "i18n-ready string tables".
  */
+export const TEMPLATE_SAVE_DIALOG_STRINGS = {
+  ariaLabel: "Save as template",
+  title: "Save as template",
+  nameLabel: "Template name",
+  namePlaceholder: "Enter a name…",
+  saveLabel: "Save",
+  cancelLabel: "Cancel",
+  emptyNameError: "Template name cannot be empty.",
+} as const;
+
 export const VAULT_STRINGS = {
   paneAriaLabel: "Vault",
   paneHeading: "Vault",
@@ -3128,6 +3141,9 @@ export const MENU_TARGET_PENDING_OPERATION = "pending_operation";
  */
 export const MENU_TARGET_MESSAGE_MULTI_SELECT = "message_multi_select";
 
+/** Vault row target — right-click on a plan or todo row in the vault pane (N-12). */
+export const MENU_TARGET_VAULT = "vault";
+
 export const KNOWN_MENU_TARGETS = [
   MENU_TARGET_SESSION,
   MENU_TARGET_MESSAGE,
@@ -3141,6 +3157,7 @@ export const KNOWN_MENU_TARGETS = [
   MENU_TARGET_ATTACHMENT,
   MENU_TARGET_PENDING_OPERATION,
   MENU_TARGET_MESSAGE_MULTI_SELECT,
+  MENU_TARGET_VAULT,
 ] as const;
 export type MenuTargetId = (typeof KNOWN_MENU_TARGETS)[number];
 
@@ -3282,6 +3299,12 @@ export const MENU_ACTION_PENDING_OPERATION_COPY_NAME = "pending_operation.copy_n
 export const MENU_ACTION_PENDING_OPERATION_COPY_COMMAND = "pending_operation.copy_command";
 export const MENU_ACTION_PENDING_OPERATION_OPEN_IN_EDITOR = "pending_operation.open_in.editor";
 
+// N-12 — Vault row context-menu actions.
+/** Copy the vault doc's ``[Title](file:///abs/path)`` Markdown link to clipboard. */
+export const MENU_ACTION_VAULT_COPY_LINK = "vault.copy_link";
+/** Copy the vault doc's raw body text to clipboard. */
+export const MENU_ACTION_VAULT_COPY_BODY = "vault.copy_body";
+
 /**
  * Context-menu UI strings + per-action labels. Pulled out of
  * components per coding-standards §"i18n-ready string tables".
@@ -3384,6 +3407,8 @@ export const CONTEXT_MENU_STRINGS = {
     [MENU_ACTION_PENDING_OPERATION_COPY_NAME]: "Copy name",
     [MENU_ACTION_PENDING_OPERATION_COPY_COMMAND]: "Copy command",
     [MENU_ACTION_PENDING_OPERATION_OPEN_IN_EDITOR]: "Open directory in editor",
+    [MENU_ACTION_VAULT_COPY_LINK]: "Copy as Markdown link",
+    [MENU_ACTION_VAULT_COPY_BODY]: "Copy doc body",
   } as const,
 } as const;
 

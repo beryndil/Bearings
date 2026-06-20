@@ -8641,6 +8641,29 @@
         "title": "CommandOut",
         "description": "One slash-command entry returned by ``GET /api/commands``."
       },
+      "ContextMenusConfig": {
+        "properties": {
+          "pin": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pin",
+            "default": []
+          },
+          "hide": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hide",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ContextMenusConfig",
+        "description": "User-customisable context-menu overrides loaded from ``~/.config/bearings/menus.toml``.\n\n``pin``: action IDs that float to the top of their section.\n``hide``: action IDs removed from the rendered menu entirely."
+      },
       "DetailError": {
         "properties": {
           "detail": {
@@ -13414,13 +13437,17 @@
           },
           "feature_flags": {
             "$ref": "#/components/schemas/FeatureFlags"
+          },
+          "context_menus": {
+            "$ref": "#/components/schemas/ContextMenusConfig"
           }
         },
         "type": "object",
         "required": [
           "commands_scope",
           "billing_mode",
-          "feature_flags"
+          "feature_flags",
+          "context_menus"
         ],
         "title": "UiConfigOut",
         "description": "Response body for GET /api/ui-config."

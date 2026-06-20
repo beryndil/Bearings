@@ -29,6 +29,9 @@ Exec-4 consumes this endpoint — keep the field names and types stable.
 
 from __future__ import annotations
 
+import tomllib
+from pathlib import Path
+
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
@@ -52,12 +55,24 @@ class FeatureFlags(BaseModel):
     spawn_from_reply: bool
 
 
+class ContextMenusConfig(BaseModel):
+    """User-customisable context-menu overrides loaded from ``~/.config/bearings/menus.toml``.
+
+    ``pin``: action IDs that float to the top of their section.
+    ``hide``: action IDs removed from the rendered menu entirely.
+    """
+
+    pin: list[str] = []
+    hide: list[str] = []
+
+
 class UiConfigOut(BaseModel):
     """Response body for GET /api/ui-config."""
 
     commands_scope: str
     billing_mode: str
     feature_flags: FeatureFlags
+    context_menus: ContextMenusConfig
 
 
 def _billing_mode(request: Request) -> str:
@@ -66,6 +81,21 @@ def _billing_mode(request: Request) -> str:
     if isinstance(raw, str) and raw:
         return raw
     return DEFAULT_BILLING_MODE
+
+
+def _load_menus_config() -> ContextMenusConfig:
+    """Load ``~/.config/bearings/menus.toml``; return empty config on absence or parse error."""
+    path = Path.home() / ".config" / "bearings" / "menus.toml"
+    if not path.exists():
+        return ContextMenusConfig()
+    try:
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+        pin = [str(a) for a in data.get("pin", []) if isinstance(a, str)]
+        hide = [str(a) for a in data.get("hide", []) if isinstance(a, str)]
+        return ContextMenusConfig(pin=pin, hide=hide)
+    except Exception:
+        return ContextMenusConfig()
 
 
 @router.get(
@@ -89,6 +119,7 @@ async def get_ui_config(request: Request) -> UiConfigOut:
             analytics=True,
             spawn_from_reply=True,
         ),
+        context_menus=_load_menus_config(),
     )
 
 

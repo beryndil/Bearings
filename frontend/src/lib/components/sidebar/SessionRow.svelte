@@ -32,6 +32,7 @@
     deleteSession,
     duplicateSession,
     exportSessionJson,
+    forkSessionFromLastMessage,
     markSessionViewed,
     patchSessionModel,
     patchSessionPinned,
@@ -66,6 +67,7 @@
     MENU_ACTION_SESSION_EDIT,
     MENU_ACTION_SESSION_EDIT_TAGS,
     MENU_ACTION_SESSION_EXPORT_JSON,
+    MENU_ACTION_SESSION_FORK_FROM_LAST_MESSAGE,
     MENU_ACTION_SESSION_MERGE_INTO,
     MENU_ACTION_SESSION_OPEN_IN_NEW_TAB,
     MENU_ACTION_SESSION_OPEN_IN_TERMINAL,
@@ -103,6 +105,7 @@
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import SessionTagPicker from "./SessionTagPicker.svelte";
   import SessionPickerModal from "../menus/SessionPickerModal.svelte";
+  import TemplateSaveDialog from "../modals/TemplateSaveDialog.svelte";
 
   interface Props {
     session: SessionOut;
@@ -360,6 +363,26 @@
   let modelPickerError = $state<string | null>(null);
   let modelPickerSaving = $state(false);
 
+  let showTemplateSaveDialog = $state(false);
+  let templateSaveError = $state<string | null>(null);
+
+  async function handleTemplateSave(name: string): Promise<void> {
+    templateSaveError = null;
+    try {
+      await createTemplate({
+        name: name.trim(),
+        model: session.model,
+        permission_profile: session.permission_mode ?? "standard",
+        working_dir_default: session.working_dir,
+      });
+      showTemplateSaveDialog = false;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : "Failed to save template";
+      templateSaveError = detail;
+      showShellOpError(detail);
+    }
+  }
+
   async function handleChangeModel(model: string): Promise<void> {
     if (modelPickerSaving) return;
     modelPickerSaving = true;
@@ -409,19 +432,28 @@
       void duplicateSession(session).then(() => refreshSessions(currentFilter()));
     },
     [MENU_ACTION_SESSION_SAVE_AS_TEMPLATE]: () => {
-      const name = window.prompt("Save as template — enter a name:", session.title);
-      if (!name || name.trim() === "") return;
-      void createTemplate({
-        name: name.trim(),
-        model: session.model,
-        permission_profile: session.permission_mode ?? "standard",
-        working_dir_default: session.working_dir,
-      }).catch(() => {
-        // Non-fatal — the user sees no feedback in v1 beyond the lack of
-        // template appearing in the picker; a 409 collision is the most
-        // common failure (duplicate name).
-      });
+      templateSaveError = null;
+      showTemplateSaveDialog = true;
     },
+    ...(session.message_count === 0
+      ? {
+          [MENU_ACTION_SESSION_FORK_FROM_LAST_MESSAGE]: {
+            disabledReason: "No messages yet to fork from",
+          },
+        }
+      : {
+          [MENU_ACTION_SESSION_FORK_FROM_LAST_MESSAGE]: () => {
+            void forkSessionFromLastMessage(session.id)
+              .then((result) => {
+                void goto(`/sessions/${result.chat_session_id}`);
+                void refreshSessions(currentFilter());
+              })
+              .catch((err: unknown) => {
+                const detail = err instanceof Error ? err.message : "Could not fork session";
+                showShellOpError(detail);
+              });
+          },
+        }),
     ...(session.pinned
       ? {
           [MENU_ACTION_SESSION_UNPIN]: () => {
@@ -459,7 +491,7 @@
     },
     // Share links are not implemented in v1; the entry renders disabled with
     // a tooltip explaining the deferral (gap-cycle-05-001 disabled-reason fill).
-    [MENU_ACTION_SESSION_COPY_SHARE_LINK]: { disabledReason: "Share links land in v0.10.x" },
+    [MENU_ACTION_SESSION_COPY_SHARE_LINK]: { disabledReason: "Share links not yet implemented in v1" },
     [MENU_ACTION_SESSION_EXPORT_JSON]: () => {
       void exportSessionJson(session);
     },
@@ -599,6 +631,20 @@
     }}
     onCancel={() => {
       showMergePicker = false;
+    }}
+  />
+{/if}
+
+{#if showTemplateSaveDialog}
+  <TemplateSaveDialog
+    initialName={session.title}
+    errorMessage={templateSaveError}
+    onSave={(name) => {
+      void handleTemplateSave(name);
+    }}
+    onCancel={() => {
+      showTemplateSaveDialog = false;
+      templateSaveError = null;
     }}
   />
 {/if}

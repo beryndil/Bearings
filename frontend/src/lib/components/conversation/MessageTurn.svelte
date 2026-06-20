@@ -72,6 +72,7 @@
     toggleMessageId,
   } from "../../stores/messageMultiSelectionStore.svelte";
   import { reorgStore } from "../../stores/reorg.svelte";
+  import { selectVaultDocByPath } from "../../stores/vault.svelte";
   import { scrollBehavior } from "../../utils/motion";
   import CollapsibleBody from "../common/CollapsibleBody.svelte";
   import ConfirmDialog from "../sidebar/ConfirmDialog.svelte";
@@ -238,6 +239,16 @@
   const hasSelection = $derived(messageMultiSelectionStore.ids.size > 0);
 
   function handleClick(event: MouseEvent): void {
+    // Intercept file:// link clicks — open doc in vault pane (vault.md §"Tag association").
+    const target = event.target as Element | null;
+    const anchor = target?.closest('a[data-link-kind="file"]') as HTMLAnchorElement | null;
+    if (anchor !== null) {
+      event.preventDefault();
+      const href = anchor.getAttribute("href") ?? "";
+      const path = href.startsWith("file://") ? decodeURIComponent(href.slice(7)) : href;
+      void selectVaultDocByPath(path).then(() => goto("/vault"));
+      return;
+    }
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       toggleMessageId(turn.id);

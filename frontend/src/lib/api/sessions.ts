@@ -17,6 +17,7 @@
 import {
   API_SESSIONS_ENDPOINT,
   SESSIONS_DEFAULT_PAGE_SIZE,
+  sessionMessagesEndpoint,
   sessionModelEndpoint,
   sessionStopEndpoint,
   spawnFromReplyEndpoint,
@@ -988,6 +989,36 @@ export interface WorkEvidenceOut {
   git_diff_stat: string | null;
   git_diff_available: boolean;
   tool_summaries: WorkEvidenceToolSummary[];
+}
+
+/**
+ * Fork the session by spawning a new paired chat seeded with the last
+ * assistant message as a blockquote (M-4; ``session.fork.from_last_message``).
+ *
+ * Fetches up to 50 recent messages, finds the last assistant-role message,
+ * then calls :func:`spawnFromReply` with that message id.
+ *
+ * @throws ``Error`` when the session has no assistant messages yet.
+ * @throws :class:`ApiError` on HTTP failures from either inner call.
+ */
+export async function forkSessionFromLastMessage(
+  sessionId: string,
+  options: RequestOptions = {},
+): Promise<SpawnFromReplyOut> {
+  const endpoint = sessionMessagesEndpoint(sessionId);
+  interface MessageRow {
+    id: string;
+    role: string;
+  }
+  const msgs = await getJson<MessageRow[]>(endpoint, {
+    ...options,
+    query: [["limit", "50"]],
+  });
+  const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
+  if (lastAssistant === undefined) {
+    throw new Error("No assistant message to fork from");
+  }
+  return await spawnFromReply(sessionId, lastAssistant.id, options);
 }
 
 /**

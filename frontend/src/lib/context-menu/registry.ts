@@ -113,6 +113,8 @@ import {
   MENU_TARGET_CODE_BLOCK,
   MENU_TARGET_LINK,
   MENU_TARGET_MESSAGE,
+  MENU_ACTION_VAULT_COPY_BODY,
+  MENU_ACTION_VAULT_COPY_LINK,
   MENU_TARGET_MESSAGE_MULTI_SELECT,
   MENU_TARGET_MULTI_SELECT,
   MENU_TARGET_PENDING_OPERATION,
@@ -120,6 +122,7 @@ import {
   MENU_TARGET_TAG,
   MENU_TARGET_TAG_CHIP,
   MENU_TARGET_TOOL_CALL,
+  MENU_TARGET_VAULT,
   type MenuSectionId,
   type MenuTargetId,
 } from "../config";
@@ -311,6 +314,12 @@ const PENDING_OPERATION_ACTIONS: readonly MenuActionDescriptor[] = [
   },
 ];
 
+// N-12 — Vault row context-menu (right-click on plan/todo rows in the vault pane).
+const VAULT_ACTIONS: readonly MenuActionDescriptor[] = [
+  { id: MENU_ACTION_VAULT_COPY_LINK, section: MENU_SECTION_COPY },
+  { id: MENU_ACTION_VAULT_COPY_BODY, section: MENU_SECTION_COPY },
+];
+
 /**
  * Per-target action lists. The menu primitive looks up the per-target
  * list when opening; consumers do NOT pass the action list themselves
@@ -331,6 +340,7 @@ export const MENU_ACTIONS_BY_TARGET: Readonly<
   [MENU_TARGET_MULTI_SELECT]: MULTI_SELECT_ACTIONS,
   [MENU_TARGET_ATTACHMENT]: ATTACHMENT_ACTIONS,
   [MENU_TARGET_PENDING_OPERATION]: PENDING_OPERATION_ACTIONS,
+  [MENU_TARGET_VAULT]: VAULT_ACTIONS,
 } as const;
 
 /** Convenience accessor — returns ``[]`` for an unknown target. */

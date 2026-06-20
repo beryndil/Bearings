@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 from fastapi.testclient import TestClient
 
 from bearings.config.constants import DEFAULT_BILLING_MODE
@@ -58,3 +61,58 @@ def test_ui_config_commands_scope_is_string() -> None:
         resp = client.get("/api/ui-config")
     scope = resp.json()["commands_scope"]
     assert isinstance(scope, str) and scope
+
+
+# ---- N-13: context_menus field -----------------------------------------------
+
+
+def test_ui_config_context_menus_default_empty() -> None:
+    """context_menus defaults to empty pin/hide when menus.toml is absent."""
+    app = create_app()
+    # Patch Path.exists to simulate no menus.toml on disk.
+    with patch.object(Path, "exists", return_value=False), TestClient(app) as client:
+        resp = client.get("/api/ui-config")
+    body = resp.json()
+    assert "context_menus" in body
+    cm = body["context_menus"]
+    assert cm["pin"] == []
+    assert cm["hide"] == []
+
+
+def test_ui_config_context_menus_loaded_from_toml(tmp_path: Path) -> None:
+    """context_menus.pin / hide are loaded from ~/.config/bearings/menus.toml."""
+    # Create the full path the loader expects: <home>/.config/bearings/menus.toml
+    config_dir = tmp_path / ".config" / "bearings"
+    config_dir.mkdir(parents=True)
+    (config_dir / "menus.toml").write_bytes(
+        b'pin = ["session.fork.from_last_message"]\nhide = ["session.copy_share_link"]\n'
+    )
+
+    # Patch Path.home() so the loader resolves to tmp_path.
+    fake_home = MagicMock(return_value=tmp_path)
+    with patch.object(Path, "home", fake_home):
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/ui-config")
+
+    cm = resp.json()["context_menus"]
+    assert "session.fork.from_last_message" in cm["pin"]
+    assert "session.copy_share_link" in cm["hide"]
+
+
+def test_ui_config_context_menus_malformed_toml(tmp_path: Path) -> None:
+    """Malformed menus.toml returns empty config rather than crashing."""
+    (tmp_path / ".config" / "bearings").mkdir(parents=True)
+    menus_toml = tmp_path / ".config" / "bearings" / "menus.toml"
+    menus_toml.write_bytes(b"NOT VALID TOML ]]]\n")
+
+    fake_home = MagicMock(return_value=tmp_path)
+    with patch.object(Path, "home", fake_home):
+        app = create_app()
+        with TestClient(app) as client:
+            resp = client.get("/api/ui-config")
+
+    assert resp.status_code == 200
+    cm = resp.json()["context_menus"]
+    assert cm["pin"] == []
+    assert cm["hide"] == []

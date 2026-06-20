@@ -18,6 +18,7 @@
  */
 import {
   getVaultDoc,
+  getVaultDocByPath,
   listVault,
   searchVault,
   type SearchResultOut,
@@ -96,6 +97,36 @@ export async function selectVaultDoc(vaultId: number): Promise<void> {
   state.selectedLoading = true;
   try {
     const doc = await getVaultDoc(vaultId, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    state.selected = doc;
+    state.error = null;
+  } catch (error) {
+    if (controller.signal.aborted || isAbortError(error)) return;
+    state.error = error instanceof Error ? error : new Error(String(error));
+  } finally {
+    if (selectController === controller) {
+      selectController = null;
+    }
+    state.selectedLoading = false;
+  }
+}
+
+/**
+ * Open one vault doc by absolute filesystem path (M-9; vault.md §"Tag
+ * association"). Called when the user clicks a ``data-link-kind="file"``
+ * anchor inside a chat message body — the linkifier renders vault paths as
+ * clickable anchors; clicking one should open the doc in the vault pane
+ * in-place rather than navigating to the path directly.
+ *
+ * Cancels any in-flight select so a rapid second click wins.
+ */
+export async function selectVaultDocByPath(path: string): Promise<void> {
+  selectController?.abort();
+  const controller = new AbortController();
+  selectController = controller;
+  state.selectedLoading = true;
+  try {
+    const doc = await getVaultDocByPath(path, { signal: controller.signal });
     if (controller.signal.aborted) return;
     state.selected = doc;
     state.error = null;
