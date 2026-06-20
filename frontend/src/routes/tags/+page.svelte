@@ -359,12 +359,25 @@
         </label>
         <label>
           <span>Color (hex or palette token)</span>
-          <input
-            type="text"
-            bind:value={editColor}
-            placeholder="#1d4ed8"
-            data-testid="tags-page-edit-color"
-          />
+          <div class="tags-page__color-row">
+            <input
+              type="color"
+              value={/^#[0-9a-fA-F]{6}$/.test(editColor) ? editColor : "#1d4ed8"}
+              oninput={(e) => {
+                editColor = (e.currentTarget as HTMLInputElement).value;
+              }}
+              class="tags-page__color-swatch"
+              data-testid="tags-page-edit-color-picker"
+              aria-label="Color picker"
+            />
+            <input
+              type="text"
+              bind:value={editColor}
+              placeholder="#1d4ed8"
+              class="tags-page__color-text"
+              data-testid="tags-page-edit-color"
+            />
+          </div>
         </label>
         <label class:tags-page__field--disabled={editClass === "severity"}>
           <span>Default model</span>
@@ -463,7 +476,8 @@
     border: 1px solid rgb(var(--bearings-border));
     border-radius: 0.375rem;
   }
-  .tags-page__create-form input {
+  .tags-page__create-form input,
+  .tags-page__create-form select {
     background: rgb(var(--bearings-surface-2));
     color: inherit;
     border: 1px solid rgb(var(--bearings-border));
@@ -472,6 +486,7 @@
     font: inherit;
     flex: 1 1 auto;
     min-width: 8rem;
+    min-height: 1.875rem;
   }
   .tags-page__create-form button[type="button"] {
     background: rgb(var(--bearings-surface-2));
@@ -570,13 +585,30 @@
   .tags-page__edit-form label span {
     color: rgb(var(--bearings-fg-muted));
   }
-  .tags-page__edit-form input {
+  .tags-page__edit-form input,
+  .tags-page__edit-form select {
     background: rgb(var(--bearings-surface-2));
     color: inherit;
     border: 1px solid rgb(var(--bearings-border));
     border-radius: 0.25rem;
     padding: 0.375rem 0.5rem;
     font: inherit;
+    min-height: 2rem;
+  }
+  .tags-page__color-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .tags-page__color-row .tags-page__color-text {
+    flex: 1;
+  }
+  .tags-page__color-swatch {
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    padding: 0.125rem;
+    cursor: pointer;
   }
   .tags-page__edit-actions {
     display: flex;
