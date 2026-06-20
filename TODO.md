@@ -307,7 +307,7 @@ scheduled separately): extend
 keeping localStorage as the synchronous boot-time read so the no-flash
 guarantee holds.~~
 
-_Resolved by N-9 bundle commit (fix/feat: memories, theme-sync, bulk-export, stub-routes, knip cleanup); `syncThemeToServer` implemented in `frontend/src/lib/themes/persistence.ts` and wired through `store.svelte.ts:setTheme`. See `git log` for the resolving commit hash._
+~~_Resolved by commit `3eccc014` (fix: Exec-9 bundle). `syncThemeToServer` implemented in `frontend/src/lib/themes/persistence.ts` and wired through `store.svelte.ts:setTheme`._~~
 
 ### Closing-sweep gap log — 2026-05-02
 
