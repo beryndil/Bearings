@@ -51,9 +51,10 @@ async def open_file(request: FileOpenRequest) -> dict[str, str]:
         else:
             open_path = path
 
-        # Use xdg-open (works on Linux, Hyprland, etc.)
+        # Use systemd-run to open in the user's session context
+        # This ensures it runs with proper display/wayland environment
         subprocess.Popen(
-            ["/usr/bin/xdg-open", str(open_path)],
+            ["systemd-run", "--user", "--scope", "thunar", str(open_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
