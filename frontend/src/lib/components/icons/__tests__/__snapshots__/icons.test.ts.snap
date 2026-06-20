@@ -102,7 +102,7 @@ exports[`BearingsMark > matches snapshot (static, loading=false) 1`] = `
     />
     <!---->
   </svg>
-  
+
 </div>
 `;
 
@@ -161,9 +161,9 @@ exports[`ClaudeMark > matches snapshot 1`] = `
       ry="3.8"
       transform="rotate(288 12 12)"
     />
-    
+
   </svg>
-  
+
 </div>
 `;
 
@@ -197,7 +197,7 @@ exports[`IconX > matches snapshot 1`] = `
       y2="13"
     />
   </svg>
-  
+
 </div>
 `;
 
@@ -218,7 +218,7 @@ exports[`SeverityShield > matches snapshot (severity=low) 1`] = `
       d="M12 2 L20 5.5 L20 14 Q20 20 12 22 Q4 20 4 14 L4 5.5 Z"
     />
   </svg>
-  
+
 </div>
 `;
 
@@ -247,6 +247,6 @@ exports[`TagIcon > matches snapshot 1`] = `
       r="1"
     />
   </svg>
-  
+
 </div>
 `;

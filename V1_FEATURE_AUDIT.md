@@ -890,4 +890,3 @@ else is P1.
   `docs/architecture-v1.md`, `docs/model-routing-v1-spec.md`,
   `docs/behavior/*.md`, `BEARINGS_ANALYTICS_v1.md`, `src/bearings/**`,
   `frontend/src/**`, `tests/**`, `scripts/**`.
-

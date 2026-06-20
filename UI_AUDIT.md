@@ -1,6 +1,6 @@
 # Bearings v1 UI/UX Gap Audit
-**vs. Behavioral Specs (docs/behavior/*.md)**  
-**Status: v1.0 + v1.1 closing sweep**  
+**vs. Behavioral Specs (docs/behavior/*.md)**
+**Status: v1.0 + v1.1 closing sweep**
 **Audit Date: 2026-05-03**
 
 ---
@@ -37,21 +37,21 @@ These are built and functional per spec:
 
 ## Category 2: Paired-Chat Wiring — BUILT BUT UNMOUNTED
 
-**Component exists:** `frontend/src/lib/components/conversation/PairedChatIndicator.svelte`  
+**Component exists:** `frontend/src/lib/components/conversation/PairedChatIndicator.svelte`
 **Status:** Ready to mount; blocked on backend endpoint lookup.
 
 ### Missing:
-1. **Conversation header breadcrumb** — `<parent checklist> › <item label>`  
-   - Location: `/frontend/src/routes/+layout.svelte` line ~398 (conversation header)  
+1. **Conversation header breadcrumb** — `<parent checklist> › <item label>`
+   - Location: `/frontend/src/routes/+layout.svelte` line ~398 (conversation header)
    - Requires: Backend `GET /api/sessions/{id}/paired-chat-info` endpoint (deferred per TODO.md)
 
-2. **Sidebar annotation** — `↳ <parent checklist title>` under paired chat rows  
-   - Location: `frontend/src/lib/components/sidebar/SessionRow.svelte`  
+2. **Sidebar annotation** — `↳ <parent checklist title>` under paired chat rows
+   - Location: `frontend/src/lib/components/sidebar/SessionRow.svelte`
    - Requires: Same backend endpoint above
 
-3. **Paired-chat link spawn** — "💬 Work on this" button on checklist items  
-   - Location: `frontend/src/lib/components/checklist/ChecklistView.svelte` (item rendering)  
-   - Status: `PairedChatLinkSpawn.svelte` component exists but not mounted  
+3. **Paired-chat link spawn** — "💬 Work on this" button on checklist items
+   - Location: `frontend/src/lib/components/checklist/ChecklistView.svelte` (item rendering)
+   - Status: `PairedChatLinkSpawn.svelte` component exists but not mounted
    - Requires: Checkbox to spawn vs. existing-pairing affordance
 
 ### Spec Reference

@@ -63,6 +63,25 @@ remain in the shared worktree. The next executor inherits a dirty tree.
 
 Resolved in this commit. See fix(reliability) commit for details.
 
+## SDK 401 fully-expired-token raises immediately — BY DESIGN (track-only) (2026-06-20)
+
+When the Claude Max OAuth token in `~/.claude/.credentials.json` is **fully
+expired** (i.e. `expiresAt` is in the past and no valid token is available),
+the SDK raises `API Error: 401 Invalid authentication credentials` immediately
+and does not retry. This is **intentional behaviour** — a fully-expired token
+cannot be salvaged by retrying; manual re-authentication is required.
+
+This is distinct from the **mid-rotation race** (item 625 in the master
+checklist, `0f6e4006fb1d4340bda9983af3432064`): during a token rotation, an
+in-flight request may carry a stale bearer while a fresh token exists on disk.
+Item 625 tracks making that transient case retryable (re-read credentials and
+retry once). The fully-expired case is not in scope for that fix and should
+not be made retryable — it is a hard authentication wall requiring the user to
+run `claude` or re-auth to obtain a fresh token.
+
+**No code change to `sdk_loop_core.py` is needed for the fully-expired case.**
+This entry is the documentation record; do not remove it when item 625 lands.
+
 ## SDK runner: treat 401 auth-credential errors as transient (token-rotation race) (2026-06-04)
 
 The Claude Max OAuth token in `~/.claude/.credentials.json` has an ~8h
