@@ -442,10 +442,16 @@ async def get_token_totals(
     Per ``docs/behavior/chat.md`` §"Token totals hydration contract"
     (gap-cycle-13-003).
     """
+    # M-10 / R-6 fix: v0.17.x rows migrated to v1 carry executor_*=NULL with
+    # the original counts in legacy input_tokens / output_tokens columns.
+    # COALESCE(SUM(executor_input_tokens), 0) returns 0 for those rows because
+    # SUM(NULL) = NULL and COALESCE(NULL, 0) = 0 — the legacy tokens are lost.
+    # The correct form is SUM(COALESCE(executor_input_tokens, input_tokens, 0))
+    # which falls back per row so migrated rows are counted.
     cursor = await connection.execute(
         "SELECT"
-        "  COALESCE(SUM(executor_input_tokens), 0),"
-        "  COALESCE(SUM(executor_output_tokens), 0),"
+        "  COALESCE(SUM(COALESCE(executor_input_tokens, input_tokens, 0)), 0),"
+        "  COALESCE(SUM(COALESCE(executor_output_tokens, output_tokens, 0)), 0),"
         "  COALESCE(SUM(cache_read_tokens), 0),"
         "  COALESCE(SUM(cache_creation_tokens), 0)"
         " FROM messages"

@@ -250,3 +250,50 @@ async def test_invalid_role_rejected_at_dataclass(
             output_tokens=None,
             seq=1,
         )
+
+
+# ---------------------------------------------------------------------------
+# get_token_totals — M-10 / R-6 legacy-token COALESCE (gap-cycle-19)
+# ---------------------------------------------------------------------------
+
+
+async def test_get_token_totals_coalesces_legacy_tokens(conn: aiosqlite.Connection) -> None:
+    """Rows with executor_*=NULL but legacy input_tokens/output_tokens set
+    are counted by get_token_totals (M-10 / R-6 regression guard).
+
+    v0.17.x rows migrated to v1 carry executor_input_tokens=NULL and
+    executor_output_tokens=NULL, but have the original counts in the
+    legacy input_tokens / output_tokens columns.  Prior to the fix,
+    COALESCE(SUM(executor_input_tokens), 0) returned 0 for these rows
+    because SUM(NULL) = NULL → COALESCE(NULL, 0) = 0.  The corrected
+    form SUM(COALESCE(executor_input_tokens, input_tokens, 0)) picks up
+    the legacy column per row so migrated sessions show non-zero totals.
+    """
+    sid = await _new_session(conn)
+    ts = "2024-01-01T00:00:00.000000+00:00"
+    # Raw INSERT to simulate a migrated v0.17.x row: executor_* are NULL,
+    # legacy input_tokens / output_tokens carry the original values.
+    await conn.execute(
+        "INSERT INTO messages "
+        "(id, session_id, role, content, created_at, "
+        "executor_input_tokens, executor_output_tokens, "
+        "input_tokens, output_tokens) "
+        "VALUES (?, ?, 'assistant', '', ?, NULL, NULL, ?, ?)",
+        ("msg_legacy_1", sid, ts, 500, 200),
+    )
+    # Also insert a modern row with executor_* set to verify both are summed.
+    await conn.execute(
+        "INSERT INTO messages "
+        "(id, session_id, role, content, created_at, "
+        "executor_input_tokens, executor_output_tokens, "
+        "input_tokens, output_tokens) "
+        "VALUES (?, ?, 'assistant', '', ?, ?, ?, NULL, NULL)",
+        ("msg_modern_1", sid, ts, 100, 50),
+    )
+    await conn.commit()
+    inp, out, cache_read, cache_creation = await messages_db.get_token_totals(conn, sid)
+    # Legacy row: 500 in + 200 out; modern row: 100 in + 50 out.
+    assert inp == 600
+    assert out == 250
+    assert cache_read == 0
+    assert cache_creation == 0

@@ -301,3 +301,64 @@ async def test_aggregator_rejects_out_of_range_threshold(
     """Construction-time validation: threshold must be in [0, 1]."""
     with pytest.raises(ValueError, match="threshold"):
         OverrideAggregator(conn, threshold=1.5)
+
+
+async def test_aggregator_origin_cte_excludes_out_of_window_sessions(
+    conn: aiosqlite.Connection,
+) -> None:
+    """N-2 regression: out-of-window sessions must not inflate override_count.
+
+    The origin CTE was missing a time-window predicate before the N-2 fix.
+    Without it, a session whose rule-fire message is older than the window
+    cutoff can still appear in ``origin``; if it also has an in-window
+    manual override the join inflates ``overridden_count`` for that rule.
+
+    This test seeds two sessions for the same rule:
+    - s_old: rule-fire message 20 days ago (outside 14-day window).
+      Has a recent manual override (today).
+    - s_new: rule-fire message today (inside window). No override.
+
+    After the fix, ``fired_count`` = 1 (s_new only) and
+    ``overridden_count`` = 0 — s_old's override is not attributed
+    because s_old's origin message is out of window.
+    """
+    await _seed_session(conn, "s_old")
+    await _seed_session(conn, "s_new")
+
+    # s_old: rule fired 20 days ago (out of window), manual override today.
+    await _seed_message(
+        conn,
+        session_id="s_old",
+        routing_source="system_rule",
+        matched_rule_id=55,
+        age_days=20.0,
+    )
+    await _seed_message(
+        conn,
+        session_id="s_old",
+        routing_source="manual",
+        matched_rule_id=None,
+        age_days=0.0,
+    )
+
+    # s_new: rule fired today (in window), no override.
+    await _seed_message(
+        conn,
+        session_id="s_new",
+        routing_source="system_rule",
+        matched_rule_id=55,
+        age_days=0.0,
+    )
+
+    await conn.commit()
+
+    rates = await OverrideAggregator(conn, window_days=14).compute()
+
+    assert len(rates) == 1
+    assert rates[0].rule_id == 55
+    # s_new fired in-window → fired_count = 1.
+    assert rates[0].fired_count == 1
+    # s_old's override must NOT be counted — its origin is out of window.
+    assert rates[0].overridden_count == 0
+    assert rates[0].rate == pytest.approx(0.0)
+    assert rates[0].review is False

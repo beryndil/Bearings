@@ -8,6 +8,29 @@ When a TODO is resolved, strike it from this file in the same commit
 that lands the fix and cite the resolving commit hash in the removal
 trailer.
 
+## N-1: Subagent transcript persistence deferred (2026-06-19)
+
+`BearingsSessionStore.append` silently drops batches where `key["subpath"]`
+is set (subagent JSONL files, e.g. `"subagents/agent-{id}"`). The main
+session transcript resumes correctly because the SDK's `list_subkeys`
+method is optional — when absent the SDK materialises only the main
+transcript on resume. Subagent context is therefore lost across
+respawns/restarts.
+
+**Why deferred**: there is currently no v1 UI surface that consumes
+subagent transcripts. Implementing persistence without a consumer would
+add dead-weight DB rows and migration complexity with no observable
+benefit. The drop is intentional and tested (see
+`tests/test_session_store.py::test_subagent_batch_dropped_on_append`
+and `::test_subagent_load_returns_none`).
+
+**When to revisit**: when a UI panel (workflow progress view, subagent
+conversation drill-down, or similar) needs to show subagent history,
+implement `list_subkeys` + per-subpath `append`/`load` in
+`BearingsSessionStore`, add a `sdk_subagent_entries` table or extend
+`sdk_session_entries` with a `subpath` column, and update the resume
+materialiser. Schedule as a new master-checklist item at that point.
+
 ## Runner crash visibility + error_pending DB persistence (2026-06-04)
 
 Diagnosed during the gap-closure pipeline (ses_5eaee838). Three illness layers:

@@ -297,6 +297,61 @@ async def test_detach_tag_broadcasts_session_upsert(
 
 
 # ---------------------------------------------------------------------------
+# N-5 — PUT /api/tags/sort-order broadcasts tag_upsert for reordered tags
+# ---------------------------------------------------------------------------
+
+
+async def test_put_sort_order_broadcasts_tag_upsert(
+    tagged_app: tuple[FastAPI, aiosqlite.Connection, SessionsBroadcaster],
+) -> None:
+    """N-5: PUT /api/tags/sort-order must fan out tag_upsert frames so
+    other tabs update their filter-panel sort positions without polling.
+
+    Creates two project tags, reorders them, then asserts that the
+    broadcaster delivered at least one ``tag_upsert`` frame after the
+    sort-order PUT (one per affected tag in the class).
+    """
+    app, _conn, bc = tagged_app
+    q = bc.subscribe()
+
+    with TestClient(app) as client:
+        r_a = client.post(
+            "/api/tags", json={"name": "proj-alpha", "color": "#111111", "class_": "project"}
+        )
+        assert r_a.status_code == 201
+        id_a = r_a.json()["id"]
+        _ = q.get_nowait()  # drain create broadcast
+
+        r_b = client.post(
+            "/api/tags", json={"name": "proj-beta", "color": "#222222", "class_": "project"}
+        )
+        assert r_b.status_code == 201
+        id_b = r_b.json()["id"]
+        _ = q.get_nowait()  # drain create broadcast
+
+        reorder_resp = client.put(
+            "/api/tags/sort-order",
+            json={"class_": "project", "ordered_ids": [id_b, id_a]},
+        )
+    assert reorder_resp.status_code == 204
+
+    # The sort-order PUT must have queued at least one tag_upsert frame.
+    frames = []
+    try:
+        while True:
+            frames.append(json.loads(q.get_nowait()))
+    except Exception:
+        pass
+
+    tag_upsert_frames = [f for f in frames if f.get("type") == "tag_upsert"]
+    assert tag_upsert_frames, "PUT /api/tags/sort-order must broadcast tag_upsert frames"
+    # Both project tags must appear in the upsert stream.
+    broadcast_ids = {f["tag"]["id"] for f in tag_upsert_frames}
+    assert id_a in broadcast_ids
+    assert id_b in broadcast_ids
+
+
+# ---------------------------------------------------------------------------
 # feature-6-008 — teardown_leg closes predecessor + broadcasts
 # ---------------------------------------------------------------------------
 

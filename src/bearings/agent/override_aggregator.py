@@ -264,6 +264,13 @@ class OverrideAggregator:
         # message's matched_rule_id). The subquery picks that earliest
         # row; the outer GROUP BY counts how many of those sessions
         # had a manual override anywhere in-window.
+        #
+        # N-2 fix: the origin CTE must be scoped to the same time window
+        # as Pass 1. Without the filter, out-of-window sessions can appear
+        # in `origin`; if they also have a recent manual override the
+        # join inflates `overridden_count` for a rule that may not have
+        # even fired in-window — producing an override_count that exceeds
+        # fired_count or attributes overrides to the wrong window cohort.
         cursor = await self._connection.execute(
             "WITH origin AS ( "
             "  SELECT m.session_id, m.routing_source AS origin_source, "
@@ -277,6 +284,7 @@ class OverrideAggregator:
             "  ) "
             "  AND m.matched_rule_id IS NOT NULL "
             "  AND m.routing_source IN ('tag_rule', 'system_rule') "
+            "  AND CAST(strftime('%s', m.created_at) AS INTEGER) >= ? "
             "), overrides AS ( "
             "  SELECT DISTINCT session_id FROM messages "
             "  WHERE routing_source IN ('manual', 'manual_override_quota') "
@@ -285,7 +293,7 @@ class OverrideAggregator:
             "SELECT origin.origin_source, origin.origin_rule_id, COUNT(*) "
             "FROM origin INNER JOIN overrides USING (session_id) "
             "GROUP BY origin.origin_source, origin.origin_rule_id",
-            (cutoff_arg,),
+            (cutoff_arg, cutoff_arg),
         )
         try:
             rows = await cursor.fetchall()
