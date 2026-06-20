@@ -144,6 +144,21 @@ const wsStatus: WsConnectionStatus = $state({ state: "closed", lastCloseCode: nu
 /** Read-only reactive view of the sessions-broadcast WebSocket status. */
 export const wsConnectionStatus: WsConnectionStatus = wsStatus;
 
+/**
+ * Monotonically-increasing open-event counter for the sessions-broadcast
+ * WebSocket. Incremented each time the socket opens (including the first
+ * connection). ``SessionList`` reacts to this counter in its refresh
+ * ``$effect`` so a WS reconnect triggers a full ``refreshSessions`` call,
+ * picking up any sessions that were created while the socket was down.
+ *
+ * Separate from ``wsConnectionStatus.state`` to avoid spurious refreshes
+ * on close/error state transitions — only open events are actionable here.
+ */
+const _wsOpenVersion = $state({ n: 0 });
+
+/** Read-only reactive view of :data:`_wsOpenVersion`. */
+export const wsOpenVersion: { readonly n: number } = _wsOpenVersion;
+
 let refreshController: AbortController | null = null;
 
 // ---- sessions-broadcast subscription (item 2.6) ----------------------------
@@ -157,10 +172,12 @@ let refreshController: AbortController | null = null;
  * tab), prepend it so it appears at the top — matching the sort order
  * the ``GET /api/sessions`` endpoint uses (newest first).
  *
- * Tag chips for the new row are NOT updated: the sidebar only shows
- * chips after the full ``refreshSessions`` cycle, and a cross-tab
- * upsert is typically a title/status change, not a tag change. A
- * later ``refreshSessions()`` call restores full tag accuracy.
+ * ``tagsBySessionId`` is also updated from the embedded ``tags`` field
+ * so the session renders in the correct tag group immediately — without
+ * this, WS-upserted rows fell into ``__ungrouped__`` until the next
+ * ``refreshSessions`` cycle (bug: "had to hard refresh to see activity").
+ * Uses the same ``as unknown as TagOut[]`` cast as ``_tagsMapFromSessions``
+ * since ``SessionTagOut`` is structurally identical to ``TagOut``.
  */
 function _applyUpsert(session: SessionOut): void {
   const idx = state.sessions.findIndex((s) => s.id === session.id);
@@ -168,6 +185,14 @@ function _applyUpsert(session: SessionOut): void {
     state.sessions[idx] = session;
   } else {
     state.sessions = [session, ...state.sessions];
+  }
+  // Seed/refresh tagsBySessionId from the embedded tags so the session
+  // renders in the correct group without waiting for refreshSessions.
+  if (session.tags !== undefined) {
+    state.tagsBySessionId = {
+      ...state.tagsBySessionId,
+      [session.id]: session.tags as unknown as TagOut[],
+    };
   }
 }
 
@@ -316,6 +341,9 @@ connectSessionsBroadcast(
       untrack(() => {
         wsStatus.state = "open";
         wsStatus.lastCloseCode = null;
+        // Increment so SessionList's refresh $effect re-fires: picks up
+        // any sessions created while the socket was down (reconnect gap).
+        _wsOpenVersion.n += 1;
       });
       // REST poll fallback (M-11/R-1): restore running/awaiting sets on
       // WS reconnect in case runner_state events were missed while down.
@@ -494,6 +522,7 @@ export function _resetForTests(): void {
   state.total = 0;
   state.nextOffset = null;
   state.hasMore = false;
+  _wsOpenVersion.n = 0;
   refreshController?.abort();
   refreshController = null;
 }
@@ -531,6 +560,16 @@ export function _setWsStatusForTests(patch: {
 export function _resetWsStatusForTests(): void {
   wsStatus.state = "closed";
   wsStatus.lastCloseCode = null;
+}
+
+/**
+ * Simulate a WS open event in unit tests by incrementing the open-version
+ * counter. Components that react to :data:`wsOpenVersion` (e.g.
+ * ``SessionList`` triggering a refresh on reconnect) can be exercised
+ * without a real WebSocket.
+ */
+export function _simulateWsOpenForTests(): void {
+  _wsOpenVersion.n += 1;
 }
 
 function isAbortError(error: unknown): boolean {

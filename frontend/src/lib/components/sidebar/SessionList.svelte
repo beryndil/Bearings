@@ -76,6 +76,7 @@
     loadMoreSessions as loadMoreSessionsDefault,
     refreshSessions as refreshSessionsDefault,
     sessionsStore as sessionsStoreDefault,
+    wsOpenVersion,
   } from "../../stores/sessions.svelte";
   import {
     clearTagFilter as clearTagFilterDefault,
@@ -537,6 +538,11 @@
   });
 
   $effect(() => {
+    // Re-run on filter change AND on every WS reconnect so sessions
+    // created while the socket was down are picked up without a hard
+    // refresh (bug: "had to hard refresh to see activity" after API
+    // session creation during a brief WS outage).
+    void wsOpenVersion.n;
     void refreshSessions(currentFilter());
   });
 
