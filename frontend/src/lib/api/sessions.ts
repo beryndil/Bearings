@@ -847,6 +847,9 @@ export interface SystemPromptLayer {
   kind:
     | "baseline"
     | "project_claude_md"
+    | "user_claude_md"
+    | "user_rules_md"
+    | "tag_claude_md"
     | "tag_memory"
     | "session_instructions"
     | "template_baseline";
@@ -854,7 +857,11 @@ export interface SystemPromptLayer {
   body: string;
   /** Approximate token count (len(body) // 4). */
   token_count: number;
-  /** Absolute filesystem path for project_claude_md / tag_memory layers; null otherwise. */
+  /**
+   * Absolute filesystem path for filesystem-sourced layers
+   * (``project_claude_md``, ``user_claude_md``, ``user_rules_md``,
+   * ``tag_claude_md``); ``null`` for DB-resident layers.
+   */
   source_path: string | null;
 }
 

@@ -339,4 +339,63 @@ describe("InspectorRouting — 'Why this model?' expandable", () => {
     expect(a1Body?.textContent).toContain("#42");
     expect(a2Body?.textContent).toContain(INSPECTOR_STRINGS.routingTimelineNoMatchedRule);
   });
+
+  it("renders the evaluated_rules eval chain with matched rule highlighted", async () => {
+    const rows = [
+      msg({
+        id: "a1",
+        matched_rule_id: 20,
+        evaluated_rules: [10, 15, 20],
+        routing_reason: "matched rule 20",
+      }),
+    ];
+    const { findByTestId } = render(InspectorRouting, {
+      props: { session: fakeSession(), fetchMessages: fixtureFetcher(rows) },
+    });
+    const toggle = await findByTestId("inspector-routing-why-toggle");
+    await fireEvent.click(toggle);
+    const chain = await findByTestId("inspector-routing-eval-chain");
+    // All three rule ids appear in the chain.
+    expect(chain.textContent).toContain("#10");
+    expect(chain.textContent).toContain("#15");
+    expect(chain.textContent).toContain("#20");
+    // The matched rule (#20) has the 'font-semibold' class applied.
+    const matched = chain.querySelector("[title='matched']");
+    expect(matched).not.toBeNull();
+    expect(matched?.textContent).toContain("#20");
+    // Skipped rules have the 'text-fg-muted' class applied.
+    const skipped = chain.querySelectorAll("[title='skipped']");
+    expect(skipped).toHaveLength(2);
+  });
+
+  it("renders 'default' suffix when matched_rule_id is null and chain is non-empty", async () => {
+    const rows = [
+      msg({
+        id: "a1",
+        matched_rule_id: null,
+        evaluated_rules: [5, 12],
+        routing_reason: "default fallback",
+      }),
+    ];
+    const { findByTestId } = render(InspectorRouting, {
+      props: { session: fakeSession(), fetchMessages: fixtureFetcher(rows) },
+    });
+    const toggle = await findByTestId("inspector-routing-why-toggle");
+    await fireEvent.click(toggle);
+    const chain = await findByTestId("inspector-routing-eval-chain");
+    expect(chain.textContent).toContain("#5");
+    expect(chain.textContent).toContain("#12");
+    expect(chain.textContent).toContain("default");
+  });
+
+  it("does not render the eval-chain row when evaluated_rules is empty", async () => {
+    const rows = [msg({ id: "a1", matched_rule_id: 7, evaluated_rules: [] })];
+    const { findByTestId, queryByTestId } = render(InspectorRouting, {
+      props: { session: fakeSession(), fetchMessages: fixtureFetcher(rows) },
+    });
+    const toggle = await findByTestId("inspector-routing-why-toggle");
+    await fireEvent.click(toggle);
+    await findByTestId("inspector-routing-why-body");
+    expect(queryByTestId("inspector-routing-eval-chain")).toBeNull();
+  });
 });

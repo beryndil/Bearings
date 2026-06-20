@@ -41,15 +41,26 @@
     | "project_claude_md"
     | "user_claude_md"
     | "user_rules_md"
+    | "tag_claude_md"
     | "tag_memory"
     | "template_baseline";
 
+  /**
+   * Display order follows splice order: per-session first, then filesystem
+   * sources (baseline, project, user, per-tag CLAUDE.md, per-tag rules),
+   * then DB-resident memory rows, then template baseline.
+   * ``tag_claude_md`` sits before ``tag_memory`` because the backend
+   * splices per-tag CLAUDE.md blocks before memory rows so that memory
+   * bodies win on any directive conflicts (docs/behavior/memories.md
+   * §"System-prompt injection").
+   */
   const LAYER_DISPLAY_ORDER: readonly LayerKind[] = [
     "session_instructions",
     "baseline",
     "project_claude_md",
     "user_claude_md",
     "user_rules_md",
+    "tag_claude_md",
     "tag_memory",
     "template_baseline",
   ] as const;

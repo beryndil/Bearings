@@ -18,9 +18,11 @@
    *      overall bucket; sonnet executor tokens against Sonnet
    *      bucket per spec §4 bucket scoping).
    *   5. "Why this model?" expandable rendering the rule eval chain
-   *      (source + matched_rule_id + reason). The full
-   *      ``evaluated_rules`` list is wire-side future work — item
-   *      1.9's :class:`MessageOut` exposes ``matched_rule_id`` only.
+   *      (source + matched_rule_id + evaluated_rules chain + reason).
+   *      ``evaluated_rules: number[]`` is on the wire per item 1.9's
+   *      :class:`MessageOut`; the chain renders as an ordered
+   *      ``#id → #id → … → default`` list with the matched rule
+   *      highlighted (N-8 gap-closure).
    * - ``docs/architecture-v1.md`` §1.2 enumerates this component as
    *   ``InspectorRouting.svelte`` under ``components/inspector/``.
    * - ``docs/behavior/chat.md`` §"What the user does NOT see in chat"

@@ -1815,8 +1815,9 @@ export const INSPECTOR_STRINGS = {
   contextLastContextMaxLabel: "Context-window max",
   contextLastContextNotSeen: "no turn observed yet",
   contextAssembledHeading: "Assembled context",
-  contextAssembledPlaceholder:
-    "System prompt, tag-default overlays, and vault attachments surface here once the assembled-context API lands (items 1.4 / 1.5 / 1.7).",
+  contextAssembledLoading: "Loading assembled context…",
+  contextAssembledError: "Couldn't load assembled context.",
+  contextAssembledTotalLabel: "Total assembled",
   // Instructions subsection — system-prompt layer breakdown
   // (gap-cycle-13-004).  Each layer kind renders as a clickable card.
   // Clicking opens a dedicated editor or read-only viewer modal for that
@@ -1829,6 +1830,7 @@ export const INSPECTOR_STRINGS = {
     project_claude_md: "Project CLAUDE.md",
     user_claude_md: "User CLAUDE.md",
     user_rules_md: "User rules",
+    tag_claude_md: "Tag CLAUDE.md",
     tag_memory: "Tag memory",
     session_instructions: "Session instructions",
     template_baseline: "Template baseline",
@@ -1839,6 +1841,7 @@ export const INSPECTOR_STRINGS = {
     project_claude_md: "No project CLAUDE.md found in working directory walk-up.",
     user_claude_md: "No ~/.claude/CLAUDE.md found.",
     user_rules_md: "No ~/.claude/rules/*.md files found.",
+    tag_claude_md: "No per-tag CLAUDE.md files found.",
     tag_memory: "No tag memories attached.",
     session_instructions: "No per-session instructions set.",
     template_baseline: "No template baseline.",

@@ -14,19 +14,14 @@
    *   header band's "total-cost / context-window indicator" — the
    *   inspector renders the same context-window numbers in long form,
    *   plus the title / description that the sidebar row truncates.
-   *
-   * The "assembled context" pieces (system prompt, tag-default
-   * overlays per item 1.4, vault attachments per item 1.5) are gated
-   * on the per-session assembly API which lands in those items'
-   * scopes; this component renders a placeholder paragraph there so
-   * the visual structure is in place when those endpoints arrive. Doc
-   * gap recorded in the executor's self-verification — chat.md is
-   * silent on this subsection's exact copy, so the placeholder text
-   * is provisional pending a doc augmentation per plan §"Behavioral
-   * gap escalation".
+   * - ``docs/behavior/chat.md`` §"Context" — below the grid an
+   *   "Assembled context" section shows the system-prompt layer
+   *   breakdown summary, wired to
+   *   ``GET /api/sessions/{id}/system_prompt``.
    */
   import { INSPECTOR_STRINGS } from "../../config";
-  import type { SessionOut } from "../../api/sessions";
+  import type { SessionOut, SystemPromptLayersOut } from "../../api/sessions";
+  import { getSessionSystemPrompt } from "../../api/sessions";
 
   interface Props {
     session: SessionOut;
@@ -53,6 +48,56 @@
       return INSPECTOR_STRINGS.contextLastContextNotSeen;
     }
     return value.toLocaleString();
+  }
+
+  // ---- assembled-context fetch -------------------------------------------
+
+  type AssembledLoadState = "loading" | "ready" | "error";
+
+  let assembledState: AssembledLoadState = $state("loading");
+  let assembledData = $state<SystemPromptLayersOut | null>(null);
+
+  $effect(() => {
+    const id = session.id;
+    assembledState = "loading";
+    assembledData = null;
+    getSessionSystemPrompt(id)
+      .then((out) => {
+        assembledData = out;
+        assembledState = "ready";
+      })
+      .catch(() => {
+        assembledState = "error";
+      });
+  });
+
+  /**
+   * Present layers in the same order InspectorInstructions uses so the
+   * two subsections are consistent. Unknown kinds fall through after the
+   * known set.
+   */
+  const LAYER_ORDER: ReadonlyArray<string> = [
+    "session_instructions",
+    "baseline",
+    "project_claude_md",
+    "user_claude_md",
+    "user_rules_md",
+    "tag_claude_md",
+    "tag_memory",
+    "template_baseline",
+  ];
+
+  const sortedLayers = $derived(
+    (assembledData?.layers ?? []).slice().sort((a, b) => {
+      const ai = LAYER_ORDER.indexOf(a.kind);
+      const bi = LAYER_ORDER.indexOf(b.kind);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    }),
+  );
+
+  function kindLabel(kind: string): string {
+    const labels = INSPECTOR_STRINGS.instructionsLayerKindLabels as Record<string, string>;
+    return labels[kind] ?? kind;
   }
 </script>
 
@@ -93,6 +138,42 @@
     <h4 class="text-xs font-semibold uppercase tracking-wider text-fg-muted">
       {INSPECTOR_STRINGS.contextAssembledHeading}
     </h4>
-    <p class="text-fg-muted">{INSPECTOR_STRINGS.contextAssembledPlaceholder}</p>
+
+    {#if assembledState === "loading"}
+      <p class="text-xs text-fg-muted" data-testid="inspector-context-assembled-loading">
+        {INSPECTOR_STRINGS.contextAssembledLoading}
+      </p>
+    {:else if assembledState === "error"}
+      <p class="text-xs text-fg-error" data-testid="inspector-context-assembled-error">
+        {INSPECTOR_STRINGS.contextAssembledError}
+      </p>
+    {:else if assembledData !== null}
+      <dl
+        class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs"
+        data-testid="inspector-context-assembled-layers"
+      >
+        {#each sortedLayers as layer (layer.kind)}
+          <dt class="text-fg-muted">{kindLabel(layer.kind)}</dt>
+          <dd class="font-mono text-fg" data-testid={`inspector-context-assembled-${layer.kind}`}>
+            {INSPECTOR_STRINGS.instructionsLayerTokensLabel(layer.token_count)}
+            {#if layer.source_path}
+              <span class="truncate text-fg-muted" title={layer.source_path}>
+                · {layer.source_path}
+              </span>
+            {/if}
+          </dd>
+        {/each}
+
+        <dt class="border-t border-border pt-1 text-fg-muted">
+          {INSPECTOR_STRINGS.contextAssembledTotalLabel}
+        </dt>
+        <dd
+          class="border-t border-border pt-1 font-mono text-fg"
+          data-testid="inspector-context-assembled-total"
+        >
+          {INSPECTOR_STRINGS.instructionsLayerTokensLabel(assembledData.total_tokens)}
+        </dd>
+      </dl>
+    {/if}
   </section>
 </section>

@@ -1,0 +1,1 @@
+import{W as e,at as t,it as n}from"../chunks/BJWgpuDn.js";import"../chunks/t62M88qj.js";import{t as r}from"../chunks/nt-GlV7C.js";import{m as i}from"../chunks/coMuefZF.js";import{n as a}from"../chunks/w7t80ZAU.js";function o(o,s){t(s,!0),e(()=>{let e=r.params.id??null;a(e),e!==null&&i(e)}),n()}export{o as component};

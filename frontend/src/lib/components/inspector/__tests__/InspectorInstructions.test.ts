@@ -92,7 +92,7 @@ describe("loading state", () => {
 // ---------------------------------------------------------------------------
 
 describe("layer rows render in correct order", () => {
-  it("renders all five layer sections in display order", async () => {
+  it("renders all layer sections in display order (including tag_claude_md)", async () => {
     vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
       fakeLayersOut([
         { kind: "session_instructions", body: "steer", token_count: 1, source_path: null },
@@ -108,6 +108,9 @@ describe("layer rows render in correct order", () => {
       "session_instructions",
       "baseline",
       "project_claude_md",
+      "user_claude_md",
+      "user_rules_md",
+      "tag_claude_md",
       "tag_memory",
       "template_baseline",
     ];
@@ -151,6 +154,38 @@ describe("layer rows render in correct order", () => {
     await waitFor(() => {
       const card = screen.getByTestId("instructions-layer-project_claude_md-0");
       expect(card.textContent).toContain("/home/user/project/CLAUDE.md");
+    });
+  });
+
+  it("renders source_path for tag_claude_md layers and opens the file editor on click", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([
+        {
+          kind: "tag_claude_md",
+          body: "tag claude md content",
+          token_count: 5,
+          source_path: "/home/user/.claude/tags/bearings/CLAUDE.md",
+        },
+      ]),
+    );
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      const card = screen.getByTestId("instructions-layer-tag_claude_md-0");
+      expect(card.textContent).toContain("/home/user/.claude/tags/bearings/CLAUDE.md");
+    });
+    await fireEvent.click(screen.getByTestId("instructions-layer-tag_claude_md-0"));
+    expect(screen.getByTestId("claudemd-edit-modal")).toBeInTheDocument();
+  });
+
+  it("renders the tag_claude_md empty state when no tag CLAUDE.md layers present", async () => {
+    vi.spyOn(sessionsApi, "getSessionSystemPrompt").mockResolvedValue(
+      fakeLayersOut([{ kind: "baseline", body: "base", token_count: 1, source_path: null }]),
+    );
+    render(InspectorInstructions, { props: { session: fakeSession() } });
+    await waitFor(() => {
+      expect(screen.getByTestId("instructions-empty-tag_claude_md")).toHaveTextContent(
+        INSPECTOR_STRINGS.instructionsLayerEmptyState.tag_claude_md,
+      );
     });
   });
 
