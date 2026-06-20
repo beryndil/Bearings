@@ -1,1 +1,0 @@
-import{H as e,U as t,r as n}from"./gbMe0zbW.js";async function r(t={}){let r={query:[[`period`,t.period??`week`]]};return t.signal!==void 0&&(r.signal=t.signal),await n(e,r)}async function i(e={}){let r=e.days??14,i={query:[[`days`,String(r)]]};return e.signal!==void 0&&(i.signal=e.signal),await n(t,i)}export{r as n,i as t};

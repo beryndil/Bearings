@@ -926,11 +926,27 @@
       {/if}
     </span>
 
-    <!-- Session id sub-line — rendered under the title row -->
+    <!-- Session id sub-line — rendered under the title row.
+         Click copies the bare numeric/slug portion (ses_ prefix stripped). -->
     <span
-      class="truncate font-mono text-[10px] leading-tight text-fg-muted"
+      role="button"
+      tabindex="0"
+      class="truncate cursor-pointer font-mono text-[10px] leading-tight text-fg-muted hover:text-fg"
       data-testid="session-row-id"
-      title={session.id}>{session.id}</span
+      title={SIDEBAR_STRINGS.sessionRowIdClickTooltip}
+      onclick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void navigator.clipboard.writeText(session.id.replace(/^ses_/, ""));
+      }}
+      onkeydown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          void navigator.clipboard.writeText(session.id.replace(/^ses_/, ""));
+        }
+      }}
+    >{session.id.replace(/^ses_/, "")}</span
     >
 
     {#if tags.length > 0}

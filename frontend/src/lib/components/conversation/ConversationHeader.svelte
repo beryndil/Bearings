@@ -291,21 +291,45 @@
   >
     <!-- Primary row: title, severity shield, tag chips, breadcrumb -->
     <div class="flex flex-wrap items-center gap-2 px-3 py-1.5">
-      <!-- Session title + id sub-line -->
+      <!-- Session title + id sub-line.
+           Both spans are click-to-copy: title copies the session title,
+           id copies the bare id with the ses_ prefix stripped. -->
       <span class="flex min-w-0 flex-col">
         <span
-          class="max-w-xs truncate text-sm font-semibold text-fg-strong"
+          role="button"
+          tabindex="0"
+          class="max-w-xs cursor-pointer truncate text-sm font-semibold text-fg-strong hover:text-fg"
           data-testid="conversation-header-title"
-          title={session.title}
+          title={CONVERSATION_HEADER_STRINGS.titleClickTooltip}
+          onclick={() => {
+            void navigator.clipboard.writeText(session.title);
+          }}
+          onkeydown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              void navigator.clipboard.writeText(session.title);
+            }
+          }}
         >
           {session.title}
         </span>
         <span
-          class="max-w-xs truncate font-mono text-[10px] leading-tight text-fg-muted"
+          role="button"
+          tabindex="0"
+          class="max-w-xs cursor-pointer truncate font-mono text-[10px] leading-tight text-fg-muted hover:text-fg"
           data-testid="conversation-header-session-id"
-          title={session.id}
+          title={CONVERSATION_HEADER_STRINGS.sessionIdClickTooltip}
+          onclick={() => {
+            void navigator.clipboard.writeText(session.id.replace(/^ses_/, ""));
+          }}
+          onkeydown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              void navigator.clipboard.writeText(session.id.replace(/^ses_/, ""));
+            }
+          }}
         >
-          {session.id}
+          {session.id.replace(/^ses_/, "")}
         </span>
       </span>
 

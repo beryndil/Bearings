@@ -944,6 +944,10 @@ export const CONVERSATION_HEADER_STRINGS = {
   costPrefix: "$",
   /** Aria-label for the total-cost readout span. */
   costAriaLabel: "Total session cost",
+  /** Tooltip on the session title span — indicates click-to-copy affordance. */
+  titleClickTooltip: "Click to copy title",
+  /** Tooltip on the session-ID span — indicates click-to-copy affordance. */
+  sessionIdClickTooltip: "Click to copy ID",
 } as const;
 
 /**
@@ -1115,6 +1119,8 @@ export const SIDEBAR_STRINGS = {
   sessionMessageCountSuffix: "msgs",
   /** Subscription mode: aria-label for the message-count sub-line. */
   sessionMessageCountAriaLabel: "Session message count",
+  /** Tooltip on the session-ID sub-line span — indicates click-to-copy affordance. */
+  sessionRowIdClickTooltip: "Click to copy ID",
 } as const;
 
 /**
