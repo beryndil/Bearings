@@ -58,6 +58,7 @@ from bearings.config.constants import (
     ROUTE_TAG_CHECKPOINTS,
     ROUTE_TAG_COMMANDS,
     ROUTE_TAG_DIAG,
+    ROUTE_TAG_FILE_OPEN,
     ROUTE_TAG_FS,
     ROUTE_TAG_HEALTH,
     ROUTE_TAG_HISTORY,
@@ -102,6 +103,7 @@ from bearings.web.routes.checkpoints import router as checkpoints_router
 from bearings.web.routes.commands import router as commands_router
 from bearings.web.routes.config import router as config_router
 from bearings.web.routes.diag import router as diag_router
+from bearings.web.routes.file_open import router as file_open_router
 from bearings.web.routes.fs import router as fs_router
 from bearings.web.routes.health import router as health_router
 from bearings.web.routes.history import router as history_router
@@ -518,6 +520,7 @@ def create_app(
     # Item 1.10 — misc-API surfaces.
     app.include_router(uploads_router, tags=[ROUTE_TAG_UPLOADS])
     app.include_router(fs_router, tags=[ROUTE_TAG_FS])
+    app.include_router(file_open_router, tags=[ROUTE_TAG_FILE_OPEN])
     app.include_router(shell_router, tags=[ROUTE_TAG_SHELL])
     app.include_router(diag_router, tags=[ROUTE_TAG_DIAG])
     app.include_router(health_router, tags=[ROUTE_TAG_HEALTH])
