@@ -453,7 +453,13 @@ export async function refreshSessions(filter: SessionFilter): Promise<void> {
   // The snapshot approach keeps the "reset on every refresh" contract intact:
   // sessions that WERE in the snapshot but absent from the server result are
   // correctly dropped (they belong to a prior list, not to in-flight upserts).
-  const snapshotIds = new Set(state.sessions.map((s) => s.id));
+  //
+  // untrack() is required: refreshSessions runs synchronously up to its first
+  // await, and SessionList calls it inside a $effect. Without untrack, reading
+  // state.sessions here subscribes the effect to state.sessions — then when
+  // refreshSessions writes state.sessions = page.sessions at the end, the
+  // effect immediately re-fires, creating an infinite ~10-15 Hz loop.
+  const snapshotIds = new Set(untrack(() => state.sessions.map((s) => s.id)));
   state.loading = true;
   try {
     const params = _filterToParams(filter);
