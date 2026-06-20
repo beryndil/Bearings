@@ -291,13 +291,22 @@
   >
     <!-- Primary row: title, severity shield, tag chips, breadcrumb -->
     <div class="flex flex-wrap items-center gap-2 px-3 py-1.5">
-      <!-- Session title -->
-      <span
-        class="max-w-xs truncate text-sm font-semibold text-fg-strong"
-        data-testid="conversation-header-title"
-        title={session.title}
-      >
-        {session.title}
+      <!-- Session title + id sub-line -->
+      <span class="flex min-w-0 flex-col">
+        <span
+          class="max-w-xs truncate text-sm font-semibold text-fg-strong"
+          data-testid="conversation-header-title"
+          title={session.title}
+        >
+          {session.title}
+        </span>
+        <span
+          class="max-w-xs truncate font-mono text-[10px] leading-tight text-fg-muted"
+          data-testid="conversation-header-session-id"
+          title={session.id}
+        >
+          {session.id}
+        </span>
       </span>
 
       <!-- Severity shield — coloured chip for the severity tag -->

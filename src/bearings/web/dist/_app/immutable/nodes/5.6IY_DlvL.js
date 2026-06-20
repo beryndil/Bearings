@@ -1,0 +1,1 @@
+import{nt as e,r as t,rt as n,s as r}from"../chunks/Cj0FL8f6.js";import{t as i}from"../chunks/BclSIxEA.js";import"../chunks/D9FQP20W.js";import"../chunks/CjYlaOj_.js";import"../chunks/Csj7NWWx.js";function a(a,o){n(o,!1),t(()=>{i(`/settings`,{replaceState:!0})}),r(),e()}export{a as component};

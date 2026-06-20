@@ -926,6 +926,13 @@
       {/if}
     </span>
 
+    <!-- Session id sub-line — rendered under the title row -->
+    <span
+      class="truncate font-mono text-[10px] leading-tight text-fg-muted"
+      data-testid="session-row-id"
+      title={session.id}>{session.id}</span
+    >
+
     {#if tags.length > 0}
       <span class="flex flex-wrap gap-1" data-testid="session-row-tags">
         {#each tags as tag (tag.id)}
