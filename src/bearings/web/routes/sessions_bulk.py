@@ -316,27 +316,33 @@ async def _handle_bulk_tag(
     )
 
 
-async def _handle_bulk_close_delete(
+async def _exec_bulk_close(
     db: aiosqlite.Connection,
     broadcaster: SessionsBroadcaster | None,
-    payload: BulkSessionsIn,
     session_ids: list[str],
-    factory: InProcessRunnerRegistry | None = None,
+    factory: InProcessRunnerRegistry | None,
 ) -> list[BulkResultItem]:
-    """Handle close / delete ops; broadcast upserts / deletes as appropriate."""
-    if payload.op == BULK_OP_CLOSE:
-        close_pairs = await _bulk_close(db, session_ids)
-        results = [r for r, _ in close_pairs]
-        if broadcaster is not None:
-            for r, closed_session in close_pairs:
-                if r.ok and closed_session is not None:
-                    broadcaster.publish_upsert(_to_out(closed_session))
-        if factory is not None:
-            for r, _ in close_pairs:
-                if r.ok:
-                    await factory.recycle(r.session_id)
-        return results
-    # payload.op == BULK_OP_DELETE (KNOWN_BULK_OPS guard rejects others)
+    """Execute a bulk-close operation; broadcast upserts and recycle runners."""
+    close_pairs = await _bulk_close(db, session_ids)
+    results = [r for r, _ in close_pairs]
+    if broadcaster is not None:
+        for r, closed_session in close_pairs:
+            if r.ok and closed_session is not None:
+                broadcaster.publish_upsert(_to_out(closed_session))
+    if factory is not None:
+        for r, _ in close_pairs:
+            if r.ok:
+                await factory.recycle(r.session_id)
+    return results
+
+
+async def _exec_bulk_delete(
+    db: aiosqlite.Connection,
+    broadcaster: SessionsBroadcaster | None,
+    session_ids: list[str],
+    factory: InProcessRunnerRegistry | None,
+) -> list[BulkResultItem]:
+    """Execute a bulk-delete operation; broadcast deletes and recycle runners."""
     results = await _bulk_delete(db, session_ids)
     if broadcaster is not None:
         for r in results:
@@ -347,6 +353,20 @@ async def _handle_bulk_close_delete(
             if r.ok:
                 await factory.recycle(r.session_id)
     return results
+
+
+async def _handle_bulk_close_delete(
+    db: aiosqlite.Connection,
+    broadcaster: SessionsBroadcaster | None,
+    payload: BulkSessionsIn,
+    session_ids: list[str],
+    factory: InProcessRunnerRegistry | None = None,
+) -> list[BulkResultItem]:
+    """Dispatch close / delete ops to the appropriate helper."""
+    if payload.op == BULK_OP_CLOSE:
+        return await _exec_bulk_close(db, broadcaster, session_ids, factory)
+    # payload.op == BULK_OP_DELETE (KNOWN_BULK_OPS guard rejects others)
+    return await _exec_bulk_delete(db, broadcaster, session_ids, factory)
 
 
 # ---------------------------------------------------------------------------

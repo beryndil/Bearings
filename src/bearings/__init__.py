@@ -6,4 +6,4 @@ reference only during Phase 0 — it is not consulted as source of truth past
 that point.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"

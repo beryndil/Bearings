@@ -181,26 +181,9 @@ async def _run_send(
 
             # Stream events from the WebSocket.
             async for raw_msg in ws:
-                if not isinstance(raw_msg, str):
-                    continue
-                try:
-                    frame: dict[str, Any] = json.loads(raw_msg)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                if frame.get("kind") != SEND_WS_FRAME_KIND_EVENT:
-                    continue  # heartbeat — ignore
-                raw_event = frame.get("event", {})
-                if not isinstance(raw_event, dict):
-                    continue
-                event: dict[str, Any] = raw_event
-
-                _print_event(event, format_)
-
-                event_type = event.get("type")
-                if event_type == SEND_EVENT_TYPE_MESSAGE_COMPLETE:
-                    return CLI_EXIT_OK
-                if event_type == SEND_EVENT_TYPE_ERROR:
-                    return CLI_EXIT_OPERATION_FAILURE
+                result = _process_ws_frame(raw_msg, format_)
+                if result is not None:
+                    return result
 
     except (ConnectionRefusedError, OSError) as exc:
         sys.stderr.write(f"bearings send: cannot connect to {ws_url}: {exc}\n")
@@ -212,6 +195,34 @@ async def _run_send(
     # WS closed without a terminal event.
     sys.stderr.write("bearings send: stream closed without message_complete\n")
     return CLI_EXIT_OPERATION_FAILURE
+
+
+def _process_ws_frame(raw_msg: str | bytes, format_: str) -> int | None:
+    """Decode one WebSocket frame and return a CLI exit code or ``None`` to continue.
+
+    Returns :data:`CLI_EXIT_OK` on ``message_complete``,
+    :data:`CLI_EXIT_OPERATION_FAILURE` on ``error``, and ``None`` for
+    heartbeats, non-event frames, or frames that cannot be decoded.
+    """
+    if not isinstance(raw_msg, str):
+        return None
+    try:
+        frame: dict[str, Any] = json.loads(raw_msg)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if frame.get("kind") != SEND_WS_FRAME_KIND_EVENT:
+        return None  # heartbeat — ignore
+    raw_event = frame.get("event", {})
+    if not isinstance(raw_event, dict):
+        return None
+    event: dict[str, Any] = raw_event
+    _print_event(event, format_)
+    event_type = event.get("type")
+    if event_type == SEND_EVENT_TYPE_MESSAGE_COMPLETE:
+        return CLI_EXIT_OK
+    if event_type == SEND_EVENT_TYPE_ERROR:
+        return CLI_EXIT_OPERATION_FAILURE
+    return None
 
 
 def _http_post_prompt(url: str, message: str, token: str | None) -> None:

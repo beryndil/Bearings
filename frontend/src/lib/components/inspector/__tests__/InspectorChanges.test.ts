@@ -69,8 +69,9 @@ function fakeToolCall(overrides: Partial<ToolCallView> = {}): ToolCallView {
       file_path: "/home/dave/foo.ts",
       content: "export const x = 1;",
     }),
-    output: "",              outputHead: "",
-              isFolded: false,
+    output: "",
+    outputHead: "",
+    isFolded: false,
 
     rawLength: 0,
     done: true,

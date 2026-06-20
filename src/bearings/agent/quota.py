@@ -531,7 +531,7 @@ def build_real_fetcher() -> QuotaFetcher:
       (the 7-day Sonnet-only bucket).
 
     Both values are stored as fractions (0.0-1.0).  When a line is
-    absent or unparseable the corresponding field is ``None`` — the
+    absent or unparsable the corresponding field is ``None`` — the
     guard treats ``None`` as "no information" and fails open (spec §4).
 
     The ``raw_payload`` carries a JSON dict with keys:

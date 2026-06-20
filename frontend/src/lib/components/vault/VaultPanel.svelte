@@ -518,7 +518,11 @@
                   data-testid="vault-panel-row"
                   data-vault-id={entry.id}
                   data-vault-kind={VAULT_KIND_PLAN}
-                  use:contextMenu={{ target: MENU_TARGET_VAULT, handlers: makeVaultRowHandlers(entry), data: { vaultId: entry.id } }}
+                  use:contextMenu={{
+                    target: MENU_TARGET_VAULT,
+                    handlers: makeVaultRowHandlers(entry),
+                    data: { vaultId: entry.id },
+                  }}
                   onclick={() => handleSelectEntry(entry.id)}
                   ondragstart={(event) => handleDragStartVaultRow(entry, event)}
                 >
@@ -551,7 +555,11 @@
                   data-testid="vault-panel-row"
                   data-vault-id={entry.id}
                   data-vault-kind={VAULT_KIND_TODO}
-                  use:contextMenu={{ target: MENU_TARGET_VAULT, handlers: makeVaultRowHandlers(entry), data: { vaultId: entry.id } }}
+                  use:contextMenu={{
+                    target: MENU_TARGET_VAULT,
+                    handlers: makeVaultRowHandlers(entry),
+                    data: { vaultId: entry.id },
+                  }}
                   onclick={() => handleSelectEntry(entry.id)}
                   ondragstart={(event) => handleDragStartVaultRow(entry, event)}
                 >

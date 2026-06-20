@@ -686,8 +686,7 @@ export const CONVERSATION_STRINGS = {
    * Inline fold banner shown between head and tail of a two-tier folded
    * tool output (M-6 — middle-fold with interactive expander).
    */
-  toolOutputFoldBanner: (chars: number): string =>
-    `… ${chars.toLocaleString()} chars hidden — `,
+  toolOutputFoldBanner: (chars: number): string => `… ${chars.toLocaleString()} chars hidden — `,
   /** Button label embedded in the fold banner. */
   toolOutputShowFull: "Show full output",
   routingBadgeTooltipFallback: "Routing reason unavailable",

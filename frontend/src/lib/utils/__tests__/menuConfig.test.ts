@@ -11,11 +11,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  _resetMenusConfigForTests,
-  fetchMenusConfig,
-  type MenusConfig,
-} from "../menuConfig";
+import { _resetMenusConfigForTests, fetchMenusConfig, type MenusConfig } from "../menuConfig";
 
 // ---------------------------------------------------------------------------
 // Fetch stub

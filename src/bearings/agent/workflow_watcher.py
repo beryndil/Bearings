@@ -113,6 +113,68 @@ class WorkflowState:
     started_at: int  # Unix timestamp in milliseconds
 
 
+def _read_journal_data(path: Path) -> dict[str, object] | None:
+    """Read and JSON-parse a workflow journal file.
+
+    Returns ``None`` when the file is missing or contains invalid JSON;
+    logs a WARNING in both cases so callers can move on without crashing.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        _log.warning("workflow_watcher: cannot read %s: %s", path, exc)
+        return None
+    try:
+        data: dict[str, object] = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        _log.warning("workflow_watcher: JSON parse error in %s: %s", path, exc)
+        return None
+    return data
+
+
+def _find_current_phase(progress: list[object]) -> str | None:
+    """Return the title of the most recent ``workflow_phase`` entry, or ``None``."""
+    for entry in reversed(progress):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") == "workflow_phase":
+            title = entry.get("title")
+            if isinstance(title, str):
+                return title
+    return None
+
+
+def _count_agent_states(progress: list[object]) -> tuple[int, int, int]:
+    """Return ``(agents_running, agents_done, agents_queued)`` from *progress*."""
+    running = done = queued = 0
+    for entry in progress:
+        if not isinstance(entry, dict) or entry.get("type") != "workflow_agent":
+            continue
+        state = entry.get("state")
+        if state == "done":
+            done += 1
+        elif state == "running":
+            running += 1
+        else:
+            queued += 1
+    return running, done, queued
+
+
+def _extract_progress_fields(
+    progress: object,
+) -> tuple[str | None, int, int, int]:
+    """Return ``(current_phase, agents_running, agents_done, agents_queued)`` from *progress*.
+
+    *progress* is the raw ``workflowProgress`` value from the journal dict;
+    any non-list value yields all-zero / None results.
+    """
+    if not isinstance(progress, list):
+        return None, 0, 0, 0
+    current_phase = _find_current_phase(progress)
+    agents_running, agents_done, agents_queued = _count_agent_states(progress)
+    return current_phase, agents_running, agents_done, agents_queued
+
+
 def _parse_journal(path: Path, session_id: str) -> WorkflowState | None:
     """Read a workflow journal file and return a :class:`WorkflowState`.
 
@@ -120,16 +182,8 @@ def _parse_journal(path: Path, session_id: str) -> WorkflowState | None:
     mandatory ``runId`` field. Errors are logged at WARNING level so
     one bad journal does not break the watcher loop.
     """
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        _log.warning("workflow_watcher: cannot read %s: %s", path, exc)
-        return None
-
-    try:
-        data: dict[str, object] = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        _log.warning("workflow_watcher: JSON parse error in %s: %s", path, exc)
+    data = _read_journal_data(path)
+    if data is None:
         return None
 
     run_id = data.get("runId")
@@ -145,37 +199,9 @@ def _parse_journal(path: Path, session_id: str) -> WorkflowState | None:
     if not isinstance(workflow_name, str):
         workflow_name = run_id
 
-    # Extract current phase and agent counts from ``workflowProgress``.
-    current_phase: str | None = None
-    agents_running = 0
-    agents_done = 0
-    agents_queued = 0
-
-    progress = data.get("workflowProgress")
-    if isinstance(progress, list):
-        # Reverse scan so we find the most recent phase header first.
-        for entry in reversed(progress):
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("type") == "workflow_phase" and current_phase is None:
-                title = entry.get("title")
-                if isinstance(title, str):
-                    current_phase = title
-
-        # Forward pass for agent counts.
-        for entry in progress:
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("type") != "workflow_agent":
-                continue
-            state = entry.get("state")
-            if state == "done":
-                agents_done += 1
-            elif state == "running":
-                agents_running += 1
-            else:
-                # "queued" or unknown — treat as queued.
-                agents_queued += 1
+    current_phase, agents_running, agents_done, agents_queued = _extract_progress_fields(
+        data.get("workflowProgress")
+    )
 
     start_time = data.get("startTime")
     if not isinstance(start_time, int):

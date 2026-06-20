@@ -66,8 +66,9 @@ function fakeToolCall(overrides: Partial<ToolCallView> = {}): ToolCallView {
     id: "tc1",
     name: "Read",
     inputJson: JSON.stringify({ file_path: "/home/dave/foo.txt" }),
-    output: "",              outputHead: "",
-              isFolded: false,
+    output: "",
+    outputHead: "",
+    isFolded: false,
 
     rawLength: 0,
     done: true,

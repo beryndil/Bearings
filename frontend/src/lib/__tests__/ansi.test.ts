@@ -72,7 +72,7 @@ describe("ansiToHtml", () => {
   it("sanitizeHtml strips script injection even if somehow present", () => {
     // Verify DOMPurify defense-in-depth: even if ansiToHtml produced a
     // script tag (it won't with escapeXML: true, but belt-and-suspenders).
-    const malicious = "<span style=\"color:red\"><script>alert(1)</script>hi</span>";
+    const malicious = '<span style="color:red"><script>alert(1)</script>hi</span>';
     const safe = sanitizeHtml(malicious);
     expect(safe).not.toContain("<script>");
     expect(safe).toContain("hi");

@@ -260,6 +260,22 @@ async def delete_reorg_audit(
 # ---------------------------------------------------------------------------
 
 
+def _ts_ms(created_at: str | None) -> float:
+    """Parse an ISO-8601 *created_at* string to a millisecond POSIX timestamp.
+
+    Returns ``0.0`` when *created_at* is absent or cannot be parsed.  Callers
+    treat ``0.0`` as "no timestamp available" and skip time-gap checks.
+    """
+    if not created_at:
+        return 0.0
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp() * 1000
+    except (ValueError, AttributeError):
+        return 0.0
+
+
 class ReorgProposal(BaseModel):
     """One proposed split boundary from ``POST /api/sessions/{id}/reorg/analyze``."""
 
@@ -326,21 +342,8 @@ async def run_reorg_analysis(
             continue
         prev = msgs[idx - 1]
 
-        try:
-            from datetime import datetime
-
-            prev_ts = (
-                datetime.fromisoformat(prev.created_at.replace("Z", "+00:00")).timestamp() * 1000
-                if prev.created_at
-                else 0.0
-            )
-            cur_ts = (
-                datetime.fromisoformat(msg.created_at.replace("Z", "+00:00")).timestamp() * 1000
-                if msg.created_at
-                else 0.0
-            )
-        except (ValueError, AttributeError):
-            prev_ts = cur_ts = 0.0
+        prev_ts = _ts_ms(prev.created_at)
+        cur_ts = _ts_ms(msg.created_at)
 
         if prev_ts > 0 and cur_ts > 0 and (cur_ts - prev_ts) >= _ANALYZE_GAP_MS:
             gap_min = int((cur_ts - prev_ts) / 60_000)

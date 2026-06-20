@@ -56,6 +56,42 @@ def _slugify(title: str) -> str:
     return slug or "session"
 
 
+async def _get_paired_parent_title(db: object, row: object, session_id: str) -> str | None:
+    """Return the checklist parent's title for a paired-chat session, else ``None``."""
+    import aiosqlite as _aiosqlite
+
+    db_conn: _aiosqlite.Connection = db  # type: ignore[assignment]
+    row_kind = getattr(row, "kind", None)
+    row_item_id = getattr(row, "checklist_item_id", None)
+    if row_kind == "chat" and row_item_id is not None:
+        info = await sessions_db.get_paired_chat_info(db_conn, session_id)
+        return info[0] if info else None
+    return None
+
+
+async def _fetch_work_tool_counts(db: object, session_id: str) -> Counter[str]:
+    """Return a :class:`Counter` of tool-call names for *session_id*.
+
+    Only tools in :data:`~bearings.config.constants.WORK_EVIDENCE_ALL_TOOL_NAMES`
+    are counted; all others are ignored.
+    """
+    import aiosqlite as _aiosqlite
+
+    db_conn: _aiosqlite.Connection = db  # type: ignore[assignment]
+    placeholders = ",".join("?" * len(WORK_EVIDENCE_ALL_TOOL_NAMES))
+    cursor = await db_conn.execute(
+        f"SELECT tool_name FROM tool_calls "
+        f"WHERE session_id = ? AND tool_name IN ({placeholders}) "
+        f"ORDER BY rowid ASC",
+        (session_id, *sorted(WORK_EVIDENCE_ALL_TOOL_NAMES)),
+    )
+    try:
+        rows = await cursor.fetchall()
+    finally:
+        await cursor.close()
+    return Counter(str(r[0]) for r in rows)
+
+
 async def _import_messages_and_checkpoints(
     db: object,
     body: SessionExport,
@@ -107,11 +143,7 @@ async def export_session(session_id: str, request: Request) -> Response:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no session matches {session_id!r}",
         )
-    paired_parent_title: str | None = None
-    if row.kind == "chat" and row.checklist_item_id is not None:
-        info = await sessions_db.get_paired_chat_info(db, session_id)
-        paired_parent_title = info[0] if info else None
-
+    paired_parent_title = await _get_paired_parent_title(db, row, session_id)
     messages = await messages_db.list_for_session(db, session_id)
     tool_calls = await sdk_entries_db.load(db, session_id=session_id)
     checkpoints = await checkpoints_db.list_for_session(db, session_id)
@@ -294,18 +326,7 @@ async def get_work_evidence(session_id: str, request: Request) -> WorkEvidenceOu
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"no session matches {session_id!r}",
         )
-    placeholders = ",".join("?" * len(WORK_EVIDENCE_ALL_TOOL_NAMES))
-    cursor = await db.execute(
-        f"SELECT tool_name FROM tool_calls "
-        f"WHERE session_id = ? AND tool_name IN ({placeholders}) "
-        f"ORDER BY rowid ASC",
-        (session_id, *sorted(WORK_EVIDENCE_ALL_TOOL_NAMES)),
-    )
-    try:
-        rows = await cursor.fetchall()
-    finally:
-        await cursor.close()
-    name_counts: Counter[str] = Counter(str(r[0]) for r in rows)
+    name_counts = await _fetch_work_tool_counts(db, session_id)
     bash_calls = sum(name_counts[n] for n in WORK_EVIDENCE_BASH_TOOL_NAMES)
     write_calls = sum(name_counts[n] for n in WORK_EVIDENCE_WRITE_TOOL_NAMES)
     edit_calls = sum(name_counts[n] for n in WORK_EVIDENCE_EDIT_TOOL_NAMES)

@@ -99,6 +99,87 @@ async def _run_sdk_client_body(
             session.detach_sdk_client()
 
 
+async def _handle_auth_error(
+    exc: Exception,
+    factory: Any,
+    sdk_options: Any,
+    runner: SessionRunner,
+    session: AgentSession,
+    translator: SDKEventTranslator,
+    persist_fn: MessagePersistence,
+) -> None:
+    """Handle a first-401 auth error: check token freshness and retry once.
+
+    If the OAuth token is fully expired, surfaces
+    :class:`~bearings.agent.sdk_loop_errors.TokenExpiredError` immediately.
+    If the token was merely rotated mid-flight, reloads it and retries the
+    SDK client body once.  A second consecutive 401 on retry is fatal.
+    """
+    try:
+        _reload_sdk_credentials()
+    except TokenExpiredError as expired_exc:
+        await _enter_error_state(runner, session, expired_exc)
+        return
+    # Token was recently rotated; fresh bearer is in the file.  Retry once.
+    try:
+        await _run_sdk_client_body(factory, sdk_options, runner, session, translator, persist_fn)
+    except _CancelledLike:
+        raise
+    except Exception as retry_exc:
+        await _enter_error_state(runner, session, retry_exc)
+
+
+async def _handle_init_timeout(
+    session_id: str,
+    factory: Any,
+    sdk_options: Any,
+    runner: SessionRunner,
+    session: AgentSession,
+    translator: SDKEventTranslator,
+    persist_fn: MessagePersistence,
+) -> None:
+    """Retry the SDK body up to INIT_TIMEOUT_MAX_RETRIES times on a handshake timeout.
+
+    Transient under load (system stress, MCP warmup).  Uses exponential
+    backoff between attempts.  On exhaustion, enters the error state and
+    schedules an auto-recover if within the auto-recover cap.
+    """
+    for attempt in range(1, INIT_TIMEOUT_MAX_RETRIES + 1):
+        delay = INIT_TIMEOUT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
+        _log.warning(
+            "session %s: SDK initialize handshake timed out "
+            "(attempt %d/%d) — retrying after %.0f s",
+            session_id,
+            attempt,
+            INIT_TIMEOUT_MAX_RETRIES,
+            delay,
+        )
+        await asyncio.sleep(delay)
+        try:
+            await _run_sdk_client_body(
+                factory, sdk_options, runner, session, translator, persist_fn
+            )
+            return  # retry succeeded
+        except _CancelledLike:
+            raise
+        except Exception as retry_exc:
+            if not _is_init_timeout_error(retry_exc):
+                await _enter_error_state(runner, session, retry_exc)
+                return
+            if attempt == INIT_TIMEOUT_MAX_RETRIES:
+                await _enter_error_state(runner, session, retry_exc)
+                scheduled = runner.schedule_auto_recover(INIT_TIMEOUT_AUTO_RECOVER_MAX)
+                if not scheduled:
+                    _log.warning(
+                        "session %s: init-timeout auto-recover cap reached "
+                        "(%d/%d) — manual /recover required",
+                        session_id,
+                        runner._auto_recover_attempts,
+                        INIT_TIMEOUT_AUTO_RECOVER_MAX,
+                    )
+                return
+
+
 async def run_session_loop(
     runner: SessionRunner,
     session: AgentSession,
@@ -144,64 +225,14 @@ async def run_session_loop(
         raise
     except Exception as exc:
         if _is_auth_error(exc):
-            # First 401 — check whether the token is fully expired (user must re-auth)
-            # or was merely rotated mid-flight (fresh token already in credentials file).
-            try:
-                _reload_sdk_credentials()
-            except TokenExpiredError as expired_exc:
-                # Token is past its expiry date — retrying with the same stale bearer
-                # will just produce another 401.  Surface an actionable error now.
-                await _enter_error_state(runner, session, expired_exc)
-                return
-            # Token was recently rotated; fresh bearer is in the file.  Retry once.
-            try:
-                await _run_sdk_client_body(
-                    factory, sdk_options, runner, session, translator, persist_fn
-                )
-            except _CancelledLike:
-                raise
-            except Exception as retry_exc:
-                await _enter_error_state(runner, session, retry_exc)
+            await _handle_auth_error(
+                exc, factory, sdk_options, runner, session, translator, persist_fn
+            )
             return
         if _is_init_timeout_error(exc):
-            # Subprocess startup timed out on the streaming-mode initialize
-            # handshake — transient under load (system stress, MCP warmup).
-            # Retry up to INIT_TIMEOUT_MAX_RETRIES times with exponential
-            # backoff; a non-timeout error or exhausted retries surfaces fatal.
-            for attempt in range(1, INIT_TIMEOUT_MAX_RETRIES + 1):
-                delay = INIT_TIMEOUT_RETRY_BASE_DELAY_S * (2 ** (attempt - 1))
-                _log.warning(
-                    "session %s: SDK initialize handshake timed out "
-                    "(attempt %d/%d) — retrying after %.0f s",
-                    session_id,
-                    attempt,
-                    INIT_TIMEOUT_MAX_RETRIES,
-                    delay,
-                )
-                await asyncio.sleep(delay)
-                try:
-                    await _run_sdk_client_body(
-                        factory, sdk_options, runner, session, translator, persist_fn
-                    )
-                    return  # retry succeeded
-                except _CancelledLike:
-                    raise
-                except Exception as retry_exc:
-                    if not _is_init_timeout_error(retry_exc):
-                        await _enter_error_state(runner, session, retry_exc)
-                        return
-                    if attempt == INIT_TIMEOUT_MAX_RETRIES:
-                        await _enter_error_state(runner, session, retry_exc)
-                        scheduled = runner.schedule_auto_recover(INIT_TIMEOUT_AUTO_RECOVER_MAX)
-                        if not scheduled:
-                            _log.warning(
-                                "session %s: init-timeout auto-recover cap reached "
-                                "(%d/%d) — manual /recover required",
-                                session_id,
-                                runner._auto_recover_attempts,
-                                INIT_TIMEOUT_AUTO_RECOVER_MAX,
-                            )
-                        return
+            await _handle_init_timeout(
+                session_id, factory, sdk_options, runner, session, translator, persist_fn
+            )
             return
         await _enter_error_state(runner, session, exc)
 

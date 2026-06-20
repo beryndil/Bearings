@@ -28,7 +28,12 @@ import {
   resetConversation,
   type MessageTurnView,
 } from "../conversation.svelte";
-import { CHAT_TOOL_OUTPUT_HEAD_CHARS, CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, CHAT_TOOL_OUTPUT_TAIL_CHARS, WS_FRAME_KIND_EVENT } from "../../config";
+import {
+  CHAT_TOOL_OUTPUT_HEAD_CHARS,
+  CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS,
+  CHAT_TOOL_OUTPUT_TAIL_CHARS,
+  WS_FRAME_KIND_EVENT,
+} from "../../config";
 import type { ToolCallOut } from "../../api/messages";
 
 afterEach(() => {

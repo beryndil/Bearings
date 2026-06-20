@@ -38,6 +38,26 @@ _log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+async def _check_tag_ids_exist(
+    db: aiosqlite.Connection,
+    tag_ids_list: list[int],
+) -> None:
+    """Raise 422 when any element of *tag_ids_list* is absent from the tags table."""
+    existing_ids = {
+        int(row[0])
+        async for row in await db.execute(
+            "SELECT id FROM tags WHERE id IN ({})".format(",".join("?" * len(tag_ids_list))),
+            tag_ids_list,
+        )
+    }
+    missing = sorted({tid for tid in tag_ids_list if tid not in existing_ids})
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"unknown tag_ids: {missing}",
+        )
+
+
 async def _resolve_patch_tag_ids(
     db: aiosqlite.Connection,
     payload: SessionUpdate,
@@ -48,22 +68,29 @@ async def _resolve_patch_tag_ids(
         return None
     tag_ids_list = payload.tag_ids
     if tag_ids_list:
-        existing_ids = {
-            int(row[0])
-            async for row in await db.execute(
-                "SELECT id FROM tags WHERE id IN ({})".format(",".join("?" * len(tag_ids_list))),
-                tag_ids_list,
-            )
-        }
-        missing = sorted({tid for tid in tag_ids_list if tid not in existing_ids})
-        if missing:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"unknown tag_ids: {missing}",
-            )
+        await _check_tag_ids_exist(db, tag_ids_list)
     new_tag_ids = tuple(tag_ids_list)
     await _validate_tag_cardinality(db, new_tag_ids)
     return new_tag_ids
+
+
+def _require_non_null_title(title: str | None) -> str:
+    """Return *title* or raise 422 when it is ``None``."""
+    if title is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="title must not be null",
+        )
+    return title
+
+
+def _require_non_negative_budget(max_budget_usd: float | None) -> None:
+    """Raise 422 when *max_budget_usd* is set to a negative value."""
+    if max_budget_usd is not None and max_budget_usd < 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="max_budget_usd must be ≥ 0",
+        )
 
 
 def _build_patch_kwargs(
@@ -73,20 +100,11 @@ def _build_patch_kwargs(
     """Build the update_fields kwargs dict from the patch payload's set fields."""
     kwargs: dict[str, object] = {}
     if "title" in fs:
-        if payload.title is None:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="title must not be null",
-            )
-        kwargs["title"] = payload.title
+        kwargs["title"] = _require_non_null_title(payload.title)
     if "description" in fs:
         kwargs["description"] = payload.description
     if "max_budget_usd" in fs:
-        if payload.max_budget_usd is not None and payload.max_budget_usd < 0:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="max_budget_usd must be ≥ 0",
-            )
+        _require_non_negative_budget(payload.max_budget_usd)
         kwargs["max_budget_usd"] = payload.max_budget_usd
     if "session_instructions" in fs:
         kwargs["session_instructions"] = payload.session_instructions

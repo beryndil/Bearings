@@ -7,6 +7,132 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-06-20
+
+### Added
+
+- **feat(cli): `bearings window`, `bearings send`, `bearings here` subcommands (Exec-5):**
+  Three new CLI subcommands for session management from the terminal: `window` opens a
+  session in the default browser, `send` dispatches a prompt to a session by ID or
+  slug, and `here` creates a new session anchored to the current working directory.
+  Backed by the Bearings prompt endpoint; thin Typer wrappers delegating to domain helpers.
+
+- **feat(agent): reply-actions LLM advisor (Exec-2):**
+  `agent/reply_advisor.py` provides an LLM-backed advisor that evaluates assistant
+  messages and suggests applicable reply-action transformations (summarise, continue,
+  rephrase). Integrated into the reply-actions REST surface; result cached per message.
+
+- **feat(agent): real quota fetcher (Exec-2):**
+  `agent/quota_fetcher.py` replaces the stub quota implementation with a live HTTP
+  fetch against the Anthropic usage API. Exposes `fetch_quota_snapshot()` wired into
+  `GET /api/usage/headroom` and the quota-guard path.
+
+- **feat(web): `GET /api/sessions/running` and `GET /api/sessions/awaiting` parity
+  endpoints (Exec-3):**
+  Two new list endpoints mirroring the session-list surface but scoped to
+  `status=running` and `status=awaiting_input` respectively; return `SessionOut[]`
+  with standard pagination. Added to `routes/sessions.py` with DB-backed filters.
+
+- **feat(web): `GET /api/pending` endpoint (Exec-3):**
+  Reads `pending.toml` from the bearings data directory and returns pending-item
+  records; supports optional `?resolved=false` filter. Used by the frontend pending
+  panel.
+
+- **feat(web): `GET /api/sessions/{id}/reorg` and `GET /api/sessions/{id}/analyze`
+  (Exec-3):**
+  `reorg` returns a structural summary of the session message tree (groupings, tool
+  chains, nested depth). `analyze` returns an LLM-produced analytical synopsis of the
+  session. Both endpoints declared in `routes/sessions.py` with Pydantic response models.
+
+- **feat(web): non-blocking `shell` and `open` helpers (Exec-3):**
+  `web/shell.py` provides fire-and-forget `shell_exec()` and `open_url()` helpers
+  used by the `here` CLI subcommand and the vault `fork-from-last-message` action.
+  Wrapped in `asyncio.create_task` to avoid blocking the event loop.
+
+- **feat(web): `GET /api/version` endpoint (Exec-1):**
+  Returns `{"version": "<semver>", "build": "<git-sha>"}` sourced from
+  `bearings.__version__` and the embedded `version.json` build artifact.
+  Used by the frontend version chip and by `bearings window`.
+
+- **feat(frontend): inspector assembled-context tab, `tag_claude_md`, evaluated_rules
+  (Exec-6):**
+  Inspector panel gains an *Assembled Context* tab showing the full system-prompt
+  context sent to Claude for the active session. New `tag_claude_md` metadata field
+  surfaces the per-tag CLAUDE.md snippet; `evaluated_rules` lists which rule anchors
+  were activated. Displayed in collapsible tree nodes in the inspector sidebar.
+
+- **feat(frontend): ANSI colour passthrough + two-tier middle-fold truncation for
+  tool output (Exec-7):**
+  Tool-output streaming now parses ANSI escape sequences and renders coloured spans
+  inline (using a zero-dependency tokeniser). Long tool-output blocks are folded at
+  two tiers: a soft cap shows a "show more" inline expander; a hard cap replaces the
+  middle with a stamped fold indicator showing byte counts and a direct-copy button.
+
+- **feat(frontend): vault fork-from-last-message, link navigation, TemplateSaveDialog,
+  vault context-menu, menus.toml (Exec-8):**
+  Vault panel adds *fork from last message* — duplicates the active session's last
+  assistant message into a new vault entry pre-filled as a prompt template.
+  Link navigation in vault entries now resolves `[[WikiLink]]` style cross-references.
+  `TemplateSaveDialog` allows saving any assistant message as a named template with
+  tag scope. New right-click context-menu on vault rows exposes move/copy/delete/fork
+  actions. `menus.toml` in the bearings data directory defines custom context-menu
+  extensions loaded at startup.
+
+- **feat(frontend): theme server-sync (Exec-9):**
+  Active theme preference is now persisted via `PATCH /api/ui-config` on change and
+  restored on page load, eliminating flash-of-wrong-theme on cold start.
+
+- **feat(agent): WorkflowWatcher background poller (11c4ca5b):**
+  `agent/workflow_watcher.py` polls the Workflow run-state endpoint on a configurable
+  interval and emits `WorkflowProgressEvent` objects into the session stream. The
+  frontend renders a live progress tree in the conversation pane for multi-agent
+  workflow runs.
+
+### Fixed
+
+- **fix(db): token COALESCE for migrated rows (Exec-4):**
+  `messages.py` query for accumulated token counts now wraps `input_tokens` and
+  `output_tokens` in `COALESCE(..., 0)` so rows migrated from v0.17.x that have
+  `NULL` token columns contribute zero rather than propagating NULL into the sum.
+
+- **fix(agent): override-rate window boundary off-by-one (Exec-4):**
+  The sliding-window rate check in `agent/override_aggregator.py` was using a
+  half-open interval that excluded events exactly at the window boundary; corrected
+  to `>=` comparator so boundary events count correctly.
+
+- **fix(frontend): memories panel empty-state flicker (Exec-9):**
+  `Memories.svelte` now gates the empty-state message behind a loaded flag, preventing
+  a brief "no memories" flash before the initial fetch resolves.
+
+- **fix(frontend): stale share-link reason chip (Exec-9):**
+  `ShareLink.svelte` re-derives the reason chip label from reactive session state
+  rather than snapshotting at mount, so the chip updates when the session's
+  `awaiting_input` field changes mid-view.
+
+- **fix(build): version drift between `pyproject.toml`, `__init__.py`, and
+  `docs/openapi.json` (Exec-1 + Exec-FINAL):**
+  The version-alignment pre-commit hook (`feature-13-003`) now gates all commits;
+  `docs/openapi.json` is regenerated as part of every release commit to keep
+  `info.version` in sync.
+
+### Changed
+
+- **chore(pre-commit): standard hook suite + commit-msg enforcement (Exec-10):**
+  `.pre-commit-config.yaml` updated to wire the full 19-hook stack across 14 tools
+  (branch-verifier, ruff lint+format, mypy strict, pytest, vulture, xenon, interrogate,
+  codespell, pip-audit, regen-openapi, schema-drift, version-alignment, eslint,
+  prettier, svelte-check, knip, depcheck, lychee). Commit-msg hook added enforcing
+  Conventional Commits syntax on every commit to `v1-rebuild`.
+
+- **chore(ci): push/PR triggers and `systemd-analyze verify` (Exec-1 + Exec-2):**
+  `.github/workflows/ci.yml` tightened to run only on pushes to `v1-rebuild` and on
+  pull requests targeting that branch (eliminates spurious runs on other refs). Added
+  `systemd-analyze verify` of `deploy/bearings-v1.service` as a CI step.
+
+- **chore(deploy): systemd unit path + `Restart=on-failure` (Exec-2):**
+  `deploy/bearings-v1.service` updated to reference the uv-managed venv path and
+  sets `Restart=on-failure` with a 5-second restart delay for unattended operation.
+
 ## [1.3.0] — 2026-06-10
 
 ### Added

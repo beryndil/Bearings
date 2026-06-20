@@ -113,7 +113,11 @@ repos:
     hooks:
       - id: pytest
         name: pytest -q
-        entry: uv run pytest -q
+        # ``bash -c '... | cat'`` drains pytest's stdout through a pipe so
+        # pre-commit's subprocess.communicate() never blocks waiting for the
+        # OS pipe buffer to clear (happens when stdout is not consumed live).
+        # ``set -o pipefail`` propagates a non-zero pytest exit through cat.
+        entry: bash -c 'set -o pipefail; uv run pytest -q 2>&1 | cat'
         language: system
         pass_filenames: false
         always_run: true

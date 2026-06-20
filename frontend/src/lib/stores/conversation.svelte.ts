@@ -26,7 +26,13 @@ import type { AgentEvent, RunnerStatusEvent } from "../api/events";
 import { listMessages, type MessageOut, type MessagePage, type ToolCallOut } from "../api/messages";
 import type { SessionTokenTotalsOut } from "../api/sessions";
 import type { StreamFrame } from "../api/streaming";
-import { CHAT_TOOL_OUTPUT_HEAD_CHARS, CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS, CHAT_TOOL_OUTPUT_TAIL_CHARS, MESSAGE_PAGE_SIZE, WS_FRAME_KIND_EVENT } from "../config";
+import {
+  CHAT_TOOL_OUTPUT_HEAD_CHARS,
+  CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS,
+  CHAT_TOOL_OUTPUT_TAIL_CHARS,
+  MESSAGE_PAGE_SIZE,
+  WS_FRAME_KIND_EVENT,
+} from "../config";
 
 /** A single tool-call drawer row inside an assistant turn. */
 export interface ToolCallView {
@@ -393,9 +399,7 @@ export function hydrateToolCalls(toolCalls: ToolCallOut[]): void {
         const isFolded = rawLength > CHAT_TOOL_OUTPUT_SOFT_CAP_CHARS;
         // Two-tier fold: head = first HEAD_CHARS, tail = last TAIL_CHARS.
         // When not folded, output = full text, outputHead = "".
-        const outputHead = isFolded
-          ? tc.output.slice(0, CHAT_TOOL_OUTPUT_HEAD_CHARS)
-          : "";
+        const outputHead = isFolded ? tc.output.slice(0, CHAT_TOOL_OUTPUT_HEAD_CHARS) : "";
         const output = isFolded
           ? tc.output.slice(rawLength - CHAT_TOOL_OUTPUT_TAIL_CHARS)
           : tc.output;

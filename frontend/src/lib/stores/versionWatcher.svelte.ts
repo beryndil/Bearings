@@ -61,11 +61,7 @@ function _maybeReload(): void {
   if (_reloadDebounce !== null) return; // already scheduled
   _reloadDebounce = setTimeout(() => {
     _reloadDebounce = null;
-    if (
-      !_reloadPending &&
-      _serverBundleMtime !== null &&
-      _serverBundleMtime > _PAGE_LOAD_MTIME
-    ) {
+    if (!_reloadPending && _serverBundleMtime !== null && _serverBundleMtime > _PAGE_LOAD_MTIME) {
       _reloadPending = true;
       window.location.reload();
     }

@@ -491,7 +491,9 @@
     },
     // Share links are not implemented in v1; the entry renders disabled with
     // a tooltip explaining the deferral (gap-cycle-05-001 disabled-reason fill).
-    [MENU_ACTION_SESSION_COPY_SHARE_LINK]: { disabledReason: "Share links not yet implemented in v1" },
+    [MENU_ACTION_SESSION_COPY_SHARE_LINK]: {
+      disabledReason: "Share links not yet implemented in v1",
+    },
     [MENU_ACTION_SESSION_EXPORT_JSON]: () => {
       void exportSessionJson(session);
     },

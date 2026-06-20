@@ -41,9 +41,7 @@ function fakeSession(overrides: Partial<SessionOut> = {}): SessionOut {
   };
 }
 
-function fakeLayersOut(
-  layers: SystemPromptLayersOut["layers"] = [],
-): SystemPromptLayersOut {
+function fakeLayersOut(layers: SystemPromptLayersOut["layers"] = []): SystemPromptLayersOut {
   return {
     layers,
     total_tokens: layers.reduce((s, l) => s + l.token_count, 0),

@@ -55,7 +55,6 @@ from claude_agent_sdk import (
     StreamEvent,
     SystemMessage,
     TextBlock,
-    ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
@@ -275,6 +274,50 @@ class SDKEventTranslator:
 
     # -- canonical message frames ---------------------------------------
 
+    def _resolve_message_id(self, message: AssistantMessage) -> str:
+        """Return a message-id, taking it from *message* or synthesising one.
+
+        The SDK should always set ``message_id`` on an
+        :class:`AssistantMessage`; when it doesn't we synthesise one so that
+        downstream events still correlate.
+        """
+        if message.message_id and self._message_id is None:
+            self._message_id = message.message_id
+        if self._message_id is None:
+            import uuid
+
+            self._message_id = f"sdk_{uuid.uuid4().hex}"
+        return self._message_id
+
+    def _iter_content_events(
+        self,
+        message_id: str,
+        content: object,
+    ) -> Iterable[AgentEvent]:
+        """Yield :class:`ToolCallStart` events and accumulate text body parts.
+
+        Processes each block in *content*:
+        * :class:`TextBlock` → appended to ``_body_parts`` (no event).
+        * :class:`ThinkingBlock` → ignored (lives on the in-flight bubble).
+        * :class:`ToolUseBlock` → yields :class:`ToolCallStart`.
+        * :class:`ToolResultBlock` on an assistant message → ignored.
+        """
+        if not isinstance(content, list):
+            return
+        for block in content:
+            if isinstance(block, TextBlock):
+                self._body_parts.append(block.text)
+            elif isinstance(block, ToolUseBlock):
+                self._tool_call_started_ns[block.id] = time.monotonic_ns()
+                yield ToolCallStart(
+                    session_id=self._session_id,
+                    message_id=message_id,
+                    tool_call_id=block.id,
+                    tool_name=block.name,
+                    tool_input_json=json.dumps(block.input, sort_keys=True),
+                )
+            # ThinkingBlock and ToolResultBlock are intentionally ignored.
+
     def _feed_assistant(self, message: AssistantMessage) -> Iterable[AgentEvent]:
         """The SDK's final canonical assistant frame.
 
@@ -292,17 +335,7 @@ class SDKEventTranslator:
         exception after the turn events are collected, triggering the
         credential-reload retry path in ``run_session_loop``.
         """
-        if message.message_id and self._message_id is None:
-            self._message_id = message.message_id
-        message_id = self._message_id
-        if message_id is None:
-            # The SDK should always set message_id on AssistantMessage;
-            # if it doesn't we synthesize one so downstream events still
-            # correlate. uuid4() avoids collisions with persisted ids.
-            import uuid
-
-            message_id = f"sdk_{uuid.uuid4().hex}"
-            self._message_id = message_id
+        message_id = self._resolve_message_id(message)
         if not self._message_start_emitted:
             self._message_start_emitted = True
             yield MessageStart(
@@ -316,24 +349,7 @@ class SDKEventTranslator:
             )
             self._turn_auth_error = error_text or "authentication_failed"
             return
-        for block in message.content:
-            if isinstance(block, TextBlock):
-                self._body_parts.append(block.text)
-            elif isinstance(block, ThinkingBlock):
-                # Thinking lives on the in-flight bubble's thinking
-                # field; the canonical body excludes it.
-                continue
-            elif isinstance(block, ToolUseBlock):
-                self._tool_call_started_ns[block.id] = time.monotonic_ns()
-                yield ToolCallStart(
-                    session_id=self._session_id,
-                    message_id=message_id,
-                    tool_call_id=block.id,
-                    tool_name=block.name,
-                    tool_input_json=json.dumps(block.input, sort_keys=True),
-                )
-            # ToolResultBlock on AssistantMessage is unusual but legal
-            # (the SDK occasionally embeds tool results; ignored here).
+        yield from self._iter_content_events(message_id, message.content)
 
     def _feed_user(self, message: UserMessage) -> Iterable[AgentEvent]:
         """SDK echo of the tool result back to the model.

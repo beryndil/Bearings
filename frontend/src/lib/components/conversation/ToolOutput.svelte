@@ -221,10 +221,7 @@
    */
   const hardCapElidedCount = $derived(
     call.isFolded
-      ? Math.max(
-          0,
-          call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS,
-        )
+      ? Math.max(0, call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS)
       : Math.max(0, call.rawLength - call.output.length),
   );
 
@@ -234,10 +231,7 @@
    */
   const middleFoldCount = $derived(
     call.isFolded && !foldExpanded
-      ? Math.max(
-          0,
-          call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS,
-        )
+      ? Math.max(0, call.rawLength - CHAT_TOOL_OUTPUT_HEAD_CHARS - CHAT_TOOL_OUTPUT_TAIL_CHARS)
       : 0,
   );
 
@@ -307,9 +301,7 @@
     if (ansiHtml !== null) {
       return sanitizeHtml(ansiHtml);
     }
-    return sanitizeHtml(
-      linkifyToHtml(text, { workingDir: workingDir ?? undefined }),
-    );
+    return sanitizeHtml(linkifyToHtml(text, { workingDir: workingDir ?? undefined }));
   }
 </script>
 
@@ -374,8 +366,7 @@
         data-testid="tool-output-fold-banner"
         aria-label={CONVERSATION_STRINGS.toolOutputFoldBanner(middleFoldCount)}
       >
-        <span class="italic"
-          >{CONVERSATION_STRINGS.toolOutputFoldBanner(middleFoldCount)}</span
+        <span class="italic">{CONVERSATION_STRINGS.toolOutputFoldBanner(middleFoldCount)}</span
         ><button
           type="button"
           class="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-fg-strong hover:bg-surface-3 focus:outline-none focus:ring-1 focus:ring-accent/60"
@@ -430,8 +421,9 @@
         <pre class="whitespace-pre-wrap break-words text-fg">{call.inputJson}</pre>
         {#if call.done}
           <p class="mb-1 mt-2 text-fg-muted">Raw output:</p>
-          <pre class="whitespace-pre-wrap break-words text-fg"
-            >{call.isFolded ? call.outputHead + call.output : call.output}</pre>
+          <pre class="whitespace-pre-wrap break-words text-fg">{call.isFolded
+              ? call.outputHead + call.output
+              : call.output}</pre>
         {/if}
       </div>
     {/if}

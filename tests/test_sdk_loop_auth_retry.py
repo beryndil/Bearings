@@ -77,8 +77,11 @@ class _FakeClient:
 
     async def receive_response(self) -> AsyncIterator[Message]:
         # Empty async generator — no messages, no result.
-        return
-        yield  # pragma: no cover
+        # ``for _ in ()`` keeps Python treating this as an async generator
+        # (a ``yield`` must appear in the body) without producing reachable
+        # values.  The loop body is never entered; pragma suppresses coverage.
+        for _ in ():  # pragma: no cover
+            yield  # type: ignore[misc]
 
 
 _AUTH_CONTENT_TEXT = "Failed to authenticate. API Error: 401 Invalid authentication credentials"
